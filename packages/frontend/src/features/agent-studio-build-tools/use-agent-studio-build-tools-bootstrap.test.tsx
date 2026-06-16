@@ -27,14 +27,22 @@ const toBuildToolsSession = (
   hasActiveSession: session != null,
 });
 
+const createSelectedView = (
+  overrides: Partial<HookArgs["selectedView"]> = {},
+): HookArgs["selectedView"] => ({
+  role: "build",
+  taskId: "task-1",
+  selectedTask: null,
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
+  ...overrides,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
-  viewRole: "build",
+  selectedView: createSelectedView(),
   session: toBuildToolsSession(null),
-  viewSelectedTask: null,
   panelKind: "build_tools",
   isPanelOpen: true,
-  transcriptState: createSelectedSessionTranscriptStateFixture(),
   ...overrides,
 });
 
@@ -48,9 +56,11 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
             workingDirectory: "/repo/worktree",
           }),
         ),
-        transcriptState: createSelectedSessionTranscriptStateFixture({
-          kind: "session_loading",
-          reason: "history",
+        selectedView: createSelectedView({
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "session_loading",
+            reason: "history",
+          }),
         }),
       }),
     );
@@ -74,7 +84,9 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
   test("enables build-tools bootstrap once the selected build session context is stable", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        viewSelectedTask: { id: "task-1" } as HookArgs["viewSelectedTask"],
+        selectedView: createSelectedView({
+          selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
+        }),
         session: toBuildToolsSession(
           createAgentSessionFixture({
             role: "build",

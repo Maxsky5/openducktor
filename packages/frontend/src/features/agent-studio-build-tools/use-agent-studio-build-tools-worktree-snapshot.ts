@@ -7,12 +7,8 @@ import {
   resolveAgentStudioGitPanelBranch,
 } from "@/pages/agents/right-panel/agents-page-git-panel";
 import { useAgentStudioDevServerPanel } from "@/pages/agents/right-panel/use-agent-studio-dev-server-panel";
-import type {
-  AgentStudioOrchestrationSelectionContext,
-  useAgentStudioOrchestrationController,
-} from "@/pages/agents/use-agent-studio-orchestration-controller";
+import type { useAgentStudioOrchestrationController } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
@@ -30,6 +26,7 @@ import {
   resolveQueriedBuildWorktreePath,
 } from "./agent-studio-build-tools-worktree-snapshot";
 import {
+  type BuildToolsSelectedView,
   type BuildToolsSessionDescriptor,
   isBuildToolsSessionContextStable,
   useAgentStudioBuildToolsBootstrap,
@@ -38,13 +35,10 @@ import {
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
-  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
-  viewTaskId: AgentStudioOrchestrationSelectionContext["view"]["taskId"];
+  selectedView: BuildToolsSelectedView;
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  transcriptState: AgentSessionTranscriptState;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   worktreeRecoveryKey: string;
 };
@@ -71,7 +65,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     repoPath: string | null;
     taskId: string | null;
     selectedTaskId: string | null;
-    viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
+    viewRole: BuildToolsSelectedView["role"];
     sessionRole: BuildToolsSessionDescriptor["role"];
     sessionWorkingDirectory: string | null;
     isSessionContextStable: boolean;
@@ -127,13 +121,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   {
     workspaceRepoPath,
     activeBranch,
-    viewRole,
-    viewTaskId,
+    selectedView,
     session,
-    viewSelectedTask,
     panelKind,
     isPanelOpen,
-    transcriptState,
     repoSettings,
     worktreeRecoveryKey,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
@@ -147,25 +138,25 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
       : null;
   const selectedTaskId = resolveBuildToolsSelectedTaskId({
-    viewTaskId,
-    viewSelectedTaskId: viewSelectedTask?.id ?? null,
+    viewTaskId: selectedView.taskId,
+    viewSelectedTaskId: selectedView.selectedTask?.id ?? null,
   });
   const isSessionContextStable = isBuildToolsSessionContextStable({
     sessionRole,
-    transcriptState,
+    transcriptState: selectedView.transcriptState,
   });
   const hasSelectedTask = selectedTaskId != null;
   const taskTargetBranchState = useMemo(
     () =>
       resolveTaskTargetBranchState({
-        taskTargetBranch: viewSelectedTask?.targetBranch,
-        taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
+        taskTargetBranch: selectedView.selectedTask?.targetBranch,
+        taskTargetBranchError: selectedView.selectedTask?.targetBranchError ?? null,
         defaultTargetBranch: repoSettings?.defaultTargetBranch,
       }),
     [
       repoSettings?.defaultTargetBranch,
-      viewSelectedTask?.targetBranch,
-      viewSelectedTask?.targetBranchError,
+      selectedView.selectedTask?.targetBranch,
+      selectedView.selectedTask?.targetBranchError,
     ],
   );
   const worktreeDiffPreconditionError =
@@ -179,17 +170,15 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   );
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
-    viewRole,
+    selectedView,
     session,
-    viewSelectedTask,
     panelKind,
     isPanelOpen,
-    transcriptState,
   });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
   const taskId = isEnabled ? selectedTaskId : null;
-  const devServerTaskId = isEnabled ? (viewSelectedTask?.id ?? null) : null;
+  const devServerTaskId = isEnabled ? (selectedView.selectedTask?.id ?? null) : null;
   const isDevServerEnabled = isEnabled && devServerTaskId != null;
   const directWorktreePath = resolveDirectBuildWorktreePath({
     repoPath,
@@ -320,7 +309,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         repoPath,
         taskId,
         selectedTaskId,
-        viewRole,
+        viewRole: selectedView.role,
         sessionRole,
         sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
         isSessionContextStable,
@@ -347,10 +336,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       repoPath,
       resolvedGitPanelBranch,
       selectedTaskId,
+      selectedView.role,
       sessionRole,
       taskTargetBranchState,
       taskId,
-      viewRole,
       worktree,
     ],
   );

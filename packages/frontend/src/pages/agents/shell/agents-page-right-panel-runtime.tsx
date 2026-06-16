@@ -1,11 +1,11 @@
 import { memo, type ReactElement, useEffect } from "react";
 import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
-import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
+import type { AgentStudioBuildWorktreeRefreshModel } from "./use-agent-studio-right-panel-bridge";
 import {
   useForwardedWorktreeRefresh,
   type WorktreeRefreshRef,
@@ -34,24 +34,22 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
 export function AgentsPageBuildWorktreeRefreshRuntime({
   panelKind,
   isPanelOpen,
-  viewRole,
-  activeSession,
-  transcriptState,
+  selectedView,
   refreshWorktreeRef,
 }: {
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
-  activeSession: AgentStudioOrchestrationSelectionContext["view"]["activeSession"];
-  transcriptState: UseAgentsPageRightPanelModelArgs["transcriptState"];
+  selectedView: AgentStudioBuildWorktreeRefreshModel["selectedView"];
   refreshWorktreeRef: WorktreeRefreshRef;
 }): null {
   const refreshWorktree = useForwardedWorktreeRefresh(refreshWorktreeRef);
 
   useAgentStudioBuildWorktreeRefresh({
-    viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
-    activeSession,
-    transcriptState,
+    selectedView: {
+      role: panelKind === "build_tools" && isPanelOpen ? selectedView.role : null,
+      activeSession: selectedView.activeSession,
+      transcriptState: selectedView.transcriptState,
+    },
     refreshWorktree,
   });
 

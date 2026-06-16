@@ -1,7 +1,10 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import type {
+  BuildToolsSelectedView,
+  BuildToolsSessionDescriptor,
+} from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
@@ -9,13 +12,9 @@ import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
-import type {
-  AgentStudioOrchestrationSelectionContext,
-  useAgentStudioOrchestrationController,
-} from "../use-agent-studio-orchestration-controller";
+import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
 export type AgentStudioGitConflictQuickActionContext = {
@@ -28,13 +27,10 @@ export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
-  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
-  viewTaskId: AgentStudioOrchestrationSelectionContext["view"]["taskId"];
+  selectedView: BuildToolsSelectedView;
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
-  transcriptState: AgentSessionTranscriptState;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   worktreeRecoveryKey: string;
@@ -60,7 +56,7 @@ type BuildAgentsPageDiffModelArgs = {
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: ReturnType<typeof useAgentStudioGitActions>;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
+  selectedTask: BuildToolsSelectedView["selectedTask"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -83,7 +79,7 @@ export function buildAgentsPageDiffModel({
   branches,
   buildToolsSnapshot,
   gitActions,
-  viewSelectedTask,
+  selectedTask,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -93,11 +89,11 @@ export function buildAgentsPageDiffModel({
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
   const pullRequestDetectionTask =
-    viewSelectedTask && !viewSelectedTask.pullRequest && canDetectTaskPullRequest(viewSelectedTask)
-      ? viewSelectedTask
+    selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask)
+      ? selectedTask
       : null;
   let targetBranchUpdateModel = {};
-  if (gitPanelContextMode === "worktree" && viewSelectedTask && setTaskTargetBranch) {
+  if (gitPanelContextMode === "worktree" && selectedTask && setTaskTargetBranch) {
     const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
     const targetBranchOptions = toBranchSelectorOptions(branches, {
       valueFormat: "full_ref",
@@ -116,7 +112,7 @@ export function buildAgentsPageDiffModel({
       targetBranchOptions,
       targetBranchSelectionValue: targetBranchState.selectionValue,
       onUpdateTargetBranch: async (selection: string) => {
-        await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
+        await setTaskTargetBranch(selectedTask.id, targetBranchFromSelection(selection));
       },
     };
   }
@@ -138,9 +134,9 @@ export function buildAgentsPageDiffModel({
           targetBranch: targetBranchState.displayTargetBranch,
         }
       : {}),
-    pullRequest: viewSelectedTask?.pullRequest ?? null,
+    pullRequest: selectedTask?.pullRequest ?? null,
     ...targetBranchUpdateModel,
-    ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
+    ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
       ? { isDetectingPullRequest: true }
       : {}),
     ...(pullRequestDetectionTask
@@ -163,13 +159,10 @@ export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
   activeBranch,
-  viewRole,
-  viewTaskId,
+  selectedView,
   session,
-  viewSelectedTask,
   panelKind,
   isPanelOpen,
-  transcriptState,
   documentsModel,
   repoSettings,
   worktreeRecoveryKey,
@@ -186,13 +179,10 @@ export function useAgentsPageRightPanelModel({
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
-    viewRole,
-    viewTaskId,
+    selectedView,
     session,
-    viewSelectedTask,
     panelKind,
     isPanelOpen,
-    transcriptState,
     repoSettings,
     worktreeRecoveryKey,
   });
@@ -258,7 +248,7 @@ export function useAgentsPageRightPanelModel({
         branches,
         buildToolsSnapshot,
         gitActions,
-        viewSelectedTask,
+        selectedTask: selectedView.selectedTask,
         detectingPullRequestTaskId,
         onDetectPullRequest,
         ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
@@ -270,7 +260,7 @@ export function useAgentsPageRightPanelModel({
       onDetectPullRequest,
       detectingPullRequestTaskId,
       setTaskTargetBranch,
-      viewSelectedTask,
+      selectedView.selectedTask,
     ],
   );
 

@@ -584,7 +584,9 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe(selectionState.view.taskId);
+      expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe(
+        selectionState.view.taskId,
+      );
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(
         orchestrationState.agentStudioWorkspaceSidebarModel,
       );

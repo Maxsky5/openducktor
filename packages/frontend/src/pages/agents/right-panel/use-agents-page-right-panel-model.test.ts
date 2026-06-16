@@ -250,7 +250,7 @@ describe("buildAgentsPageDiffModel", () => {
         }),
       },
       gitActions: createGitActions(),
-      viewSelectedTask: createTaskCardFixture({
+      selectedTask: createTaskCardFixture({
         id: "task-24",
         targetBranchError: validationError,
       }),

@@ -93,17 +93,17 @@ describe("useAgentStudioRightPanelBridge", () => {
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(args.activeWorkspace);
-      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe("task-1");
-      expect(state.rightPanelBridge?.rightPanel.viewRole).toBe("build");
+      expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe("task-1");
+      expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.activeSession).toBe(
         args.selection.view.activeSession,
       );
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.transcriptState).toBe(
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.transcriptState).toBe(
         args.selection.view.transcriptState,
       );
-      expect(state.rightPanelBridge?.rightPanel.transcriptState).toBe(
+      expect(state.rightPanelBridge?.rightPanel.selectedView.transcriptState).toBe(
         args.selection.view.transcriptState,
       );
       expect(state.rightPanelBridge?.rightPanel.session).toEqual({

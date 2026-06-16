@@ -17,14 +17,17 @@ export type BuildToolsSessionDescriptor = {
   hasActiveSession: boolean;
 };
 
+export type BuildToolsSelectedView = Pick<
+  AgentStudioOrchestrationSelectionContext["view"],
+  "role" | "taskId" | "selectedTask" | "transcriptState"
+>;
+
 type UseAgentStudioBuildToolsBootstrapArgs = {
   workspaceRepoPath: string | null;
-  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
+  selectedView: BuildToolsSelectedView;
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  transcriptState: AgentSessionTranscriptState;
 };
 
 type BuildToolsBootstrapContext = {
@@ -46,12 +49,10 @@ export const isBuildToolsSessionContextStable = ({
 
 export function useAgentStudioBuildToolsBootstrap({
   workspaceRepoPath,
-  viewRole,
+  selectedView,
   session,
-  viewSelectedTask,
   panelKind,
   isPanelOpen,
-  transcriptState,
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
   const sessionRole = session.role;
   const sessionWorkingDirectory = session.workingDirectory;
@@ -59,7 +60,7 @@ export function useAgentStudioBuildToolsBootstrap({
 
   return useMemo(() => {
     const isVisibleBuildToolsPanel =
-      viewRole === "build" && panelKind === "build_tools" && isPanelOpen;
+      selectedView.role === "build" && panelKind === "build_tools" && isPanelOpen;
     if (!isVisibleBuildToolsPanel) {
       return {
         isEnabled: false,
@@ -67,33 +68,31 @@ export function useAgentStudioBuildToolsBootstrap({
         taskId: null,
         sessionWorkingDirectory: null,
         shouldEnableEventPolling: false,
-        hasSelectedTask: Boolean(viewSelectedTask),
+        hasSelectedTask: Boolean(selectedView.selectedTask),
       };
     }
 
     const isBuildSessionContextStable = isBuildToolsSessionContextStable({
       sessionRole,
-      transcriptState,
+      transcriptState: selectedView.transcriptState,
     });
 
     return {
       isEnabled: Boolean(workspaceRepoPath) && isBuildSessionContextStable,
       repoPath: isBuildSessionContextStable ? workspaceRepoPath : null,
-      taskId: isBuildSessionContextStable ? (viewSelectedTask?.id ?? null) : null,
+      taskId: isBuildSessionContextStable ? (selectedView.selectedTask?.id ?? null) : null,
       sessionWorkingDirectory: isBuildSessionContextStable ? sessionWorkingDirectory : null,
       shouldEnableEventPolling:
         Boolean(workspaceRepoPath) && isBuildSessionContextStable && hasActiveSession,
-      hasSelectedTask: Boolean(viewSelectedTask),
+      hasSelectedTask: Boolean(selectedView.selectedTask),
     };
   }, [
     workspaceRepoPath,
     hasActiveSession,
     isPanelOpen,
     panelKind,
+    selectedView,
     sessionRole,
     sessionWorkingDirectory,
-    transcriptState,
-    viewRole,
-    viewSelectedTask,
   ]);
 }

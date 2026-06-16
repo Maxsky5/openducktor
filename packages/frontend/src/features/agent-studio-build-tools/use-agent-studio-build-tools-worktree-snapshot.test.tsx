@@ -100,21 +100,28 @@ const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] 
 
 type HookArgs = Parameters<UseSnapshotHook>[0];
 
+const createSelectedView = (
+  overrides: Partial<HookArgs["selectedView"]> = {},
+): HookArgs["selectedView"] => ({
+  role: "build",
+  taskId: "task-24",
+  selectedTask: createTaskCardFixture({ id: "task-24" }),
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
+  ...overrides,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   activeBranch: { name: "main", detached: false },
-  viewRole: "build",
-  viewTaskId: "task-24",
+  selectedView: createSelectedView(),
   session: {
     role: "build",
     activityState: "running",
     workingDirectory: null,
     hasActiveSession: true,
   },
-  viewSelectedTask: createTaskCardFixture({ id: "task-24" }),
   panelKind: "build_tools",
   isPanelOpen: true,
-  transcriptState: createSelectedSessionTranscriptStateFixture(),
   repoSettings: null,
   worktreeRecoveryKey: "recovery-key-a",
   ...overrides,
@@ -223,8 +230,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     taskWorktreeGetMock.mockImplementation(async () => taskWorktreeFetch.promise);
     const harness = createHookHarness(
       createBaseArgs({
-        viewTaskId: "task-25",
-        viewSelectedTask: createTaskCardFixture({ id: "task-25" }),
+        selectedView: createSelectedView({
+          taskId: "task-25",
+          selectedTask: createTaskCardFixture({ id: "task-25" }),
+        }),
       }),
       { queryClient },
     );
@@ -333,9 +342,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           workingDirectory: "/repo",
           hasActiveSession: true,
         },
-        viewSelectedTask: createTaskCardFixture({
-          id: "task-24",
-          targetBranchError: "Invalid openducktor.targetBranch metadata: missing field `branch`.",
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranchError: "Invalid openducktor.targetBranch metadata: missing field `branch`.",
+          }),
         }),
       }),
     );
@@ -357,7 +368,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps dev-server reads scoped to the hydrated selected task", async () => {
-    const harness = createHookHarness(createBaseArgs({ viewSelectedTask: null }));
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({ selectedTask: null }),
+      }),
+    );
 
     try {
       await harness.mount();

@@ -36,13 +36,10 @@ export type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
-  viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
-  viewTaskId: UseAgentsPageRightPanelModelArgs["viewTaskId"];
+  selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
   session: UseAgentsPageRightPanelModelArgs["session"];
-  viewSelectedTask: UseAgentsPageRightPanelModelArgs["viewSelectedTask"];
   panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
-  transcriptState: UseAgentsPageRightPanelModelArgs["transcriptState"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   worktreeRecoveryKey: UseAgentsPageRightPanelModelArgs["worktreeRecoveryKey"];
@@ -57,10 +54,12 @@ export type AgentStudioRightPanelRuntimeModel = {
 
 export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
-  "panelKind" | "isPanelOpen" | "viewRole"
+  "panelKind" | "isPanelOpen"
 > & {
-  activeSession: AgentStudioOrchestrationSelectionContext["view"]["activeSession"];
-  transcriptState: AgentStudioRightPanelRuntimeModel["transcriptState"];
+  selectedView: Pick<
+    AgentStudioOrchestrationSelectionContext["view"],
+    "role" | "activeSession" | "transcriptState"
+  >;
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -124,21 +123,20 @@ function buildAgentStudioRightPanelBridgeModel({
     buildWorktreeRefresh: {
       panelKind,
       isPanelOpen,
-      viewRole: selection.view.role,
-      activeSession: selection.view.activeSession,
-      transcriptState: selection.view.transcriptState,
+      selectedView: {
+        role: selection.view.role,
+        activeSession: selection.view.activeSession,
+        transcriptState: selection.view.transcriptState,
+      },
     },
     rightPanel: {
       activeWorkspace,
       activeBranch,
       branches,
-      viewRole: selection.view.role,
-      viewTaskId: selection.view.taskId,
+      selectedView: selection.view,
       session,
-      viewSelectedTask: selection.view.selectedTask,
       panelKind,
       isPanelOpen,
-      transcriptState: selection.view.transcriptState,
       documentsModel,
       repoSettings,
       worktreeRecoveryKey,

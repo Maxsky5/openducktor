@@ -14,10 +14,14 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
 
-type UseAgentStudioBuildWorktreeRefreshArgs = {
-  viewRole: string | null;
+type BuildWorktreeRefreshSelectedView = {
+  role: string | null;
   activeSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
+};
+
+type UseAgentStudioBuildWorktreeRefreshArgs = {
+  selectedView: BuildWorktreeRefreshSelectedView;
   refreshWorktree: GitDiffRefresh;
 };
 
@@ -59,11 +63,10 @@ const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
 };
 
 export function useAgentStudioBuildWorktreeRefresh({
-  viewRole,
-  activeSession,
-  transcriptState,
+  selectedView,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
+  const { role, activeSession, transcriptState } = selectedView;
   const isTranscriptLoading = isAgentSessionTranscriptLoading(transcriptState);
   const processedToolMessageKeysRef = useRef<Set<string> | null>(null);
   if (processedToolMessageKeysRef.current === null) {
@@ -76,7 +79,7 @@ export function useAgentStudioBuildWorktreeRefresh({
   const completedToolKeysBeforeViewLoadRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    if (viewRole !== "build" || activeSession?.role !== "build") {
+    if (role !== "build" || activeSession?.role !== "build") {
       return;
     }
 
@@ -142,5 +145,5 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (shouldRefresh) {
       void refreshWorktree("soft");
     }
-  }, [activeSession, isTranscriptLoading, processedToolMessageKeys, refreshWorktree, viewRole]);
+  }, [activeSession, isTranscriptLoading, processedToolMessageKeys, refreshWorktree, role]);
 }

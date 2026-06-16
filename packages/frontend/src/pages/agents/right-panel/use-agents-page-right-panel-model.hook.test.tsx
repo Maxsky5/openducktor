@@ -151,36 +151,46 @@ afterEach(async () => {
   ]);
 });
 
+const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  activeWorkspace: { repoPath: "/repo" } as never,
+  branches: [],
+  activeBranch: null,
+  selectedView: {
+    role: "build",
+    taskId: "task-1",
+    selectedTask: createTaskCardFixture({ id: "task-1" }),
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
+  },
+  session: {
+    role: "build",
+    activityState: "running",
+    workingDirectory: "/repo",
+    hasActiveSession: true,
+  },
+  panelKind: "documents",
+  isPanelOpen: false,
+  documentsModel: { activeDocument: null },
+  repoSettings: { defaultTargetBranch: null } as never,
+  worktreeRecoveryKey: "recovery-key-a",
+  detectingPullRequestTaskId: null,
+  onDetectPullRequest: () => {},
+  onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
+  onGitConflictQuickActionContextChange: () => {},
+  ...overrides,
+});
+
 describe("useAgentsPageRightPanelModel", () => {
   test("publishes conflict context changes without intermediate null and clears on unmount", async () => {
     const events: Array<string | null> = [];
 
-    const harness = createHookHarness(useAgentsPageRightPanelModel, {
-      activeWorkspace: { repoPath: "/repo" } as never,
-      branches: [],
-      activeBranch: null,
-      viewRole: "build",
-      viewTaskId: "task-1",
-      session: {
-        role: "build",
-        activityState: "running",
-        workingDirectory: "/repo",
-        hasActiveSession: true,
-      },
-      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
-      panelKind: "documents",
-      isPanelOpen: false,
-      transcriptState: createSelectedSessionTranscriptStateFixture(),
-      documentsModel: { activeDocument: null },
-      repoSettings: { defaultTargetBranch: null } as never,
-      worktreeRecoveryKey: "recovery-key-a",
-      detectingPullRequestTaskId: null,
-      onDetectPullRequest: () => {},
-      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
-      onGitConflictQuickActionContextChange: (context) => {
-        events.push(context ? (context.conflict.operation as string) : null);
-      },
-    } as HookArgs);
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        onGitConflictQuickActionContextChange: (context) => {
+          events.push(context ? (context.conflict.operation as string) : null);
+        },
+      }),
+    );
 
     await harness.mount();
 
@@ -189,32 +199,14 @@ describe("useAgentsPageRightPanelModel", () => {
     buildToolsSnapshotState.current = createSnapshot("B");
     gitActionsState.current = createGitActions("B");
 
-    await harness.update({
-      activeWorkspace: { repoPath: "/repo" } as never,
-      branches: [],
-      activeBranch: null,
-      viewRole: "build",
-      viewTaskId: "task-1",
-      session: {
-        role: "build",
-        activityState: "running",
-        workingDirectory: "/repo",
-        hasActiveSession: true,
-      },
-      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
-      panelKind: "documents",
-      isPanelOpen: false,
-      transcriptState: createSelectedSessionTranscriptStateFixture(),
-      documentsModel: { activeDocument: null },
-      repoSettings: { defaultTargetBranch: null } as never,
-      worktreeRecoveryKey: "recovery-key-b",
-      detectingPullRequestTaskId: null,
-      onDetectPullRequest: () => {},
-      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
-      onGitConflictQuickActionContextChange: (context) => {
-        events.push(context ? (context.conflict.operation as string) : null);
-      },
-    } as HookArgs);
+    await harness.update(
+      createHookArgs({
+        worktreeRecoveryKey: "recovery-key-b",
+        onGitConflictQuickActionContextChange: (context) => {
+          events.push(context ? (context.conflict.operation as string) : null);
+        },
+      }),
+    );
 
     expect(events).toEqual(["A", "B"]);
 
@@ -224,30 +216,20 @@ describe("useAgentsPageRightPanelModel", () => {
   });
 
   test("does not lock git actions for a builder session waiting for input", async () => {
-    const harness = createHookHarness(useAgentsPageRightPanelModel, {
-      activeWorkspace: { repoPath: "/repo" } as never,
-      branches: [],
-      activeBranch: null,
-      viewRole: "build",
-      viewTaskId: "task-1",
-      session: {
-        role: "build",
-        activityState: "waiting_input",
-        workingDirectory: "/repo",
-        hasActiveSession: true,
-      },
-      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
-      panelKind: "build_tools",
-      isPanelOpen: true,
-      transcriptState: createSelectedSessionTranscriptStateFixture(),
-      documentsModel: { activeDocument: null },
-      repoSettings: { defaultTargetBranch: null } as never,
-      worktreeRecoveryKey: "recovery-key",
-      detectingPullRequestTaskId: null,
-      onDetectPullRequest: () => {},
-      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
-      onGitConflictQuickActionContextChange: () => {},
-    } as HookArgs);
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        session: {
+          role: "build",
+          activityState: "waiting_input",
+          workingDirectory: "/repo",
+          hasActiveSession: true,
+        },
+        panelKind: "build_tools",
+        isPanelOpen: true,
+        worktreeRecoveryKey: "recovery-key",
+      }),
+    );
 
     await harness.mount();
 
