@@ -38,6 +38,26 @@ const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
   current: createAgentSessionCollection(sessions),
 });
 
+const createQaAvailableTaskDependencies = () =>
+  createTaskDependenciesFixture({
+    taskRef: {
+      current: [
+        createTaskCardFixture(
+          {
+            status: "ai_review",
+            agentWorkflows: {
+              spec: { required: false, canSkip: true, available: true, completed: false },
+              planner: { required: false, canSkip: true, available: true, completed: false },
+              builder: { required: true, canSkip: false, available: true, completed: true },
+              qa: { required: false, canSkip: true, available: true, completed: false },
+            },
+          },
+          {},
+        ),
+      ],
+    },
+  });
+
 describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -164,35 +184,49 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           runtime: createRuntimeDependenciesFixture({
             resolveTaskWorktree: async () => null,
           }),
-          task: createTaskDependenciesFixture({
-            taskRef: {
-              current: [
-                createTaskCardFixture(
-                  {
-                    status: "ai_review",
-                    agentWorkflows: {
-                      spec: { required: false, canSkip: true, available: true, completed: false },
-                      planner: {
-                        required: false,
-                        canSkip: true,
-                        available: true,
-                        completed: false,
-                      },
-                      builder: { required: true, canSkip: false, available: true, completed: true },
-                      qa: { required: false, canSkip: true, available: true, completed: false },
-                    },
-                  },
-                  {},
-                ),
-              ],
-            },
-          }),
+          task: createQaAvailableTaskDependencies(),
           model: {
             loadRepoPromptOverrides: async () => ({}),
           },
         },
       }),
     ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
+  });
+
+  test("rejects qa reuse when the builder continuation target changed", async () => {
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+          workingDirectory: "/tmp/repo/old-worktree",
+        }),
+      ]),
+    });
+
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture({ role: "qa" }),
+        input: {
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/old-worktree",
+          },
+        },
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveTaskWorktree: async () =>
+              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
+          }),
+          task: createQaAvailableTaskDependencies(),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).rejects.toThrow("it does not match the required builder worktree for this QA session");
   });
 
   test("rejects qa reuse when the task workflow does not allow qa", async () => {

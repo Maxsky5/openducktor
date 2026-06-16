@@ -18,19 +18,3 @@ export const resolveStartTask = ({
   }
   return resolvedTask;
 };
-
-export const resolveReuseValidationError = ({
-  matchesQaTarget,
-  matchesBuildTarget,
-}: {
-  matchesQaTarget: boolean;
-  matchesBuildTarget: boolean;
-}): string | null => {
-  if (!matchesQaTarget) {
-    return "it does not match the required builder worktree for this QA session";
-  }
-  if (!matchesBuildTarget) {
-    return "it does not match the current builder continuation target";
-  }
-  return null;
-};

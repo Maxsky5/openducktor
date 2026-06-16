@@ -12,7 +12,7 @@ import type {
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
-import { resolveReuseValidationError, resolveStartTask } from "./start-session-policies";
+import { resolveStartTask } from "./start-session-policies";
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
@@ -70,72 +70,40 @@ const loadSessionForReuse = async ({
   return historyLoadedSession;
 };
 
-const createWorkingDirectoryMatchers = ({
+const validateReusableSession = async ({
   ctx,
   deps,
-}: Pick<ReuseStrategyInput, "ctx" | "deps">) => {
-  let resolvedExpectedWorkingDirectory: string | null = null;
+  session,
+}: {
+  ctx: StartSessionContext;
+  deps: Pick<StartSessionExecutionDependencies, "runtime">;
+  session: Pick<AgentSessionState, "workingDirectory">;
+}): Promise<string | null> => {
+  if (ctx.role !== "qa" && ctx.role !== "build") {
+    return null;
+  }
 
-  const resolveExpectedWorkingDirectory = async (): Promise<string> => {
-    if (resolvedExpectedWorkingDirectory !== null) {
-      return resolvedExpectedWorkingDirectory;
-    }
-
-    resolvedExpectedWorkingDirectory = normalizeWorkingDirectory(
+  let expectedWorkingDirectory: string;
+  try {
+    expectedWorkingDirectory = normalizeWorkingDirectory(
       requireBuildContinuationTarget(
         await deps.runtime.resolveTaskWorktree(ctx.repoPath, ctx.taskId),
       ).workingDirectory,
     );
-    return resolvedExpectedWorkingDirectory;
-  };
-
-  const matchesQaTarget = async (workingDirectory: string): Promise<boolean> => {
-    if (ctx.role !== "qa") {
-      return true;
+  } catch (error) {
+    if (ctx.role === "build") {
+      return "it does not match the current builder continuation target";
     }
-    return (
-      normalizeWorkingDirectory(workingDirectory) === (await resolveExpectedWorkingDirectory())
-    );
-  };
+    throw error;
+  }
 
-  const matchesBuildTarget = async (workingDirectory: string): Promise<boolean> => {
-    if (ctx.role !== "build") {
-      return true;
-    }
-    try {
-      return (
-        normalizeWorkingDirectory(workingDirectory) === (await resolveExpectedWorkingDirectory())
-      );
-    } catch {
-      return false;
-    }
-  };
+  if (normalizeWorkingDirectory(session.workingDirectory) === expectedWorkingDirectory) {
+    return null;
+  }
 
-  return {
-    matchesQaTarget,
-    matchesBuildTarget,
-  };
-};
-
-const validateReusableSession = async ({
-  session,
-  matchesQaTarget,
-  matchesBuildTarget,
-}: {
-  session: Pick<AgentSessionState, "workingDirectory">;
-  matchesQaTarget: (workingDirectory: string) => Promise<boolean>;
-  matchesBuildTarget: (workingDirectory: string) => Promise<boolean>;
-}): Promise<string | null> => {
-  const [matchesQa, matchesBuild] = await Promise.all([
-    matchesQaTarget(session.workingDirectory),
-    matchesBuildTarget(session.workingDirectory),
-  ]);
-  const reuseError = resolveReuseValidationError({
-    matchesQaTarget: matchesQa,
-    matchesBuildTarget: matchesBuild,
-  });
-
-  return reuseError;
+  return ctx.role === "qa"
+    ? "it does not match the required builder worktree for this QA session"
+    : "it does not match the current builder continuation target";
 };
 
 const matchesSourceIdentity = (
@@ -222,7 +190,6 @@ export const executeReuseStart = async ({
   if (ctx.role === "qa") {
     resolveStartTask({ ctx, task: deps.task });
   }
-  const { matchesQaTarget, matchesBuildTarget } = createWorkingDirectoryMatchers({ ctx, deps });
 
   const existingSession = deps.session.readSessionSnapshot(input.sourceSession);
   if (existingSession) {
@@ -232,9 +199,9 @@ export const executeReuseStart = async ({
       );
     }
     const reuseError = await validateReusableSession({
+      ctx,
+      deps,
       session: existingSession,
-      matchesQaTarget,
-      matchesBuildTarget,
     });
     if (!reuseError) {
       return {
@@ -259,9 +226,9 @@ export const executeReuseStart = async ({
   }
 
   const reuseError = await validateReusableSession({
+    ctx,
+    deps,
     session: persistedSession,
-    matchesQaTarget,
-    matchesBuildTarget,
   });
   if (reuseError) {
     throw new Error(
