@@ -23,7 +23,7 @@ type WorkflowDocumentTarget = {
   inputKey: "markdown" | "reportMarkdown";
 };
 
-const shouldReplayWorkflowDocumentMessagesForAliasHydration = ({
+const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
   activeSession,
   workflowAliasMetadataReady,
   previousWorkflowAliasMetadataReady,
@@ -151,7 +151,7 @@ export function useAgentStudioDocuments({
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
     if (
-      shouldReplayWorkflowDocumentMessagesForAliasHydration({
+      shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady({
         activeSession,
         workflowAliasMetadataReady,
         previousWorkflowAliasMetadataReady,
