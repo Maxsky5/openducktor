@@ -5,7 +5,7 @@ import type {
   AgentSessionRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   firstLaunchAction,
   resolveBuildContinuationLaunchAction,
@@ -28,7 +28,6 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
-import { useSelectedSessionHistoryLoad } from "./selected-session-history-load";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
 type UseAgentStudioSelectedSessionViewArgs = {
@@ -170,11 +169,17 @@ export function useAgentStudioSelectedSessionView({
     readSessionTodos,
   });
 
-  useSelectedSessionHistoryLoad({
-    selectedSessionIdentity,
-    transcriptState,
-    loadAgentSessionHistory,
-  });
+  useEffect(() => {
+    if (
+      selectedSessionIdentity === null ||
+      transcriptState.kind !== "session_loading" ||
+      transcriptState.reason !== "history"
+    ) {
+      return;
+    }
+
+    void loadAgentSessionHistory(selectedSessionIdentity);
+  }, [loadAgentSessionHistory, selectedSessionIdentity, transcriptState]);
 
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({
