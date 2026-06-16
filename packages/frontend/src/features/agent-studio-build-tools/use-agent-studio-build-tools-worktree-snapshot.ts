@@ -27,16 +27,18 @@ import {
 } from "./agent-studio-build-tools-worktree-snapshot";
 import {
   type BuildToolsSelectedView,
-  type BuildToolsSessionDescriptor,
   isBuildToolsSessionContextStable,
   useAgentStudioBuildToolsBootstrap,
 } from "./use-agent-studio-build-tools-bootstrap";
+
+type BuildToolsActiveSessionRole =
+  | NonNullable<BuildToolsSelectedView["activeSession"]>["role"]
+  | null;
 
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  session: BuildToolsSessionDescriptor;
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
@@ -66,7 +68,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     taskId: string | null;
     selectedTaskId: string | null;
     viewRole: BuildToolsSelectedView["role"];
-    sessionRole: BuildToolsSessionDescriptor["role"];
+    activeSessionRole: BuildToolsActiveSessionRole;
     sessionWorkingDirectory: string | null;
     isSessionContextStable: boolean;
     hasSelectedTask: boolean;
@@ -122,7 +124,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    session,
     panelKind,
     isPanelOpen,
     repoSettings,
@@ -130,9 +131,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
-  const sessionRole = session.role;
+  const activeSession = selectedView.activeSession;
+  const activeSessionRole = activeSession?.role ?? null;
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
-    sessionRole === "build" ? "worktree" : "repository";
+    activeSessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
     gitPanelContextMode === "repository"
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
@@ -142,7 +144,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewSelectedTaskId: selectedView.selectedTask?.id ?? null,
   });
   const isSessionContextStable = isBuildToolsSessionContextStable({
-    sessionRole,
+    activeSession,
     transcriptState: selectedView.transcriptState,
   });
   const hasSelectedTask = selectedTaskId != null;
@@ -171,7 +173,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
     selectedView,
-    session,
     panelKind,
     isPanelOpen,
   });
@@ -310,7 +311,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         taskId,
         selectedTaskId,
         viewRole: selectedView.role,
-        sessionRole,
+        activeSessionRole,
         sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
         isSessionContextStable,
         hasSelectedTask,
@@ -337,7 +338,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       resolvedGitPanelBranch,
       selectedTaskId,
       selectedView.role,
-      sessionRole,
+      activeSessionRole,
       taskTargetBranchState,
       taskId,
       worktree,

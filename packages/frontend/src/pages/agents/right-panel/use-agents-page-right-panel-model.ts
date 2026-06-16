@@ -1,13 +1,13 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import type {
-  BuildToolsSelectedView,
-  BuildToolsSessionDescriptor,
-} from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import {
+  getAgentSessionActivityStateFromSession,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
@@ -28,7 +28,6 @@ export type UseAgentsPageRightPanelModelArgs = {
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  session: BuildToolsSessionDescriptor;
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
@@ -160,7 +159,6 @@ export function useAgentsPageRightPanelModel({
   branches = [],
   activeBranch,
   selectedView,
-  session,
   panelKind,
   isPanelOpen,
   documentsModel,
@@ -173,14 +171,16 @@ export function useAgentsPageRightPanelModel({
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const sessionRole = session.role;
-  const sessionActivityState = session.activityState;
+  const activeSession = selectedView.activeSession;
+  const activeSessionRole = activeSession?.role ?? null;
+  const sessionActivityState = activeSession
+    ? getAgentSessionActivityStateFromSession(activeSession)
+    : null;
 
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    session,
     panelKind,
     isPanelOpen,
     repoSettings,
@@ -189,7 +189,7 @@ export function useAgentsPageRightPanelModel({
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
 
   const isActiveBuilderWorking =
-    sessionRole === "build" && isAgentSessionActivityWorking(sessionActivityState);
+    activeSessionRole === "build" && isAgentSessionActivityWorking(sessionActivityState);
   const detectedConflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],

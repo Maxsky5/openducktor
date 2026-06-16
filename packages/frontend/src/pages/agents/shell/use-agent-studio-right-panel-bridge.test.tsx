@@ -106,45 +106,6 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.selectedView.transcriptState).toBe(
         args.selection.view.transcriptState,
       );
-      expect(state.rightPanelBridge?.rightPanel.session).toEqual({
-        role: "build",
-        activityState: "running",
-        workingDirectory: "/repo/worktrees/task-1",
-        hasActiveSession: true,
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("projects waiting-input activity into the right-panel session descriptor", async () => {
-    const harness = createHookHarness(
-      createArgs({
-        selection: {
-          ...createArgs().selection,
-          view: createSelectionView({
-            activeSession: createAgentSessionFixture({
-              externalSessionId: "session-1",
-              taskId: "task-1",
-              role: "build",
-              status: "running",
-              workingDirectory: "/repo/worktrees/task-1",
-              pendingQuestions: [{ requestId: "question-1", questions: [] }],
-            }),
-          }),
-        },
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      expect(harness.getLatest().rightPanelBridge?.rightPanel.session).toMatchObject({
-        role: "build",
-        activityState: "waiting_input",
-        workingDirectory: "/repo/worktrees/task-1",
-        hasActiveSession: true,
-      });
     } finally {
       await harness.unmount();
     }

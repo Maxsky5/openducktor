@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
+  createAgentSessionFixture,
   createHookHarness,
   createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
@@ -112,6 +113,21 @@ const createGitActions = (gitConflictId: string | null) => ({
   pullFromUpstream: async () => {},
 });
 
+const createSelectedView = (
+  overrides: Partial<HookArgs["selectedView"]> = {},
+): HookArgs["selectedView"] => ({
+  role: "build",
+  taskId: "task-1",
+  selectedTask: createTaskCardFixture({ id: "task-1" }),
+  activeSession: createAgentSessionFixture({
+    role: "build",
+    status: "running",
+    workingDirectory: "/repo",
+  }),
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
+  ...overrides,
+});
+
 beforeEach(async () => {
   buildToolsSnapshotState.current = createSnapshot("A");
   gitActionsState.current = createGitActions("A");
@@ -155,18 +171,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: { repoPath: "/repo" } as never,
   branches: [],
   activeBranch: null,
-  selectedView: {
-    role: "build",
-    taskId: "task-1",
-    selectedTask: createTaskCardFixture({ id: "task-1" }),
-    transcriptState: createSelectedSessionTranscriptStateFixture(),
-  },
-  session: {
-    role: "build",
-    activityState: "running",
-    workingDirectory: "/repo",
-    hasActiveSession: true,
-  },
+  selectedView: createSelectedView(),
   panelKind: "documents",
   isPanelOpen: false,
   documentsModel: { activeDocument: null },
@@ -219,12 +224,14 @@ describe("useAgentsPageRightPanelModel", () => {
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({
-        session: {
-          role: "build",
-          activityState: "waiting_input",
-          workingDirectory: "/repo",
-          hasActiveSession: true,
-        },
+        selectedView: createSelectedView({
+          activeSession: createAgentSessionFixture({
+            role: "build",
+            status: "running",
+            workingDirectory: "/repo",
+            pendingQuestions: [{ requestId: "question-1", questions: [] }],
+          }),
+        }),
         panelKind: "build_tools",
         isPanelOpen: true,
         worktreeRecoveryKey: "recovery-key",

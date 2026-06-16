@@ -1,6 +1,4 @@
 import { useMemo } from "react";
-import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
 import type {
   AgentStudioGitConflictQuickActionContext,
@@ -37,7 +35,6 @@ export type AgentStudioRightPanelRuntimeModel = {
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
-  session: UseAgentsPageRightPanelModelArgs["session"];
   panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
@@ -78,29 +75,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
 > & {
   panelKind: NonNullable<AgentStudioRightPanelPanelState["panelKind"]>;
   isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
-  session: BuildToolsSessionDescriptor;
 };
-
-function useRightPanelSessionDescriptor(
-  activeSession: AgentStudioRightPanelBridgeSelection["view"]["activeSession"],
-): BuildToolsSessionDescriptor {
-  const role = activeSession?.role ?? null;
-  const activityState = activeSession
-    ? getAgentSessionActivityStateFromSession(activeSession)
-    : null;
-  const workingDirectory = activeSession?.workingDirectory ?? null;
-  const hasActiveSession = activeSession != null;
-
-  return useMemo(
-    () => ({
-      role,
-      activityState,
-      workingDirectory,
-      hasActiveSession,
-    }),
-    [activityState, hasActiveSession, role, workingDirectory],
-  );
-}
 
 function buildAgentStudioRightPanelBridgeModel({
   activeWorkspace,
@@ -109,7 +84,6 @@ function buildAgentStudioRightPanelBridgeModel({
   selection,
   panelKind,
   isPanelOpen,
-  session,
   documentsModel,
   repoSettings,
   worktreeRecoveryKey,
@@ -134,7 +108,6 @@ function buildAgentStudioRightPanelBridgeModel({
       activeBranch,
       branches,
       selectedView: selection.view,
-      session,
       panelKind,
       isPanelOpen,
       documentsModel,
@@ -167,7 +140,6 @@ export function useAgentStudioRightPanelBridge({
   const panelKind = panel.panelKind;
   const isPanelOpen = panel.isPanelOpen;
   const isRightPanelVisible = Boolean(panelKind && isPanelOpen);
-  const session = useRightPanelSessionDescriptor(selection.view.activeSession);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
     if (!isRightPanelVisible || !panelKind) {
@@ -181,7 +153,6 @@ export function useAgentStudioRightPanelBridge({
       selection,
       panelKind,
       isPanelOpen,
-      session,
       documentsModel,
       repoSettings,
       worktreeRecoveryKey,
@@ -205,7 +176,6 @@ export function useAgentStudioRightPanelBridge({
     panelKind,
     repoSettings,
     selection,
-    session,
     setTaskTargetBranch,
     worktreeRecoveryKey,
   ]);

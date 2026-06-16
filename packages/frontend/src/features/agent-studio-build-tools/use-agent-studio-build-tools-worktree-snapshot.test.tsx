@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DiffDataState } from "@/features/agent-studio-git";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
@@ -106,6 +105,11 @@ const createSelectedView = (
   role: "build",
   taskId: "task-24",
   selectedTask: createTaskCardFixture({ id: "task-24" }),
+  activeSession: createAgentSessionFixture({
+    role: "build",
+    status: "running",
+    workingDirectory: "/repo",
+  }),
   transcriptState: createSelectedSessionTranscriptStateFixture(),
   ...overrides,
 });
@@ -114,12 +118,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   activeBranch: { name: "main", detached: false },
   selectedView: createSelectedView(),
-  session: {
-    role: "build",
-    activityState: "running",
-    workingDirectory: null,
-    hasActiveSession: true,
-  },
   panelKind: "build_tools",
   isPanelOpen: true,
   repoSettings: null,
@@ -162,12 +160,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("uses a direct non-repo session working directory without querying", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        session: {
-          role: "build",
-          activityState: "running",
-          workingDirectory: "/repo/.worktrees/task-24",
-          hasActiveSession: true,
-        },
+        selectedView: createSelectedView({
+          activeSession: createAgentSessionFixture({
+            role: "build",
+            status: "running",
+            workingDirectory: "/repo/.worktrees/task-24",
+          }),
+        }),
         worktreeRecoveryKey: "recovery-key-b",
       }),
     );
@@ -313,12 +312,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const repoSession = createAgentSessionFixture({ role: "spec", workingDirectory: "/repo" });
     const harness = createHookHarness(
       createBaseArgs({
-        session: {
-          role: repoSession.role,
-          activityState: getAgentSessionActivityStateFromSession(repoSession),
-          workingDirectory: repoSession.workingDirectory,
-          hasActiveSession: true,
-        },
+        selectedView: createSelectedView({
+          role: "spec",
+          activeSession: repoSession,
+        }),
       }),
     );
 
@@ -336,13 +333,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("preserves target-branch validation for repository-mode UI locking without blocking diff", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        session: {
-          role: "spec",
-          activityState: "running",
-          workingDirectory: "/repo",
-          hasActiveSession: true,
-        },
         selectedView: createSelectedView({
+          role: "spec",
+          activeSession: createAgentSessionFixture({
+            role: "spec",
+            status: "running",
+            workingDirectory: "/repo",
+          }),
           selectedTask: createTaskCardFixture({
             id: "task-24",
             targetBranchError: "Invalid openducktor.targetBranch metadata: missing field `branch`.",

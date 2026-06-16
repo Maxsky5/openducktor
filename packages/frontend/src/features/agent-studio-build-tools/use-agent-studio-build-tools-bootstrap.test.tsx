@@ -1,15 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import {
-  type BuildToolsSessionDescriptor,
-  useAgentStudioBuildToolsBootstrap,
-} from "./use-agent-studio-build-tools-bootstrap";
+import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
 
 enableReactActEnvironment();
 
@@ -18,21 +14,13 @@ type HookArgs = Parameters<typeof useAgentStudioBuildToolsBootstrap>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioBuildToolsBootstrap, initialProps);
 
-const toBuildToolsSession = (
-  session: ReturnType<typeof createAgentSessionFixture> | null,
-): BuildToolsSessionDescriptor => ({
-  role: session?.role ?? null,
-  activityState: session ? getAgentSessionActivityStateFromSession(session) : null,
-  workingDirectory: session?.workingDirectory ?? null,
-  hasActiveSession: session != null,
-});
-
 const createSelectedView = (
   overrides: Partial<HookArgs["selectedView"]> = {},
 ): HookArgs["selectedView"] => ({
   role: "build",
   taskId: "task-1",
   selectedTask: null,
+  activeSession: null,
   transcriptState: createSelectedSessionTranscriptStateFixture(),
   ...overrides,
 });
@@ -40,7 +28,6 @@ const createSelectedView = (
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   selectedView: createSelectedView(),
-  session: toBuildToolsSession(null),
   panelKind: "build_tools",
   isPanelOpen: true,
   ...overrides,
@@ -50,13 +37,11 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
   test("blocks build-tools bootstrap while the selected build session history is hydrating", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        session: toBuildToolsSession(
-          createAgentSessionFixture({
+        selectedView: createSelectedView({
+          activeSession: createAgentSessionFixture({
             role: "build",
             workingDirectory: "/repo/worktree",
           }),
-        ),
-        selectedView: createSelectedView({
           transcriptState: createSelectedSessionTranscriptStateFixture({
             kind: "session_loading",
             reason: "history",
@@ -86,13 +71,11 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
-        }),
-        session: toBuildToolsSession(
-          createAgentSessionFixture({
+          activeSession: createAgentSessionFixture({
             role: "build",
             workingDirectory: "/repo/worktree",
           }),
-        ),
+        }),
       }),
     );
 
