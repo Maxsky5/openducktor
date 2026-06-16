@@ -106,7 +106,7 @@ const listChildSessionLinks = async (
     ?.children;
   if (typeof childrenApi !== "function") {
     throw new Error(
-      "OpenCode SDK does not expose session.children(); cannot hydrate subagent transcript links.",
+      "OpenCode SDK does not expose session.children(); cannot load subagent transcript links.",
     );
   }
 
