@@ -112,31 +112,29 @@ export type SessionRefreshContext = { repoPath: string } & Pick<
   "refreshTaskData" | "resolveWorkflowToolAliasesByCanonical"
 >;
 
-export type SessionLifecycleEventContext = {
+export type SessionEventContext = {
   store: SessionStoreContext;
   drafts: SessionDraftContext;
   turn: SessionTurnContext;
   approvals: SessionApprovalContext;
-  runtimeData: SessionRuntimeDataContext;
-};
-
-export type SessionPartEventContext = {
-  store: SessionStoreContext;
-  drafts: SessionDraftContext;
-  turn: SessionTurnContext;
   refresh: SessionRefreshContext;
   runtimeData: SessionRuntimeDataContext;
 };
+
+export type SessionLifecycleEventContext = Pick<
+  SessionEventContext,
+  "store" | "drafts" | "turn" | "approvals" | "runtimeData"
+>;
+
+export type SessionPartEventContext = Pick<
+  SessionEventContext,
+  "store" | "drafts" | "turn" | "refresh" | "runtimeData"
+>;
 
 export type SessionToolPartEventContext = Pick<
   SessionPartEventContext,
   "store" | "refresh" | "runtimeData"
 >;
-
-export type SessionEventHandlerContext = {
-  lifecycle: SessionLifecycleEventContext;
-  parts: SessionPartEventContext;
-};
 
 const createTargetContext = (context: ObserveAgentSessionParams): SessionEventTargetContext => ({
   sessionIdentity: context.sessionRef,
@@ -152,6 +150,7 @@ const createStoreContext = (
   updateSession: context.updateSession,
   readSession: context.readSession,
   hasSession: (identity) => context.readSession(identity) !== null,
+  ...(context.hasSessionObserver ? { hasSessionObserver: context.hasSessionObserver } : {}),
 });
 
 const createDraftContext = (
@@ -174,49 +173,31 @@ const createTurnContext = (
   clearTurnDuration: context.clearTurnDuration,
 });
 
-const createRuntimeDataContext = (
+export const createSessionEventContext = (
   context: ObserveAgentSessionParams,
-): SessionRuntimeDataContext => ({
-  updateSessionTodos: context.updateSessionTodos,
-});
-
-const createRefreshContext = (context: ObserveAgentSessionParams): SessionRefreshContext => ({
-  repoPath: context.sessionRef.repoPath,
-  refreshTaskData: context.refreshTaskData,
-  resolveWorkflowToolAliasesByCanonical: context.resolveWorkflowToolAliasesByCanonical,
-});
-
-export const createSessionEventHandlerContext = (
-  context: ObserveAgentSessionParams,
-): SessionEventHandlerContext => {
+): SessionEventContext => {
   const target = createTargetContext(context);
   const store = createStoreContext(context, target);
-  const lifecycleStore = context.hasSessionObserver
-    ? { ...store, hasSessionObserver: context.hasSessionObserver }
-    : store;
   const drafts = createDraftContext(context, target);
   const turn = createTurnContext(context, target);
-  const runtimeData = createRuntimeDataContext(context);
 
   return {
-    lifecycle: {
-      store: lifecycleStore,
-      drafts,
-      turn,
-      approvals: {
-        repoPath: context.sessionRef.repoPath,
-        adapter: context.adapter,
-        buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
-        canAutoRejectReadOnlyApproval: context.canAutoRejectReadOnlyApproval,
-      },
-      runtimeData,
+    store,
+    drafts,
+    turn,
+    approvals: {
+      repoPath: context.sessionRef.repoPath,
+      adapter: context.adapter,
+      buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
+      canAutoRejectReadOnlyApproval: context.canAutoRejectReadOnlyApproval,
     },
-    parts: {
-      store,
-      drafts,
-      turn,
-      refresh: createRefreshContext(context),
-      runtimeData,
+    refresh: {
+      repoPath: context.sessionRef.repoPath,
+      refreshTaskData: context.refreshTaskData,
+      resolveWorkflowToolAliasesByCanonical: context.resolveWorkflowToolAliasesByCanonical,
+    },
+    runtimeData: {
+      updateSessionTodos: context.updateSessionTodos,
     },
   };
 };

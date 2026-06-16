@@ -10,9 +10,9 @@ import {
 import type {
   ObserveAgentSessionParams,
   SessionEvent,
-  SessionEventHandlerContext,
+  SessionEventContext,
 } from "./session-event-types";
-import { createSessionEventHandlerContext } from "./session-event-types";
+import { createSessionEventContext } from "./session-event-types";
 import {
   handleAssistantMessage,
   handleSessionCompacted,
@@ -44,58 +44,58 @@ const handleMcpReconnectStarted = (
   });
 };
 
-const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
+const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): void => {
   switch (event.type) {
     case "session_started":
-      handleSessionStarted(context.lifecycle, event);
+      handleSessionStarted(context, event);
       return;
     case "assistant_delta":
-      handleAssistantDelta(context.parts, event);
+      handleAssistantDelta(context, event);
       return;
     case "assistant_part":
-      handleAssistantPart(context.parts, event);
+      handleAssistantPart(context, event);
       return;
     case "assistant_message":
-      handleAssistantMessage(context.lifecycle, event);
+      handleAssistantMessage(context, event);
       return;
     case "user_message":
-      handleUserMessage(context.lifecycle, event);
+      handleUserMessage(context, event);
       return;
     case "session_status":
-      handleSessionStatus(context.lifecycle, event);
+      handleSessionStatus(context, event);
       return;
     case "approval_required":
-      handlePermissionRequired(context.lifecycle, event);
+      handlePermissionRequired(context, event);
       return;
     case "approval_resolved":
-      handlePermissionResolved(context.lifecycle, event);
+      handlePermissionResolved(context, event);
       return;
     case "mcp_reconnect_started":
       handleMcpReconnectStarted(event);
       return;
     case "question_required":
-      handleQuestionRequired(context.lifecycle, event);
+      handleQuestionRequired(context, event);
       return;
     case "question_resolved":
-      handleQuestionResolved(context.lifecycle, event);
+      handleQuestionResolved(context, event);
       return;
     case "session_todos_updated":
-      handleSessionTodosUpdated(context.lifecycle, event);
+      handleSessionTodosUpdated(context, event);
       return;
     case "session_compaction_started":
-      handleSessionCompactionStarted(context.lifecycle, event);
+      handleSessionCompactionStarted(context, event);
       return;
     case "session_compacted":
-      handleSessionCompacted(context.lifecycle, event);
+      handleSessionCompacted(context, event);
       return;
     case "session_error":
-      handleSessionError(context.lifecycle, event);
+      handleSessionError(context, event);
       return;
     case "session_idle":
-      handleSessionIdle(context.lifecycle, event);
+      handleSessionIdle(context, event);
       return;
     case "session_finished":
-      handleSessionFinished(context.lifecycle, event);
+      handleSessionFinished(context, event);
       return;
   }
 };
@@ -109,7 +109,7 @@ const isObservedSessionMounted = ({
 export const listenToAgentSessionEvents = async (
   context: ObserveAgentSessionParams,
 ): Promise<() => void> => {
-  const handlerContext = createSessionEventHandlerContext(context);
+  const handlerContext = createSessionEventContext(context);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
   const batcher = createSessionEventBatcher();
   let queuedEvents: QueuedSessionEvent[] = [];
@@ -144,7 +144,7 @@ export const listenToAgentSessionEvents = async (
     let bufferedSession: AgentSessionState | null = context.readSession(context.sessionRef);
     let shouldPersistBufferedSession = false;
     let hasBufferedSessionUpdate = false;
-    const batchedHandlerContext = createSessionEventHandlerContext({
+    const batchedHandlerContext = createSessionEventContext({
       ...context,
       readSession: (identity) => {
         if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
