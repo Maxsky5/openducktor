@@ -3,7 +3,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { isSessionHistoryLoaded } from "../lifecycle/session-history-loader";
+import { isSessionHistoryLoaded } from "../history/session-history-loader";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import type {
   StartAgentSessionInput,

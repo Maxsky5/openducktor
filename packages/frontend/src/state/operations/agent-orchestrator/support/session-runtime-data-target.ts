@@ -3,7 +3,7 @@ import type { AgentSessionRef, RuntimeWorkingDirectoryRef } from "@openducktor/c
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
-import { isSessionHistoryLoaded } from "@/state/operations/agent-orchestrator/lifecycle/session-history-loader";
+import { isSessionHistoryLoaded } from "@/state/operations/agent-orchestrator/history/session-history-loader";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveRuntimeWorkingDirectoryRefState } from "./session-runtime-ref";
 

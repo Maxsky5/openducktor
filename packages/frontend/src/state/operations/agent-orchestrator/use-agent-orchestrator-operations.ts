@@ -15,11 +15,11 @@ import type {
 import type { UpdateSession } from "./events/session-event-types";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
+import { createLoadAgentSessionHistory } from "./history/session-history-loader";
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
-import { createLoadAgentSessionHistory } from "./lifecycle/session-history-loader";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
