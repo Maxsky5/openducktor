@@ -16,7 +16,6 @@ import { createSessionMessagesState } from "../support/messages";
 import {
   createLoadAgentSessionHistory,
   loadSessionHistoryIntoStore,
-  shouldLoadSelectedSessionHistory,
 } from "./session-history-loader";
 
 const taskFixture: TaskCard = {
@@ -89,33 +88,6 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState = createSess
 };
 
 describe("session history loader", () => {
-  test("owns selected-session history loading policy", () => {
-    expect(
-      shouldLoadSelectedSessionHistory({
-        repoReadinessState: "ready",
-        session: createSession(),
-      }),
-    ).toBe(true);
-    expect(
-      shouldLoadSelectedSessionHistory({
-        repoReadinessState: "ready",
-        session: { ...createSession(), historyLoadState: "failed" },
-      }),
-    ).toBe(false);
-    expect(
-      shouldLoadSelectedSessionHistory({
-        repoReadinessState: "checking",
-        session: createSession(),
-      }),
-    ).toBe(false);
-    expect(
-      shouldLoadSelectedSessionHistory({
-        repoReadinessState: "ready",
-        session: { ...createSession(), historyLoadState: "loading" },
-      }),
-    ).toBe(false);
-  });
-
   test("treats a stale operation as neither applied nor failed", async () => {
     const loadSessionHistory = mock(async () => []);
     const updateSession = mock(() => undefined);

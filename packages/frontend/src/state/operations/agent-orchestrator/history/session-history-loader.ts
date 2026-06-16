@@ -4,8 +4,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionHistorySystemPromptContext,
 } from "@openducktor/core";
-import { type MutableRefObject, useEffect } from "react";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
 import { mergeHistoryMessages } from "../support/history-message-merge";
@@ -50,45 +49,10 @@ type CreateLoadAgentSessionHistoryArgs = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
-type UseSelectedSessionHistoryLoaderArgs = {
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  repoReadinessState: RepoRuntimeReadinessState;
-  session: AgentSessionState | null;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
-};
-
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
 export const isSessionHistoryLoaded = (session: AgentSessionState): boolean =>
   session.historyLoadState === "loaded";
-
-export const shouldLoadSelectedSessionHistory = ({
-  repoReadinessState,
-  session,
-}: {
-  repoReadinessState: RepoRuntimeReadinessState;
-  session: AgentSessionState | null;
-}): boolean => repoReadinessState === "ready" && session?.historyLoadState === "not_requested";
-
-export const useSelectedSessionHistoryLoader = ({
-  selectedSessionIdentity,
-  repoReadinessState,
-  session,
-  loadAgentSessionHistory,
-}: UseSelectedSessionHistoryLoaderArgs): void => {
-  const shouldLoadHistory = shouldLoadSelectedSessionHistory({
-    repoReadinessState,
-    session,
-  });
-
-  useEffect(() => {
-    if (selectedSessionIdentity === null || !shouldLoadHistory) {
-      return;
-    }
-
-    void loadAgentSessionHistory(selectedSessionIdentity);
-  }, [loadAgentSessionHistory, selectedSessionIdentity, shouldLoadHistory]);
-};
 
 const canStartSessionHistoryLoad = (session: AgentSessionState): boolean =>
   session.historyLoadState === "not_requested" || session.historyLoadState === "failed";

@@ -163,16 +163,15 @@ Files:
 
 Owns:
 
-- deciding when a selected session should retry or start its history load
-- running the selected-session history load effect for the Agent Studio view
 - claiming, applying, failing, and releasing session history load state
 - building transient runtime prompt context through the shared prompt helper and
   passing it to history loads without storing it in session state
 - merging runtime history into transcript messages without erasing live messages
 
 Invariant: history loading is explicit and singular. The selected session view or
-session action asks to load one concrete session route; the repo projection never
-bulk-loads transcripts.
+session action asks to load one concrete session route; this command owner claims,
+applies, fails, or releases that concrete load. The repo projection never bulk-loads
+transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 read mutable collection snapshots directly.
 
@@ -318,10 +317,12 @@ surface hooks and rendering components must not interpret transcript state
 directly or pass a separate transcript-pending boolean beside transcript state.
 Agent chat types must reference the canonical selected-session transcript state and
 repo-runtime readiness contracts instead of declaring local lookalike shapes.
-Selected-session transcript state is the source of truth for transcript loading. Shell,
-right-panel, and build-tool modules may derive edge booleans from
-`viewTranscriptState`, but central selection must not expose a second
-`isSessionViewLoading` field.
+Selected-session transcript state is the source of truth for transcript loading.
+The selected-session view starts history loading only when transcript state is
+`session_loading` with reason `history`; it must not recompute that condition from
+runtime readiness and session history fields. Shell, right-panel, and build-tool
+modules may derive edge booleans from `viewTranscriptState`, but central selection
+must not expose a second `isSessionViewLoading` field.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
 loading and error fields; selected-session transcript state is the only place that

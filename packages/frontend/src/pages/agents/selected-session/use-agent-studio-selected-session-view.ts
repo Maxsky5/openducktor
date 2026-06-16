@@ -15,7 +15,6 @@ import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSession } from "@/state/app-state-provider";
-import { useSelectedSessionHistoryLoader } from "@/state/operations/agent-orchestrator/history/session-history-loader";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import {
@@ -29,6 +28,7 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
+import { useSelectedSessionHistoryLoad } from "./selected-session-history-load";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
 type UseAgentStudioSelectedSessionViewArgs = {
@@ -170,10 +170,9 @@ export function useAgentStudioSelectedSessionView({
     readSessionTodos,
   });
 
-  useSelectedSessionHistoryLoader({
+  useSelectedSessionHistoryLoad({
     selectedSessionIdentity,
-    repoReadinessState,
-    session,
+    transcriptState,
     loadAgentSessionHistory,
   });
 
