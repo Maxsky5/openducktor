@@ -68,7 +68,9 @@ export type AgentStudioSelectedView = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   activeSessionSummary: AgentSessionSummary | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
   activeSession: AgentSessionState | null;
+  selectedSessionModel: AgentSessionState["selectedModel"] | null;
   sessionRuntimeData: AgentStudioSelectedSessionView["runtimeData"];
   sessionRuntimeDataError: AgentStudioSelectedSessionView["runtimeDataError"];
   runtimeReadiness: AgentStudioSelectedSessionView["runtimeReadiness"];
@@ -294,7 +296,9 @@ export function useAgentStudioSelectionController({
         selectedTask: selectedViewTask,
         sessionsForTask: selectedViewSessions,
         activeSessionSummary: selectedSessionView.sessionSummary,
+        selectedSessionIdentity: selectedSessionView.sessionIdentity,
         activeSession: selectedSessionView.session,
+        selectedSessionModel: selectedSessionView.selectedModel,
         sessionRuntimeData: selectedSessionView.runtimeData,
         sessionRuntimeDataError: selectedSessionView.runtimeDataError,
         runtimeReadiness: selectedSessionView.runtimeReadiness,
@@ -321,6 +325,8 @@ export function useAgentStudioSelectionController({
       selectedSessionView.runtimeDataError,
       selectedSessionView.runtimeReadiness,
       selectedSessionView.session,
+      selectedSessionView.sessionIdentity,
+      selectedSessionView.selectedModel,
       selectedSessionView.sessionSummary,
       selectedSessionFromRoute,
       selectedTask,

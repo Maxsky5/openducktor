@@ -261,7 +261,8 @@ const createAssistantMessage = (
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   activeSession: null,
-  activeSessionSummary: null,
+  selectedSessionIdentity: null,
+  selectedSessionModel: null,
   activeSessionModelCatalog: null,
   activeSessionIsLoadingModelCatalog: false,
   role: "spec",
@@ -396,23 +397,16 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession: null,
-        activeSessionSummary: {
+        selectedSessionIdentity: {
           externalSessionId: "external-1",
-          taskId: "task-1",
-          role: "spec",
-          status: "idle",
-          activityState: "idle",
-          startedAt: "2026-02-20T10:00:00.000Z",
           workingDirectory: "/repo",
           runtimeKind: "opencode",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude-sonnet",
-            profileId: "build-agent",
-          },
-          pendingApprovalCount: 0,
-          pendingQuestionCount: 0,
+        },
+        selectedSessionModel: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          profileId: "build-agent",
         },
         loadCatalog: async () => catalogLoad.promise,
         readSessionSlashCommands,
@@ -443,27 +437,20 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("uses summary target runtime capabilities while the full session object is still loading", async () => {
+  test("uses selected session runtime capabilities while the full session object is still loading", async () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession: null,
-        activeSessionSummary: {
+        selectedSessionIdentity: {
           externalSessionId: "external-codex",
-          taskId: "task-1",
-          role: "spec",
-          status: "idle",
-          activityState: "idle",
-          startedAt: "2026-02-20T10:00:00.000Z",
           workingDirectory: "/repo",
           runtimeKind: "codex",
-          selectedModel: {
-            runtimeKind: "codex",
-            providerId: "openai",
-            modelId: "gpt-5",
-            profileId: "build-agent",
-          },
-          pendingApprovalCount: 0,
-          pendingQuestionCount: 0,
+        },
+        selectedSessionModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "build-agent",
         },
         repoSettings: createRepoSettings(null, "opencode"),
         loadCatalog: async () => CODEX_CATALOG,

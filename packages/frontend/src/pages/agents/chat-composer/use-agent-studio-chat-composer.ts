@@ -35,7 +35,6 @@ import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/pro
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -44,7 +43,8 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
   activeSession: AgentSessionState | null;
-  activeSessionSummary: AgentSessionSummary | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionModel: AgentSessionState["selectedModel"] | null;
   activeSessionModelCatalog: AgentModelCatalog | null;
   activeSessionIsLoadingModelCatalog: boolean;
   role: AgentRole;
@@ -118,7 +118,8 @@ type AgentStudioChatComposerState = {
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
   activeSession,
-  activeSessionSummary,
+  selectedSessionIdentity: selectedSessionIdentityFromView,
+  selectedSessionModel: selectedSessionModelFromView,
   activeSessionModelCatalog,
   activeSessionIsLoadingModelCatalog,
   role,
@@ -154,13 +155,12 @@ export function useAgentStudioChatComposer({
   const activeLoadedSessionIdentity: AgentSessionIdentity | null = activeSession
     ? toAgentSessionIdentity(activeSession)
     : null;
-  const activeSessionSelectedModel =
-    activeSession?.selectedModel ?? activeSessionSummary?.selectedModel ?? null;
-  const activeSessionIdentity =
-    activeLoadedSessionIdentity ??
-    (activeSessionSummary ? toAgentSessionIdentity(activeSessionSummary) : null);
-  const activeSessionRuntimeKind = activeSessionIdentity?.runtimeKind ?? null;
-  const hasSessionTarget = activeSessionIdentity !== null;
+  const selectedSessionIdentity = activeLoadedSessionIdentity ?? selectedSessionIdentityFromView;
+  const selectedSessionModel = activeSession
+    ? activeSession.selectedModel
+    : selectedSessionModelFromView;
+  const activeSessionRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
+  const hasSessionTarget = selectedSessionIdentity !== null;
   const hasLoadedSessionTarget = activeSession !== null;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     const selection = toRoleDefaultModelSelection(
@@ -189,7 +189,7 @@ export function useAgentStudioChatComposer({
   } = useAgentStudioDraftModelSelectionState({ workspaceRepoPath, repoSettings, role });
   const selectedRuntimeKind = useMemo<RuntimeKind | null>(() => {
     return resolveSelectedRuntimeKindForChatComposer({
-      activeSessionSelectedModel,
+      selectedSessionModel,
       draftSelection,
       roleDefaultSelection,
       repoDefaultRuntimeKind:
@@ -199,7 +199,7 @@ export function useAgentStudioChatComposer({
           : null,
     });
   }, [
-    activeSessionSelectedModel,
+    selectedSessionModel,
     draftSelection,
     repoSettings?.defaultRuntimeKind,
     roleDefaultSelection,
@@ -210,10 +210,10 @@ export function useAgentStudioChatComposer({
       resolveChatComposerPromptInputTarget({
         workspaceRepoPath,
         activeSession,
-        activeSessionSummary,
+        selectedSessionIdentity,
         selectedRuntimeKind,
       }),
-    [activeSession, activeSessionSummary, selectedRuntimeKind, workspaceRepoPath],
+    [activeSession, selectedSessionIdentity, selectedRuntimeKind, workspaceRepoPath],
   );
   const promptInputRuntimeKind = getChatComposerPromptInputRuntimeKind(promptInputTarget);
   const promptInputRuntimeDefinitions = hasSessionTarget
@@ -283,7 +283,7 @@ export function useAgentStudioChatComposer({
   useActiveSessionModelSelectionRepair({
     activeSession: activeLoadedSessionIdentity,
     activeSessionModelCatalog,
-    activeSessionSelectedModel,
+    activeSessionSelectedModel: activeSession?.selectedModel ?? null,
     roleDefaultSelection,
     updateAgentSessionModel,
   });
@@ -333,13 +333,13 @@ export function useAgentStudioChatComposer({
   const selectedModelSelection = useMemo(
     () =>
       resolveSelectedModelSelection({
-        activeSessionSelectedModel,
+        selectedSessionModel,
         draftSelection,
         roleDefaultSelectionForComposer,
         fallbackCatalogSelection,
       }),
     [
-      activeSessionSelectedModel,
+      selectedSessionModel,
       draftSelection,
       fallbackCatalogSelection,
       roleDefaultSelectionForComposer,

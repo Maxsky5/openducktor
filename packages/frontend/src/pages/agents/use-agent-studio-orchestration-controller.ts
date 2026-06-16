@@ -270,7 +270,8 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
     activeSession: view.activeSession,
-    activeSessionSummary: view.activeSessionSummary,
+    selectedSessionIdentity: view.selectedSessionIdentity,
+    selectedSessionModel: view.selectedSessionModel,
     activeSessionModelCatalog: view.sessionRuntimeData.modelCatalog,
     activeSessionIsLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
     role: view.role,

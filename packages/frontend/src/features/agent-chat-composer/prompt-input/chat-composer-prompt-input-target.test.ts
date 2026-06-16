@@ -11,7 +11,7 @@ const session = (runtimeKind: RuntimeKind = "codex") => ({
   pendingQuestions: [],
 });
 
-const summary = (runtimeKind: RuntimeKind = "codex") => ({
+const sessionIdentity = (runtimeKind: RuntimeKind = "codex") => ({
   externalSessionId: "session-1",
   runtimeKind,
   workingDirectory: "/repo/worktree",
@@ -22,7 +22,7 @@ describe("resolveChatComposerPromptInputTarget", () => {
     const target = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: "/repo",
       activeSession: session(),
-      activeSessionSummary: summary("opencode"),
+      selectedSessionIdentity: sessionIdentity("opencode"),
       selectedRuntimeKind: "opencode",
     });
 
@@ -36,21 +36,21 @@ describe("resolveChatComposerPromptInputTarget", () => {
     });
   });
 
-  test("keeps summary-only and starting sessions in an explicit loading state", () => {
-    const summaryTarget = resolveChatComposerPromptInputTarget({
+  test("keeps selected but unloaded and starting sessions in an explicit loading state", () => {
+    const unloadedTarget = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: "/repo",
       activeSession: null,
-      activeSessionSummary: summary(),
+      selectedSessionIdentity: sessionIdentity(),
       selectedRuntimeKind: "opencode",
     });
     const startingTarget = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: "/repo",
       activeSession: { ...session(), status: "starting" },
-      activeSessionSummary: summary(),
+      selectedSessionIdentity: sessionIdentity(),
       selectedRuntimeKind: "opencode",
     });
 
-    expect(summaryTarget).toEqual({ kind: "sessionLoading", runtimeKind: "codex" });
+    expect(unloadedTarget).toEqual({ kind: "sessionLoading", runtimeKind: "codex" });
     expect(startingTarget).toEqual({ kind: "sessionLoading", runtimeKind: "codex" });
   });
 
@@ -67,7 +67,7 @@ describe("resolveChatComposerPromptInputTarget", () => {
           },
         ],
       },
-      activeSessionSummary: null,
+      selectedSessionIdentity: null,
       selectedRuntimeKind: "opencode",
     });
 
@@ -85,7 +85,7 @@ describe("resolveChatComposerPromptInputTarget", () => {
     const target = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: "/repo",
       activeSession: null,
-      activeSessionSummary: null,
+      selectedSessionIdentity: null,
       selectedRuntimeKind: "opencode",
     });
 
@@ -100,13 +100,13 @@ describe("resolveChatComposerPromptInputTarget", () => {
     const noRepoTarget = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: null,
       activeSession: null,
-      activeSessionSummary: null,
+      selectedSessionIdentity: null,
       selectedRuntimeKind: "opencode",
     });
     const noRuntimeTarget = resolveChatComposerPromptInputTarget({
       workspaceRepoPath: "/repo",
       activeSession: null,
-      activeSessionSummary: null,
+      selectedSessionIdentity: null,
       selectedRuntimeKind: null,
     });
 

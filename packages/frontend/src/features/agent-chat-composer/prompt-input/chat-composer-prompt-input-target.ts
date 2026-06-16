@@ -2,9 +2,8 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
 export type ChatComposerPromptInputTarget =
   | {
@@ -36,7 +35,7 @@ export type ChatComposerPromptInputTarget =
 type ResolveChatComposerPromptInputTargetArgs = {
   workspaceRepoPath: string | null;
   activeSession: ChatComposerPromptInputSession | null;
-  activeSessionSummary: ChatComposerPromptInputSummary | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
   selectedRuntimeKind: RuntimeKind | null;
 };
 
@@ -50,15 +49,10 @@ type ChatComposerPromptInputSession = Pick<
   | "pendingQuestions"
 >;
 
-type ChatComposerPromptInputSummary = Pick<
-  AgentSessionSummary,
-  "externalSessionId" | "runtimeKind" | "workingDirectory"
->;
-
 export const resolveChatComposerPromptInputTarget = ({
   workspaceRepoPath,
   activeSession,
-  activeSessionSummary,
+  selectedSessionIdentity,
   selectedRuntimeKind,
 }: ResolveChatComposerPromptInputTargetArgs): ChatComposerPromptInputTarget => {
   if (activeSession) {
@@ -95,10 +89,10 @@ export const resolveChatComposerPromptInputTarget = ({
     };
   }
 
-  if (activeSessionSummary) {
+  if (selectedSessionIdentity) {
     return {
       kind: "sessionLoading",
-      runtimeKind: activeSessionSummary.runtimeKind,
+      runtimeKind: selectedSessionIdentity.runtimeKind,
     };
   }
 

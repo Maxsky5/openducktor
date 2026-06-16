@@ -2,18 +2,18 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 
 export const resolveSelectedRuntimeKindForChatComposer = ({
-  activeSessionSelectedModel,
+  selectedSessionModel,
   draftSelection,
   roleDefaultSelection,
   repoDefaultRuntimeKind,
 }: {
-  activeSessionSelectedModel: AgentModelSelection | null;
+  selectedSessionModel: AgentModelSelection | null;
   draftSelection: AgentModelSelection | null;
   roleDefaultSelection: AgentModelSelection | null;
   repoDefaultRuntimeKind?: RuntimeKind | null;
 }): RuntimeKind | null => {
   return (
-    activeSessionSelectedModel?.runtimeKind ??
+    selectedSessionModel?.runtimeKind ??
     draftSelection?.runtimeKind ??
     roleDefaultSelection?.runtimeKind ??
     repoDefaultRuntimeKind ??

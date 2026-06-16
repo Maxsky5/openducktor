@@ -45,18 +45,18 @@ export const resolveSelectionCatalogLoading = ({
 };
 
 export const resolveSelectedModelSelection = ({
-  activeSessionSelectedModel,
+  selectedSessionModel,
   draftSelection,
   roleDefaultSelectionForComposer,
   fallbackCatalogSelection,
 }: {
-  activeSessionSelectedModel: AgentModelSelection | null;
+  selectedSessionModel: AgentModelSelection | null;
   draftSelection: AgentModelSelection | null;
   roleDefaultSelectionForComposer: AgentModelSelection | null;
   fallbackCatalogSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
   return (
-    activeSessionSelectedModel ??
+    selectedSessionModel ??
     draftSelection ??
     roleDefaultSelectionForComposer ??
     fallbackCatalogSelection ??

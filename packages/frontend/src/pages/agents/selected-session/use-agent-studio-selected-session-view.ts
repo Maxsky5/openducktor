@@ -58,7 +58,9 @@ type UseAgentStudioSelectedSessionViewArgs = {
 
 export type AgentStudioSelectedSessionView = {
   sessionSummary: AgentSessionSummary | null;
+  sessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
+  selectedModel: AgentSessionState["selectedModel"] | null;
   runtimeData: SessionRuntimeDataState["runtimeData"];
   runtimeDataError: string | null;
   runtimeReadiness: RepoRuntimeReadiness;
@@ -166,7 +168,11 @@ export function useAgentStudioSelectedSessionView({
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({
       sessionSummary: selection.sessionSummary,
+      sessionIdentity: selectedSessionIdentity,
       session,
+      selectedModel: session
+        ? session.selectedModel
+        : (selection.sessionSummary?.selectedModel ?? null),
       runtimeData: runtimeData.runtimeData,
       runtimeDataError: runtimeData.runtimeDataError,
       runtimeReadiness,
@@ -183,6 +189,7 @@ export function useAgentStudioSelectedSessionView({
       selection.role,
       selection.sessionSummary,
       session,
+      selectedSessionIdentity,
     ],
   );
 }

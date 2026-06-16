@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
@@ -21,38 +22,43 @@ const createPanelState = (
 
 const createSelectionView = (
   overrides: Partial<HookArgs["selection"]["view"]> = {},
-): HookArgs["selection"]["view"] => ({
-  role: "build",
-  taskId: "task-1",
-  selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
-  sessionsForTask: [],
-  activeSessionSummary: null,
-  activeSession: createAgentSessionFixture({
+): HookArgs["selection"]["view"] => {
+  const activeSession = createAgentSessionFixture({
     externalSessionId: "session-1",
     taskId: "task-1",
     role: "build",
     status: "running",
     workingDirectory: "/repo/worktrees/task-1",
-  }),
-  sessionRuntimeData: {
-    modelCatalog: null,
-    todos: [],
-    isLoadingModelCatalog: false,
-  },
-  sessionRuntimeDataError: null,
-  runtimeReadiness: {
-    readinessState: "ready",
-    isReady: true,
-    isRuntimeStarting: false,
-    blockedReason: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
-  launchActionId: "build_implementation_start",
-  isTaskReady: true,
-  transcriptState: createSelectedSessionTranscriptStateFixture(),
-  ...overrides,
-});
+  });
+  return {
+    role: "build",
+    taskId: "task-1",
+    selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
+    sessionsForTask: [],
+    activeSessionSummary: null,
+    selectedSessionIdentity: toAgentSessionIdentity(activeSession),
+    activeSession,
+    selectedSessionModel: activeSession.selectedModel,
+    sessionRuntimeData: {
+      modelCatalog: null,
+      todos: [],
+      isLoadingModelCatalog: false,
+    },
+    sessionRuntimeDataError: null,
+    runtimeReadiness: {
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
+    launchActionId: "build_implementation_start",
+    isTaskReady: true,
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
+    ...overrides,
+  };
+};
 
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
