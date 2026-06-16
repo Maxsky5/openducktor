@@ -14,8 +14,8 @@ import {
 } from "@/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
@@ -364,12 +364,16 @@ export const resolveAgentStudioViewSessionSelection = ({
   };
 };
 
+const isLiveAgentSessionState = (
+  session: AgentSessionSummary | AgentSessionState,
+): session is AgentSessionState => "messages" in session;
+
 export const resolveAgentStudioBuilderSessionsForTask = ({
   taskId,
   candidateSessions,
 }: {
   taskId: string;
-  candidateSessions: Array<AgentSessionSummary | null>;
+  candidateSessions: Array<AgentSessionSummary | AgentSessionState | null>;
 }): AgentSessionSummary[] => {
   if (!taskId) {
     return [];
@@ -387,7 +391,7 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
       continue;
     }
     seenSessionKeys.add(sessionKey);
-    sessions.push(session);
+    sessions.push(isLiveAgentSessionState(session) ? toAgentSessionSummary(session) : session);
   }
 
   return sessions;

@@ -1,6 +1,5 @@
 import { type RefObject, useCallback, useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
@@ -114,39 +113,9 @@ export function useAgentsPageOrchestrationShellModel({
     },
   });
 
-  const activeSessionSummary = selection.activeSessionSummary;
-  const selectedViewSessionSummary = useMemo(
-    () =>
-      selection.view.activeSessionSummary ??
-      (selection.view.activeSession ? toAgentSessionSummary(selection.view.activeSession) : null),
-    [selection.view.activeSession, selection.view.activeSessionSummary],
-  );
-  const rebaseConflictSelection = useMemo(
-    () => ({
-      view: {
-        taskId: selection.view.taskId,
-        selectedTask: selection.view.selectedTask,
-        activeSession: selectedViewSessionSummary,
-        sessionsForTask: selection.view.sessionsForTask,
-      },
-      activeSession: activeSessionSummary,
-      selectedSessionFromRoute: selection.selectedSessionFromRoute,
-      sessionsForTask: selection.sessionsForTask,
-    }),
-    [
-      activeSessionSummary,
-      selection.selectedSessionFromRoute,
-      selection.sessionsForTask,
-      selection.view.selectedTask,
-      selection.view.sessionsForTask,
-      selection.view.taskId,
-      selectedViewSessionSummary,
-    ],
-  );
-
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     workspaceId: activeWorkspaceId,
-    selection: rebaseConflictSelection,
+    selection,
     scheduleQueryUpdate,
     startSessionRequest: orchestration.startSessionRequest,
   });

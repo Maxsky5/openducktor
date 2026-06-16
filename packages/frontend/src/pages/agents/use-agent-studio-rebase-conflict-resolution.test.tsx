@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
+  createAgentSessionFixture,
   createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
@@ -69,10 +70,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
           title: "Resolve rebase conflict",
           description: "Fix the branch divergence.",
         }),
-        activeSession: plannerSession,
+        activeSession: null,
+        activeSessionSummary: plannerSession,
         sessionsForTask: [builderSession],
       },
-      activeSession: plannerSession,
+      activeSessionSummary: plannerSession,
       selectedSessionFromRoute: null,
       sessionsForTask: [builderSession],
     },
@@ -128,11 +130,12 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       externalSessionId: "build-other",
       workingDirectory: "/repo/worktrees/other",
     });
+    const baseSelection = createBaseArgs().selection;
     const args = createBaseArgs({
       selection: {
-        ...createBaseArgs().selection,
+        ...baseSelection,
         view: {
-          ...createBaseArgs().selection.view,
+          ...baseSelection.view,
           sessionsForTask: [matchingBuilderSession, otherBuilderSession],
         },
         sessionsForTask: [matchingBuilderSession, otherBuilderSession],
@@ -172,26 +175,20 @@ describe("useAgentStudioRebaseConflictResolution", () => {
   });
 
   test("does not require an existing selected model to request a new conflict session", async () => {
+    const baseSelection = createBaseArgs().selection;
+    const builderSession = buildSession({
+      externalSessionId: "build-1",
+      workingDirectory: "/repo/worktrees/task-1",
+      selectedModel: null,
+    });
     const args = createBaseArgs({
       selection: {
-        ...createBaseArgs().selection,
+        ...baseSelection,
         view: {
-          ...createBaseArgs().selection.view,
-          sessionsForTask: [
-            buildSession({
-              externalSessionId: "build-1",
-              workingDirectory: "/repo/worktrees/task-1",
-              selectedModel: null,
-            }),
-          ],
+          ...baseSelection.view,
+          sessionsForTask: [builderSession],
         },
-        sessionsForTask: [
-          buildSession({
-            externalSessionId: "build-1",
-            workingDirectory: "/repo/worktrees/task-1",
-            selectedModel: null,
-          }),
-        ],
+        sessionsForTask: [builderSession],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),
     });
@@ -225,11 +222,12 @@ describe("useAgentStudioRebaseConflictResolution", () => {
   });
 
   test("passes the conflicted worktree when requesting a fresh conflict session", async () => {
+    const baseSelection = createBaseArgs().selection;
     const args = createBaseArgs({
       selection: {
-        ...createBaseArgs().selection,
+        ...baseSelection,
         view: {
-          ...createBaseArgs().selection.view,
+          ...baseSelection.view,
           sessionsForTask: [],
         },
         sessionsForTask: [],
@@ -298,7 +296,58 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     }
   });
 
-  test("keeps the resolve callback stable when hydration rebuilds the selection wrapper", async () => {
+  test("uses the live selected Builder session without a shell-side summary wrapper", async () => {
+    const liveBuilderSession = createAgentSessionFixture({
+      externalSessionId: "build-live-1",
+      taskId: "task-1",
+      role: "build",
+      status: "running",
+      workingDirectory: "/repo/worktrees/task-1",
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+    const baseSelection = createBaseArgs().selection;
+    const args = createBaseArgs({
+      selection: {
+        ...baseSelection,
+        view: {
+          ...baseSelection.view,
+          activeSession: liveBuilderSession,
+          activeSessionSummary: null,
+          sessionsForTask: [],
+        },
+        activeSessionSummary: null,
+        sessionsForTask: [],
+      },
+      startSessionRequest: mock(async () => sessionWorkflowResult("build-live-1")),
+    });
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
+
+      expect(resolved).toBe(true);
+      expect(args.startSessionRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialStartMode: "reuse",
+          initialSourceSession: {
+            externalSessionId: "build-live-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/task-1",
+          },
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the resolve callback stable when the selection object is rebuilt", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
 
