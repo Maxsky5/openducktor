@@ -311,7 +311,8 @@ inline that selection logic. The target resolver does not own runtime readiness 
 query enablement; it only returns `none`, `live`, or a concrete history ref.
 Readonly transcript presentation state is derived in
 `readonly-transcript/runtime-transcript-surface-state.ts`; hooks must not inline
-empty/loading/error or displayed-session working-state policy.
+empty/loading/error policy. Displayed-session working state stays with the hook
+that passes the session into the shared chat model.
 Agent chat renderable-thread projection, transcript notice copy, and
 reset-window policy are derived in `agent-chat/agent-chat-thread-state.ts`;
 surface hooks and rendering components must not interpret transcript state

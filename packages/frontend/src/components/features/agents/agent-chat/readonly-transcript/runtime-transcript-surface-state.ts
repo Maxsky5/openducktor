@@ -1,13 +1,11 @@
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentChatEmptyStateModel, AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentChatEmptyStateModel } from "../agent-chat.types";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
 type RuntimeTranscriptSurfaceState = {
-  isSessionWorking: boolean;
   loadError: string | null;
   emptyState: AgentChatEmptyStateModel | null;
 };
@@ -16,7 +14,7 @@ type RuntimeTranscriptSurfaceStateInput = {
   isOpen: boolean;
   hasWorkspace: boolean;
   hasTarget: boolean;
-  session: AgentChatThreadSession | null;
+  hasSession: boolean;
   transcriptState: AgentSessionTranscriptState;
   historyError: string | null;
   chatSettingsError: unknown;
@@ -69,7 +67,7 @@ export const deriveRuntimeTranscriptSurfaceState = ({
   isOpen,
   hasWorkspace,
   hasTarget,
-  session,
+  hasSession,
   transcriptState,
   historyError,
   chatSettingsError,
@@ -80,10 +78,9 @@ export const deriveRuntimeTranscriptSurfaceState = ({
     chatSettingsError,
   });
   const isTranscriptLoading = isAgentSessionTranscriptLoading(transcriptState);
-  const isSessionDisplayed = session !== null;
   const isLoadingTargetTranscript = isOpen && hasWorkspace && hasTarget && isTranscriptLoading;
   const emptyState =
-    loadError || (!isSessionDisplayed && !isLoadingTargetTranscript)
+    loadError || (!hasSession && !isLoadingTargetTranscript)
       ? toUnavailableConversationEmptyState({
           hasWorkspace,
           hasTarget,
@@ -92,7 +89,6 @@ export const deriveRuntimeTranscriptSurfaceState = ({
       : null;
 
   return {
-    isSessionWorking: isAgentSessionActivityWorking(session?.activityState),
     loadError,
     emptyState,
   };

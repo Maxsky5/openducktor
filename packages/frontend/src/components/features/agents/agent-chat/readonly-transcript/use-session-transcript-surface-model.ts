@@ -1,3 +1,4 @@
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-health";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -61,7 +62,7 @@ export function useSessionTranscriptSurfaceModel({
     isOpen,
     hasWorkspace,
     hasTarget: target !== null,
-    session: transcriptInteractions.session,
+    hasSession: transcriptInteractions.session !== null,
     transcriptState: sessionHistory.transcriptState,
     historyError: sessionHistory.historyError,
     chatSettingsError,
@@ -71,7 +72,7 @@ export function useSessionTranscriptSurfaceModel({
     session: transcriptInteractions.session,
     transcriptState: sessionHistory.transcriptState,
     chatSettings,
-    isSessionWorking: transcriptSurfaceState.isSessionWorking,
+    isSessionWorking: isAgentSessionActivityWorking(transcriptInteractions.session?.activityState),
     runtimeDefinitions,
     sessionRuntimeDataError: transcriptSurfaceState.loadError,
     runtimeReadiness,

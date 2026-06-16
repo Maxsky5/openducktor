@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 
 const baseInput = {
   isOpen: true,
   hasWorkspace: true,
   hasTarget: true,
-  session: null,
+  hasSession: false,
   transcriptState: { kind: "empty" as const },
   historyError: null,
   chatSettingsError: null,
@@ -63,43 +62,11 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
     });
   });
 
-  test("derives working state from the displayed session", () => {
-    expect(
-      deriveRuntimeTranscriptSurfaceState({
-        ...baseInput,
-        session: {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo-a",
-          title: "Session",
-          activityState: "running",
-          messages: createSessionMessagesState("session-1"),
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-          todos: [],
-        },
-        transcriptState: { kind: "visible" },
-      }).isSessionWorking,
-    ).toBe(true);
-  });
-
   test("does not expose an empty state while a session is displayed", () => {
     expect(
       deriveRuntimeTranscriptSurfaceState({
         ...baseInput,
-        session: {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo-a",
-          title: "Session",
-          activityState: "idle",
-          messages: createSessionMessagesState("session-1"),
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-          todos: [],
-        },
+        hasSession: true,
         transcriptState: { kind: "visible" },
       }).emptyState,
     ).toBeNull();
