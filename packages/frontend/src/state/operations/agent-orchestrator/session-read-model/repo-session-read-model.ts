@@ -10,14 +10,14 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { normalizeWorkingDirectory } from "../support/core";
+import { fromPersistedSessionRecord } from "../support/persistence";
+import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   type AgentSessionRuntimeSnapshot,
   applyAgentSessionRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
-} from "../lifecycle/session-runtime-snapshot";
-import { normalizeWorkingDirectory } from "../support/core";
-import { fromPersistedSessionRecord } from "../support/persistence";
-import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
+} from "./session-runtime-snapshot";
 
 type TaskSessionRecord = {
   taskId: string;

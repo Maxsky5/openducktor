@@ -97,6 +97,7 @@ Files:
 
 - `session-read-model/load-sessions.ts`
 - `session-read-model/repo-session-read-model.ts`
+- `session-read-model/session-runtime-snapshot.ts`
 - `hooks/use-repo-session-read-model-effects.ts`
 
 Owns:
@@ -513,7 +514,7 @@ Use these compact tests as the first-line safety net:
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Runtime preparation failures before session start | `lifecycle/ensure-ready.test.ts` |
-| Runtime snapshot projection onto session state | `lifecycle/session-runtime-snapshot.test.ts` |
+| Runtime snapshot projection onto session state | `session-read-model/session-runtime-snapshot.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
 | Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |
 | Readonly transcript loading and direct pending-input replies | `components/features/agents/agent-chat/readonly-transcript/use-session-transcript-surface-model.test.tsx` |

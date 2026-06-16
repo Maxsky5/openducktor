@@ -3,17 +3,17 @@ import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
-import { throwIfRepoStale } from "../support/core";
-import type { SessionObservers } from "../support/session-observers";
-import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
-import { isWorkflowAgentSession } from "../support/workflow-session";
 import {
   type AgentSessionRuntimeSnapshot,
   type AvailableAgentSessionRuntimeSnapshot,
   applyAgentSessionRuntimeSnapshotToSession,
   sessionRuntimeSnapshotHasPendingInput,
-} from "./session-runtime-snapshot";
+} from "../session-read-model/session-runtime-snapshot";
+import { throwIfRepoStale } from "../support/core";
+import type { SessionObservers } from "../support/session-observers";
+import { loadSessionPromptContext } from "../support/session-prompt";
+import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 
 type EnsureSessionReadyDependencies = {
   workspaceRepoPath: string | null;
