@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useEffect, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   type AgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
@@ -20,7 +20,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   isLoadingTasks: boolean;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   cleanupLocalSessions: (sessions: readonly AgentSessionRef[]) => void;
@@ -39,7 +39,7 @@ export const useRepoSessionReadModelEffects = ({
   isLoadingTasks,
   currentWorkspaceRepoPathRef,
   repoEpochRef,
-  setSessionCollection,
+  commitSessionCollection,
   agentEngine,
   observeAgentSession,
   cleanupLocalSessions,
@@ -78,7 +78,7 @@ export const useRepoSessionReadModelEffects = ({
           repoPath: workspaceRepoPath,
           tasks: taskSessionTargets,
           adapter: agentEngine,
-          setSessionCollection,
+          commitSessionCollection,
           observeAgentSession,
           cleanupLocalSessions,
           queryClient,
@@ -111,7 +111,7 @@ export const useRepoSessionReadModelEffects = ({
     queryClient,
     observeAgentSession,
     cleanupLocalSessions,
-    setSessionCollection,
+    commitSessionCollection,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionReadModelLoadState,

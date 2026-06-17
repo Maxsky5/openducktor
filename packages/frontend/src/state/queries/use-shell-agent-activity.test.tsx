@@ -91,6 +91,9 @@ const createActivityStore = (
     getSessionSummariesSnapshot: (): AgentSessionSummary[] => emptySummaries,
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
+    commitSessionCollection: () => {
+      throw new Error("commitSessionCollection is not used in this test");
+    },
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");
     },

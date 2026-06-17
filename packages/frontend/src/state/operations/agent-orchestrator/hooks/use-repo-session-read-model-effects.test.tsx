@@ -4,9 +4,9 @@ import type { AgentSessionRef } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
@@ -21,11 +21,6 @@ const record: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const applySessionCollectionUpdater = (
-  current: AgentSessionCollection,
-  updater: AgentSessionCollectionUpdater,
-): AgentSessionCollection => updater(current);
-
 const createHarnessState = () => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
@@ -38,8 +33,10 @@ const createHarnessState = () => {
   const agentEngine = { listSessionRuntimeSnapshots };
   const currentWorkspaceRepoPathRef = { current: "/repo" };
   const repoEpochRef = { current: 0 };
-  const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-    sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
+  const commitSessionCollection: AgentSessionsStore["commitSessionCollection"] = (commit) => {
+    const { collection, result } = commit(sessionCollection);
+    sessionCollection = collection;
+    return result;
   };
   const observeAgentSession = async (session: AgentSessionRef) => {
     observedSessions.push(session);
@@ -56,7 +53,7 @@ const createHarnessState = () => {
     isLoadingTasks: false,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
-    setSessionCollection,
+    commitSessionCollection,
     agentEngine,
     observeAgentSession,
     cleanupLocalSessions,

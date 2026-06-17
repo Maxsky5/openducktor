@@ -24,12 +24,17 @@ export {
 } from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
+type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) => {
+  collection: AgentSessionCollection;
+  result: Result;
+};
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
+  commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: (
     identity: AgentSessionIdentity,
@@ -52,10 +57,12 @@ export const createAgentSessionsStore = (
     }
   };
 
-  const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
-    const nextCollection = updater(sessionCollection);
+  const commitSessionCollection = <Result>(
+    commit: AgentSessionCollectionCommit<Result>,
+  ): Result => {
+    const { collection: nextCollection, result } = commit(sessionCollection);
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
-      return;
+      return result;
     }
 
     sessionCollection = nextCollection;
@@ -65,6 +72,14 @@ export const createAgentSessionsStore = (
       workspaceRepoPath,
     });
     notifyListeners();
+    return result;
+  };
+
+  const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
+    commitSessionCollection((current) => ({
+      collection: updater(current),
+      result: undefined,
+    }));
   };
 
   return {
@@ -77,6 +92,7 @@ export const createAgentSessionsStore = (
     getSessionSummariesSnapshot: () => snapshots.sessionSummaries,
     getActivitySnapshot: () => snapshots.activitySnapshot,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
+    commitSessionCollection,
     setSessionCollection,
     updateSession: (identity, updater) => {
       const current = getAgentSession(sessionCollection, identity);

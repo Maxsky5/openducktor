@@ -41,8 +41,8 @@ split this into a single-use mutation hook.
 Observer cleanup and runtime event handlers must read from `AgentSessionsStore`.
 Session removal updates the store collection once; the session observer owner
 clears matching observers and turn state for the removed identities.
-Repo session read-model refreshes merge through the session store updater; the
-store passes the current collection into that updater and remains the only owner
+Repo session read-model refreshes merge through one session store commit; the
+store passes the current collection into that commit and remains the only owner
 of the collection.
 Session history loading, session preparation, and start/reuse policies should read
 one current session through the store's selected-session reader; they must not

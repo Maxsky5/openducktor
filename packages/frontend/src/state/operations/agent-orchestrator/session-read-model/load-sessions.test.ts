@@ -5,11 +5,11 @@ import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
   createAgentSessionCollection,
   emptyAgentSessionCollection,
   listAgentSessions,
 } from "@/state/agent-session-collection";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import { host } from "../../host";
@@ -51,11 +51,6 @@ const taskFixture: TaskCard = {
   createdAt: "2026-06-12T08:00:00.000Z",
 };
 
-const applySessionCollectionUpdater = (
-  current: AgentSessionCollection,
-  updater: AgentSessionCollectionUpdater,
-): AgentSessionCollection => updater(current);
-
 const createLoaderHarness = ({
   initialSessionCollection = emptyAgentSessionCollection(),
   listSessionRuntimeSnapshots,
@@ -87,8 +82,10 @@ const createLoaderHarness = ({
     },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },
-    setSessionCollection: (updater) => {
-      sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
+    commitSessionCollection: (commit) => {
+      const { collection, result } = commit(sessionCollection);
+      sessionCollection = collection;
+      return result;
     },
     observeAgentSession: async (session) => {
       listenedSessions.push(session);
@@ -137,9 +134,11 @@ describe("createLoadAgentSessions", () => {
           return [];
         },
       },
-      setSessionCollection: (updater) => {
-        sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
-      },
+      commitSessionCollection: ((commit) => {
+        const { collection, result } = commit(sessionCollection);
+        sessionCollection = collection;
+        return result;
+      }) satisfies AgentSessionsStore["commitSessionCollection"],
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },

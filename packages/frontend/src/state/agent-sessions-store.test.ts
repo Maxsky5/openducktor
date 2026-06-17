@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection } from "./agent-session-collection";
 import { createAgentSessionsStore, toAgentSessionSummary } from "./agent-sessions-store";
@@ -169,6 +170,33 @@ describe("createAgentSessionsStore session snapshots", () => {
 
     expect(notifyCount).toBe(0);
     expect(store.getSessionSnapshot(session)).toBe(session);
+  });
+
+  test("commits a collection update and returns the result from the same current collection", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      status: "idle",
+    });
+    replaceStoreSessions(store, [session]);
+
+    let notifyCount = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifyCount += 1;
+    });
+
+    const nextSession = { ...session, status: "running" as const };
+    const result = store.commitSessionCollection((current) => ({
+      collection: createAgentSessionCollection([nextSession]),
+      result: current.get(agentSessionIdentityKey(session))?.status ?? null,
+    }));
+    unsubscribe();
+
+    expect(result).toBe("idle");
+    expect(store.getSessionSnapshot(session)).toBe(nextSession);
+    expect(notifyCount).toBe(1);
   });
 });
 
