@@ -124,13 +124,11 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
           },
           async () => () => {
             unsubscribeCalls.push("first");
-            observers.removeMany([
-              {
-                externalSessionId: "second",
-                runtimeKind: "opencode",
-                workingDirectory: "/tmp/repo-a",
-              },
-            ]);
+            observers.remove({
+              externalSessionId: "second",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo-a",
+            });
           },
         );
         await observers.ensureObserver(

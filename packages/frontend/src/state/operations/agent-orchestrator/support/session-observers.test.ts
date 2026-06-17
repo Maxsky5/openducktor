@@ -78,27 +78,6 @@ describe("session observers", () => {
     expect(observers.has(session)).toBe(false);
   });
 
-  test("removes all matching observers before callbacks can mutate the collection", async () => {
-    const observers = createSessionObservers();
-    const calls: string[] = [];
-    const firstSession = createSessionRef("/tmp/repo/first");
-    const secondSession = createSessionRef("/tmp/repo/second");
-
-    await observers.ensureObserver(firstSession, async () => () => {
-      calls.push("first");
-      observers.removeMany([secondSession]);
-    });
-    await observers.ensureObserver(secondSession, async () => () => {
-      calls.push("second");
-    });
-
-    observers.removeMany([firstSession, secondSession]);
-
-    expect(calls).toEqual(["first", "second"]);
-    expect(observers.has(firstSession)).toBe(false);
-    expect(observers.has(secondSession)).toBe(false);
-  });
-
   test("clears all observers before callbacks can mutate the collection", async () => {
     const observers = createSessionObservers();
     const calls: string[] = [];

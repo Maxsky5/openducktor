@@ -21,7 +21,6 @@ export type SessionObservers = {
     createObserver: SessionObserverFactory,
   ) => Promise<boolean>;
   remove: (session: AgentSessionIdentityLike) => void;
-  removeMany: (sessions: readonly AgentSessionIdentityLike[]) => void;
   clear: () => void;
 };
 
@@ -57,12 +56,6 @@ export const createSessionObservers = (
     }
     unsubscribeBySessionKey.delete(sessionKey);
     return unsubscribe;
-  };
-
-  const unsubscribeAll = (unsubscribers: readonly SessionObserverUnsubscribe[]): void => {
-    for (const unsubscribe of unsubscribers) {
-      unsubscribe();
-    }
   };
 
   return {
@@ -108,16 +101,6 @@ export const createSessionObservers = (
       }
       unsubscribe();
     },
-    removeMany: (sessions) => {
-      const removedObservers: SessionObserverUnsubscribe[] = [];
-      for (const session of sessions) {
-        const unsubscribe = take(session);
-        if (unsubscribe) {
-          removedObservers.push(unsubscribe);
-        }
-      }
-      unsubscribeAll(removedObservers);
-    },
     clear: () => {
       for (const pending of pendingBySessionKey.values()) {
         pending.cancelled = true;
@@ -125,7 +108,9 @@ export const createSessionObservers = (
       pendingBySessionKey.clear();
       const observers = [...unsubscribeBySessionKey.values()];
       unsubscribeBySessionKey.clear();
-      unsubscribeAll(observers);
+      for (const unsubscribe of observers) {
+        unsubscribe();
+      }
     },
   };
 };

@@ -12,7 +12,6 @@ import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { listenToAgentSessionEvents } from "../events/session-events";
-import { cleanupLocalAgentSessions } from "../support/local-session-cleanup";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { SessionTurnState } from "../support/session-turn-state";
@@ -60,11 +59,10 @@ export const useAgentSessionObservers = ({
 
   const cleanupSessions = useCallback(
     (sessions: readonly AgentSessionIdentity[]): void => {
-      cleanupLocalAgentSessions({
-        sessions,
-        sessionObservers: sessionObserversRef.current,
-        clearSessionTurnState: sessionTurnState.clearSession,
-      });
+      for (const session of sessions) {
+        sessionObserversRef.current.remove(session);
+        sessionTurnState.clearSession(session);
+      }
     },
     [sessionObserversRef, sessionTurnState],
   );
