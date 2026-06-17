@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
   AgentSessionRef,
   AgentSessionRuntimeRef,
@@ -6,7 +5,6 @@ import type {
 } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { readPersistedSessionRuntimeKind } from "./session-runtime-kind";
 
 export type ObserveAgentSession = (session: AgentSessionRef) => Promise<boolean>;
 type RuntimeSessionContextSource = Pick<
@@ -52,22 +50,6 @@ export const toRuntimeSessionRef = (
     externalSessionId: session.externalSessionId,
   };
 };
-
-export const toPersistedRuntimeSessionRef = ({
-  repoPath,
-  record,
-}: {
-  repoPath: string;
-  record: AgentSessionRecord;
-}): AgentSessionRef => ({
-  ...toRuntimeWorkingDirectoryRef({
-    repoPath,
-    runtimeKind: readPersistedSessionRuntimeKind(record),
-    workingDirectory: record.workingDirectory,
-    action: `reach persisted session '${record.externalSessionId}'`,
-  }),
-  externalSessionId: record.externalSessionId,
-});
 
 export const toRuntimeSessionContextRef = (
   repoPath: string,

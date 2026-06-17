@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
-import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "./session-runtime-ref";
+import { toRuntimeSessionRef } from "./session-runtime-ref";
 
 const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "session-1",
@@ -17,18 +16,6 @@ const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessio
   pendingQuestions: [],
   selectedModel: null,
   historyLoadState: "not_requested",
-  ...overrides,
-});
-
-const persistedRecordFixture = (
-  overrides: Partial<AgentSessionRecord> = {},
-): AgentSessionRecord => ({
-  externalSessionId: "session-1",
-  runtimeKind: "codex",
-  role: "build",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  workingDirectory: "/repo/worktree",
-  selectedModel: null,
   ...overrides,
 });
 
@@ -48,19 +35,5 @@ describe("runtime session refs", () => {
     expect(() => toRuntimeSessionRef("/repo", sessionFixture({ workingDirectory: " " }))).toThrow(
       "Session workingDirectory is required to reach session 'session-1'.",
     );
-  });
-
-  test("builds persisted session refs from mandatory persisted runtime fields", () => {
-    expect(
-      toPersistedRuntimeSessionRef({
-        repoPath: " /repo ",
-        record: persistedRecordFixture({ workingDirectory: " /repo/wt " }),
-      }),
-    ).toEqual({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/wt",
-      externalSessionId: "session-1",
-    });
   });
 });

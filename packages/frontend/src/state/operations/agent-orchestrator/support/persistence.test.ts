@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { fromPersistedSessionRecord, toPersistedSessionRecord } from "./persistence";
+import {
+  fromPersistedSessionRecord,
+  toPersistedSessionIdentity,
+  toPersistedSessionRecord,
+} from "./persistence";
 
 const recordFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
@@ -103,6 +107,21 @@ describe("agent-orchestrator/support/persistence", () => {
     const persisted = toPersistedSessionRecord(loadedSession);
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.selectedModel?.runtimeKind).toBe("opencode");
+  });
+
+  test("derives persisted session identity from mandatory durable runtime fields", () => {
+    expect(
+      toPersistedSessionIdentity({
+        ...recordFixture,
+        runtimeKind: "codex",
+        workingDirectory: " /tmp/repo/worktree ",
+        selectedModel: null,
+      }),
+    ).toEqual({
+      externalSessionId: "external-1",
+      runtimeKind: "codex",
+      workingDirectory: "/tmp/repo/worktree",
+    });
   });
 
   test("rejects persisted session records without a top-level runtime kind", () => {

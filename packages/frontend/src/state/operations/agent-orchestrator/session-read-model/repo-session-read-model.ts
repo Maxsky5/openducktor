@@ -15,8 +15,9 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   type PersistedTaskSessionRecord,
+  toPersistedSessionIdentity,
 } from "../support/persistence";
-import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   type AgentSessionRuntimeSnapshot,
   applyRuntimeSnapshotToSession,
@@ -85,9 +86,9 @@ export const readRepoRuntimeSessionSnapshots = async ({
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   for (const { record } of taskSessionRecords) {
-    const ref = toPersistedRuntimeSessionRef({ repoPath, record });
-    const runtimeKind = ref.runtimeKind;
-    const directory = normalizeWorkingDirectory(ref.workingDirectory);
+    const identity = toPersistedSessionIdentity(record);
+    const runtimeKind = identity.runtimeKind;
+    const directory = normalizeWorkingDirectory(identity.workingDirectory);
     const directories = directoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
     directories.add(directory);
     directoriesByRuntimeKind.set(runtimeKind, directories);
@@ -128,7 +129,7 @@ export const buildRepoSessionReadModel = ({
   const loadedTaskIds = new Set(tasks.map((task) => task.id));
   const persistedSessionKeys = new Set(
     taskSessionRecords.map(({ record }) =>
-      agentSessionIdentityKey(toPersistedRuntimeSessionRef({ repoPath, record })),
+      agentSessionIdentityKey(toPersistedSessionIdentity(record)),
     ),
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
@@ -148,9 +149,10 @@ export const buildRepoSessionReadModel = ({
   const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
-    const ref = toPersistedRuntimeSessionRef({ repoPath, record });
-    const sessionKey = agentSessionIdentityKey(ref);
-    const current = getAgentSession(currentSessions, record) ?? undefined;
+    const identity = toPersistedSessionIdentity(record);
+    const ref = toRuntimeSessionRef(repoPath, identity);
+    const sessionKey = agentSessionIdentityKey(identity);
+    const current = getAgentSession(currentSessions, identity) ?? undefined;
     const snapshot = runtimeSnapshots.get(sessionKey) ?? toMissingAgentSessionRuntimeSnapshot(ref);
     const persistedSessionView = toPersistedSessionView({
       taskId,

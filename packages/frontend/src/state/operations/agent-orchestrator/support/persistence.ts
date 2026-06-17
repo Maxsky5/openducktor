@@ -1,6 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { formatWorkflowAgentSessionTitle, requireSessionWorkingDirectory } from "@openducktor/core";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
 import { normalizePersistedSelection } from "./models";
 import {
@@ -45,14 +45,23 @@ export type PersistedTaskSessionRecord = {
   record: AgentSessionRecord;
 };
 
+export const toPersistedSessionIdentity = (record: AgentSessionRecord): AgentSessionIdentity => ({
+  externalSessionId: record.externalSessionId,
+  runtimeKind: readPersistedSessionRuntimeKind(record),
+  workingDirectory: requireSessionWorkingDirectory(
+    record.workingDirectory,
+    `read persisted session '${record.externalSessionId}'`,
+  ),
+});
+
 export const fromPersistedSessionRecord = ({
   taskId,
   record,
 }: PersistedTaskSessionRecord): AgentSessionState => {
-  const runtimeKind = readPersistedSessionRuntimeKind(record);
+  const identity = toPersistedSessionIdentity(record);
 
   return {
-    externalSessionId: record.externalSessionId,
+    externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
     taskId,
     role: record.role,
@@ -60,10 +69,10 @@ export const fromPersistedSessionRecord = ({
     // start idle; mounted refreshes may preserve current live state separately.
     status: "idle",
     startedAt: record.startedAt,
-    runtimeKind,
-    workingDirectory: record.workingDirectory,
+    runtimeKind: identity.runtimeKind,
+    workingDirectory: identity.workingDirectory,
     historyLoadState: "not_requested",
-    messages: createSessionMessagesState(record.externalSessionId),
+    messages: createSessionMessagesState(identity.externalSessionId),
     contextUsage: null,
     pendingApprovals: [],
     pendingQuestions: [],
@@ -71,8 +80,8 @@ export const fromPersistedSessionRecord = ({
       ? normalizePersistedSelection({
           ...record.selectedModel,
           runtimeKind: readPersistedSelectedModelRuntimeKind(
-            record.externalSessionId,
-            runtimeKind,
+            identity.externalSessionId,
+            identity.runtimeKind,
             record.selectedModel,
           ),
         })
