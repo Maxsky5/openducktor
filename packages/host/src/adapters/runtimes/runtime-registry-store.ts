@@ -1,7 +1,6 @@
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import { runtimeWorkspaceKey } from "../../domain/runtime-workspace-key";
 import { HostOperationError } from "../../effect/host-errors";
 
 export type WorkspaceRuntimeLookupInput = {
@@ -24,28 +23,9 @@ export const createRuntimeRegistryStore = (
   runtimes: Iterable<RuntimeInstanceSummary> = [],
 ): RuntimeRegistryStore => {
   const entries = new Map<string, RuntimeInstanceSummary>();
-  const workspaceRuntimeIds = new Map<string, Set<string>>();
-
-  const deleteWorkspaceRuntimeId = (runtimeId: string): void => {
-    for (const [key, runtimeIds] of workspaceRuntimeIds) {
-      runtimeIds.delete(runtimeId);
-      if (runtimeIds.size === 0) {
-        workspaceRuntimeIds.delete(key);
-      }
-    }
-  };
 
   const upsert = (runtime: RuntimeInstanceSummary): void => {
-    deleteWorkspaceRuntimeId(runtime.runtimeId);
     entries.set(runtime.runtimeId, runtime);
-    if (runtime.role !== "workspace" || runtime.taskId !== null) {
-      return;
-    }
-
-    const key = runtimeWorkspaceKey({ runtimeKind: runtime.kind, repoPath: runtime.repoPath });
-    const runtimeIds = workspaceRuntimeIds.get(key) ?? new Set<string>();
-    runtimeIds.add(runtime.runtimeId);
-    workspaceRuntimeIds.set(key, runtimeIds);
   };
 
   for (const runtime of runtimes) {
@@ -60,7 +40,6 @@ export const createRuntimeRegistryStore = (
         return null;
       }
       entries.delete(runtimeId);
-      deleteWorkspaceRuntimeId(runtimeId);
       return runtime;
     },
     get(runtimeId) {
@@ -79,12 +58,18 @@ export const createRuntimeRegistryStore = (
       });
     },
     findWorkspaceRuntime(input) {
-      const key = runtimeWorkspaceKey(input);
-      const runtimeIds = workspaceRuntimeIds.get(key) ?? new Set<string>();
-      if (runtimeIds.size === 0) {
+      const normalizedRepoPath = normalizePathForComparison(input.repoPath);
+      const matches = [...entries.values()].filter(
+        (runtime) =>
+          runtime.role === "workspace" &&
+          runtime.taskId === null &&
+          runtime.kind === input.runtimeKind &&
+          normalizePathForComparison(runtime.repoPath) === normalizedRepoPath,
+      );
+      if (matches.length === 0) {
         return Effect.succeed(null);
       }
-      if (runtimeIds.size > 1) {
+      if (matches.length > 1) {
         return Effect.fail(
           new HostOperationError({
             operation: "runtimeRegistry.findWorkspaceRuntime",
@@ -92,13 +77,12 @@ export const createRuntimeRegistryStore = (
             details: {
               runtimeKind: input.runtimeKind,
               repoPath: input.repoPath,
-              runtimeIds: [...runtimeIds],
+              runtimeIds: matches.map((runtime) => runtime.runtimeId),
             },
           }),
         );
       }
-      const runtimeId = [...runtimeIds][0];
-      return Effect.succeed(runtimeId ? (entries.get(runtimeId) ?? null) : null);
+      return Effect.succeed(matches[0] ?? null);
     },
   };
 };
