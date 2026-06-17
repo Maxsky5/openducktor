@@ -112,8 +112,3 @@ export type OpencodeSdkAdapterOptions = {
   repoRuntimeResolver?: RepoRuntimeResolverPort;
   logEvent?: OpencodeEventLogger;
 };
-
-export type McpServerStatus = {
-  status: string;
-  error?: string;
-};

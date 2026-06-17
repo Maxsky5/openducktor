@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { getMcpStatus, listAvailableSlashCommands, searchFiles } from "./catalog-and-mcp";
-import { OpenCodeRequestError } from "./request-errors";
+import { listAvailableSlashCommands, searchFiles } from "./catalog-and-mcp";
 
 describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("normalizes command payloads into a slash catalog", async () => {
@@ -215,29 +214,5 @@ describe("catalog-and-mcp searchFiles", () => {
     ).rejects.toThrow(
       "OpenCode request failed: search files: Invalid file search payload: expected an array of file paths.",
     );
-  });
-});
-
-describe("catalog-and-mcp getMcpStatus", () => {
-  test("wraps MCP status timeouts with structured failure metadata", async () => {
-    const status = mock(async () => {
-      const failure = new Error("socket closed");
-      Object.assign(failure, { code: "ETIMEDOUT" });
-      throw failure;
-    });
-
-    try {
-      await getMcpStatus((() => ({ mcp: { status } })) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      });
-      throw new Error("Expected getMcpStatus to reject");
-    } catch (error) {
-      expect(error).toBeInstanceOf(OpenCodeRequestError);
-      expect((error as OpenCodeRequestError).message).toBe(
-        "OpenCode request failed: get mcp status (code=ETIMEDOUT): socket closed",
-      );
-      expect((error as OpenCodeRequestError).failureKind).toBe("timeout");
-    }
   });
 });

@@ -391,18 +391,6 @@ export const registerSession = (input: {
   return summary;
 };
 
-export const clearWorkflowToolCacheForDirectory = (
-  sessions: Map<string, SessionRecord>,
-  workingDirectory: string,
-): void => {
-  for (const session of sessions.values()) {
-    if (session.input.workingDirectory === workingDirectory) {
-      delete session.workflowToolSelectionCache;
-      delete session.workflowToolSelectionCachedAt;
-    }
-  }
-};
-
 export const releaseSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,

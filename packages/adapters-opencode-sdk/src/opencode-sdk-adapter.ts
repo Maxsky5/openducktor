@@ -29,14 +29,7 @@ import type {
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle, toAgentSessionRuntimeSnapshot } from "@openducktor/core";
-import {
-  connectMcpServer,
-  getMcpStatus,
-  listAvailableModels,
-  listAvailableSlashCommands,
-  listAvailableToolIds,
-  searchFiles,
-} from "./catalog-and-mcp";
+import { listAvailableModels, listAvailableSlashCommands, searchFiles } from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
@@ -74,7 +67,6 @@ import {
   startUserMessageSend,
 } from "./session-activity";
 import {
-  clearWorkflowToolCacheForDirectory,
   registerSession,
   releaseSessionRuntime,
   requireSession,
@@ -84,7 +76,6 @@ import {
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 import type {
   ClientFactory,
-  McpServerStatus,
   OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
   RepoRuntimeResolverPort,
@@ -570,29 +561,6 @@ export class OpencodeSdkAdapter
       ...(await this.resolveRuntimeClientInput(input, "search files", { requireLive: true })),
       query: input.query,
     });
-  }
-
-  async listAvailableToolIds(input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  }): Promise<string[]> {
-    return listAvailableToolIds(this.createClient, input);
-  }
-
-  async getMcpStatus(input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  }): Promise<Record<string, McpServerStatus>> {
-    return getMcpStatus(this.createClient, input);
-  }
-
-  async connectMcpServer(input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-    name: string;
-  }): Promise<void> {
-    await connectMcpServer(this.createClient, input);
-    clearWorkflowToolCacheForDirectory(this.sessions, input.workingDirectory);
   }
 
   shouldRestartRuntimeForMcpStatusError(message: string): boolean {
