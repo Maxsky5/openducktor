@@ -5,6 +5,8 @@ import {
   emptyAgentSessionCollection,
   getAgentSession,
   hasAgentSessionStateChanges,
+  removeAgentSession,
+  replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import {
@@ -36,6 +38,8 @@ export type AgentSessionsStore = {
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  replaceSession: (session: AgentSessionState) => void;
+  removeSession: (identity: AgentSessionIdentity) => void;
   updateSession: (
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
@@ -94,6 +98,12 @@ export const createAgentSessionsStore = (
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     commitSessionCollection,
     setSessionCollection,
+    replaceSession: (session) => {
+      setSessionCollection((current) => replaceAgentSession(current, session));
+    },
+    removeSession: (identity) => {
+      setSessionCollection((current) => removeAgentSession(current, identity));
+    },
     updateSession: (identity, updater) => {
       const current = getAgentSession(sessionCollection, identity);
       if (!current) {

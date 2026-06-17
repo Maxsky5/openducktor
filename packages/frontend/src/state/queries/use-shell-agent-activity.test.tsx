@@ -97,6 +97,12 @@ const createActivityStore = (
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");
     },
+    replaceSession: (): void => {
+      throw new Error("replaceSession is not used in this test");
+    },
+    removeSession: (): void => {
+      throw new Error("removeSession is not used in this test");
+    },
     updateSession: (): AgentSessionState | null => {
       throw new Error("updateSession is not used in this test");
     },

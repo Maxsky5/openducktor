@@ -103,6 +103,30 @@ describe("createAgentSessionsStore session snapshots", () => {
     ).toBeNull();
   });
 
+  test("replaces and removes sessions through store-owned mutations", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      status: "starting",
+    });
+
+    let notifyCount = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifyCount += 1;
+    });
+
+    store.replaceSession(session);
+    expect(store.getSessionSnapshot(session)).toBe(session);
+
+    store.removeSession(session);
+    unsubscribe();
+
+    expect(store.getSessionSnapshot(session)).toBeNull();
+    expect(notifyCount).toBe(2);
+  });
+
   test("notifies subscribers for consecutive loading and loaded transcript commits", () => {
     const store = createAgentSessionsStore();
     const identity = {

@@ -1,5 +1,5 @@
 import { errorMessage } from "@/lib/errors";
-import { removeAgentSession } from "@/state/agent-session-collection";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import type {
   RuntimeDependencies,
@@ -9,17 +9,16 @@ import type {
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 
-const readStartedSessionRuntimeKind = (startedCtx: StartedSessionContext) => {
-  return startedCtx.summary.runtimeKind;
-};
+const toStartedSessionIdentity = (startedCtx: StartedSessionContext): AgentSessionIdentity => ({
+  externalSessionId: startedCtx.summary.externalSessionId,
+  runtimeKind: startedCtx.summary.runtimeKind,
+  workingDirectory: startedCtx.summary.workingDirectory,
+});
 
 const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
-  const runtimeKind = readStartedSessionRuntimeKind(startedCtx);
   return {
+    ...toStartedSessionIdentity(startedCtx),
     repoPath: startedCtx.repoPath,
-    externalSessionId: startedCtx.summary.externalSessionId,
-    runtimeKind,
-    workingDirectory: startedCtx.summary.workingDirectory,
   };
 };
 
@@ -69,13 +68,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   runtime: RuntimeDependencies;
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
-  session.setSessionCollection((current) =>
-    removeAgentSession(current, {
-      externalSessionId,
-      runtimeKind: readStartedSessionRuntimeKind(startedCtx),
-      workingDirectory: startedCtx.summary.workingDirectory,
-    }),
-  );
+  session.removeSession(toStartedSessionIdentity(startedCtx));
 
   try {
     await runOrchestratorTask(

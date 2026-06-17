@@ -1,6 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { replaceAgentSession } from "@/state/agent-session-collection";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import type {
@@ -11,7 +10,10 @@ import type {
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { buildInitialSession, persistInitialSession } from "./start-session-local-state";
-import { rollbackStartedSessionAfterPersistenceFailure } from "./start-session-rollback";
+import {
+  rollbackStartedSessionAfterPersistenceFailure,
+  stopSessionOnStaleAndThrow,
+} from "./start-session-rollback";
 
 export const registerStartedSession = async ({
   ctx,
@@ -39,13 +41,16 @@ export const registerStartedSession = async ({
     ...(initialMessages ? { initialMessages } : {}),
   });
 
-  deps.session.setSessionCollection((current) => {
-    if (ctx.isStaleRepoOperation()) {
-      return current;
-    }
-    return replaceAgentSession(current, initialSession);
-  });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  deps.session.replaceSession(initialSession);
+  if (ctx.isStaleRepoOperation()) {
+    deps.session.removeSession(initialSession);
+    await stopSessionOnStaleAndThrow({
+      reason: "start-session-stop-on-stale-after-local-registration",
+      runtime: deps.runtime,
+      startedCtx,
+    });
+  }
 
   try {
     await persistInitialSession({

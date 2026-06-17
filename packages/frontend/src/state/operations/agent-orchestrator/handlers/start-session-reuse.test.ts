@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
-import type {
-  AgentSessionCollection,
-  AgentSessionCollectionUpdater,
-} from "@/state/agent-session-collection";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import { host } from "../../shared/host";
 import {
   BUILD_SELECTION,
@@ -240,15 +237,11 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
     };
-    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-      sessionsRef.current = updater(sessionsRef.current);
-    };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
     const { start } = createStartSessionTestHarness({
-      setSessionCollection,
       sessionsRef,
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({

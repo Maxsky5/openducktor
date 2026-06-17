@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
   emptyAgentSessionCollection,
   listAgentSessions,
+  replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { host } from "../../shared/host";
@@ -44,19 +44,20 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     }
   });
 
-  test("does not diverge ref/state when workspace becomes stale during initial session commit", async () => {
+  test("removes local registration when workspace becomes stale during initial session registration", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    let sessionsState: AgentSessionCollection = emptyAgentSessionCollection();
+    let stopCalls = 0;
     const sessionsRef: { current: AgentSessionCollection } = {
       current: emptyAgentSessionCollection(),
     };
-    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
+    const replaceSession = (session: Parameters<typeof replaceAgentSession>[1]) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
-      sessionsState = updater(sessionsState);
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
     };
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
+    const originalStopSession = adapter.stopSession;
     adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
@@ -65,13 +66,16 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       role: "build",
       status: "idle",
     });
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
     const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection,
+      replaceSession,
       sessionsRef,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
@@ -87,9 +91,10 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
       expect(listAgentSessions(sessionsRef.current)).toEqual([]);
-      expect(listAgentSessions(sessionsState)).toEqual([]);
+      expect(stopCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
+      adapter.stopSession = originalStopSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });

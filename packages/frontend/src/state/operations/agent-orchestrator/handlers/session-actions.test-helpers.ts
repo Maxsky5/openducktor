@@ -5,6 +5,8 @@ import {
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
+  removeAgentSession,
+  replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
@@ -102,7 +104,12 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     workspaceRepoPath: "/tmp/repo",
     workspaceId: "workspace-1",
     adapter,
-    setSessionCollection: () => {},
+    replaceSession: (session) => {
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
+    },
+    removeSession: (identity) => {
+      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
+    },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },

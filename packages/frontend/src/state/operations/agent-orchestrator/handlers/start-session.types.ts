@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -15,7 +14,8 @@ import type { ObserveAgentSession } from "../support/session-runtime-ref";
 export type { StartAgentSessionInput, StartAgentSessionResult };
 
 export type SessionDependencies = {
-  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  replaceSession: (session: AgentSessionState) => void;
+  removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadAgentSessions: (taskId: string) => Promise<void>;

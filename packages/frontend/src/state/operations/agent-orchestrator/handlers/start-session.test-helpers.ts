@@ -6,11 +6,12 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import {
   type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
   createAgentSessionCollection as createStrictAgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
+  removeAgentSession,
+  replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import type {
@@ -189,7 +190,8 @@ export const toStartSessionDependencies = (
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
     },
     session: {
-      setSessionCollection: deps.setSessionCollection,
+      replaceSession: deps.replaceSession,
+      removeSession: deps.removeSession,
       readSessionSnapshot:
         deps.readSessionSnapshot ??
         ((identity) => getAgentSession(deps.sessionsRef.current, identity)),
@@ -223,10 +225,12 @@ export const toStartSessionDependencies = (
 
 type StartSessionHarnessOptions = Omit<
   Partial<FlatStartSessionDependencies>,
-  "setSessionCollection"
+  "replaceSession" | "removeSession"
 > & {
   sessionsRef?: { current: AgentSessionCollection };
-  setSessionCollection?: StartSessionDependencies["session"]["setSessionCollection"];
+  replaceSession?: StartSessionDependencies["session"]["replaceSession"];
+  removeSession?: StartSessionDependencies["session"]["removeSession"];
+  onSessionCollectionChange?: (collection: AgentSessionCollection) => void;
 };
 
 export const createStartSessionTestHarness = (options: StartSessionHarnessOptions = {}) => {
@@ -253,11 +257,19 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadRepoPromptOverrides = async () => ({}),
     sessionStartGateRef,
     readSessionSnapshot,
+    onSessionCollectionChange,
   } = options;
-  const setSessionCollection =
-    options.setSessionCollection ??
-    ((updater: AgentSessionCollectionUpdater) => {
-      sessionsRef.current = updater(sessionsRef.current);
+  const replaceSession =
+    options.replaceSession ??
+    ((session: Parameters<StartSessionDependencies["session"]["replaceSession"]>[0]) => {
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
+      onSessionCollectionChange?.(sessionsRef.current);
+    });
+  const removeSession =
+    options.removeSession ??
+    ((identity: Parameters<StartSessionDependencies["session"]["removeSession"]>[0]) => {
+      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
+      onSessionCollectionChange?.(sessionsRef.current);
     });
 
   const start = createStartAgentSession(
@@ -266,7 +278,8 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       workspaceId,
       adapter,
       sessionsRef,
-      setSessionCollection,
+      replaceSession,
+      removeSession,
       taskRef,
       repoEpochRef,
       currentWorkspaceRepoPathRef,

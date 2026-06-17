@@ -4,6 +4,8 @@ import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
+  removeAgentSession,
+  replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -39,7 +41,12 @@ export const createSessionDependenciesFixture = (
   const { sessionsRef: overrideSessionsRef, ...sessionOverrides } = overrides;
   const sessionsRef = overrideSessionsRef ?? { current: emptyAgentSessionCollection() };
   return {
-    setSessionCollection: () => {},
+    replaceSession: (session) => {
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
+    },
+    removeSession: (identity) => {
+      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
+    },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionStartGateRef: { current: createSessionStartGate() },
     loadAgentSessions: async () => {},

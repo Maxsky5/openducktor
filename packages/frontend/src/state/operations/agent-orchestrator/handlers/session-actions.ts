@@ -1,7 +1,6 @@
 import type { RepoPromptOverrides, TaskCard, TaskWorktreeSummary } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
@@ -19,7 +18,8 @@ type SessionActionsDependencies = {
   workspaceRepoPath: string | null;
   workspaceId: string | null;
   adapter: AgentEnginePort;
-  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  replaceSession: (session: AgentSessionState) => void;
+  removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
@@ -49,7 +49,8 @@ export const createAgentSessionActions = ({
   workspaceRepoPath,
   workspaceId,
   adapter,
-  setSessionCollection,
+  replaceSession,
+  removeSession,
   readSessionSnapshot,
   taskRef,
   repoEpochRef,
@@ -102,7 +103,8 @@ export const createAgentSessionActions = ({
       currentWorkspaceRepoPathRef,
     },
     session: {
-      setSessionCollection,
+      replaceSession,
+      removeSession,
       readSessionSnapshot,
       sessionStartGateRef,
       loadAgentSessions,
