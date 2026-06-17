@@ -181,7 +181,7 @@ export const createBaseArgs = (): HookArgs => ({
   retryWorktreeResolution: retryWorktreeResolutionMock,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   branchIdentityKey: null,
-  enablePolling: false,
+  enableScheduledRefresh: false,
 });
 
 export const dispatchDiffRefresh = (): void => {

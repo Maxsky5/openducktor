@@ -1,20 +1,20 @@
 import { useEffect } from "react";
 
-type UseAgentStudioDiffPollingArgs = {
-  enablePolling: boolean;
+type UseAgentStudioDiffVisibilityRefreshArgs = {
+  enableScheduledRefresh: boolean;
   repoPath: string | null;
   shouldBlockDiffLoading: boolean;
-  poll: () => void;
+  refresh: () => void;
 };
 
-export function useAgentStudioDiffPolling({
-  enablePolling,
-  poll,
+export function useAgentStudioDiffVisibilityRefresh({
+  enableScheduledRefresh,
+  refresh,
   repoPath,
   shouldBlockDiffLoading,
-}: UseAgentStudioDiffPollingArgs): void {
+}: UseAgentStudioDiffVisibilityRefreshArgs): void {
   useEffect(() => {
-    if (!enablePolling || !repoPath || shouldBlockDiffLoading) {
+    if (!enableScheduledRefresh || !repoPath || shouldBlockDiffLoading) {
       return;
     }
 
@@ -23,7 +23,7 @@ export function useAgentStudioDiffPolling({
         return;
       }
 
-      poll();
+      refresh();
     };
 
     globalThis.addEventListener("focus", refreshWhenVisible);
@@ -33,5 +33,5 @@ export function useAgentStudioDiffPolling({
       globalThis.removeEventListener("focus", refreshWhenVisible);
       globalThis.document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [enablePolling, poll, repoPath, shouldBlockDiffLoading]);
+  }, [enableScheduledRefresh, refresh, repoPath, shouldBlockDiffLoading]);
 }

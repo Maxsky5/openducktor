@@ -3,11 +3,11 @@ import {
   createHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { useAgentStudioDiffPolling } from "./use-diff-polling";
+import { useAgentStudioDiffVisibilityRefresh } from "./use-diff-visibility-refresh";
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioDiffPolling>[0];
+type HookArgs = Parameters<typeof useAgentStudioDiffVisibilityRefresh>[0];
 
 type WindowEventTargetOverride = typeof globalThis & {
   addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
@@ -67,17 +67,17 @@ const createVisibilityStateController = () => {
 };
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  enablePolling: true,
+  enableScheduledRefresh: true,
   repoPath: "/repo",
   shouldBlockDiffLoading: false,
-  poll: () => {},
+  refresh: () => {},
   ...overrides,
 });
 
-describe("useAgentStudioDiffPolling", () => {
+describe("useAgentStudioDiffVisibilityRefresh", () => {
   const createHarness = (initialProps: HookArgs) =>
     createHookHarness((props: HookArgs) => {
-      useAgentStudioDiffPolling(props);
+      useAgentStudioDiffVisibilityRefresh(props);
       return { ready: true };
     }, initialProps);
 
@@ -92,26 +92,26 @@ describe("useAgentStudioDiffPolling", () => {
   });
 
   test("refreshes diff data when the window regains focus", async () => {
-    const poll = mock(() => {});
-    const harness = createHarness(createBaseProps({ poll }));
+    const refresh = mock(() => {});
+    const harness = createHarness(createBaseProps({ refresh }));
 
     try {
       await harness.mount();
-      expect(poll).toHaveBeenCalledTimes(0);
+      expect(refresh).toHaveBeenCalledTimes(0);
 
       await harness.run(() => {
         globalThis.dispatchEvent(new Event("focus"));
       });
 
-      expect(poll).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
   });
 
   test("refreshes diff data when the document becomes visible", async () => {
-    const poll = mock(() => {});
-    const harness = createHarness(createBaseProps({ poll }));
+    const refresh = mock(() => {});
+    const harness = createHarness(createBaseProps({ refresh }));
 
     try {
       visibilityStateController.set("hidden");
@@ -120,21 +120,21 @@ describe("useAgentStudioDiffPolling", () => {
       await harness.run(() => {
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      expect(poll).toHaveBeenCalledTimes(0);
+      expect(refresh).toHaveBeenCalledTimes(0);
 
       await harness.run(() => {
         visibilityStateController.set("visible");
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      expect(poll).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("does not subscribe when polling is disabled", async () => {
-    const poll = mock(() => {});
-    const harness = createHarness(createBaseProps({ enablePolling: false, poll }));
+  test("does not subscribe when scheduled refresh is disabled", async () => {
+    const refresh = mock(() => {});
+    const harness = createHarness(createBaseProps({ enableScheduledRefresh: false, refresh }));
 
     try {
       await harness.mount();
@@ -144,25 +144,25 @@ describe("useAgentStudioDiffPolling", () => {
         document.dispatchEvent(new Event("visibilitychange"));
       });
 
-      expect(poll).toHaveBeenCalledTimes(0);
+      expect(refresh).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
 
   test("keeps one active subscription across rerenders", async () => {
-    const poll = mock(() => {});
-    const harness = createHarness(createBaseProps({ poll }));
+    const refresh = mock(() => {});
+    const harness = createHarness(createBaseProps({ refresh }));
 
     try {
       await harness.mount();
-      await harness.update(createBaseProps({ poll }));
+      await harness.update(createBaseProps({ refresh }));
 
       await harness.run(() => {
         globalThis.dispatchEvent(new Event("focus"));
       });
 
-      expect(poll).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

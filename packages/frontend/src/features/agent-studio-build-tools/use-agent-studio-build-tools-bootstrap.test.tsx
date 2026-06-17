@@ -59,7 +59,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
-        shouldEnableEventPolling: true,
+        shouldEnableScheduledRefresh: true,
       });
     } finally {
       await harness.unmount();
@@ -88,7 +88,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
-        shouldEnableEventPolling: true,
+        shouldEnableScheduledRefresh: true,
       });
     } finally {
       await harness.unmount();
@@ -118,7 +118,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
-        shouldEnableEventPolling: true,
+        shouldEnableScheduledRefresh: true,
       });
     } finally {
       await harness.unmount();

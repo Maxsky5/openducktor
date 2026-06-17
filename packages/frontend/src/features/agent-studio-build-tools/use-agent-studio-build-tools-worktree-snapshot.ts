@@ -236,7 +236,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     defaultTargetBranch: diffComparisonTarget,
     ...(worktreeDiffPreconditionError ? { preconditionError: worktreeDiffPreconditionError } : {}),
     branchIdentityKey: repositoryBranchIdentityKey,
-    enablePolling: buildToolsBootstrap.shouldEnableEventPolling && isEnabled,
+    enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
   });
   const devServerModel = dependencies.useDevServerPanel({
     repoPath,

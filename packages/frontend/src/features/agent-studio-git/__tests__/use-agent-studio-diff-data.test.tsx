@@ -252,7 +252,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("keeps polling listeners stable across rerenders with unchanged inputs", async () => {
+  test("keeps scheduled refresh listeners stable across rerenders with unchanged inputs", async () => {
     const originalWindowAddEventListener = globalThis.addEventListener.bind(globalThis);
     const originalWindowRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
     const originalDocumentAddEventListener = document.addEventListener.bind(document);
@@ -300,11 +300,11 @@ describe("useAgentStudioDiffData", () => {
     document.removeEventListener =
       documentRemoveEventListenerMock as typeof document.removeEventListener;
 
-    const pollingArgs = {
+    const scheduledRefreshArgs = {
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     } satisfies HookArgs;
-    const harness = createHookHarness(pollingArgs);
+    const harness = createHookHarness(scheduledRefreshArgs);
 
     try {
       await harness.mount();
@@ -323,7 +323,7 @@ describe("useAgentStudioDiffData", () => {
       documentAddEventListenerMock.mockClear();
       documentRemoveEventListenerMock.mockClear();
 
-      await harness.update(pollingArgs);
+      await harness.update(scheduledRefreshArgs);
       await harness.run(async () => {
         await Promise.resolve();
       });

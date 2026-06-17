@@ -17,7 +17,7 @@ type BuildToolsBootstrapContext = {
   isEnabled: boolean;
   repoPath: string | null;
   sessionWorkingDirectory: string | null;
-  shouldEnableEventPolling: boolean;
+  shouldEnableScheduledRefresh: boolean;
 };
 
 export function useAgentStudioBuildToolsBootstrap({
@@ -36,7 +36,7 @@ export function useAgentStudioBuildToolsBootstrap({
         isEnabled: false,
         repoPath: null,
         sessionWorkingDirectory: null,
-        shouldEnableEventPolling: false,
+        shouldEnableScheduledRefresh: false,
       };
     }
 
@@ -44,7 +44,7 @@ export function useAgentStudioBuildToolsBootstrap({
       isEnabled: Boolean(workspaceRepoPath),
       repoPath: workspaceRepoPath,
       sessionWorkingDirectory: selectedSessionIdentity?.workingDirectory ?? null,
-      shouldEnableEventPolling: Boolean(workspaceRepoPath && selectedSessionIdentity),
+      shouldEnableScheduledRefresh: Boolean(workspaceRepoPath && selectedSessionIdentity),
     };
   }, [workspaceRepoPath, isPanelOpen, panelKind, selectedView.role, selectedSessionIdentity]);
 }

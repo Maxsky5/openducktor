@@ -1,6 +1,6 @@
 import type { GitDiffRefreshMode } from "../contracts";
-import { createScheduledFetchCooldownKey, shouldRunScheduledFetch } from "./polling-policy";
 import type { DiffRefreshContext, RefreshRequest, RefreshScopeContext } from "./refresh-types";
+import { createScheduledFetchCooldownKey, shouldRunScheduledFetch } from "./scheduled-fetch-policy";
 
 type FetchRemoteResult = {
   outcome: "fetched" | "skipped_no_remote";

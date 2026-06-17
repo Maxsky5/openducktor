@@ -127,7 +127,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
@@ -270,7 +270,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
@@ -390,7 +390,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
@@ -526,7 +526,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
