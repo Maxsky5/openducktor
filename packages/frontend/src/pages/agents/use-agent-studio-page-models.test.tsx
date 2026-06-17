@@ -374,6 +374,29 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("derives thread working state from the loaded session activity", async () => {
+    const idleSession = createSession("session-idle", {
+      status: "stopped",
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          loadedSession: idleSession,
+          sessionsForTask: summarizeSessions([idleSession]),
+        },
+        sessionActions: {
+          isSessionWorking: true,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().agentChatModel.thread.isSessionWorking).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("preserves active Codex runtime identity for composer accent while catalog loads", async () => {
     const codexSession = createSession("session-codex", {
       runtimeKind: "codex",

@@ -1,5 +1,6 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import { useMemo, useRef } from "react";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
@@ -29,7 +30,6 @@ type UseAgentChatSurfaceModelArgs = {
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
   chatSettings: ChatSettings;
-  isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
   sessionAuxiliaryError: string | null;
   runtimeReadiness: RepoRuntimeReadiness;
@@ -47,7 +47,6 @@ export function useAgentChatSurfaceModel({
   session,
   transcriptState,
   chatSettings,
-  isSessionWorking,
   runtimeDefinitions = [],
   sessionAuxiliaryError,
   runtimeReadiness,
@@ -65,6 +64,7 @@ export function useAgentChatSurfaceModel({
     transcriptState,
     runtimeReadiness,
   });
+  const isSessionWorking = isAgentSessionActivityWorking(threadState.threadSession?.activityState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
