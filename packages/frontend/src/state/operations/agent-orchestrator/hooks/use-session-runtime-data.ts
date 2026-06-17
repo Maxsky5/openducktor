@@ -24,7 +24,6 @@ import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-r
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
   selectedSessionIdentity: AgentSessionIdentity | null;
-  canReadSessionTodos: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
@@ -48,7 +47,6 @@ const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
 export const useSessionRuntimeData = ({
   repoPath,
   selectedSessionIdentity,
-  canReadSessionTodos,
   runtimeDefinitions,
   repoReadinessState,
   loadRuntimeCatalog,
@@ -64,7 +62,6 @@ export const useSessionRuntimeData = ({
     [repoPath, runtimeDefinitions, selectedSessionIdentity],
   );
   const canReadRuntimeData = selectedSessionIdentity !== null && repoReadinessState === "ready";
-  const canReadTodos = canReadRuntimeData && canReadSessionTodos;
 
   const catalogQuery = useQuery(
     runtimeDataRefs.catalogRef && canReadRuntimeData
@@ -73,7 +70,7 @@ export const useSessionRuntimeData = ({
   );
 
   const todosQuery = useQuery(
-    runtimeDataRefs.todosRef && canReadTodos
+    runtimeDataRefs.todosRef && canReadRuntimeData
       ? sessionTodosQueryOptions(runtimeDataRefs.todosRef, readSessionTodos)
       : skippedSessionTodosQueryOptions(runtimeDataRefs.todosRef),
   );

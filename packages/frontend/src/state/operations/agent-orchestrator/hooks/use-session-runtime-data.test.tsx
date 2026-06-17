@@ -55,7 +55,6 @@ describe("useSessionRuntimeData", () => {
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
-        canReadSessionTodos: true,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -87,7 +86,6 @@ describe("useSessionRuntimeData", () => {
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
-        canReadSessionTodos: true,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "checking",
         loadRuntimeCatalog,
@@ -118,7 +116,6 @@ describe("useSessionRuntimeData", () => {
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
       selectedSessionIdentity: sessionIdentity(),
-      canReadSessionTodos: true,
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       repoReadinessState: "ready",
       loadRuntimeCatalog,
@@ -155,7 +152,6 @@ describe("useSessionRuntimeData", () => {
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
-        canReadSessionTodos: true,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready" as const,
         loadRuntimeCatalog,
@@ -181,17 +177,14 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("loads the model catalog while selected-session todos are gated", async () => {
+  test("reads todos whenever selected-session runtime data is supported and ready", async () => {
     const loadRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => {
-      throw new Error("todos should not be queried");
-    });
+    const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
-        canReadSessionTodos: false,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -202,13 +195,13 @@ describe("useSessionRuntimeData", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.modelCatalog !== null);
+      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(harness.getLatest()).toEqual({
         modelCatalog: emptyCatalog,
-        todos: [],
+        todos: [todoFixture],
         isLoadingModelCatalog: false,
         error: null,
       });
@@ -225,7 +218,6 @@ describe("useSessionRuntimeData", () => {
       {
         repoPath: null,
         selectedSessionIdentity: sessionIdentity(),
-        canReadSessionTodos: true,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -255,7 +247,6 @@ describe("useSessionRuntimeData", () => {
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity({ workingDirectory: "" }),
-        canReadSessionTodos: true,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,

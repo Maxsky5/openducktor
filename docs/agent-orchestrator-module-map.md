@@ -505,6 +505,7 @@ Must not own:
 
 - `AgentSessionState` identity, status, transcript messages, or history load state
 - canonical session todos; todos are runtime data, not session state
+- status/activity-derived gates for selected-session runtime-data reads
 - task session records
 - model catalog, slash-command catalog, skills catalog, or file-search query ownership
 - runtime route resolution

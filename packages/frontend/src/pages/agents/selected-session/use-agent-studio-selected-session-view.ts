@@ -170,7 +170,6 @@ export function useAgentStudioSelectedSessionView({
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,
-    canReadSessionTodos: selectedSessionActivityState !== "starting",
     runtimeDefinitions,
     repoReadinessState,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,
