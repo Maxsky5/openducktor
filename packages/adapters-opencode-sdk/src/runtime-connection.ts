@@ -1,4 +1,4 @@
-import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import type { RepoRuntimeResolverPort } from "./types";
@@ -24,7 +24,7 @@ export type ResolveOpencodeRuntimeClientInputRequest = {
 };
 
 const requireOpencodeRuntimeEndpoint = (
-  runtime: RuntimeInstanceSummary,
+  runtime: RepoRuntimeRouteResolution,
   input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
   action: string,
 ): string => {
@@ -56,7 +56,7 @@ const requireOpencodeRuntimeEndpoint = (
 };
 
 export const toOpencodeRuntimeClientInput = (input: {
-  runtime: RuntimeInstanceSummary;
+  runtime: RepoRuntimeRouteResolution;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
   workingDirectory: string | null | undefined;

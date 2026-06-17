@@ -1,10 +1,11 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
+  RepoRuntimeRef,
+  RepoRuntimeRouteResolution,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type {
@@ -94,8 +95,8 @@ export type ClientFactory = (input: {
 }) => OpencodeClient;
 
 export type RepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
+  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 
 export type OpencodeStreamEventLog = {
