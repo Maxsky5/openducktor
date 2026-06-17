@@ -8,7 +8,6 @@ import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionSnapshots,
-  type TaskSessionRecords,
 } from "./repo-session-read-model";
 import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
@@ -27,60 +26,6 @@ type CreateLoadAgentSessionsArgs = {
   observeAgentSession: ObserveAgentSession;
   cleanupLocalSessions: CleanupLocalSessions;
   queryClient: QueryClient;
-};
-
-export const loadRepoAgentSessions = async ({
-  repoPath,
-  tasks,
-  adapter,
-  setSessionCollection,
-  observeAgentSession,
-  cleanupLocalSessions,
-  isStaleRepoOperation,
-  readSessionCollection,
-}: {
-  repoPath: string;
-  tasks: TaskSessionRecords[];
-  adapter: SessionLoaderAdapter;
-  setSessionCollection: SetSessionCollection;
-  observeAgentSession: ObserveAgentSession;
-  cleanupLocalSessions: CleanupLocalSessions;
-  isStaleRepoOperation: () => boolean;
-  readSessionCollection: ReadSessionCollection;
-}): Promise<void> => {
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
-  const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
-    repoPath,
-    tasks,
-    listSessionRuntimeSnapshots: (input) => adapter.listSessionRuntimeSnapshots(input),
-  });
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
-  const readModel = buildRepoSessionReadModel({
-    repoPath,
-    tasks,
-    currentSessionCollection: readSessionCollection(),
-    runtimeSnapshots,
-  });
-  setSessionCollection(readModel.sessionCollection);
-  cleanupLocalSessions(readModel.removedSessionRefs);
-
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
-  await Promise.all(
-    readModel.liveSessionRefs.map(async (session) => {
-      if (!isStaleRepoOperation()) {
-        await observeAgentSession(session);
-      }
-    }),
-  );
 };
 
 export const loadRepoAgentSessionsForTasks = async ({
@@ -120,16 +65,35 @@ export const loadRepoAgentSessionsForTasks = async ({
     return;
   }
 
-  await loadRepoAgentSessions({
+  const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks: taskSessionRecords,
-    adapter,
-    setSessionCollection,
-    observeAgentSession,
-    cleanupLocalSessions,
-    isStaleRepoOperation,
-    readSessionCollection,
+    listSessionRuntimeSnapshots: (input) => adapter.listSessionRuntimeSnapshots(input),
   });
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
+  const readModel = buildRepoSessionReadModel({
+    repoPath,
+    tasks: taskSessionRecords,
+    currentSessionCollection: readSessionCollection(),
+    runtimeSnapshots,
+  });
+  setSessionCollection(readModel.sessionCollection);
+  cleanupLocalSessions(readModel.removedSessionRefs);
+
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
+  await Promise.all(
+    readModel.liveSessionRefs.map(async (session) => {
+      if (!isStaleRepoOperation()) {
+        await observeAgentSession(session);
+      }
+    }),
+  );
 };
 
 export const createLoadAgentSessions = ({

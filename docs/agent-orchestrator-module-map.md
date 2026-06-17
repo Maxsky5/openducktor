@@ -799,7 +799,7 @@ be exposed through public app operation contexts.
 
 1. The app loads task IDs from the task store.
 2. `use-repo-session-read-model-effects.ts` loads task session records for those
-   task IDs and passes the records to `loadRepoAgentSessions`.
+   task IDs through `loadRepoAgentSessionsForTasks`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle but does not demote mounted sessions or clear their live transcript state.
