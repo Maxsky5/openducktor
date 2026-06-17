@@ -10,10 +10,7 @@ import {
   readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
-import {
-  loadTaskSessionRecordsForTask,
-  loadTaskSessionRecordsForTasks,
-} from "./task-session-records";
+import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type SetSessionCollection = (sessionCollection: AgentSessionCollection) => void;
 type ReadSessionCollection = () => AgentSessionCollection;
@@ -96,6 +93,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   queryClient,
   isStaleRepoOperation,
   readSessionCollection,
+  forceFresh,
 }: {
   repoPath: string;
   tasks: Pick<TaskCard, "id">[];
@@ -106,6 +104,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
   readSessionCollection: ReadSessionCollection;
+  forceFresh?: boolean;
 }): Promise<void> => {
   if (isStaleRepoOperation()) {
     return;
@@ -115,6 +114,7 @@ export const loadRepoAgentSessionsForTasks = async ({
     queryClient,
     repoPath,
     tasks,
+    ...(forceFresh === undefined ? {} : { forceFresh }),
   });
   if (isStaleRepoOperation()) {
     return;
@@ -159,25 +159,17 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const task = await loadTaskSessionRecordsForTask({
-      queryClient,
+    await loadRepoAgentSessionsForTasks({
       repoPath,
-      taskId,
-      forceFresh: true,
-    });
-    if (isStaleRepoOperation()) {
-      return;
-    }
-
-    await loadRepoAgentSessions({
-      repoPath,
-      tasks: [task],
+      tasks: [{ id: taskId }],
       adapter,
       setSessionCollection,
       observeAgentSession,
       cleanupLocalSessions,
+      queryClient,
       isStaleRepoOperation,
       readSessionCollection,
+      forceFresh: true,
     });
   };
 };
