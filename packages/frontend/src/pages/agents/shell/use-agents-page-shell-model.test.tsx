@@ -319,7 +319,7 @@ let lastOrchestrationSelection: OrchestrationControllerArgs["selection"] | null 
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const syncAgentSessionsStore = (): void => {
-  sessionStore.setSessionCollection(createAgentSessionCollection(agentSessions));
+  sessionStore.setSessionCollection(() => createAgentSessionCollection(agentSessions));
 };
 
 const workspaceStateValue = (): WorkspaceStateContextValue => ({

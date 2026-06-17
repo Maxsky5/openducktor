@@ -257,7 +257,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
   const setSessionCollection =
     options.setSessionCollection ??
     ((updater: AgentSessionCollectionUpdater) => {
-      sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      sessionsRef.current = updater(sessionsRef.current);
     });
 
   const start = createStartAgentSession(

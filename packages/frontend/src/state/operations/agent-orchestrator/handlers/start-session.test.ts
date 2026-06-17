@@ -253,7 +253,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionCollection = updater(sessionCollection);
         sessionsRef.current = sessionCollection;
       },
       sessionsRef,
@@ -313,7 +313,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionCollection = updater(sessionCollection);
         sessionsRef.current = sessionCollection;
         lifecycleEvents.push(
           `status:${getSession(sessionCollection, "planner-external")?.status ?? "missing"}`,
@@ -429,8 +429,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
-        sessionsRef.current =
-          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+        sessionsRef.current = updater(sessionsRef.current);
       },
       sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },

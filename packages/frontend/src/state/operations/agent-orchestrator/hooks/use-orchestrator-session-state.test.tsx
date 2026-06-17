@@ -112,7 +112,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     try {
       await harness.mount();
       await harness.run(async (hook) => {
-        hook.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
+        hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
 
         const observers = hook.sessionObserversRef.current;
         await observers.ensureObserver(
@@ -206,7 +206,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       await harness.mount();
 
       await harness.run((hook) => {
-        hook.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
+        hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
       });
 
       expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toEqual(session);

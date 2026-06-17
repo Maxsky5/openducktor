@@ -241,7 +241,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       ]),
     };
     const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-      sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      sessionsRef.current = updater(sessionsRef.current);
     };
 
     const originalAgentSessionsList = host.agentSessionsList;

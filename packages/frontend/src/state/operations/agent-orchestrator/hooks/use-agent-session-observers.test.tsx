@@ -133,7 +133,7 @@ describe("useAgentSessionObservers", () => {
     await harness.run(async ({ state }) => {
       const session = createSession();
       const sessionKey = agentSessionIdentityKey(session);
-      state.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
+      state.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
       await state.sessionObserversRef.current.ensureObserver(
         {
           externalSessionId: "external-1",

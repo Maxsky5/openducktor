@@ -3,9 +3,9 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 
 export type AgentSessionCollection = ReadonlyMap<string, AgentSessionState>;
 
-export type AgentSessionCollectionUpdater =
-  | AgentSessionCollection
-  | ((current: AgentSessionCollection) => AgentSessionCollection);
+export type AgentSessionCollectionUpdater = (
+  current: AgentSessionCollection,
+) => AgentSessionCollection;
 
 export const emptyAgentSessionCollection = (): AgentSessionCollection => new Map();
 

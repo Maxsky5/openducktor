@@ -24,7 +24,7 @@ const record: AgentSessionRecord = {
 const applySessionCollectionUpdater = (
   current: AgentSessionCollection,
   updater: AgentSessionCollectionUpdater,
-): AgentSessionCollection => (typeof updater === "function" ? updater(current) : updater);
+): AgentSessionCollection => updater(current);
 
 const createHarnessState = () => {
   const queryClient = new QueryClient();

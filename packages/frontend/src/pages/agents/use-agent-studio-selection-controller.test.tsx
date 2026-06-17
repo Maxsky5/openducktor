@@ -106,7 +106,7 @@ const createSession = (
 const sessionKeyParam = (session: AgentSessionIdentity): string => agentSessionIdentityKey(session);
 
 const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
-  sessionStore.setSessionCollection(
+  sessionStore.setSessionCollection(() =>
     createAgentSessionCollection(
       sessions.flatMap(
         (session) => createdSessionStateByKey.get(agentSessionIdentityKey(session)) ?? [],

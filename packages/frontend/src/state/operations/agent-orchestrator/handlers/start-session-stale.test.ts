@@ -52,7 +52,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     };
     const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
-      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
+      sessionsState = updater(sessionsState);
     };
 
     const adapter = new OpencodeSdkAdapter();

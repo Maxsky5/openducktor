@@ -53,7 +53,7 @@ export const createAgentSessionsStore = (
   };
 
   const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
-    const nextCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+    const nextCollection = updater(sessionCollection);
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return;
     }
@@ -89,7 +89,9 @@ export const createAgentSessionsStore = (
         return null;
       }
 
-      setSessionCollection(replaceAgentSessionByIdentity(sessionCollection, identity, nextSession));
+      setSessionCollection((current) =>
+        replaceAgentSessionByIdentity(current, identity, nextSession),
+      );
       return nextSession;
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {

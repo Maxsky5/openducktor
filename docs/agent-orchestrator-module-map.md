@@ -29,9 +29,9 @@ Owns:
 - notifying React subscribers when the collection changes
 
 Invariant: `AgentSessionsStore` is the only in-memory owner for loaded
-sessions. Session observation receives store operations such as `readSession`,
-`hasSession`, and `updateSession`; it must not receive or inspect the mutable
-collection bridge.
+sessions. Session observation receives store operations such as `readSession`
+and `updateSession`; it must not receive or inspect the mutable collection
+bridge.
 Hooks should expose the store, not duplicate collection getters.
 Transient event state is held in explicit named refs; do not reintroduce a
 generic mutable-state bridge that hides which concept owns which value.
@@ -41,11 +41,12 @@ split this into a single-use mutation hook.
 Observer cleanup and runtime event handlers must read from `AgentSessionsStore`.
 Session removal updates the store collection once; the session observer owner
 clears matching observers and turn state for the removed identities.
-Repo session read-model refreshes should read the current collection through
-the session store snapshot reader, never through the mutable event-stream bridge.
+Repo session read-model refreshes merge through the session store updater; the
+store passes the current collection into that updater and remains the only owner
+of the collection.
 Session history loading, session preparation, and start/reuse policies should read
-one current session through the store snapshot reader; they must not inspect a
-mutable collection snapshot directly.
+one current session through the store's selected-session reader; they must not
+inspect or request full collection snapshots.
 UI start flows such as Kanban receive session summaries as render snapshots;
 they must not create mutable session mirrors to make callbacks look stable.
 
@@ -187,7 +188,7 @@ history-load owner or a session action asks to load one concrete session route;
 this command owner claims, applies, fails, or releases that concrete load. The
 repo projection never bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
-read mutable collection snapshots directly.
+inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they
 must run through the orchestrator async side-effect owner with session identity
 tags. Do not discard history-load promises with raw `void` calls.

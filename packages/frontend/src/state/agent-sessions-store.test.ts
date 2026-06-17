@@ -7,6 +7,13 @@ import {
   getSessionMessageCount,
 } from "./operations/agent-orchestrator/support/messages";
 
+const replaceStoreSessions = (
+  store: ReturnType<typeof createAgentSessionsStore>,
+  sessions: Parameters<typeof createAgentSessionCollection>[0],
+): void => {
+  store.setSessionCollection(() => createAgentSessionCollection(sessions));
+};
+
 describe("toAgentSessionSummary", () => {
   test("preserves session working directory for build-session consumers", () => {
     const session = createAgentSessionFixture({
@@ -43,7 +50,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       workingDirectory: "/repo/old",
       status: "idle",
     });
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     let notifyCount = 0;
     const unsubscribe = store.subscribe(() => {
@@ -77,7 +84,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       workingDirectory: "/repo/worktree",
     });
 
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     expect(
       store.getSessionSnapshot({
@@ -110,7 +117,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       }),
       messages: createSessionMessagesState(identity.externalSessionId),
     };
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     const observedStates: string[] = [];
     const unsubscribe = store.subscribe(() => {
@@ -122,25 +129,21 @@ describe("createAgentSessionsStore session snapshots", () => {
       );
     });
 
-    store.setSessionCollection(
-      createAgentSessionCollection([{ ...session, historyLoadState: "loading" }]),
-    );
-    store.setSessionCollection(
-      createAgentSessionCollection([
-        {
-          ...session,
-          historyLoadState: "loaded",
-          messages: createSessionMessagesState(identity.externalSessionId, [
-            {
-              id: "message-1",
-              role: "assistant",
-              content: "Loaded transcript",
-              timestamp: "2026-06-14T00:00:00.000Z",
-            },
-          ]),
-        },
-      ]),
-    );
+    replaceStoreSessions(store, [{ ...session, historyLoadState: "loading" }]);
+    replaceStoreSessions(store, [
+      {
+        ...session,
+        historyLoadState: "loaded",
+        messages: createSessionMessagesState(identity.externalSessionId, [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "Loaded transcript",
+            timestamp: "2026-06-14T00:00:00.000Z",
+          },
+        ]),
+      },
+    ]);
     unsubscribe();
 
     expect(observedStates).toEqual(["loading:0", "loaded:1"]);
@@ -154,14 +157,14 @@ describe("createAgentSessionsStore session snapshots", () => {
       workingDirectory: "/repo/worktree",
       status: "running",
     });
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     let notifyCount = 0;
     const unsubscribe = store.subscribe(() => {
       notifyCount += 1;
     });
 
-    store.setSessionCollection(createAgentSessionCollection([{ ...session }]));
+    replaceStoreSessions(store, [{ ...session }]);
     unsubscribe();
 
     expect(notifyCount).toBe(0);
@@ -178,7 +181,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionCollection(createAgentSessionCollection([baseSession]));
+    replaceStoreSessions(store, [baseSession]);
 
     const initialSnapshot = store.getActivitySnapshot().sessions;
     const updatedSession = {
@@ -196,7 +199,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       ],
     };
 
-    store.setSessionCollection(createAgentSessionCollection([updatedSession]));
+    replaceStoreSessions(store, [updatedSession]);
 
     expect(store.getActivitySnapshot().sessions).toBe(initialSnapshot);
   });
@@ -210,7 +213,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       pendingApprovals: [],
     });
 
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     const initialSnapshot = store.getActivitySnapshot().sessions;
     const updatedSession = {
@@ -233,7 +236,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       ],
     };
 
-    store.setSessionCollection(createAgentSessionCollection([updatedSession]));
+    replaceStoreSessions(store, [updatedSession]);
 
     const nextSnapshot = store.getActivitySnapshot().sessions;
     expect(nextSnapshot).not.toBe(initialSnapshot);
@@ -255,7 +258,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     const initialSnapshot = store.getActivitySnapshot().sessions;
     const movedSession = {
@@ -264,7 +267,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       workingDirectory: "/repo/codex",
     };
 
-    store.setSessionCollection(createAgentSessionCollection([movedSession]));
+    replaceStoreSessions(store, [movedSession]);
 
     const nextSnapshot = store.getActivitySnapshot().sessions;
     expect(nextSnapshot).not.toBe(initialSnapshot);
@@ -293,7 +296,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionCollection(createAgentSessionCollection([opencodeSession, codexSession]));
+    replaceStoreSessions(store, [opencodeSession, codexSession]);
 
     expect(store.getActivitySnapshot().sessions).toEqual(
       expect.arrayContaining([
@@ -322,7 +325,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       role: null,
     });
 
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
 
     expect(store.getActivitySnapshot().sessions).toEqual([]);
   });
@@ -335,7 +338,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionCollection(createAgentSessionCollection([session]));
+    replaceStoreSessions(store, [session]);
     expect(store.getActivitySnapshot()).toMatchObject({
       workspaceRepoPath: "/repo-a",
       sessions: [expect.objectContaining({ externalSessionId: "session-1" })],

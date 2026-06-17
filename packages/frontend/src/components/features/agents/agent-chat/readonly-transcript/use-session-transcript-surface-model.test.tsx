@@ -118,7 +118,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
 }
 
 function setLiveTranscriptSessions(...sessions: AgentSessionState[]): void {
-  sessionStore.setSessionCollection(createAgentSessionCollection(sessions));
+  sessionStore.setSessionCollection(() => createAgentSessionCollection(sessions));
 }
 
 function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {

@@ -441,7 +441,7 @@ const renderPage = async (
   };
   const { useKanbanPageModels } = await import("./use-kanban-page-models");
   const sessionStore = createAgentSessionsStore("/repo");
-  sessionStore.setSessionCollection(createAgentSessionCollection(renderState.sessions));
+  sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
   const queryClient = createQueryClient();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
