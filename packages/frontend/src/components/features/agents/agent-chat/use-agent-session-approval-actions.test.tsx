@@ -35,13 +35,13 @@ const sessionIdentity = (
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sessionIdentity: sessionIdentity(),
   pendingApprovals: [createApprovalRequest("req-1")],
-  agentStudioReady: true,
+  canReplyToApprovals: true,
   replyAgentApproval: async () => {},
   ...overrides,
 });
 
 describe("useAgentSessionApprovalActions", () => {
-  test("does nothing when session is missing or studio is not ready", async () => {
+  test("does nothing when there is no session or approvals cannot be replied to", async () => {
     const replyAgentApproval = mock(async () => {});
     const base = createBaseArgs({ replyAgentApproval });
     const harness = createHookHarness({ ...base, sessionIdentity: null });
@@ -52,7 +52,7 @@ describe("useAgentSessionApprovalActions", () => {
         await state.onReplyApproval("req-1", "approve_once");
       });
 
-      await harness.update({ ...base, agentStudioReady: false });
+      await harness.update({ ...base, canReplyToApprovals: false });
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "approve_session");
       });

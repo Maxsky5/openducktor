@@ -3,19 +3,19 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 
-type UseAgentStudioQuestionActionsArgs = {
+type UseAgentSessionQuestionActionsArgs = {
   sessionIdentity: AgentSessionIdentity | null;
   pendingQuestionRequestIds: readonly string[];
-  agentStudioReady: boolean;
+  canAnswerQuestions: boolean;
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
-export function useAgentStudioQuestionActions({
+export function useAgentSessionQuestionActions({
   sessionIdentity,
   pendingQuestionRequestIds,
-  agentStudioReady,
+  canAnswerQuestions,
   answerAgentQuestion,
-}: UseAgentStudioQuestionActionsArgs): {
+}: UseAgentSessionQuestionActionsArgs): {
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
 } {
@@ -25,7 +25,7 @@ export function useAgentStudioQuestionActions({
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!sessionIdentity || !agentStudioReady) {
+      if (!sessionIdentity || !canAnswerQuestions) {
         return;
       }
       const sessionKey = agentSessionIdentityKey(sessionIdentity);
@@ -57,7 +57,7 @@ export function useAgentStudioQuestionActions({
         });
       }
     },
-    [agentStudioReady, answerAgentQuestion, sessionIdentity],
+    [answerAgentQuestion, canAnswerQuestions, sessionIdentity],
   );
 
   const isSubmittingQuestionByRequestId = useMemo(() => {

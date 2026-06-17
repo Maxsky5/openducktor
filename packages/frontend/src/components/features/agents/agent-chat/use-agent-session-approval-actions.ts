@@ -6,7 +6,7 @@ import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-o
 type UseAgentSessionApprovalActionsParams = {
   sessionIdentity: AgentSessionIdentity | null;
   pendingApprovals: readonly AgentApprovalRequest[];
-  agentStudioReady: boolean;
+  canReplyToApprovals: boolean;
   replyAgentApproval: (
     session: AgentSessionIdentity,
     requestId: string,
@@ -49,7 +49,7 @@ const filterStringMapByPendingRequestIds = (
 export function useAgentSessionApprovalActions({
   sessionIdentity,
   pendingApprovals,
-  agentStudioReady,
+  canReplyToApprovals,
   replyAgentApproval,
 }: UseAgentSessionApprovalActionsParams): {
   isSubmittingApprovalByRequestId: Record<string, boolean>;
@@ -95,7 +95,7 @@ export function useAgentSessionApprovalActions({
 
   const onReplyApproval = useCallback(
     async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {
-      if (!sessionIdentity || !agentStudioReady) {
+      if (!sessionIdentity || !canReplyToApprovals) {
         return;
       }
 
@@ -134,7 +134,7 @@ export function useAgentSessionApprovalActions({
         });
       }
     },
-    [agentStudioReady, replyAgentApproval, sessionIdentity],
+    [canReplyToApprovals, replyAgentApproval, sessionIdentity],
   );
 
   return {

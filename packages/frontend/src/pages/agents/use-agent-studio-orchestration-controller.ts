@@ -325,7 +325,7 @@ export function useAgentStudioOrchestrationController({
     useAgentSessionApprovalActions({
       sessionIdentity: view.selectedSessionIdentity,
       pendingApprovals: view.loadedSession?.pendingApprovals ?? [],
-      agentStudioReady,
+      canReplyToApprovals: agentStudioReady,
       replyAgentApproval,
     });
 

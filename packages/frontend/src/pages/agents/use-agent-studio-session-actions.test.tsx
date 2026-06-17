@@ -30,7 +30,6 @@ import {
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
@@ -1805,69 +1804,6 @@ describe("useAgentStudioSessionActions", () => {
       agent: "spec",
     });
 
-    await harness.unmount();
-  });
-
-  test("question actions no-op when there is no loaded session", async () => {
-    const answerAgentQuestion = mock(async () => {});
-    const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
-      sessionIdentity: null,
-      pendingQuestionRequestIds: [],
-      agentStudioReady: true,
-      answerAgentQuestion,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
-    });
-
-    expect(answerAgentQuestion).not.toHaveBeenCalled();
-    expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
-
-    await harness.unmount();
-  });
-
-  test("question actions keep submitting state scoped by session identity", async () => {
-    const answerDeferred = createDeferred<void>();
-    const answerAgentQuestion = mock(async () => answerDeferred.promise);
-    const firstSessionIdentity: AgentSessionIdentity = {
-      externalSessionId: "shared-session",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/repo/opencode",
-    };
-    const secondSessionIdentity: AgentSessionIdentity = {
-      externalSessionId: "shared-session",
-      runtimeKind: "codex" as const,
-      workingDirectory: "/repo/codex",
-    };
-    const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
-      sessionIdentity: firstSessionIdentity,
-      pendingQuestionRequestIds: ["req-1"],
-      agentStudioReady: true,
-      answerAgentQuestion,
-    });
-
-    await harness.mount();
-    let submitPromise: Promise<void> | null = null;
-    await harness.run((state) => {
-      submitPromise = state.onSubmitQuestionAnswers("req-1", [["yes"]]);
-    });
-    await harness.waitFor((state) => state.isSubmittingQuestionByRequestId["req-1"] === true);
-
-    await harness.update({
-      sessionIdentity: secondSessionIdentity,
-      pendingQuestionRequestIds: ["req-1"],
-      agentStudioReady: true,
-      answerAgentQuestion,
-    });
-
-    expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
-
-    await harness.run(async () => {
-      answerDeferred.resolve();
-      await submitPromise;
-    });
     await harness.unmount();
   });
 });

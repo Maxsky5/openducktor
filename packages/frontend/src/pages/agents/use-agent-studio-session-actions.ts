@@ -9,6 +9,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback, useMemo } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   RunSessionStartWorkflow,
@@ -25,7 +26,6 @@ import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions"
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import { deriveAgentStudioSessionActionState } from "./session-actions/agent-studio-session-action-state";
-import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
 import {
@@ -208,10 +208,10 @@ export function useAgentStudioSessionActions({
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
-    useAgentStudioQuestionActions({
+    useAgentSessionQuestionActions({
       sessionIdentity: selectedSessionIdentity,
       pendingQuestionRequestIds: loadedSessionPendingQuestionRequestIds,
-      agentStudioReady,
+      canAnswerQuestions: agentStudioReady,
       answerAgentQuestion,
     });
 
