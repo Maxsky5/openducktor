@@ -4,13 +4,24 @@ import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-
 import { getSessionMessageCount } from "../support/messages";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
+type SelectedAgentSessionTranscriptEmptyReason = Exclude<
+  AgentSessionTranscriptEmptyReason,
+  "unavailable"
+>;
 
-export type AgentSessionTranscriptState =
-  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
+type AgentSessionTranscriptNonEmptyState =
   | { kind: "runtime_waiting" }
   | { kind: "session_loading"; reason: "preparing" | "history" }
   | { kind: "visible" }
   | { kind: "failed"; message: string };
+
+export type AgentSessionTranscriptState =
+  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
+  | AgentSessionTranscriptNonEmptyState;
+
+export type SelectedAgentSessionTranscriptState =
+  | { kind: "empty"; reason: SelectedAgentSessionTranscriptEmptyReason }
+  | AgentSessionTranscriptNonEmptyState;
 
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
 
@@ -23,19 +34,14 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-export const inactiveAgentSessionTranscriptState: AgentSessionTranscriptState = {
+export const inactiveAgentSessionTranscriptState: SelectedAgentSessionTranscriptState = {
   kind: "empty",
   reason: "inactive",
 };
 
-export const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
+export const sessionlessAgentSessionTranscriptState: SelectedAgentSessionTranscriptState = {
   kind: "empty",
   reason: "sessionless",
-};
-
-export const unavailableAgentSessionTranscriptState: AgentSessionTranscriptState = {
-  kind: "empty",
-  reason: "unavailable",
 };
 
 export const deriveRuntimeTranscriptState = ({
@@ -83,7 +89,7 @@ const deriveMissingSelectedSessionTranscriptState = ({
   selectedSessionIdentity: AgentSessionIdentity | null;
   repoReadinessState: RepoRuntimeReadinessState;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-}): AgentSessionTranscriptState => {
+}): SelectedAgentSessionTranscriptState => {
   const hasSelectedSession = selectedSessionIdentity !== null;
   const hasSelectionContext = hasSelectedTask || hasSelectedSession;
   if (!hasSelectionContext) {
@@ -105,6 +111,28 @@ const deriveMissingSelectedSessionTranscriptState = ({
   return sessionlessAgentSessionTranscriptState;
 };
 
+const deriveLoadedSelectedSessionTranscriptState = ({
+  session,
+  repoReadinessState,
+}: {
+  session: AgentSessionState;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): SelectedAgentSessionTranscriptState => {
+  if (getSessionMessageCount(session) > 0 || session.historyLoadState === "loaded") {
+    return { kind: "visible" };
+  }
+
+  if (repoReadinessState !== "ready") {
+    return { kind: "runtime_waiting" };
+  }
+
+  if (session.historyLoadState === "failed") {
+    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
+  }
+
+  return { kind: "session_loading", reason: "history" };
+};
+
 export const deriveSelectedAgentSessionTranscriptState = ({
   selectedSessionIdentity,
   session,
@@ -117,14 +145,10 @@ export const deriveSelectedAgentSessionTranscriptState = ({
   hasSelectedTask: boolean;
   repoReadinessState: RepoRuntimeReadinessState;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-}): AgentSessionTranscriptState => {
+}): SelectedAgentSessionTranscriptState => {
   return session
-    ? deriveRuntimeTranscriptState({
-        hasVisibleTranscript:
-          getSessionMessageCount(session) > 0 || session.historyLoadState === "loaded",
-        hasHistoryTarget: true,
-        historyFailureMessage:
-          session.historyLoadState === "failed" ? DEFAULT_TRANSCRIPT_FAILURE_MESSAGE : null,
+    ? deriveLoadedSelectedSessionTranscriptState({
+        session,
         repoReadinessState,
       })
     : deriveMissingSelectedSessionTranscriptState({

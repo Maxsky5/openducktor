@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 
 const startLaunchKickoff = mock(async () => {});
@@ -19,7 +19,8 @@ const baseSurfaceInput = {
 
 const transcriptState = (
   kind: "empty" | "runtime_waiting" | "visible",
-): AgentSessionTranscriptState => (kind === "empty" ? { kind, reason: "sessionless" } : { kind });
+): SelectedAgentSessionTranscriptState =>
+  kind === "empty" ? { kind, reason: "sessionless" } : { kind };
 
 describe("deriveAgentStudioChatSurfaceState", () => {
   test("prompts for a task before Agent Studio has a task context", () => {

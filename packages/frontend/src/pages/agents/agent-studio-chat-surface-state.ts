@@ -1,6 +1,5 @@
 import type { AgentChatEmptyStateModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export type AgentStudioChatSurfaceState = {
   emptyState: AgentChatEmptyStateModel | null;
@@ -8,14 +7,16 @@ export type AgentStudioChatSurfaceState = {
   composerReadOnlyReason: string | null;
 };
 
+type AgentStudioChatWorkflowState = {
+  selectedRoleAvailable: boolean;
+  selectedRoleReadOnlyReason: string | null;
+};
+
 type DeriveAgentStudioChatSurfaceStateInput = {
   taskId: string;
   selectedSessionKey: string | null;
-  transcriptState: AgentStudioSelectedSessionContext["transcriptState"];
-  workflow: Pick<
-    AgentStudioSelectedSessionContext["workflow"],
-    "selectedRoleAvailable" | "selectedRoleReadOnlyReason"
-  >;
+  transcriptState: SelectedAgentSessionTranscriptState;
+  workflow: AgentStudioChatWorkflowState;
   isStarting: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
@@ -31,7 +32,7 @@ const deriveAgentStudioChatEmptyState = ({
   startLaunchKickoff,
 }: {
   taskId: string;
-  transcriptState: AgentSessionTranscriptState;
+  transcriptState: SelectedAgentSessionTranscriptState;
   isStarting: boolean;
   canKickoff: boolean;
   kickoffLabel: string;
@@ -45,12 +46,6 @@ const deriveAgentStudioChatEmptyState = ({
 
   if (transcriptState.kind !== "empty") {
     return null;
-  }
-
-  if (transcriptState.reason === "unavailable") {
-    return {
-      title: "Conversation unavailable.",
-    };
   }
 
   if (isStarting) {
