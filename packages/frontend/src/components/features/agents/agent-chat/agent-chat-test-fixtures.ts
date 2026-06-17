@@ -5,6 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
@@ -17,9 +18,14 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession, AgentRoleOption } from "./agent-chat.types";
+import type {
+  AgentChatThreadModel,
+  AgentChatThreadSession,
+  AgentRoleOption,
+} from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "./agent-chat-thread-session";
+import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -82,10 +88,6 @@ const baseSession: AgentSessionState = {
   workingDirectory: "/repo",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: baseSelection,
@@ -129,9 +131,41 @@ export const buildSession = (
   );
 };
 
+type TranscriptStateFixtureInput =
+  | AgentSessionTranscriptState
+  | { kind: "failed"; message?: string };
+
 export const buildThreadTranscriptState = (
-  transcriptState: AgentSessionTranscriptState = { kind: "visible" },
-): AgentSessionTranscriptState => transcriptState;
+  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
+): AgentSessionTranscriptState =>
+  transcriptState.kind === "failed"
+    ? {
+        kind: "failed",
+        message: transcriptState.message ?? "The selected conversation could not be loaded.",
+      }
+    : transcriptState;
+
+type AgentChatThreadProjectionFields =
+  | "displayedSessionKey"
+  | "shouldResetTranscriptWindow"
+  | "transcriptNotice";
+
+export type AgentChatThreadModelInput = Omit<
+  AgentChatThreadModel,
+  AgentChatThreadProjectionFields
+> &
+  Partial<Pick<AgentChatThreadModel, AgentChatThreadProjectionFields>>;
+
+export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => ({
+  ...model,
+  ...projectAgentChatThreadState({
+    sessionKey:
+      model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
+    session: model.session,
+    transcriptState: model.transcriptState,
+    runtimeReadiness: model.runtimeReadiness,
+  }),
+});
 
 export const buildMessage = (
   role: AgentChatMessage["role"],

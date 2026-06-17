@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useMemo } from "react";
+import type { RunSessionStartWorkflow } from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -21,13 +22,9 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   gitConflictQuickActionContext: AgentStudioGitConflictQuickActionContext | null;
   gitConflictQuickActionContextRef: RefObject<AgentStudioGitConflictQuickActionContext | null>;
   openTaskDetails: () => void;
+  runSessionStartWorkflow: RunSessionStartWorkflow;
   agentOperations: Pick<
     ReturnType<typeof useAgentOperations>,
-    | "readSessionFileSearch"
-    | "readSessionSlashCommands"
-    | "readSessionSkills"
-    | "startAgentSession"
-    | "settleStartedAgentSession"
     | "sendAgentMessage"
     | "stopAgentSession"
     | "updateAgentSessionModel"
@@ -61,6 +58,7 @@ export function useAgentsPageOrchestrationShellModel({
   gitConflictQuickActionContext,
   gitConflictQuickActionContextRef,
   openTaskDetails,
+  runSessionStartWorkflow,
   agentOperations,
   humanRequestChangesTask,
   setTaskTargetBranch,
@@ -72,11 +70,11 @@ export function useAgentsPageOrchestrationShellModel({
       [
         selection.view.taskId,
         selection.view.role,
-        selection.view.activeSession
-          ? agentSessionIdentityKey(selection.view.activeSession)
+        selection.view.loadedSession
+          ? agentSessionIdentityKey(selection.view.loadedSession)
           : "new",
       ].join(":"),
-    [selection.view.activeSession, selection.view.role, selection.view.taskId],
+    [selection.view.loadedSession, selection.view.role, selection.view.taskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -88,7 +86,6 @@ export function useAgentsPageOrchestrationShellModel({
     }),
     [isForegroundLoadingTasks, selection],
   );
-
   const orchestration = useAgentStudioOrchestrationController({
     activeWorkspaceId,
     branches,
@@ -101,14 +98,10 @@ export function useAgentsPageOrchestrationShellModel({
     actions: {
       updateQuery: scheduleQueryUpdate,
       openTaskDetails,
-      startAgentSession: agentOperations.startAgentSession,
-      settleStartedAgentSession: agentOperations.settleStartedAgentSession,
+      runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
       stopAgentSession: agentOperations.stopAgentSession,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
-      readSessionFileSearch: agentOperations.readSessionFileSearch,
-      readSessionSlashCommands: agentOperations.readSessionSlashCommands,
-      readSessionSkills: agentOperations.readSessionSkills,
       humanRequestChangesTask,
       setTaskTargetBranch,
       replyAgentApproval: agentOperations.replyAgentApproval,

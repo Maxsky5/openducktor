@@ -126,15 +126,10 @@ describe("DiagnosticsPanelSections", () => {
             observation: null,
             instance: {
               kind: "opencode",
-              runtimeId: "runtime-1",
               repoPath: "/Users/dev/fairnest",
               taskId: null,
               role: "workspace",
               workingDirectory: "/Users/dev/fairnest",
-              runtimeRoute: {
-                type: "local_http",
-                endpoint: "http://127.0.0.1:49700",
-              },
               startedAt: "2026-02-20T12:00:00.000Z",
               descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
             },

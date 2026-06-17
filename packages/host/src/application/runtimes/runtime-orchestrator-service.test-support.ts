@@ -118,86 +118,90 @@ export const createRegistry = (
   runtimes: RuntimeInstanceSummary[] = [],
   overrides: Partial<RuntimeRegistryPort> = {},
 ): RuntimeRegistryPort => {
-  const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
-  const registry: RuntimeRegistryPort = {
+  const runtimeStore = [...runtimes];
+  const matchesRepo = (runtime: RuntimeInstanceSummary, repoPath: string): boolean =>
+    normalizePathForComparison(runtime.repoPath) === normalizePathForComparison(repoPath);
+  const findWorkspaceRuntime = (input: { repoPath: string; runtimeKind: string }) => {
+    const matches = runtimeStore.filter(
+      (runtime) =>
+        runtime.role === "workspace" &&
+        runtime.taskId === null &&
+        runtime.kind === input.runtimeKind &&
+        matchesRepo(runtime, input.repoPath),
+    );
+    if (matches.length > 1) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: "test.runtimeRegistry.findWorkspaceRuntime",
+          message: `Multiple live ${input.runtimeKind} workspace runtimes found for repo '${input.repoPath}'.`,
+        }),
+      );
+    }
+    return Effect.succeed(matches[0] ?? null);
+  };
+  const upsertRuntime = (runtime: RuntimeInstanceSummary): void => {
+    const existingIndex = runtimeStore.findIndex(
+      (current) => current.runtimeId === runtime.runtimeId,
+    );
+    if (existingIndex === -1) {
+      runtimeStore.push(runtime);
+      return;
+    }
+    runtimeStore[existingIndex] = runtime;
+  };
+
+  return {
     ensureWorkspaceRuntime(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          const existing = [...entries.values()].find(
-            (runtime) =>
-              runtime.kind === input.runtimeKind &&
-              runtime.repoPath === input.repoPath &&
-              runtime.role === "workspace",
-          );
-          if (existing) {
-            return existing;
-          }
-          const runtime = createRuntime({
-            kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
-            repoPath: input.repoPath,
-            workingDirectory: input.workingDirectory,
-            descriptor: input.descriptor,
-          });
-          entries.set(runtime.runtimeId, runtime);
-          return runtime;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.gen(function* () {
+        const existingRuntime = yield* findWorkspaceRuntime(input);
+        if (existingRuntime) {
+          return existingRuntime;
+        }
+
+        const runtime = createRuntime({
+          kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
+          runtimeId: `${input.runtimeKind}-runtime-${runtimeStore.length + 1}`,
+          repoPath: input.repoPath,
+          workingDirectory: input.workingDirectory,
+          descriptor: input.descriptor,
+        });
+        upsertRuntime(runtime);
+        return runtime;
       });
     },
     findRuntimeById(runtimeId) {
-      return Effect.succeed(entries.get(runtimeId) ?? null);
+      return Effect.succeed(
+        runtimeStore.find((runtime) => runtime.runtimeId === runtimeId) ?? null,
+      );
     },
+    findWorkspaceRuntime,
     listRuntimes() {
-      return Effect.succeed([...entries.values()]);
+      return Effect.succeed([...runtimeStore]);
     },
     listRuntimesByRepo(input) {
-      const normalizedInput = normalizePathForComparison(input.repoPath);
       return Effect.succeed(
-        [...entries.values()].filter(
+        runtimeStore.filter(
           (runtime) =>
-            normalizePathForComparison(runtime.repoPath) === normalizedInput &&
+            matchesRepo(runtime, input.repoPath) &&
             (!input.runtimeKind || runtime.kind === input.runtimeKind),
         ),
       );
     },
     stopRuntime(runtimeId) {
-      return Effect.tryPromise({
-        try: async () => {
-          if (!entries.delete(runtimeId)) {
-            throw new Error(`Runtime not found: ${runtimeId}`);
-          }
-          return true;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
+      const runtimeIndex = runtimeStore.findIndex((runtime) => runtime.runtimeId === runtimeId);
+      if (runtimeIndex === -1) {
+        return Effect.succeed(false);
+      }
+      runtimeStore.splice(runtimeIndex, 1);
+      return Effect.succeed(true);
     },
     stopAllRuntimes() {
-      return Effect.sync(() => {
-        const stopped = [...entries.values()];
-        entries.clear();
-        return stopped;
-      });
+      const stoppedRuntimes = [...runtimeStore];
+      runtimeStore.length = 0;
+      return Effect.succeed(stoppedRuntimes);
     },
     stopSession() {
-      return Effect.tryPromise({
-        try: async () => {},
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
+      return Effect.succeed(undefined);
     },
     probeSessionStatus() {
       return Effect.succeed({ supported: false, hasLiveSession: false });
@@ -214,5 +218,4 @@ export const createRegistry = (
     },
     ...overrides,
   };
-  return registry as unknown as RuntimeRegistryPort;
 };

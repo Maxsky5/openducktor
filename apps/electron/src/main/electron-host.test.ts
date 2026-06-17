@@ -1195,12 +1195,6 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).resolves.toEqual([]);
-    await expect(
-      router.invoke("agent_sessions_list_bulk", {
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-      }),
-    ).resolves.toEqual({ "task-1": [] });
 
     const stoppedSessions: unknown[] = [];
     const opencodeDescriptor = createRuntimeDefinitionsService()
@@ -2211,7 +2205,6 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
     });
   });

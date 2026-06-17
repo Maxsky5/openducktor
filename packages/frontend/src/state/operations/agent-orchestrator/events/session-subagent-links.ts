@@ -1,6 +1,6 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { findLastSessionMessageByRole, upsertSessionMessage } from "../support/messages";
-import { formatSubagentContent } from "../support/subagent-messages";
+import { createSubagentMessage } from "../support/subagent-messages";
 import { normalizeSessionId, readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 
@@ -26,7 +26,7 @@ const resolveSubagentMessageForSessionLink = (
 };
 
 export const patchParentSubagentSessionLink = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: SubagentLinkEvent,
 ): void => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
@@ -38,30 +38,29 @@ export const patchParentSubagentSessionLink = (
     return;
   }
 
-  context.store.updateSession(
-    parentSession,
-    (current) => {
-      const subagentMessage = resolveSubagentMessageForSessionLink(current, event);
-      if (subagentMessage?.meta?.kind !== "subagent") {
-        return current;
-      }
-      if (subagentMessage.meta.externalSessionId === childExternalSessionId) {
-        return current;
-      }
+  context.store.updateSession(parentSession, (current) => {
+    const subagentMessage = resolveSubagentMessageForSessionLink(current, event);
+    if (subagentMessage?.meta?.kind !== "subagent") {
+      return current;
+    }
+    if (subagentMessage.meta.externalSessionId === childExternalSessionId) {
+      return current;
+    }
 
-      const nextMeta = {
-        ...subagentMessage.meta,
-        externalSessionId: childExternalSessionId,
-      };
-      return {
-        ...current,
-        messages: upsertSessionMessage(current, {
-          ...subagentMessage,
-          content: formatSubagentContent(nextMeta),
+    const nextMeta = {
+      ...subagentMessage.meta,
+      externalSessionId: childExternalSessionId,
+    };
+    return {
+      ...current,
+      messages: upsertSessionMessage(
+        current,
+        createSubagentMessage({
+          id: subagentMessage.id,
+          timestamp: subagentMessage.timestamp,
           meta: nextMeta,
         }),
-      };
-    },
-    { persist: false },
-  );
+      ),
+    };
+  });
 };

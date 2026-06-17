@@ -1,10 +1,6 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
-import {
-  finalizeDraftAssistantMessage,
-  toAssistantMessageMeta,
-  toSessionContextUsage,
-} from "../support/assistant-meta";
+import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
 import {
   buildSessionCompactedNoticeMessage,
@@ -20,17 +16,19 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
-import { clearDraftBuffers, flushDraftBuffers, settleDraftToIdle } from "./session-helpers";
+import { settleSessionToIdle } from "./session-helpers";
 
-const clearTurnTracking = (context: Pick<SessionLifecycleEventContext, "turn" | "store">): void => {
-  context.turn.turnMetadata.clearSession(context.store.sessionKey);
+const clearTurnTracking = (
+  context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
+): void => {
+  context.turn.turnMetadata.clearSession(context.session.key);
 };
 
 const nextContextUsageWasEstablishedForMessage = (
-  context: Pick<SessionLifecycleEventContext, "turn" | "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
   messageId: string,
 ): boolean => {
-  return context.turn.turnMetadata.hasContextUsageMessageId(context.store.sessionKey, messageId);
+  return context.turn.turnMetadata.hasContextUsageMessageId(context.session.key, messageId);
 };
 
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
@@ -99,10 +97,10 @@ const resolveFinalAssistantSnapshot = ({
 };
 
 export const handleSessionStarted = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
-  context.store.updateSession(context.store.sessionIdentity, (current) => ({
+  context.store.updateSession(context.session.identity, (current) => ({
     ...current,
     status: "running",
     messages: appendSessionMessage(current, {
@@ -118,21 +116,18 @@ export const handleAssistantMessage = (
   context: SessionLifecycleEventContext,
   event: AssistantMessageEvent,
 ): void => {
-  flushDraftBuffers(context);
-  clearDraftBuffers(context);
-  context.store.updateSession(context.store.sessionIdentity, (current) => {
+  context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const durationMs = context.turn.resolveTurnDurationMs(
-      context.store.sessionKey,
-      context.store.externalSessionId,
+      context.session.key,
+      context.session.identity.externalSessionId,
       event.timestamp,
       settledMessages,
     );
     const shouldPreserveContextUsage =
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
-    const model =
-      event.model ?? context.turn.turnMetadata.readModel(context.store.sessionKey) ?? null;
+    const model = event.model ?? context.turn.turnMetadata.readModel(context.session.key) ?? null;
     const nextSnapshot = resolveFinalAssistantSnapshot({
       current,
       durationMs,
@@ -143,10 +138,6 @@ export const handleAssistantMessage = (
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
       contextUsage: nextSnapshot.contextUsage,
       messages: upsertSessionMessage(
         {
@@ -157,31 +148,27 @@ export const handleAssistantMessage = (
       ),
     };
   });
-  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };
 
 export const handleUserMessage = (
-  context: Pick<SessionLifecycleEventContext, "store" | "turn">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
-  context.turn.recordTurnUserMessageTimestamp(context.store.sessionKey, event.timestamp);
-  context.store.updateSession(
-    context.store.sessionIdentity,
-    (current) => {
-      return {
-        ...current,
-        messages: upsertSessionMessage(current, {
-          id: event.messageId,
-          role: "user",
-          content: event.message,
-          timestamp: event.timestamp,
-          meta: toUserMessageMeta(event),
-        }),
-      };
-    },
-    { persist: false },
-  );
+  context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
+  context.store.updateSession(context.session.identity, (current) => {
+    return {
+      ...current,
+      messages: upsertSessionMessage(current, {
+        id: event.messageId,
+        role: "user",
+        content: event.message,
+        timestamp: event.timestamp,
+        meta: toUserMessageMeta(event),
+      }),
+    };
+  });
 };
 
 export const handleSessionStatus = (
@@ -191,78 +178,67 @@ export const handleSessionStatus = (
   const status = event.status;
 
   if (status.type === "busy") {
-    context.turn.recordTurnActivityTimestamp(context.store.sessionKey, event.timestamp);
-    context.store.updateSession(
-      context.store.sessionIdentity,
-      (current) =>
-        current.status === "error"
-          ? current
-          : {
-              ...current,
-              status: "running",
-            },
-      { persist: false },
+    context.turn.recordTurnActivityTimestamp(context.session.key, event.timestamp);
+    context.store.updateSession(context.session.identity, (current) =>
+      current.status === "error"
+        ? current
+        : {
+            ...current,
+            status: "running",
+          },
     );
     return;
   }
 
   if (status.type === "retry") {
     const retryMessage = normalizeRetryStatusMessage(status.message);
-    context.store.updateSession(
-      context.store.sessionIdentity,
-      (current) =>
-        current.status === "error"
-          ? current
-          : {
-              ...current,
-              status: "running",
-              messages: upsertSessionMessage(current, {
-                id: `retry:${status.attempt}`,
-                role: "system",
-                content: `Retry ${status.attempt}: ${retryMessage}`,
-                timestamp: event.timestamp,
-              }),
-            },
-      { persist: false },
+    context.store.updateSession(context.session.identity, (current) =>
+      current.status === "error"
+        ? current
+        : {
+            ...current,
+            status: "running",
+            messages: upsertSessionMessage(current, {
+              id: `retry:${status.attempt}`,
+              role: "system",
+              content: `Retry ${status.attempt}: ${retryMessage}`,
+              timestamp: event.timestamp,
+            }),
+          },
     );
     return;
   }
 
-  if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
+  if (settleSessionToIdle(context, event.timestamp)) {
+    context.turn.clearTurnDuration(context.session.key, event.timestamp);
     clearTurnTracking(context);
   }
 };
 
 export const handleSessionTodosUpdated = (
-  context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store" | "todos">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
-  const current = context.store.readSession(context.store.sessionIdentity);
+  const current = context.store.readSession(context.session.identity);
   if (!current) {
     return;
   }
 
-  context.runtimeData.updateSessionTodos((todos) =>
-    mergeTodoListPreservingOrder(todos, event.todos),
-  );
-  context.store.updateSession(
-    context.store.sessionIdentity,
-    (current) => ({
-      ...current,
-      messages: settleDanglingTodoToolMessages(current, event.timestamp),
-    }),
-    { persist: false },
-  );
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: settleDanglingTodoToolMessages(current, event.timestamp),
+  }));
+
+  context.todos.updateSessionTodos((todos) => mergeTodoListPreservingOrder(todos, event.todos));
 };
 
 export const handleSessionCompacted = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: Extract<SessionEvent, { type: "session_compacted" }>,
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
   context.store.updateSession(
-    context.store.sessionIdentity,
+    context.session.identity,
     (current) => ({
       ...current,
       messages: upsertSessionMessage(
@@ -275,12 +251,12 @@ export const handleSessionCompacted = (
 };
 
 export const handleSessionCompactionStarted = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: Extract<SessionEvent, { type: "session_compaction_started" }>,
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
   context.store.updateSession(
-    context.store.sessionIdentity,
+    context.session.identity,
     (current) => ({
       ...current,
       messages: upsertSessionMessage(
@@ -320,43 +296,29 @@ export const handleSessionError = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_error" }>,
 ): void => {
-  flushDraftBuffers(context);
-  clearDraftBuffers(context);
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
   context.store.updateSession(
-    context.store.sessionIdentity,
+    context.session.identity,
     (current) => {
-      const finalized = finalizeDraftAssistantMessage(
-        current,
-        event.timestamp,
-        context.turn.resolveTurnDurationMs(
-          context.store.sessionKey,
-          context.store.externalSessionId,
-          event.timestamp,
-          current.messages,
-        ),
-        undefined,
-        context.turn.turnMetadata.readModel(context.store.sessionKey) ?? undefined,
-      );
       const appendUserStoppedNotice =
         Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
       return {
-        ...finalized,
+        ...current,
         pendingUserMessageStartedAt: undefined,
         status: appendUserStoppedNotice ? "stopped" : "error",
         stopRequestedAt: null,
         pendingApprovals: [],
         pendingQuestions: [],
         messages: appendUserStoppedNotice
-          ? settleTerminalMessages(finalized, event.timestamp, {
+          ? settleTerminalMessages(current, event.timestamp, {
               outcome: "error",
               errorMessage: sessionErrorMessage,
               appendUserStoppedNotice: true,
             })
           : appendSessionMessage(
               {
-                externalSessionId: finalized.externalSessionId,
-                messages: settleTerminalMessages(finalized, event.timestamp, {
+                externalSessionId: current.externalSessionId,
+                messages: settleTerminalMessages(current, event.timestamp, {
                   outcome: "error",
                   errorMessage: sessionErrorMessage,
                 }),
@@ -367,7 +329,7 @@ export const handleSessionError = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -375,10 +337,8 @@ export const handleSessionIdle = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_idle" }>,
 ): void => {
-  flushDraftBuffers(context);
-  clearDraftBuffers(context);
-  if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
+  if (settleSessionToIdle(context, event.timestamp)) {
+    context.turn.clearTurnDuration(context.session.key, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -387,31 +347,17 @@ export const handleSessionFinished = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_finished" }>,
 ): void => {
-  flushDraftBuffers(context);
-  clearDraftBuffers(context);
   context.store.updateSession(
-    context.store.sessionIdentity,
+    context.session.identity,
     (current) => {
-      const finalized = finalizeDraftAssistantMessage(
-        current,
-        event.timestamp,
-        context.turn.resolveTurnDurationMs(
-          context.store.sessionKey,
-          context.store.externalSessionId,
-          event.timestamp,
-          current.messages,
-        ),
-        undefined,
-        context.turn.turnMetadata.readModel(context.store.sessionKey) ?? undefined,
-      );
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       const terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
         ? "stopped"
         : "idle";
       return {
-        ...finalized,
+        ...current,
         pendingUserMessageStartedAt: undefined,
-        messages: settleTerminalMessages(finalized, event.timestamp, {
+        messages: settleTerminalMessages(current, event.timestamp, {
           ...(appendUserStoppedNotice
             ? {
                 outcome: "error" as const,
@@ -428,6 +374,6 @@ export const handleSessionFinished = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };

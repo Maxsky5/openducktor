@@ -155,10 +155,6 @@ export type AgentSessionState = {
   workingDirectory: string;
   historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
-  draftAssistantText: string;
-  draftAssistantMessageId: string | null;
-  draftReasoningText: string;
-  draftReasoningMessageId: string | null;
   contextUsage?: AgentSessionContextUsage | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];

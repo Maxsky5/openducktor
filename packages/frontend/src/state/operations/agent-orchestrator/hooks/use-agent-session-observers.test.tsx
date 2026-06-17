@@ -28,18 +28,12 @@ describe("useAgentSessionObservers", () => {
           listRuntimeDefinitions: () => [],
         }),
         sessionObserversRef: state.sessionObserversRef,
-        sessionTransientState: state.sessionTransientState,
-        readSessions: state.sessionStore.getSessionsSnapshot,
+        sessionTurnState: state.sessionTurnState,
         readSession: state.sessionStore.getSessionSnapshot,
-        setSessionCollection: state.sessionStore.setSessionCollection,
         updateSession: () => null,
         queryClient,
         workspaceId: "workspace",
         loadRepoPromptOverrides: async () => ({}),
-        recordTurnActivityTimestamp: () => undefined,
-        recordTurnUserMessageTimestamp: () => undefined,
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => undefined,
         refreshTaskData: async () => undefined,
       });
       return { observers };
@@ -79,18 +73,12 @@ describe("useAgentSessionObservers", () => {
           listRuntimeDefinitions: () => [],
         }),
         sessionObserversRef: state.sessionObserversRef,
-        sessionTransientState: state.sessionTransientState,
-        readSessions: state.sessionStore.getSessionsSnapshot,
+        sessionTurnState: state.sessionTurnState,
         readSession: state.sessionStore.getSessionSnapshot,
-        setSessionCollection: state.sessionStore.setSessionCollection,
         updateSession: () => null,
         queryClient,
         workspaceId: "workspace",
         loadRepoPromptOverrides: async () => ({}),
-        recordTurnActivityTimestamp: () => undefined,
-        recordTurnUserMessageTimestamp: () => undefined,
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => undefined,
         refreshTaskData: async () => undefined,
       });
       return { state, observers };
@@ -119,7 +107,7 @@ describe("useAgentSessionObservers", () => {
     await harness.unmount();
   });
 
-  test("removal clears subscriptions, drafts, turn timing, and session state", async () => {
+  test("cleanup clears subscriptions and turn state without mutating session collection", async () => {
     const unsubscribe = mock(() => undefined);
     const queryClient = new QueryClient();
     const Harness = () => {
@@ -130,18 +118,12 @@ describe("useAgentSessionObservers", () => {
       const observers = useAgentSessionObservers({
         agentEngine: createNoopEngine(),
         sessionObserversRef: state.sessionObserversRef,
-        sessionTransientState: state.sessionTransientState,
-        readSessions: state.sessionStore.getSessionsSnapshot,
+        sessionTurnState: state.sessionTurnState,
         readSession: state.sessionStore.getSessionSnapshot,
-        setSessionCollection: state.sessionStore.setSessionCollection,
         updateSession: () => null,
         queryClient,
         workspaceId: "workspace",
         loadRepoPromptOverrides: async () => ({}),
-        recordTurnActivityTimestamp: () => undefined,
-        recordTurnUserMessageTimestamp: () => undefined,
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => undefined,
         refreshTaskData: async () => undefined,
       });
       return { state, observers };
@@ -160,13 +142,8 @@ describe("useAgentSessionObservers", () => {
         },
         async () => unsubscribe,
       );
-      state.sessionTransientState.draftBuffers.writeChannel(sessionKey, "reasoning", {
-        raw: "draft",
-        source: "delta",
-        messageId: "message-1",
-      });
-      state.sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
-      state.sessionTransientState.turnMetadata.recordModel(sessionKey, null);
+      state.sessionTurnState.timing.recordTurnUserMessageTimestamp(sessionKey, 1);
+      state.sessionTurnState.metadata.recordModel(sessionKey, null);
     });
     const removedSession = {
       externalSessionId: "external-1",
@@ -174,7 +151,7 @@ describe("useAgentSessionObservers", () => {
       workingDirectory: "/tmp/repo/worktree",
     };
     const removedSessionKey = agentSessionIdentityKey(removedSession);
-    await harness.run(({ observers }) => observers.removeAgentSession(removedSession));
+    await harness.run(({ observers }) => observers.cleanupLocalSessions([removedSession]));
     const { state } = harness.getLatest();
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
@@ -186,73 +163,14 @@ describe("useAgentSessionObservers", () => {
       }),
     ).toBe(false);
     expect(
-      state.sessionTransientState.draftBuffers.readChannel(removedSessionKey, "reasoning").raw,
-    ).toBe("");
-    expect(
-      state.sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs(
-        removedSessionKey,
-      ),
+      state.sessionTurnState.timing.readTurnUserMessageStartedAtMs(removedSessionKey),
     ).toBeUndefined();
-    expect(state.sessionTransientState.turnMetadata.readModel(removedSessionKey)).toBeUndefined();
+    expect(state.sessionTurnState.metadata.readModel(removedSessionKey)).toBeUndefined();
     expect(
-      listAgentSessions(state.sessionStore.getSessionCollectionSnapshot()).find(
+      listAgentSessions(state.sessionStore.getSessionCollectionSnapshot()).some(
         (session) => session.externalSessionId === "external-1",
-      ) ?? null,
-    ).toBeNull();
-    await harness.unmount();
-  });
-
-  test("removes sessions by task and role through the commit boundary", async () => {
-    const queryClient = new QueryClient();
-    const Harness = () => {
-      const state = useOrchestratorSessionState({
-        workspaceRepoPath: "/tmp/repo",
-        tasks: [createTaskFixture()],
-      });
-      const observers = useAgentSessionObservers({
-        agentEngine: createNoopEngine(),
-        sessionObserversRef: state.sessionObserversRef,
-        sessionTransientState: state.sessionTransientState,
-        readSessions: state.sessionStore.getSessionsSnapshot,
-        readSession: state.sessionStore.getSessionSnapshot,
-        setSessionCollection: state.sessionStore.setSessionCollection,
-        updateSession: () => null,
-        queryClient,
-        workspaceId: "workspace",
-        loadRepoPromptOverrides: async () => ({}),
-        recordTurnActivityTimestamp: () => undefined,
-        recordTurnUserMessageTimestamp: () => undefined,
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => undefined,
-        refreshTaskData: async () => undefined,
-      });
-      return { state, observers };
-    };
-    const harness = createHookHarness(Harness, undefined);
-    await harness.mount();
-    const buildSession = createSession({
-      externalSessionId: "external-build",
-      role: "build",
-      workingDirectory: "/tmp/repo/build",
-    });
-    const qaSession = createSession({
-      externalSessionId: "external-qa",
-      role: "qa",
-      workingDirectory: "/tmp/repo/qa",
-    });
-    await harness.run(({ state }) => {
-      state.sessionStore.setSessionCollection(
-        createAgentSessionCollection([buildSession, qaSession]),
-      );
-    });
-
-    await harness.run(({ observers }) =>
-      observers.removeAgentSessions({ taskId: "task-1", roles: ["build"] }),
-    );
-
-    expect(
-      listAgentSessions(harness.getLatest().state.sessionStore.getSessionCollectionSnapshot()),
-    ).toEqual([qaSession]);
+      ),
+    ).toBe(true);
     await harness.unmount();
   });
 });

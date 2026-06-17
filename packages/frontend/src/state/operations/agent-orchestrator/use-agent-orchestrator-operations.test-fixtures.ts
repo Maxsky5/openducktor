@@ -68,11 +68,6 @@ export const taskFixture2WithPersistedBuildSession: TaskCard = {
 
 export const buildBootstrapFixture = {
   runtimeKind: "opencode",
-  runtimeId: "runtime-build",
-  runtimeRoute: {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4444",
-  },
   workingDirectory: "/tmp/repo/worktree",
 } as const;
 

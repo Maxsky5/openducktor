@@ -1,15 +1,16 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { StartAgentSession } from "@/types/agent-session-start";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import type { NewSessionStartDecision, NewSessionStartRequest } from "./session-start-types";
 import {
+  type SendAgentMessage,
   type SessionStartBeforeAction,
   type SessionStartPostAction,
   type SessionStartWorkflowResult,
@@ -45,7 +46,7 @@ type BuildSessionStartModalRequestArgs = {
   request: SessionStartFlowRequest;
   selectedModel: AgentModelSelection | null;
   taskSessions: AgentSessionSummary[];
-  activeSession?: SessionStartContextSession | null | undefined;
+  preferredSourceSession?: SessionStartContextSession | null | undefined;
   selectedTask?: Pick<TaskCard, "targetBranch" | "targetBranchError"> | null;
 };
 
@@ -56,13 +57,24 @@ type ExecuteSessionStartFromDecisionArgs = {
   task: TaskCard | null;
   workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
+  startAgentSession: StartAgentSession;
+  sendAgentMessage?: SendAgentMessage;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
-  postStartExecution?: "await" | "detached";
-  onPostStartActionError?: ((action: SessionStartPostAction, error: Error) => void) | undefined;
 };
+
+export type RunSessionStartWorkflowInput = Omit<
+  ExecuteSessionStartFromDecisionArgs,
+  "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
+>;
+
+export type RunSessionStartWorkflow = (
+  input: RunSessionStartWorkflowInput,
+) => Promise<SessionStartWorkflowResult>;
+
+type CreateSessionStartWorkflowRunnerArgs = Pick<
+  ExecuteSessionStartFromDecisionArgs,
+  "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
+>;
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
@@ -93,27 +105,25 @@ const resolveExistingSessionOptions = (
 const resolveInitialSourceSession = ({
   request,
   existingSessionOptions,
-  activeSession,
+  preferredSourceSession,
 }: {
   request: SessionStartFlowRequest;
   existingSessionOptions: ReturnType<typeof resolveExistingSessionOptions>;
-  activeSession?: SessionStartContextSession | null | undefined;
+  preferredSourceSession?: SessionStartContextSession | null | undefined;
 }): AgentSessionIdentity | null => {
   if (request.initialSourceSession !== undefined) {
     return request.initialSourceSession;
   }
 
   if (
-    activeSession &&
-    activeSession.taskId === request.taskId &&
-    activeSession.role === request.role &&
-    existingSessionOptions.some((option) => option.value === agentSessionIdentityKey(activeSession))
+    preferredSourceSession &&
+    preferredSourceSession.taskId === request.taskId &&
+    preferredSourceSession.role === request.role &&
+    existingSessionOptions.some(
+      (option) => option.value === agentSessionIdentityKey(preferredSourceSession),
+    )
   ) {
-    return {
-      externalSessionId: activeSession.externalSessionId,
-      runtimeKind: activeSession.runtimeKind,
-      workingDirectory: activeSession.workingDirectory,
-    };
+    return toAgentSessionIdentity(preferredSourceSession);
   }
 
   return existingSessionOptions[0]?.sourceSession ?? null;
@@ -124,14 +134,14 @@ export const buildSessionStartModalRequest = ({
   request,
   selectedModel,
   taskSessions,
-  activeSession,
+  preferredSourceSession,
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
   const initialSourceSession = resolveInitialSourceSession({
     request,
     existingSessionOptions,
-    activeSession,
+    preferredSourceSession,
   });
   const initialTargetBranch = request.initialTargetBranch ?? selectedTask?.targetBranch ?? null;
   const initialTargetBranchError =
@@ -163,15 +173,9 @@ export const executeSessionStartFromDecision = async ({
   workspaceId,
   persistTaskTargetBranch,
   startAgentSession,
-  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
-  postStartExecution,
-  onPostStartActionError,
 }: ExecuteSessionStartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
-  const resolvedPostStartExecution =
-    postStartExecution ?? (request.postStartAction === "none" ? "await" : "detached");
-
   return startSessionWorkflow({
     queryClient,
     intent: {
@@ -195,13 +199,23 @@ export const executeSessionStartFromDecision = async ({
     workspaceId,
     ...(persistTaskTargetBranch ? { persistTaskTargetBranch } : {}),
     startAgentSession,
-    settleStartedAgentSession,
     ...(sendAgentMessage ? { sendAgentMessage } : {}),
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
-    postStartExecution: resolvedPostStartExecution,
-    onDetachedPostStartError:
-      resolvedPostStartExecution === "detached" && onPostStartActionError
-        ? (error) => onPostStartActionError(request.postStartAction, error)
-        : undefined,
   });
+};
+
+export const createSessionStartWorkflowRunner = ({
+  queryClient,
+  workspaceId,
+  startAgentSession,
+  sendAgentMessage,
+}: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
+  return (input) =>
+    executeSessionStartFromDecision({
+      ...input,
+      queryClient,
+      workspaceId,
+      startAgentSession,
+      ...(sendAgentMessage ? { sendAgentMessage } : {}),
+    });
 };

@@ -104,14 +104,14 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
-      threadInventory: this.threadInventory,
+      updateThreadStatus: (runtimeId, threadId, status) =>
+        this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
     });
     this.localSessions = new CodexLocalSessionState({
       sessionEvents: this.sessionEvents,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
-      threadInventory: this.threadInventory,
       runtimeEvents: this.runtimeEvents,
     });
   }

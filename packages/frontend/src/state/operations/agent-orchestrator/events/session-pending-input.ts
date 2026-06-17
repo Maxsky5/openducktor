@@ -6,7 +6,6 @@ import { appendSessionMessage } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import { readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
-import { flushDraftBuffers } from "./session-helpers";
 import {
   resolvePendingInputRoute,
   resolveResolvedPendingInputSession,
@@ -47,7 +46,7 @@ const removePendingInput = <Entry extends { requestId: string }>(
 ): Entry[] => entries.filter((entry) => entry.requestId !== requestId);
 
 const resolvePermissionPolicyRole = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: ApprovalRequiredEvent,
 ): AgentRole | undefined => {
   if (event.parentExternalSessionId) {
@@ -57,7 +56,7 @@ const resolvePermissionPolicyRole = (
     }
   }
 
-  return context.store.readSession(context.store.sessionIdentity)?.role ?? undefined;
+  return context.store.readSession(context.session.identity)?.role ?? undefined;
 };
 
 const recordSessionPendingApproval = (
@@ -68,14 +67,10 @@ const recordSessionPendingApproval = (
   if (!targetSession) {
     return;
   }
-  context.store.updateSession(
-    targetSession,
-    (current) => ({
-      ...current,
-      pendingApprovals: upsertPendingInput(current.pendingApprovals, toPendingApproval(event)),
-    }),
-    { persist: false },
-  );
+  context.store.updateSession(targetSession, (current) => ({
+    ...current,
+    pendingApprovals: upsertPendingInput(current.pendingApprovals, toPendingApproval(event)),
+  }));
 };
 
 const recordSessionPendingQuestion = (
@@ -86,14 +81,10 @@ const recordSessionPendingQuestion = (
   if (!targetSession) {
     return;
   }
-  context.store.updateSession(
-    targetSession,
-    (current) => ({
-      ...current,
-      pendingQuestions: upsertPendingInput(current.pendingQuestions, toPendingQuestion(event)),
-    }),
-    { persist: false },
-  );
+  context.store.updateSession(targetSession, (current) => ({
+    ...current,
+    pendingQuestions: upsertPendingInput(current.pendingQuestions, toPendingQuestion(event)),
+  }));
 };
 
 const shouldAutoRejectApproval = (
@@ -105,7 +96,7 @@ const shouldAutoRejectApproval = (
     return false;
   }
 
-  const session = context.store.readSession(context.store.sessionIdentity);
+  const session = context.store.readSession(context.session.identity);
   if (!session) {
     return false;
   }
@@ -127,7 +118,7 @@ const autoRejectMutatingApproval = (
   const pendingApproval = toPendingApproval(event);
   const markManualResponseRequired = (error: unknown): void => {
     const manualResponseSession =
-      pendingSession && context.store.hasSession(pendingSession) ? pendingSession : replySession;
+      pendingSession && context.store.readSession(pendingSession) ? pendingSession : replySession;
     context.store.updateSession(
       manualResponseSession,
       (current) => ({
@@ -199,7 +190,6 @@ export const handlePermissionRequired = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent,
 ): void => {
-  flushDraftBuffers(context);
   const role = resolvePermissionPolicyRole(context, event);
   const route = resolvePendingInputRoute(context, event);
 
@@ -231,21 +221,16 @@ export const handlePermissionResolved = (
     return;
   }
 
-  context.store.updateSession(
-    targetSession,
-    (current) => ({
-      ...current,
-      pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
-    }),
-    { persist: false },
-  );
+  context.store.updateSession(targetSession, (current) => ({
+    ...current,
+    pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
+  }));
 };
 
 export const handleQuestionRequired = (
   context: SessionLifecycleEventContext,
   event: QuestionRequiredEvent,
 ): void => {
-  flushDraftBuffers(context);
   const route = resolvePendingInputRoute(context, event);
 
   if (route.shouldPatchParentLink) {
@@ -264,12 +249,8 @@ export const handleQuestionResolved = (
     return;
   }
 
-  context.store.updateSession(
-    targetSession,
-    (current) => ({
-      ...current,
-      pendingQuestions: removePendingInput(current.pendingQuestions, event.requestId),
-    }),
-    { persist: false },
-  );
+  context.store.updateSession(targetSession, (current) => ({
+    ...current,
+    pendingQuestions: removePendingInput(current.pendingQuestions, event.requestId),
+  }));
 };

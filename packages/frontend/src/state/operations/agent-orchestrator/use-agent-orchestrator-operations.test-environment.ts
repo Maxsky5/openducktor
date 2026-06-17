@@ -25,7 +25,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalBuildContinuationTargetGet = host.taskWorktreeGet;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-  const originalAgentSessionsListBulk = host.agentSessionsListBulk;
   const originalRuntimeList = host.runtimeList;
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalRuntimeRequire = host.runtimeRequire;
@@ -57,12 +56,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
       agentDefaults: {},
     }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
   host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
-  host.agentSessionsListBulk = async (repoPath, taskIds) => {
-    const entries = await Promise.all(
-      taskIds.map(async (taskId) => [taskId, await host.agentSessionsList(repoPath, taskId)]),
-    );
-    return Object.fromEntries(entries);
-  };
   host.runtimeList = async () => [createWorktreeRuntimeFixture()];
   host.runtimeEnsure = async (repoPath, runtimeKind) => ({
     kind: runtimeKind,
@@ -117,7 +110,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.taskWorktreeGet = originalBuildContinuationTargetGet;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    host.agentSessionsListBulk = originalAgentSessionsListBulk;
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;
     host.runtimeRequire = originalRuntimeRequire;

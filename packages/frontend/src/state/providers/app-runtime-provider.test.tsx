@@ -23,6 +23,7 @@ const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
           throw new Error("catalog loader not configured");
         },
         loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+        loadRepoRuntimeSkills: async () => ({ skills: [] }),
         loadRepoRuntimeFileSearch: async () => [],
       },
       children,

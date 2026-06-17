@@ -3,7 +3,6 @@ import { listenToAgentSessionEvents } from "./events/session-events";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createEnsureRuntime } from "./runtime/runtime";
 import { createLoadAgentSessions } from "./session-read-model/load-sessions";
-import { upsertMessage } from "./support/utils";
 
 describe("agent-orchestrator/index", () => {
   test("exports orchestrator public internals", () => {
@@ -11,6 +10,5 @@ describe("agent-orchestrator/index", () => {
     expect(typeof createLoadAgentSessions).toBe("function");
     expect(typeof listenToAgentSessionEvents).toBe("function");
     expect(typeof createEnsureRuntime).toBe("function");
-    expect(typeof upsertMessage).toBe("function");
   });
 });

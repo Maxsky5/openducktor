@@ -20,7 +20,6 @@ type UseAgentStudioRightPanelBridgeArgs = {
   panel: AgentStudioRightPanelPanelState;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoveryKey: string;
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -39,7 +38,6 @@ export type AgentStudioRightPanelRuntimeModel = {
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoveryKey: UseAgentsPageRightPanelModelArgs["worktreeRecoveryKey"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -53,10 +51,7 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
   "panelKind" | "isPanelOpen"
 > & {
-  selectedView: Pick<
-    AgentStudioOrchestrationSelectionContext["view"],
-    "role" | "activeSession" | "transcriptState"
-  >;
+  selectedView: Pick<AgentStudioOrchestrationSelectionContext["view"], "role" | "loadedSession">;
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -86,7 +81,6 @@ function buildAgentStudioRightPanelBridgeModel({
   isPanelOpen,
   documentsModel,
   repoSettings,
-  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -99,8 +93,7 @@ function buildAgentStudioRightPanelBridgeModel({
       isPanelOpen,
       selectedView: {
         role: selection.view.role,
-        activeSession: selection.view.activeSession,
-        transcriptState: selection.view.transcriptState,
+        loadedSession: selection.view.loadedSession,
       },
     },
     rightPanel: {
@@ -112,7 +105,6 @@ function buildAgentStudioRightPanelBridgeModel({
       isPanelOpen,
       documentsModel,
       repoSettings,
-      worktreeRecoveryKey,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -130,7 +122,6 @@ export function useAgentStudioRightPanelBridge({
   panel,
   documentsModel,
   repoSettings,
-  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -155,7 +146,6 @@ export function useAgentStudioRightPanelBridge({
       isPanelOpen,
       documentsModel,
       repoSettings,
-      worktreeRecoveryKey,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -177,7 +167,6 @@ export function useAgentStudioRightPanelBridge({
     repoSettings,
     selection,
     setTaskTargetBranch,
-    worktreeRecoveryKey,
   ]);
 
   return {

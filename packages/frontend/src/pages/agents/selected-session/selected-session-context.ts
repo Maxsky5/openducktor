@@ -3,7 +3,7 @@ import type {
   RuntimeDescriptor,
   TaskCard,
 } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
@@ -14,7 +14,8 @@ import {
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import {
   type AgentStudioDocumentsContext,
   buildActiveDocumentForRole,
@@ -38,31 +39,14 @@ type SelectedSessionApprovalsContext = {
   onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
-type SelectedSessionRuntimeDataInput = {
-  todos: AgentSessionTodoItem[];
-  isLoadingModelCatalog: boolean;
-};
-
 export type SelectedSessionDocumentsContext = {
-  activeDocumentRole: AgentRole;
   activeDocument: AgentStudioWorkspaceDocument | null;
-  hasDocumentPanel: boolean;
-};
-
-export type SelectedSessionRightPanelContext = {
-  role: AgentRole;
-  hasTaskContext: boolean;
-  hasDocumentPanel: boolean;
-  hasBuildToolsPanel: boolean;
 };
 
 export type SelectedSessionRuntimeContext = {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeReadiness: RepoRuntimeReadiness;
-  sessionRuntimeDataError: string | null;
-  sessionTodos: AgentSessionTodoItem[];
-  isLoadingModelCatalog: boolean;
-  transcriptState: AgentSessionTranscriptState;
+  runtimeData: SelectedSessionRuntimeData;
 };
 
 export type SelectedSessionPendingInputContext = {
@@ -78,10 +62,11 @@ export type AgentStudioSelectedSessionContext = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  activeSession: AgentSessionState | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  loadedSession: AgentSessionState | null;
+  transcriptState: AgentSessionTranscriptState;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
-  rightPanel: SelectedSessionRightPanelContext;
   runtime: SelectedSessionRuntimeContext;
   pendingInput: SelectedSessionPendingInputContext;
 };
@@ -92,10 +77,10 @@ export type AgentStudioSelectedSessionContextInput = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  activeSession: AgentSessionState | null;
-  activeSessionRuntimeData: SelectedSessionRuntimeDataInput;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  loadedSession: AgentSessionState | null;
+  sessionRuntimeData: SelectedSessionRuntimeData;
   runtimeDefinitions: RuntimeDescriptor[];
-  sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
   transcriptState: AgentSessionTranscriptState;
   documents: AgentStudioDocumentsContext;
@@ -135,10 +120,10 @@ export const buildAgentStudioSelectedSessionContext = ({
   selectedTask,
   sessionsForTask,
   allSessionSummaries,
-  activeSession,
-  activeSessionRuntimeData,
+  selectedSessionIdentity,
+  loadedSession,
+  sessionRuntimeData,
   runtimeDefinitions,
-  sessionRuntimeDataError,
   hasActiveGitConflict,
   transcriptState,
   documents,
@@ -147,40 +132,31 @@ export const buildAgentStudioSelectedSessionContext = ({
   approvals,
   roleLabelByRole,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
-  const workflowActiveSession = activeSession
-    ? {
-        externalSessionId: activeSession.externalSessionId,
-        runtimeKind: activeSession.runtimeKind,
-        workingDirectory: activeSession.workingDirectory,
-        role: activeSession.role,
-      }
-    : null;
   const workflow = buildWorkflowModelContext({
     selectedTask,
     sessionsForTask,
-    activeSession: workflowActiveSession,
+    selectedSessionIdentity,
     role,
     isSessionWorking: sessionActions.isSessionWorking,
     hasActiveGitConflict,
     roleLabelByRole,
   });
-  const activeDocumentRole = activeSession?.role ?? role;
   const activeDocument = taskId
     ? buildActiveDocumentForRole({
-        activeRole: activeDocumentRole,
+        activeRole: role,
         specDoc: documents.specDoc,
         planDoc: documents.planDoc,
         qaDoc: documents.qaDoc,
       })
     : null;
-  const hasPendingQuestions = activeSession
-    ? hasAgentSessionPendingQuestions(activeSession)
+  const hasPendingQuestions = loadedSession
+    ? hasAgentSessionPendingQuestions(loadedSession)
     : false;
-  const hasPendingApprovals = activeSession
-    ? hasAgentSessionPendingApprovals(activeSession)
+  const hasPendingApprovals = loadedSession
+    ? hasAgentSessionPendingApprovals(loadedSession)
     : false;
-  const waitingInputPlaceholder = activeSession
-    ? getAgentSessionWaitingInputPlaceholder(activeSession)
+  const waitingInputPlaceholder = loadedSession
+    ? getAgentSessionWaitingInputPlaceholder(loadedSession)
     : null;
 
   return {
@@ -188,26 +164,17 @@ export const buildAgentStudioSelectedSessionContext = ({
     role,
     selectedTask,
     sessionsForTask,
-    activeSession,
+    selectedSessionIdentity,
+    loadedSession,
+    transcriptState,
     workflow,
     documents: {
-      activeDocumentRole,
       activeDocument,
-      hasDocumentPanel: Boolean(activeDocument),
-    },
-    rightPanel: {
-      role,
-      hasTaskContext: Boolean(taskId),
-      hasDocumentPanel: Boolean(activeDocument),
-      hasBuildToolsPanel: role === "build",
     },
     runtime: {
       runtimeDefinitions,
       runtimeReadiness,
-      sessionRuntimeDataError,
-      sessionTodos: activeSessionRuntimeData.todos,
-      isLoadingModelCatalog: activeSessionRuntimeData.isLoadingModelCatalog,
-      transcriptState,
+      runtimeData: sessionRuntimeData,
     },
     pendingInput: {
       waitingInputPlaceholder,

@@ -1,31 +1,21 @@
-import type {
-  RuntimeDescriptor,
-  RuntimeInstanceSummary,
-  TaskStoreCheck,
-  WorkspaceRecord,
-} from "@openducktor/contracts";
+import type { RuntimeDescriptor, TaskStoreCheck, WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   createTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeDiagnosticInstance, RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
 export const makeRuntimeDefinitions = (): RuntimeDescriptor[] => [
   structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
 ];
 
-export const makeRuntimeSummary = (): RuntimeInstanceSummary => ({
+export const makeRuntimeDiagnosticInstance = (): RepoRuntimeDiagnosticInstance => ({
   kind: "opencode",
-  runtimeId: "runtime-1",
   repoPath: "/repo",
   taskId: null,
   role: "workspace",
   workingDirectory: "/repo",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:49700",
-  },
   startedAt: "2026-02-20T12:00:00.000Z",
   descriptor: structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
 });

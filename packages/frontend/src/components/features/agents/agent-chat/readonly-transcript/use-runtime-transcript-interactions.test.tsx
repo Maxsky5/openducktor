@@ -142,7 +142,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("blocks approval replies when the active session id does not match the transcript target", async () => {
+  test("blocks approval replies when the live session id does not match the transcript target", async () => {
     const replyAgentApproval = mock(
       async (
         _session: AgentSessionIdentity,

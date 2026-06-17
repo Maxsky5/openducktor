@@ -3,6 +3,7 @@ import {
   type AgentSessionTodoItem,
   buildReadOnlyPermissionRejectionMessage,
 } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -23,11 +24,7 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import {
-  createSessionDraftBuffers,
-  createSessionTurnMetadata,
-  type SessionDraftBuffers,
-} from "../support/session-transient-state";
+import { createSessionTurnMetadata } from "../support/session-turn-metadata";
 import {
   createAgentSessionCollectionRefFixture,
   findAgentSessionFixture,
@@ -58,16 +55,6 @@ export const createRecordingSessionTodosUpdater = () => {
   };
 };
 
-const createImmediateSessionDraftBuffers = (): SessionDraftBuffers => {
-  const buffers = createSessionDraftBuffers();
-  return {
-    ...buffers,
-    scheduleFlush: (_sessionKey, flush) => {
-      flush();
-    },
-  };
-};
-
 type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: AgentChatMessage[] | SessionMessagesState;
 };
@@ -85,10 +72,6 @@ export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessio
     startedAt: "2026-02-22T08:00:00.000Z",
     workingDirectory: "/tmp/repo",
     messages: createSessionMessagesFixture(externalSessionId, messages),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     contextUsage: null,
     pendingApprovals: [],
     pendingQuestions: [],
@@ -138,7 +121,6 @@ export const getSessionMessages = (
 type ObserveAgentSessionEventsTestParams = Omit<
   ObserveAgentSessionParams,
   | "sessionRef"
-  | "draftBuffers"
   | "turnMetadata"
   | "readSession"
   | "updateSessionTodos"
@@ -147,12 +129,12 @@ type ObserveAgentSessionEventsTestParams = Omit<
   | "buildReadOnlyApprovalRejectionMessage"
   | "canAutoRejectReadOnlyApproval"
   | "resolveWorkflowToolAliasesByCanonical"
+  | "isSessionObserved"
 > &
   Partial<
     Pick<
       ObserveAgentSessionParams,
       | "sessionRef"
-      | "draftBuffers"
       | "turnMetadata"
       | "updateSessionTodos"
       | "recordTurnActivityTimestamp"
@@ -160,6 +142,7 @@ type ObserveAgentSessionEventsTestParams = Omit<
       | "buildReadOnlyApprovalRejectionMessage"
       | "canAutoRejectReadOnlyApproval"
       | "resolveWorkflowToolAliasesByCanonical"
+      | "isSessionObserved"
     >
   > & {
     sessionsRef: { current: AgentSessionCollection };
@@ -175,7 +158,6 @@ export const listenToAgentSessionEvents = (
     repoPath,
     sessionsRef,
     sessionRef: providedSessionRef,
-    draftBuffers,
     turnMetadata,
     updateSessionTodos,
     recordTurnActivityTimestamp,
@@ -183,6 +165,7 @@ export const listenToAgentSessionEvents = (
     buildReadOnlyApprovalRejectionMessage,
     canAutoRejectReadOnlyApproval,
     resolveWorkflowToolAliasesByCanonical,
+    isSessionObserved,
     ...eventParams
   } = params;
   const targetExternalSessionId =
@@ -198,7 +181,6 @@ export const listenToAgentSessionEvents = (
 
   return listenToAgentSessionEventsImpl({
     ...eventParams,
-    draftBuffers: draftBuffers ?? createImmediateSessionDraftBuffers(),
     turnMetadata: turnMetadata ?? createSessionTurnMetadata(),
     recordTurnActivityTimestamp: recordTurnActivityTimestamp ?? (() => {}),
     recordTurnUserMessageTimestamp: recordTurnUserMessageTimestamp ?? (() => {}),
@@ -217,6 +199,10 @@ export const listenToAgentSessionEvents = (
     resolveWorkflowToolAliasesByCanonical:
       resolveWorkflowToolAliasesByCanonical ??
       (() => OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical),
+    isSessionObserved:
+      isSessionObserved ??
+      ((candidateSession) =>
+        agentSessionIdentityKey(candidateSession) === agentSessionIdentityKey(sessionRef)),
     updateSessionTodos: updateSessionTodos ?? (() => {}),
     readSession: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionRef,
@@ -231,7 +217,6 @@ export const getLastSessionMessage = (
 export type { AgentSessionState, SessionEvent, SessionEventAdapter, SessionPartEventContext };
 export type SessionUpdateFn = ObserveAgentSessionParams["updateSession"];
 export {
-  createSessionDraftBuffers,
   createSessionEventBatcher,
   createSessionTurnMetadata,
   handleAssistantPart,

@@ -6,25 +6,29 @@ import { createSessionMessagesState } from "@/state/operations/agent-orchestrato
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  type AgentSessionWorkflowSummary,
+  closeTaskTab,
+  ensureActiveTaskTab,
+  getAvailableTabTasks,
+  reorderTaskTabs,
+  resolveFallbackTaskId,
+} from "./agent-studio-task-tabs-list";
+import {
   addTaskToPersistedTaskTabs,
+  canPersistTaskTabs,
+  parsePersistedTaskTabs,
+  toPersistedTaskTabs,
+} from "./agent-studio-task-tabs-storage";
+import {
+  type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
+  buildLiveSessionByRoleMap,
   buildRoleEnabledMapForTask,
-  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildTaskTabs,
   buildWorkflowStateByRole,
-  canPersistTaskTabs,
-  closeTaskTab,
-  ensureActiveTaskTab,
-  getAvailableTabTasks,
   getTabStatusForTask,
-  parsePersistedTaskTabs,
-  reorderTaskTabs,
-  resolveFallbackTaskId,
-  toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionWorkflowSummary => {
@@ -37,10 +41,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionW
     startedAt: "2026-02-20T10:00:00.000Z",
     workingDirectory: "/tmp/work",
     messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     pendingApprovals: [],
     pendingQuestions: [],
     selectedModel: null,
@@ -321,7 +321,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("builds workflow rail states from backend-provided workflow fields", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([]);
+    const liveSessionByRole = buildLiveSessionByRoleMap([]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -330,7 +330,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states).toEqual({
@@ -362,7 +362,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("renders skippable available steps as optional", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([]);
+    const liveSessionByRole = buildLiveSessionByRoleMap([]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -371,7 +371,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.spec).toEqual({
@@ -384,7 +384,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -395,7 +395,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.build).toEqual({
@@ -407,7 +407,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("marks builder as in_progress when builder session exists but is stopped without build_completed", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -418,7 +418,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.build).toEqual({
@@ -430,7 +430,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("uses warning tone for blocked builder tasks even when the latest session is stopped", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -441,7 +441,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.build).toEqual({
@@ -464,7 +464,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([]),
+      liveSessionByRole: buildLiveSessionByRoleMap([]),
     });
 
     expect(states.build).toEqual({
@@ -476,7 +476,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("keeps blocked builder tasks in progress while the live builder session is still running", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "build", status: "running" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -487,7 +487,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.build).toEqual({
@@ -499,7 +499,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("keeps blocked builder tasks failed when the latest builder session errored", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "build", status: "error" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -510,7 +510,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states.build).toEqual({
@@ -522,7 +522,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("marks workflow role as in_progress when latest role session is started but not completed", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "planner", status: "idle" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -533,7 +533,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states).toEqual({
@@ -565,7 +565,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("keeps workflow role in_progress while the latest role session is still running even if workflow is completed", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "spec", status: "running" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -576,7 +576,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states).toEqual({
@@ -608,7 +608,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("does not mark unavailable roles as in_progress when a session exists", () => {
-    const roleSessionByRole = buildRoleSessionSummaryMap([
+    const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({ role: "qa", status: "idle" }),
     ]);
     const states = buildWorkflowStateByRole({
@@ -619,7 +619,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole,
+      liveSessionByRole,
     });
 
     expect(states).toEqual({
@@ -674,7 +674,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([buildSession({ role: "qa", status: "idle" })]),
+      liveSessionByRole: buildLiveSessionByRoleMap([buildSession({ role: "qa", status: "idle" })]),
     });
 
     expect(states).toEqual({
@@ -730,7 +730,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([
+      liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({ role: "build", status: "stopped" }),
         buildSession({ role: "qa", status: "idle" }),
       ]),
@@ -797,7 +797,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([
+      liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({ role: "build", status: "stopped" }),
         session,
       ]),
@@ -835,7 +835,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([
+      liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({ role: "spec", status: "idle" }),
         buildSession({ role: "planner", status: "idle" }),
         buildSession({
@@ -903,7 +903,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([]),
+      liveSessionByRole: buildLiveSessionByRoleMap([]),
     });
 
     expect(states.build.completion).toBe("done");
@@ -911,7 +911,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("keeps the newest role session as the workflow target even when an older one is waiting", () => {
-    const summaries = buildRoleSessionSummaryMap([
+    const sessions = [
       buildSession({
         role: "spec",
         externalSessionId: "session-newer",
@@ -925,11 +925,12 @@ describe("agents-page-session-tabs", () => {
         status: "running",
         pendingQuestions: [{ requestId: "q-1", questions: [] }],
       }),
-    ]);
+    ];
+    const latestSessionByRole = buildLatestSessionByRoleMap(sessions);
+    const liveSessionByRole = buildLiveSessionByRoleMap(sessions);
 
-    expect(summaries.spec.latestSession?.externalSessionId).toBe("session-newer");
-    expect(summaries.spec.workflowSession?.externalSessionId).toBe("session-newer");
-    expect(summaries.spec.liveSession).toBe("idle");
+    expect(latestSessionByRole.spec?.externalSessionId).toBe("session-newer");
+    expect(liveSessionByRole.spec).toBe("idle");
   });
 
   test("marks optional available roles as optional instead of generic available", () => {
@@ -941,7 +942,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: false, canSkip: true, available: true, completed: false },
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([]),
+      liveSessionByRole: buildLiveSessionByRoleMap([]),
     });
 
     expect(states.spec.tone).toBe("optional");
@@ -959,7 +960,7 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([
+      liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({
           role: "spec",
           status: "running",

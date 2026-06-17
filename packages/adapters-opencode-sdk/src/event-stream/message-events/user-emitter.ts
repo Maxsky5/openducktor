@@ -143,6 +143,31 @@ export const emitKnownUserMessage = (
   });
 };
 
+export const emitAdmittedUserMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp: string;
+    message: string;
+    parts: AgentUserMessageDisplayPart[];
+    state: AgentUserMessageState;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  runtime.messageRoleById.set(input.messageId, "user");
+  persistUserMessageMetadata({
+    session,
+    messageId: input.messageId,
+    timestamp: input.timestamp,
+    ...(input.model ? { model: input.model } : {}),
+    visible: input.message,
+    displayParts: input.parts,
+  });
+
+  return emitUserMessage(runtime, input);
+};
+
 type UserHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "user" }>;
 
 const seedHistoryUserMessageMetadata = (

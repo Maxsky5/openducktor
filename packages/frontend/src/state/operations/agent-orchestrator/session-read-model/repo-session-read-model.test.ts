@@ -5,7 +5,11 @@ import {
   type AgentPendingQuestionRequest,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
-import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
+import {
+  createAgentSessionCollection,
+  getAgentSession,
+  listAgentSessions,
+} from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
@@ -269,6 +273,47 @@ describe("repo session read model", () => {
     ]);
   });
 
+  test("removes current sessions for loaded tasks when durable records no longer contain them", async () => {
+    const removedSession = createAgentSessionFixture({
+      externalSessionId: "removed-session",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "running",
+      startedAt: "2026-06-11T08:00:00.000Z",
+      workingDirectory: "/repo/removed-worktree",
+    });
+    const otherTaskSession = createAgentSessionFixture({
+      externalSessionId: "other-task-session",
+      taskId: "task-2",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "running",
+      startedAt: "2026-06-11T08:00:00.000Z",
+      workingDirectory: "/repo/other-worktree",
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks: [createTask([])],
+      currentSessionCollection: createAgentSessionCollection([removedSession, otherTaskSession]),
+      runtimeSnapshots: new Map(),
+    });
+
+    expect(getReadModelSession(readModel, removedSession.externalSessionId)).toBeNull();
+    expect(getReadModelSession(readModel, otherTaskSession.externalSessionId)).toBe(
+      otherTaskSession,
+    );
+    expect(readModel.removedSessionRefs).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: removedSession.externalSessionId,
+        runtimeKind: removedSession.runtimeKind,
+        workingDirectory: removedSession.workingDirectory,
+      },
+    ]);
+  });
+
   test("surfaces idle status from initial runtime snapshot", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
@@ -293,7 +338,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("demotes a mounted active session when runtime snapshot is missing", async () => {
+  test("preserves a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
@@ -325,11 +370,11 @@ describe("repo session read model", () => {
       runtimeSnapshots: runtimeSnapshots,
     });
 
-    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps mounted transcript but clears runtime-owned state when runtime snapshot is missing", async () => {
+  test("keeps mounted transcript and live turn state when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -344,8 +389,6 @@ describe("repo session read model", () => {
         historyLoadState: "loaded",
       }),
       pendingUserMessageStartedAt: 123,
-      draftAssistantText: "partial assistant",
-      draftAssistantMessageId: "assistant-draft",
       messages: createSessionMessagesState(record.externalSessionId, [
         {
           id: "existing-message",
@@ -372,18 +415,16 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("idle");
+    expect(session?.status).toBe("running");
     expect(session?.historyLoadState).toBe("loaded");
-    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
-    expect(session?.draftAssistantText).toBe("");
-    expect(session?.draftAssistantMessageId).toBeNull();
+    expect(session?.pendingUserMessageStartedAt).toBe(123);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("does not reuse mounted state from a different runtime identity", async () => {
+  test("removes mounted state from a different runtime identity when records do not contain it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -419,7 +460,7 @@ describe("repo session read model", () => {
       runtimeSnapshots: runtimeSnapshots,
     });
 
-    const session = getReadModelSession(readModel, record.externalSessionId);
+    const session = getAgentSession(readModel.sessionCollection, record);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
@@ -428,10 +469,19 @@ describe("repo session read model", () => {
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(session.historyLoadState).toBe("not_requested");
     expect(sessionMessagesToArray(session)).toEqual([]);
+    expect(getAgentSession(readModel.sessionCollection, currentSession)).toBeNull();
+    expect(readModel.removedSessionRefs).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: currentSession.externalSessionId,
+        runtimeKind: currentSession.runtimeKind,
+        workingDirectory: currentSession.workingDirectory,
+      },
+    ]);
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("preserves mounted transcript for an equivalent normalized working directory without preserving running state", async () => {
+  test("preserves mounted transcript and status for an equivalent normalized working directory", async () => {
     const record = createRecord({ workingDirectory: "/repo/worktree" });
     const tasks = [createTask([record])];
     const currentSession = {
@@ -471,7 +521,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("idle");
+    expect(session.status).toBe("running");
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Mounted transcript",
@@ -637,11 +687,11 @@ describe("repo session read model", () => {
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("drops local task sessions that are no longer present in persisted task records", async () => {
+  test("uses loaded empty task session records as local session cleanup", async () => {
     const tasks = [createTask([])];
     const currentSession = {
       ...createAgentSessionFixture({
-        externalSessionId: "orphan-session",
+        externalSessionId: "local-session",
         taskId: "task-1",
         runtimeKind: "opencode",
         role: "build",
@@ -673,6 +723,14 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
+    expect(readModel.removedSessionRefs).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: currentSession.externalSessionId,
+        runtimeKind: currentSession.runtimeKind,
+        workingDirectory: currentSession.workingDirectory,
+      },
+    ]);
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 

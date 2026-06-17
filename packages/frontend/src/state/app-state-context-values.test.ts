@@ -2,14 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
-  AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
 } from "@/types/state-slices";
 import {
-  buildAgentStateValue,
   buildChecksStateValue,
   buildDelegationStateValue,
   buildSpecStateValue,
@@ -112,41 +110,9 @@ describe("app-state-context-values", () => {
       saveSpecDocument: async () => ({ updatedAt: "" }),
       savePlanDocument: async () => ({ updatedAt: "" }),
     };
-    const agentValue: AgentStateContextValue = {
-      sessions: [],
-      sessionReadModelLoadState: { kind: "idle" },
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
-      startAgentSession: async () => ({
-        externalSessionId: "session",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/session",
-      }),
-      settleStartedAgentSession: () => {},
-      sendAgentMessage: async () => {},
-      stopAgentSession: async () => {},
-      updateAgentSessionModel: () => {},
-      replyAgentApproval: async () => {},
-      answerAgentQuestion: async () => {},
-    };
-
     expect(buildChecksStateValue(checksValue)).toBe(checksValue);
     expect(buildTasksStateValue(tasksValue)).toBe(tasksValue);
     expect(buildDelegationStateValue(delegationValue)).toBe(delegationValue);
     expect(buildSpecStateValue(specValue)).toBe(specValue);
-    expect(buildAgentStateValue(agentValue)).toBe(agentValue);
   });
 });

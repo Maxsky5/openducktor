@@ -1,12 +1,12 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   ResolvedSessionStartDecision,
+  RunSessionStartWorkflow,
   SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
@@ -15,13 +15,13 @@ import type {
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
-  executeSessionStartFromDecision,
+  sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
@@ -45,7 +45,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  activeSession: AgentSessionState | null;
+  loadedSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   canStartRole: CanStartRole;
@@ -54,9 +54,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   workspaceId: string | null;
   workspaceRepoPath: string | null;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
@@ -64,17 +62,8 @@ type UseAgentStudioSessionStartFlowArgs = {
 
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
 
-type RunSessionStartRequestOptions = {
-  trackStartingActivity?: boolean;
-  postStartExecution?: "await" | "detached";
-};
-
 const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
-  const message =
-    action === "kickoff"
-      ? "Session started, but the kickoff prompt failed to send."
-      : "Session started, but feedback message failed.";
-  toast.error(message, {
+  toast.error(sessionStartPostActionErrorTitle(action), {
     description: error.message,
   });
 };
@@ -84,7 +73,7 @@ export function useAgentStudioSessionStartFlow({
   taskId,
   role,
   launchActionId,
-  activeSession,
+  loadedSession,
   sessionsForTask,
   selectedTask,
   canStartRole,
@@ -93,9 +82,7 @@ export function useAgentStudioSessionStartFlow({
   repoSettings,
   workspaceId,
   workspaceRepoPath,
-  startAgentSession,
-  settleStartedAgentSession,
-  sendAgentMessage,
+  runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
@@ -111,7 +98,6 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
-  const queryClient = useQueryClient();
   const sessionStartGate = useAgentStudioSessionStartGate(workspaceId);
   const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
     useAgentStudioAsyncActivityTracker();
@@ -120,7 +106,7 @@ export function useAgentStudioSessionStartFlow({
       workspaceId,
       taskId,
       role,
-      session: activeSession,
+      session: loadedSession,
     }),
   );
 
@@ -145,14 +131,14 @@ export function useAgentStudioSessionStartFlow({
               ? (selectionForNewSession ?? null)
               : null,
           taskSessions: sessionsForTask,
-          activeSession: isWorkflowAgentSession(activeSession) ? activeSession : null,
+          preferredSourceSession: isWorkflowAgentSession(loadedSession) ? loadedSession : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
         async ({ decision }) => executeWithDecision(decision),
       );
     },
     [
-      activeSession,
+      loadedSession,
       role,
       runInternalSessionStartRequest,
       selectionForNewSession,
@@ -163,30 +149,21 @@ export function useAgentStudioSessionStartFlow({
   );
 
   const runSessionStartRequest = useCallback(
-    async (
-      request: SessionStartFlowRequest,
-      options: RunSessionStartRequestOptions = {},
-    ): Promise<SessionStartWorkflowResult | undefined> => {
+    async (request: SessionStartFlowRequest): Promise<SessionStartWorkflowResult | undefined> => {
       const executeWithDecision = async (
         decision: ResolvedSessionStartDecision,
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const execute = async (): Promise<SessionStartWorkflowResult> => {
-          const workflow = await executeSessionStartFromDecision({
-            queryClient,
+          const workflow = await runSessionStartWorkflow({
             request,
             decision,
             task: request.taskId === taskId ? selectedTask : null,
-            workspaceId,
             ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
-            startAgentSession,
-            settleStartedAgentSession,
-            sendAgentMessage,
             humanRequestChangesTask,
-            ...(options.postStartExecution
-              ? { postStartExecution: options.postStartExecution }
-              : {}),
-            onPostStartActionError: showPostStartActionError,
           });
+          if (workflow.postStartActionError) {
+            showPostStartActionError(request.postStartAction, workflow.postStartActionError);
+          }
 
           updateQuery(
             buildAgentStudioSelectionQueryUpdate({
@@ -197,10 +174,6 @@ export function useAgentStudioSessionStartFlow({
           );
           return workflow;
         };
-
-        if (!options.trackStartingActivity) {
-          return execute();
-        }
 
         const activity = beginStartingActivity(
           buildAgentStudioSessionActivityKey({
@@ -223,12 +196,9 @@ export function useAgentStudioSessionStartFlow({
       beginStartingActivity,
       executeRequestedSessionStart,
       humanRequestChangesTask,
-      queryClient,
+      runSessionStartWorkflow,
       selectedTask,
-      sendAgentMessage,
-      settleStartedAgentSession,
       setTaskTargetBranch,
-      startAgentSession,
       taskId,
       updateQuery,
       workspaceId,
@@ -249,17 +219,14 @@ export function useAgentStudioSessionStartFlow({
         launchActionId,
       });
       return sessionStartGate.run(startKey, () =>
-        runSessionStartRequest(
-          {
-            taskId,
-            role,
-            launchActionId,
-            postStartAction: params.postStartAction,
-            initialTargetBranch: selectedTask?.targetBranch ?? null,
-            initialTargetBranchError: selectedTask?.targetBranchError ?? null,
-          },
-          { trackStartingActivity: true },
-        ),
+        runSessionStartRequest({
+          taskId,
+          role,
+          launchActionId,
+          postStartAction: params.postStartAction,
+          initialTargetBranch: selectedTask?.targetBranch ?? null,
+          initialTargetBranchError: selectedTask?.targetBranchError ?? null,
+        }),
       );
     },
     [
@@ -317,7 +284,7 @@ export function useAgentStudioSessionStartFlow({
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
       const { role: nextRole, launchActionId: nextLaunchActionId } = option;
-      if (activeSession && isSessionWorking) {
+      if (loadedSession && isSessionWorking) {
         return;
       }
 
@@ -331,22 +298,16 @@ export function useAgentStudioSessionStartFlow({
         launchActionId: nextLaunchActionId,
       });
       void sessionStartGate.run(startKey, () =>
-        runSessionStartRequest(
-          {
-            taskId,
-            role: nextRole,
-            launchActionId: nextLaunchActionId,
-            postStartAction: "kickoff",
-          },
-          {
-            trackStartingActivity: true,
-            postStartExecution: "detached",
-          },
-        ),
+        runSessionStartRequest({
+          taskId,
+          role: nextRole,
+          launchActionId: nextLaunchActionId,
+          postStartAction: "kickoff",
+        }),
       );
     },
     [
-      activeSession,
+      loadedSession,
       canStartRole,
       isSessionWorking,
       runSessionStartRequest,

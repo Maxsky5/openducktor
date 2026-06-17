@@ -1,113 +1,117 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
-import { resolveSessionRuntimeDataTarget } from "@/state/operations/agent-orchestrator/support/session-runtime-data-target";
 import {
-  sessionModelCatalogQueryOptions,
+  agentSessionTodosQueryKeys,
+  SESSION_TODOS_STALE_TIME_MS,
   sessionTodosQueryOptions,
-} from "@/state/queries/agent-session-runtime";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+} from "@/state/queries/agent-session-todos";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeCatalogQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  EMPTY_SELECTED_SESSION_RUNTIME_DATA,
+  type SelectedSessionRuntimeData,
+} from "@/types/selected-session-runtime-data";
+import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
-  session: AgentSessionState | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  canReadSessionTodos: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-  ) => Promise<AgentModelCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
-export type SessionRuntimeDataState = {
-  runtimeData: {
-    modelCatalog: AgentModelCatalog | null;
-    todos: AgentSessionTodoItem[];
-    isLoadingModelCatalog: boolean;
-  };
-  runtimeDataError: string | null;
-};
+const skippedSessionTodosQueryOptions = (session: AgentSessionRef | null) =>
+  skippedQueryOptions<AgentSessionTodoItem[]>({
+    queryKey: session ? agentSessionTodosQueryKeys.todos(session) : agentSessionTodosQueryKeys.all,
+    staleTime: SESSION_TODOS_STALE_TIME_MS,
+  });
 
-const emptyRuntimeData: SessionRuntimeDataState["runtimeData"] = Object.freeze({
-  modelCatalog: null,
-  todos: [],
-  isLoadingModelCatalog: false,
-});
+const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+  skippedQueryOptions<AgentModelCatalog>({
+    queryKey: runtimeRef
+      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+      : runtimeCatalogQueryKeys.all,
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
 
 export const useSessionRuntimeData = ({
   repoPath,
-  session,
+  selectedSessionIdentity,
+  canReadSessionTodos,
   runtimeDefinitions,
   repoReadinessState,
-  readSessionModelCatalog,
+  loadRuntimeCatalog,
   readSessionTodos,
-}: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
-  const runtimeDataTarget = useMemo(
+}: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
+  const runtimeDataRefs = useMemo(
     () =>
-      resolveSessionRuntimeDataTarget({
+      resolveSessionRuntimeDataRefs({
         repoPath,
-        session,
+        selectedSessionIdentity,
         runtimeDefinitions,
-        repoReadinessState,
       }),
-    [repoPath, runtimeDefinitions, repoReadinessState, session],
+    [repoPath, runtimeDefinitions, selectedSessionIdentity],
   );
-  const modelCatalogRuntimeRef =
-    runtimeDataTarget.kind === "modelCatalog" || runtimeDataTarget.kind === "modelCatalogAndTodos"
-      ? runtimeDataTarget.runtimeRef
-      : null;
-  const todosSessionRef =
-    runtimeDataTarget.kind === "modelCatalogAndTodos" ? runtimeDataTarget.todosSessionRef : null;
-  const supportError = runtimeDataTarget.kind === "blocked" ? runtimeDataTarget.supportError : null;
+  const canReadRuntimeData = selectedSessionIdentity !== null && repoReadinessState === "ready";
+  const canReadTodos = canReadRuntimeData && canReadSessionTodos;
 
-  const catalogQuery = useQuery({
-    ...sessionModelCatalogQueryOptions(modelCatalogRuntimeRef, readSessionModelCatalog),
-    enabled: modelCatalogRuntimeRef !== null,
-  });
+  const catalogQuery = useQuery(
+    runtimeDataRefs.catalogRef && canReadRuntimeData
+      ? repoRuntimeCatalogQueryOptions(runtimeDataRefs.catalogRef, loadRuntimeCatalog)
+      : skippedRuntimeCatalogQueryOptions(runtimeDataRefs.catalogRef),
+  );
 
-  const todosQuery = useQuery({
-    ...sessionTodosQueryOptions(todosSessionRef, readSessionTodos),
-    enabled: todosSessionRef !== null,
-  });
+  const todosQuery = useQuery(
+    runtimeDataRefs.todosRef && canReadTodos
+      ? sessionTodosQueryOptions(runtimeDataRefs.todosRef, readSessionTodos)
+      : skippedSessionTodosQueryOptions(runtimeDataRefs.todosRef),
+  );
 
   return useMemo(() => {
-    if (!session) {
-      return {
-        runtimeData: emptyRuntimeData,
-        runtimeDataError: null,
-      };
+    if (!selectedSessionIdentity) {
+      return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
     const catalogQueryError =
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const runtimeDataError = supportError ?? runtimeDataQueryError;
+    const error = runtimeDataRefs.error ?? runtimeDataQueryError;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const canShowModelCatalogLoading =
-      modelCatalogRuntimeRef !== null && !supportError && !catalogQueryError;
+      canReadRuntimeData &&
+      runtimeDataRefs.catalogRef !== null &&
+      !runtimeDataRefs.error &&
+      !catalogQueryError;
     const isLoadingModelCatalog =
       canShowModelCatalogLoading && resolvedCatalog === null && catalogQuery.isPending;
 
     return {
-      runtimeData: {
-        modelCatalog: resolvedCatalog,
-        todos: resolvedTodos,
-        isLoadingModelCatalog,
-      },
-      runtimeDataError,
+      modelCatalog: resolvedCatalog,
+      todos: resolvedTodos,
+      isLoadingModelCatalog,
+      error,
     };
   }, [
     catalogQuery.data,
     catalogQuery.error,
     catalogQuery.isPending,
-    modelCatalogRuntimeRef,
-    session,
-    supportError,
+    canReadRuntimeData,
+    runtimeDataRefs.catalogRef,
+    runtimeDataRefs.error,
+    selectedSessionIdentity,
     todosQuery.data,
     todosQuery.error,
   ]);

@@ -191,7 +191,7 @@ export type AgentSessionSummary = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };
 
-export interface AgentRuntimeRegistryPort {
+export interface AgentRuntimeDefinitionsPort {
   listRuntimeDefinitions(): RuntimeDescriptor[];
 }
 
@@ -231,7 +231,7 @@ export interface AgentWorkspaceInspectionPort {
   loadFileStatus(input: LoadAgentFileStatusInput): Promise<FileStatus[]>;
 }
 
-export type AgentEnginePort = AgentRuntimeRegistryPort &
+export type AgentEnginePort = AgentRuntimeDefinitionsPort &
   AgentCatalogPort &
   AgentSessionPort &
   AgentWorkspaceInspectionPort;

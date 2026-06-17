@@ -781,6 +781,97 @@ describe("CodexAppServerAdapter streaming", () => {
     });
   });
 
+  test("emits accepted queued Codex user messages into the runtime transcript stream", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    transports.get("runtime-ensure")?.turnStartDeferred.resolve({
+      turn: { id: "turn-active", status: "running" },
+    });
+    await flushCodexAdapterWork();
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Also inspect failing tests" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    const userMessages = events.filter(
+      (event): event is { type: "user_message"; message: string } =>
+        (event as { type?: string }).type === "user_message",
+    );
+    expect(userMessages.map((event) => event.message)).toEqual([
+      "Start now",
+      "Also inspect failing tests",
+    ]);
+    expect(transports.get("runtime-ensure")?.calls).toContainEqual({
+      method: "turn/steer",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        input: [{ type: "text", text: "Also inspect failing tests" }],
+        expectedTurnId: "turn-active",
+      },
+    });
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-ensure",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turnId: "turn-active",
+          item: {
+            id: "codex-user-queued-confirmed",
+            type: "userMessage",
+            content: [{ type: "text", text: "Also inspect failing tests" }],
+          },
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+    const userMessagesAfterNativeEcho = events.filter(
+      (event): event is { type: "user_message"; message: string } =>
+        (event as { type?: string }).type === "user_message",
+    );
+    expect(userMessagesAfterNativeEcho.map((event) => event.message)).toEqual([
+      "Start now",
+      "Also inspect failing tests",
+    ]);
+    unsubscribe();
+  });
+
   test("does not duplicate streamed user message completions after synthetic echo", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void

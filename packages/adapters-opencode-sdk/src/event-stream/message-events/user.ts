@@ -110,10 +110,11 @@ export const handleUserMessageUpdated = (
     return true;
   }
 
+  const timestamp = currentMetadata?.timestamp ?? input.messageTimestamp;
   persistUserMessageMetadata({
     session,
     messageId: input.messageId,
-    timestamp: input.messageTimestamp,
+    timestamp,
     ...(currentMetadata ? { metadata: currentMetadata } : {}),
     ...(input.messageModel ? { model: input.messageModel } : {}),
     visible,
@@ -123,7 +124,7 @@ export const handleUserMessageUpdated = (
   const explicitState = readExplicitUserMessageState(input.infoRecord, input.properties);
   return emitUserMessage(runtime, {
     messageId: input.messageId,
-    timestamp: input.messageTimestamp,
+    timestamp,
     message: visible,
     parts: displayParts,
     state: resolveLiveUserMessageState(runtime, {

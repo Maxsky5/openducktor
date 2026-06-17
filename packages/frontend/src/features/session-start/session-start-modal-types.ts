@@ -3,9 +3,9 @@ import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@ope
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
+import type { SessionStartPostAction } from "./session-start-workflow";
 
 export type SessionStartModalSource = "agent_studio" | "kanban";
-export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
 export type SessionStartModalIntent = {
   source: SessionStartModalSource;

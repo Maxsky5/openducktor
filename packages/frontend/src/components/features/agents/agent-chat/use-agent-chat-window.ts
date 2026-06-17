@@ -7,7 +7,7 @@ import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
-  activeSessionKey: string | null;
+  displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -29,7 +29,7 @@ type UseAgentChatWindowResult = {
 export function useAgentChatWindow({
   rows,
   turns,
-  activeSessionKey,
+  displayedSessionKey,
   shouldResetForTranscriptLoad,
   isSessionWorking = false,
   messagesContainerRef,
@@ -49,7 +49,7 @@ export function useAgentChatWindow({
     forceScrollToBottom,
     refreshScrollState,
   } = useAgentChatScrollController({
-    activeSessionKey,
+    displayedSessionKey,
     messagesContainerRef,
     messagesContentRef,
     isSessionWorking,
@@ -65,7 +65,7 @@ export function useAgentChatWindow({
   } = useAgentChatHistoryWindow({
     rows,
     shouldResetForTranscriptLoad,
-    activeSessionKey,
+    displayedSessionKey,
     messagesContainerRef,
     userScrolledRef,
     ...(turns ? { turns } : {}),
@@ -87,13 +87,13 @@ export function useAgentChatWindow({
   }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
 
   useLayoutEffect(() => {
-    if (prevSessionKeyRef.current === activeSessionKey) {
+    if (prevSessionKeyRef.current === displayedSessionKey) {
       return;
     }
 
-    prevSessionKeyRef.current = activeSessionKey;
+    prevSessionKeyRef.current = displayedSessionKey;
     resetLatestTurnsAndPinBottom();
-  }, [activeSessionKey, resetLatestTurnsAndPinBottom]);
+  }, [displayedSessionKey, resetLatestTurnsAndPinBottom]);
 
   useLayoutEffect(() => {
     const finishedTranscriptLoad =

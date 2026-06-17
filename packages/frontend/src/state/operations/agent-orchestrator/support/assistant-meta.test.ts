@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createSessionMessagesState,
-  getSessionMessageCount,
-} from "@/state/operations/agent-orchestrator/support/messages";
-import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
+import { toAssistantMessageMeta } from "./assistant-meta";
 
 const sessionFixture: AgentSessionState = {
   runtimeKind: "opencode",
@@ -17,10 +13,6 @@ const sessionFixture: AgentSessionState = {
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState("external-1"),
-  draftAssistantText: "Draft answer",
-  draftAssistantMessageId: "assistant-msg-1",
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: {
@@ -66,20 +58,5 @@ describe("agent-orchestrator/support/assistant-meta", () => {
     expect(meta.modelId).toBe("claude-3-7-sonnet");
     expect(meta.profileId).toBeUndefined();
     expect(meta.variant).toBeUndefined();
-  });
-
-  test("finalizes draft assistant text into a message", () => {
-    const finalized = finalizeDraftAssistantMessage(
-      sessionFixture,
-      "2026-02-22T08:00:01.000Z",
-      900,
-      24,
-    );
-
-    expect(finalized.draftAssistantText).toBe("");
-    expect(getSessionMessageCount(finalized)).toBe(1);
-    expect(sessionMessageAt(finalized, 0)?.role).toBe("assistant");
-    expect(sessionMessageAt(finalized, 0)?.content).toBe("Draft answer");
-    expect(sessionMessageAt(finalized, 0)?.timestamp).toBe("2026-02-22T08:00:01.000Z");
   });
 });

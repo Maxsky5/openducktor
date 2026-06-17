@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { checksQueryKeys } from "@/state/queries/checks";
 import {
@@ -7,19 +6,8 @@ import {
   invalidateRuntimeReadinessQueries,
 } from "./runtime-readiness-publication";
 
-const createRuntimeSummary = () => ({
-  kind: "opencode" as const,
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace" as const,
+const createReadyRuntime = () => ({
   workingDirectory: "/repo",
-  runtimeRoute: {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4555",
-  },
-  startedAt: "2026-04-19T10:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
 describe("runtime-readiness-publication", () => {
@@ -43,7 +31,7 @@ describe("runtime-readiness-publication", () => {
   test("publishes readiness queries after a successful runtime ensure", async () => {
     const invalidateQueries = mock(async () => undefined);
     const queryClient = { invalidateQueries } as Pick<QueryClient, "invalidateQueries">;
-    const ensureRuntime = mock(async () => createRuntimeSummary());
+    const ensureRuntime = mock(async () => createReadyRuntime());
 
     const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
       repoPath: "/repo",
@@ -52,7 +40,7 @@ describe("runtime-readiness-publication", () => {
       queryClient,
     });
 
-    expect(runtime.runtimeId).toBe("runtime-1");
+    expect(runtime.workingDirectory).toBe("/repo");
     expect(ensureRuntime).toHaveBeenCalledWith("/repo", "opencode");
     expect(invalidateQueries).toHaveBeenCalledTimes(1);
   });

@@ -230,11 +230,10 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("hides panel and toggle when role panel kind is unavailable", async () => {
+  test("hides panel and toggle when document role has no active document", async () => {
     const harness = createHookHarness({
-      role: "build",
+      role: "spec",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: false,
     });
 
     await harness.mount();
@@ -250,7 +249,6 @@ describe("useAgentStudioRightPanel", () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: true,
     });
 
     await harness.mount();
@@ -265,7 +263,6 @@ describe("useAgentStudioRightPanel", () => {
     await harness.update({
       role: "spec",
       hasDocumentPanel: true,
-      hasBuildToolsPanel: true,
     });
     expect(harness.getLatest().panelKind).toBe("documents");
     expect(harness.getLatest().isPanelOpen).toBe(true);
@@ -273,7 +270,6 @@ describe("useAgentStudioRightPanel", () => {
     await harness.update({
       role: "build",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: true,
     });
     expect(harness.getLatest().panelKind).toBe("build_tools");
     expect(harness.getLatest().isPanelOpen).toBe(false);
@@ -285,7 +281,6 @@ describe("useAgentStudioRightPanel", () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: true,
     });
 
     await harness.mount();
@@ -306,7 +301,6 @@ describe("useAgentStudioRightPanel", () => {
     const secondHarness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: true,
     });
 
     await secondHarness.mount();
@@ -323,7 +317,6 @@ describe("useAgentStudioRightPanel", () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasBuildToolsPanel: true,
     });
 
     await harness.mount();

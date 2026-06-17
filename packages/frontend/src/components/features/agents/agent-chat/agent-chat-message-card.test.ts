@@ -21,6 +21,7 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
     throw new Error("Test runtime catalog loader was not configured.");
   },
   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+  loadRepoRuntimeSkills: async () => ({ skills: [] }),
   loadRepoRuntimeFileSearch: async () => [],
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -1450,13 +1451,13 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("mx-1");
   });
 
-  test("renders hydrated skill source text against the raw message content", () => {
+  test("renders history-loaded skill source text against the raw message content", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
-          id: "hydrated-user-skill-ref",
+          id: "history-loaded-user-skill-ref",
           role: "user",
-          content: "Tell me the purpose of $create-pr please skill-hydration-smoke",
+          content: "Tell me the purpose of $create-pr please skill-history-load-smoke",
           timestamp: "2026-02-22T10:28:50.000Z",
           meta: {
             kind: "user",
@@ -1482,7 +1483,7 @@ describe("AgentChatMessageCard tool duration", () => {
               },
               {
                 kind: "text",
-                text: " please skill-hydration-smoke",
+                text: " please skill-history-load-smoke",
               },
             ],
           },
@@ -1493,12 +1494,12 @@ describe("AgentChatMessageCard tool duration", () => {
 
     const leadingTextIndex = html.indexOf("Tell me the purpose of");
     const chipTextIndex = html.indexOf(">create-pr<");
-    const trailingTextIndex = html.indexOf(" please skill-hydration-smoke");
+    const trailingTextIndex = html.indexOf(" please skill-history-load-smoke");
 
     expect(leadingTextIndex).toBeGreaterThanOrEqual(0);
     expect(chipTextIndex).toBeGreaterThan(leadingTextIndex);
     expect(trailingTextIndex).toBeGreaterThan(chipTextIndex);
-    expect(html).not.toContain("create-prill-hydration-smoke");
+    expect(html).not.toContain("create-prill-history-load-smoke");
     expect(html).not.toContain(">$create-pr<");
   });
 

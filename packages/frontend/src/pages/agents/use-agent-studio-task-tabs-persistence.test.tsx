@@ -8,9 +8,9 @@ import {
   type TestStorageLike,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
+import { toPersistedTaskTabs } from "./agent-studio-task-tabs-storage";
 import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
-import { toPersistedTaskTabs } from "./agents-page-session-tabs";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 
 enableReactActEnvironment();

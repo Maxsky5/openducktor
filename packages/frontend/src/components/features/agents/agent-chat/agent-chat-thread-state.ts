@@ -1,46 +1,32 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
   isAgentSessionTranscriptVisible,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentChatThreadModel, AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatThreadSession, AgentChatTranscriptNotice } from "./agent-chat.types";
 
-export type AgentChatTranscriptNotice = {
-  kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
-  severity: "loading" | "error";
-  title: string;
-  description: string;
-};
-
-export type AgentChatThreadProjection = {
+export type AgentChatThreadState = {
   threadSession: AgentChatThreadSession | null;
-  activeSessionKey: string | null;
+  displayedSessionKey: string | null;
+  shouldResetTranscriptWindow: boolean;
+  transcriptNotice: AgentChatTranscriptNotice | null;
 };
 
-export const deriveAgentChatThreadProjection = ({
-  session,
-  transcriptState,
-}: {
+type ProjectAgentChatThreadStateArgs = {
+  sessionKey: string | null;
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
-}): AgentChatThreadProjection => {
-  const threadSession = isAgentSessionTranscriptVisible(transcriptState) ? session : null;
-
-  return {
-    threadSession,
-    activeSessionKey: threadSession ? agentSessionIdentityKey(threadSession) : null,
-  };
+  runtimeReadiness: RepoRuntimeReadiness;
 };
 
 const deriveAgentChatTranscriptNotice = ({
   transcriptState,
   runtimeReadiness,
-}: Pick<
-  AgentChatThreadModel,
-  "transcriptState" | "runtimeReadiness"
->): AgentChatTranscriptNotice | null => {
+}: {
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
+}): AgentChatTranscriptNotice | null => {
   if (
     transcriptState.kind === "runtime_waiting" &&
     runtimeReadiness.readinessState === "blocked" &&
@@ -80,27 +66,20 @@ const deriveAgentChatTranscriptNotice = ({
       kind: "session_failed",
       severity: "error",
       title: "Failed to load session",
-      description: "The selected conversation could not be loaded.",
+      description: transcriptState.message,
     };
   }
 
   return null;
 };
 
-type BuildAgentChatThreadStateArgs = {
-  transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: RepoRuntimeReadiness;
-};
-
-export type AgentChatThreadState = {
-  shouldResetTranscriptWindow: boolean;
-  transcriptNotice: AgentChatTranscriptNotice | null;
-};
-
-export const getAgentChatThreadState = ({
+export const projectAgentChatThreadState = ({
+  sessionKey,
+  session,
   transcriptState,
   runtimeReadiness,
-}: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
+}: ProjectAgentChatThreadStateArgs): AgentChatThreadState => {
+  const threadSession = isAgentSessionTranscriptVisible(transcriptState) ? session : null;
   const shouldResetTranscriptWindow = isAgentSessionTranscriptLoading(transcriptState);
   const transcriptNotice = deriveAgentChatTranscriptNotice({
     transcriptState,
@@ -108,6 +87,8 @@ export const getAgentChatThreadState = ({
   });
 
   return {
+    threadSession,
+    displayedSessionKey: sessionKey,
     shouldResetTranscriptWindow,
     transcriptNotice,
   };

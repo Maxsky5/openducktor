@@ -1,6 +1,7 @@
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
+  isAgentSessionTranscriptVisible,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentChatEmptyStateModel } from "../agent-chat.types";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
@@ -11,39 +12,31 @@ type RuntimeTranscriptSurfaceState = {
 };
 
 type RuntimeTranscriptSurfaceStateInput = {
-  isOpen: boolean;
-  hasWorkspace: boolean;
-  hasTarget: boolean;
-  hasSession: boolean;
   transcriptState: AgentSessionTranscriptState;
-  historyError: string | null;
   chatSettingsError: unknown;
 };
 
 const deriveLoadError = ({
-  hasWorkspace,
-  historyError,
+  transcriptState,
   chatSettingsError,
-}: Pick<RuntimeTranscriptSurfaceStateInput, "hasWorkspace" | "historyError" | "chatSettingsError">):
+}: Pick<RuntimeTranscriptSurfaceStateInput, "transcriptState" | "chatSettingsError">):
   | string
   | null => {
-  if (chatSettingsError && hasWorkspace) {
+  if (chatSettingsError) {
     return `Failed to load chat settings: ${errorMessageFromUnknown(
       chatSettingsError,
       "Settings read failed.",
     )}`;
   }
 
-  return historyError;
+  return transcriptState.kind === "failed" ? transcriptState.message : null;
 };
 
 const toUnavailableConversationEmptyState = ({
-  hasWorkspace,
-  hasTarget,
+  transcriptState,
   loadError,
 }: {
-  hasWorkspace: boolean;
-  hasTarget: boolean;
+  transcriptState: AgentSessionTranscriptState;
   loadError: string | null;
 }): AgentChatEmptyStateModel => {
   if (loadError) {
@@ -52,7 +45,7 @@ const toUnavailableConversationEmptyState = ({
     };
   }
 
-  if (hasWorkspace && hasTarget) {
+  if (transcriptState.kind !== "empty" || transcriptState.reason === "unavailable") {
     return {
       title: "Conversation unavailable.",
     };
@@ -64,26 +57,19 @@ const toUnavailableConversationEmptyState = ({
 };
 
 export const deriveRuntimeTranscriptSurfaceState = ({
-  isOpen,
-  hasWorkspace,
-  hasTarget,
-  hasSession,
   transcriptState,
-  historyError,
   chatSettingsError,
 }: RuntimeTranscriptSurfaceStateInput): RuntimeTranscriptSurfaceState => {
   const loadError = deriveLoadError({
-    hasWorkspace,
-    historyError,
+    transcriptState,
     chatSettingsError,
   });
   const isTranscriptLoading = isAgentSessionTranscriptLoading(transcriptState);
-  const isLoadingTargetTranscript = isOpen && hasWorkspace && hasTarget && isTranscriptLoading;
+  const isTranscriptVisible = isAgentSessionTranscriptVisible(transcriptState);
   const emptyState =
-    loadError || (!hasSession && !isLoadingTargetTranscript)
+    loadError || (!isTranscriptVisible && !isTranscriptLoading)
       ? toUnavailableConversationEmptyState({
-          hasWorkspace,
-          hasTarget,
+          transcriptState,
           loadError,
         })
       : null;

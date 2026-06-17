@@ -13,7 +13,6 @@ import { toRightPanelStorageKey } from "../agents-page-selection";
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
-  hasBuildToolsPanel?: boolean;
   hasTaskContext?: boolean;
 };
 
@@ -89,12 +88,12 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
 
 const isRightPanelKindAvailable = (
   kind: AgentStudioRightPanelKind,
-  availability: { hasDocumentPanel: boolean; hasBuildToolsPanel: boolean },
+  availability: { hasDocumentPanel: boolean },
 ): boolean => {
   if (kind === "documents") {
     return availability.hasDocumentPanel;
   }
-  return availability.hasBuildToolsPanel;
+  return true;
 };
 
 type BuildAgentStudioRightPanelModelInput = {
@@ -131,7 +130,6 @@ export const buildAgentStudioRightPanelModel = ({
 export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
-  hasBuildToolsPanel = false,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
@@ -164,7 +162,6 @@ export function useAgentStudioRightPanel({
     hasTaskContext &&
     isRightPanelKindAvailable(panelKindForRole, {
       hasDocumentPanel,
-      hasBuildToolsPanel,
     });
   const panelKind = panelAvailable ? panelKindForRole : null;
   const isPanelOpen = panelKind ? isOpenByRole[role] : false;

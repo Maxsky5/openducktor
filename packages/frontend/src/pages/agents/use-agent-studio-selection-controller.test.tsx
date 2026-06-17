@@ -1,12 +1,30 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { PropsWithChildren, ReactElement } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import {
+  type AgentSessionSummary,
+  createAgentSessionsStore,
+  toAgentSessionSummary,
+} from "@/state/agent-sessions-store";
+import {
+  AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
+  AgentSessionsContext,
+} from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import {
+  type AgentSessionReadModelLoadState,
+  failedAgentSessionReadModelLoadState,
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+  unavailableAgentSessionReadModelLoadState,
+} from "@/types/agent-session-read-model";
+import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -14,20 +32,35 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 
 enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
   typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
 
-let useAgentStudioSelectionController: UseAgentStudioSelectionControllerHook;
-
-const sessionByIdRef: { current: Record<string, AgentSessionState> } = {
-  current: {},
+const sessionReadModelLoadStateRef: { current: AgentSessionReadModelLoadState } = {
+  current: unavailableAgentSessionReadModelLoadState,
+};
+const loadSessionHistoryRef: {
+  current: (session: AgentSessionIdentity) => Promise<void>;
+} = {
+  current: async () => undefined,
+};
+const readSessionTodosRef: {
+  current: AgentOperationsContextValue["readSessionTodos"];
+} = {
+  current: async () => [],
 };
 const createdSessionStateByKey = new Map<string, AgentSessionState>();
+let sessionStore = createAgentSessionsStore(null);
 
 type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
+type TestContextOverrides = {
+  sessionReadModelLoadState?: AgentSessionReadModelLoadState;
+  loadSessionHistory?: (session: AgentSessionIdentity) => Promise<void>;
+  readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
+};
 const emptyCatalog = {
   providers: [],
   models: [],
@@ -74,117 +107,120 @@ const createSession = (
 const sessionKeyParam = (session: AgentSessionIdentity): string => agentSessionIdentityKey(session);
 
 const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
-  const nextLookup: Record<string, AgentSessionState> = {};
-  for (const session of sessions) {
-    const fullSession = createdSessionStateByKey.get(agentSessionIdentityKey(session));
-    if (fullSession) {
-      nextLookup[agentSessionIdentityKey(session)] = fullSession;
-    }
-  }
-  sessionByIdRef.current = nextLookup;
+  sessionStore.setSessionCollection(
+    createAgentSessionCollection(
+      sessions.flatMap(
+        (session) => createdSessionStateByKey.get(agentSessionIdentityKey(session)) ?? [],
+      ),
+    ),
+  );
 };
 
-const createHookHarness = (initialProps: HookArgs) => {
+const defaultSessionReadModelLoadState = (
+  workspaceRepoPath: string | null,
+): AgentSessionReadModelLoadState =>
+  workspaceRepoPath
+    ? readyAgentSessionReadModelLoadState(workspaceRepoPath)
+    : unavailableAgentSessionReadModelLoadState;
+
+const applyTestContextOverrides = (
+  hookArgs: HookArgs,
+  contextOverrides: TestContextOverrides = {},
+): void => {
+  sessionReadModelLoadStateRef.current =
+    contextOverrides.sessionReadModelLoadState ??
+    defaultSessionReadModelLoadState(hookArgs.workspaceRepoPath);
+  loadSessionHistoryRef.current = contextOverrides.loadSessionHistory ?? (async () => undefined);
+  readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
+};
+
+const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContextOverrides = {}) => {
+  applyTestContextOverrides(initialProps, contextOverrides);
   syncSessionLookup(initialProps.sessions);
-  const harness = createSharedHookHarness(useAgentStudioSelectionController, initialProps);
+  const agentOperationsValue = (): AgentOperationsContextValue => ({
+    readSessionTodos: readSessionTodosRef.current,
+    readSessionHistory: async () => [],
+    startAgentSession: async () => ({
+      externalSessionId: "session-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    }),
+    sendAgentMessage: async () => undefined,
+    stopAgentSession: async () => undefined,
+    updateAgentSessionModel: () => undefined,
+    replyAgentApproval: async () => undefined,
+    answerAgentQuestion: async () => undefined,
+  });
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <AgentOperationsContext.Provider value={agentOperationsValue()}>
+      <AgentSessionsContext.Provider value={sessionStore}>
+        <AgentSessionReadModelStateContext.Provider
+          value={{
+            sessionReadModelLoadState: sessionReadModelLoadStateRef.current,
+            refreshTaskSessions: async () => undefined,
+          }}
+        >
+          <AgentSessionHistoryLoadContext.Provider
+            value={{ loadSessionHistory: loadSessionHistoryRef.current }}
+          >
+            {children}
+          </AgentSessionHistoryLoadContext.Provider>
+        </AgentSessionReadModelStateContext.Provider>
+      </AgentSessionsContext.Provider>
+    </AgentOperationsContext.Provider>
+  );
+  const harness = createSharedHookHarness(useAgentStudioSelectionController, initialProps, {
+    wrapper,
+  });
 
   return {
     ...harness,
-    update: async (nextProps: HookArgs) => {
+    update: async (nextProps: HookArgs, nextContextOverrides: TestContextOverrides = {}) => {
+      applyTestContextOverrides(nextProps, nextContextOverrides);
       syncSessionLookup(nextProps.sessions);
       await harness.update(nextProps);
     },
   };
 };
 
-const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspaceId: null,
-  workspaceRepoPath: null,
-  isRepoNavigationBoundaryPending: false,
-  tasks: [createTask("task-1"), createTask("task-2")],
-  isLoadingTasks: false,
-  sessions: [],
-  sessionReadModelLoadState: { kind: "idle" },
-  taskIdParam: "task-1",
-  sessionKeyParam: null,
-  hasExplicitRoleParam: false,
-  roleFromQuery: "spec",
-  selectionIntent: null,
-  repoSettings,
-  isLoadingRepoSettings: false,
-  updateQuery: () => {},
-  loadAgentSessionHistory: async () => undefined,
-  runtimeDefinitions: createDefaultRuntimeDefinitions(),
-  isLoadingRuntimeDefinitions: false,
-  runtimeDefinitionsError: null,
-  runtimeHealthByRuntime: {
-    opencode: createRepoRuntimeHealthFixture(),
-  },
-  isLoadingChecks: false,
-  refreshChecks: async () => {},
-  readSessionModelCatalog: async () => emptyCatalog,
-  readSessionTodos: async () => [],
-  ...overrides,
-});
+const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
+  return {
+    activeWorkspaceId: null,
+    workspaceRepoPath: null,
+    isRepoNavigationBoundaryPending: false,
+    tasks: [createTask("task-1"), createTask("task-2")],
+    isLoadingTasks: false,
+    sessions: [],
+    taskIdParam: "task-1",
+    sessionKeyParam: null,
+    hasExplicitRoleParam: false,
+    roleFromQuery: "spec",
+    selectionIntent: null,
+    repoSettings,
+    isLoadingRepoSettings: false,
+    updateQuery: () => {},
+    runtimeDefinitions: createDefaultRuntimeDefinitions(),
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    runtimeHealthByRuntime: {
+      opencode: createRepoRuntimeHealthFixture(),
+    },
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+    loadRepoRuntimeCatalog: async () => emptyCatalog,
+    ...overrides,
+  };
+};
 
 describe("useAgentStudioSelectionController", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     createdSessionStateByKey.clear();
-    sessionByIdRef.current = {};
-    mock.module("@/state/app-state-provider", () => ({
-      AppStateProvider: ({ children }: { children: unknown }) => children,
-      useActiveWorkspace: () => null,
-      useAgentState: () => {
-        throw new Error("useAgentState is not used in this test");
-      },
-      useAgentOperations: () => {
-        throw new Error("useAgentOperations is not used in this test");
-      },
-      useAgentSessionReadModelState: () => {
-        throw new Error("useAgentSessionReadModelState is not used in this test");
-      },
-      useAgentSessions: () => {
-        throw new Error("useAgentSessions is not used in this test");
-      },
-      useAgentSessionSummaries: () => {
-        throw new Error("useAgentSessionSummaries is not used in this test");
-      },
-      useAgentActivitySessions: () => {
-        throw new Error("useAgentActivitySessions is not used in this test");
-      },
-      useAgentActivitySnapshot: () => {
-        throw new Error("useAgentActivitySnapshot is not used in this test");
-      },
-      useWorkspaceState: () => {
-        throw new Error("useWorkspaceState is not used in this test");
-      },
-      useTasksState: () => {
-        throw new Error("useTasksState is not used in this test");
-      },
-      useChecksState: () => {
-        throw new Error("useChecksState is not used in this test");
-      },
-      useSpecState: () => {
-        throw new Error("useSpecState is not used in this test");
-      },
-      useAgentSession: (identity: AgentSessionIdentity | null) => {
-        if (!identity) {
-          return null;
-        }
-        const session = sessionByIdRef.current[agentSessionIdentityKey(identity)] ?? null;
-        return matchesAgentSessionIdentity(session, identity) ? session : null;
-      },
-    }));
-
-    ({ useAgentStudioSelectionController } = await import(
-      "./use-agent-studio-selection-controller"
-    ));
+    sessionStore = createAgentSessionsStore(workspaceRepoPath);
+    readSessionTodosRef.current = async () => [];
   });
 
   afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
-    ]);
+    sessionStore = createAgentSessionsStore(workspaceRepoPath);
   });
 
   test("resolves task context from selected session when task param is missing", async () => {
@@ -205,7 +241,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedTask?.id).toBe("task-2");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-2");
       expect(latest.view.taskId).toBe("task-2");
-      expect(latest.view.activeSession?.externalSessionId).toBe("session-2");
+      expect(latest.view.loadedSession?.externalSessionId).toBe("session-2");
     } finally {
       await harness.unmount();
     }
@@ -217,11 +253,13 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspaceId,
         workspaceRepoPath,
         tasks: [createTask("task-1"), createTask("task-2")],
-        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
       }),
+      {
+        sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
+      },
     );
 
     try {
@@ -231,7 +269,7 @@ describe("useAgentStudioSelectionController", () => {
         kind: "session_loading",
         reason: "preparing",
       });
-      expect(harness.getLatest().view.activeSession).toBeNull();
+      expect(harness.getLatest().view.loadedSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
         role: "build",
@@ -252,7 +290,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(harness.getLatest().view.transcriptState).toEqual({
         kind: "visible",
       });
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-reloaded");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-reloaded");
     } finally {
       await harness.unmount();
     }
@@ -264,12 +302,14 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspaceId,
         workspaceRepoPath,
         tasks: [createTask("task-1")],
-        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         sessionKeyParam: null,
         hasExplicitRoleParam: false,
       }),
+      {
+        sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
+      },
     );
 
     try {
@@ -280,7 +320,7 @@ describe("useAgentStudioSelectionController", () => {
         kind: "session_loading",
         reason: "preparing",
       });
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -303,13 +343,15 @@ describe("useAgentStudioSelectionController", () => {
           }),
         },
         tasks: [task],
-        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         sessionKeyParam: "session-reloaded",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
+      },
     );
 
     try {
@@ -319,7 +361,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -362,7 +404,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.activeSession?.runtimeKind).toBe("codex");
+      expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
       expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
@@ -403,7 +445,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
       expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
@@ -444,7 +486,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
       expect(latest.view.runtimeReadiness.readinessState).toBe("blocked");
       expect(latest.view.runtimeReadiness.blockedReason).toBe(
         "Runtime 'codex' is not available for agent chat.",
@@ -487,7 +529,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
       expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
@@ -509,30 +551,35 @@ describe("useAgentStudioSelectionController", () => {
         workspaceRepoPath,
         tasks: [task],
         sessions: [],
-        sessionReadModelLoadState: {
-          kind: "failed",
-          message: "Failed to load agent session read model",
-        },
         taskIdParam: "task-1",
         sessionKeyParam: "session-reloaded",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
+          workspaceRepoPath,
+          "Failed to load agent session read model",
+        ),
+      },
     );
 
     try {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.transcriptState).toEqual({ kind: "failed" });
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.transcriptState).toEqual({
+        kind: "failed",
+        message: "Failed to load agent session read model",
+      });
+      expect(latest.view.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("loads selected session history through the transcript owner", async () => {
-    const loadAgentSessionHistory = mock(async () => undefined);
+  test("loads selected session history through the session history state owner", async () => {
+    const loadSessionHistory = mock(async () => undefined);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
     });
@@ -543,18 +590,93 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [session],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(session),
-        loadAgentSessionHistory,
       }),
+      { loadSessionHistory },
     );
 
     try {
       await harness.mount();
 
-      expect(loadAgentSessionHistory).toHaveBeenCalledWith({
+      expect(loadSessionHistory).toHaveBeenCalledWith({
         externalSessionId: session.externalSessionId,
         runtimeKind: session.runtimeKind,
         workingDirectory: session.workingDirectory,
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads selected session history even when live messages are already visible", async () => {
+    const loadSessionHistory = mock(async () => undefined);
+    const session = createSession("task-1", "session-live", {
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("session-live", [
+        {
+          id: "live-message",
+          role: "assistant",
+          content: "live tail",
+          timestamp: "2026-02-22T08:00:03.000Z",
+        },
+      ]),
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(session),
+      }),
+      { loadSessionHistory },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().view.transcriptState).toEqual({ kind: "visible" });
+      expect(loadSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("waits for runtime readiness before loading selected session history", async () => {
+    const loadSessionHistory = mock(async () => undefined);
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const session = createSession("task-1", "session-live", {
+      historyLoadState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [task],
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(session),
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture({
+            runtime: { status: "checking" },
+          }),
+        },
+      }),
+      { loadSessionHistory },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().view.transcriptState).toEqual({ kind: "runtime_waiting" });
+      expect(loadSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -596,7 +718,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.view.role).toBe("planner");
       expect(latest.view.launchActionId).toBe("planner_initial");
-      expect(latest.view.activeSession?.externalSessionId).toBe("session-planner");
+      expect(latest.view.loadedSession?.externalSessionId).toBe("session-planner");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
@@ -629,7 +751,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.resolvedRouteSession).toBeNull();
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
     } finally {
@@ -666,7 +788,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.selectedSessionFromRoute?.externalSessionId).toBe("session-build");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-build");
-      expect(latest.view.activeSession?.externalSessionId).toBe("session-build");
+      expect(latest.view.loadedSession?.externalSessionId).toBe("session-build");
       expect(latest.view.role).toBe("build");
     } finally {
       await harness.unmount();
@@ -697,8 +819,8 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(buildSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        readSessionTodos,
       }),
+      { readSessionTodos },
     );
 
     try {
@@ -742,8 +864,8 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(activeSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        readSessionTodos,
       }),
+      { readSessionTodos },
     );
 
     try {
@@ -780,7 +902,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
-    const readSessionModelCatalog = mock(async () => emptyCatalog);
+    const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);
     const staleSession = createSession("task-1", "session-1", {
       runtimeKind: "opencode",
@@ -796,9 +918,9 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(staleSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        readSessionModelCatalog,
-        readSessionTodos,
+        loadRepoRuntimeCatalog,
       }),
+      { readSessionTodos },
     );
 
     try {
@@ -810,8 +932,8 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedTask).toBeNull();
       expect(latest.resolvedRouteSession).toBeNull();
       expect(latest.view.taskId).toBe("");
-      expect(latest.view.activeSession).toBeNull();
-      expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
+      expect(latest.view.loadedSession).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
       expect(readSessionTodos).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
@@ -875,7 +997,7 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-1");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-1");
 
       await harness.run((state) => {
         state.handleSelectTab("task-2");
@@ -883,7 +1005,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.taskId).toBe("task-2");
-      expect(latest.view.activeSession?.externalSessionId).toBe("session-2");
+      expect(latest.view.loadedSession?.externalSessionId).toBe("session-2");
       expect(latest.view.role).toBe("qa");
       expect(latest.view.launchActionId).toBe("qa_review");
     } finally {
@@ -1024,7 +1146,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
       const latest = harness.getLatest();
 
-      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.loadedSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
     } finally {
@@ -1062,7 +1184,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
 
       await harness.update(
@@ -1075,7 +1197,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {
@@ -1113,7 +1235,7 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
 
       await harness.update(
@@ -1127,7 +1249,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {
@@ -1174,7 +1296,7 @@ describe("useAgentStudioSelectionController", () => {
       });
 
       expect(harness.getLatest().view.taskId).toBe("task-2");
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
       expect(updateQuery).toHaveBeenCalledWith({
         task: "task-2",
@@ -1195,7 +1317,7 @@ describe("useAgentStudioSelectionController", () => {
       );
 
       expect(harness.getLatest().view.taskId).toBe("task-2");
-      expect(harness.getLatest().view.activeSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {

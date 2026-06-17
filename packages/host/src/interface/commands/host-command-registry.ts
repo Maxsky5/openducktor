@@ -4,7 +4,6 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_stop",
   "agent_session_upsert",
   "agent_sessions_list",
-  "agent_sessions_list_bulk",
   "build_blocked",
   "build_completed",
   "build_resumed",

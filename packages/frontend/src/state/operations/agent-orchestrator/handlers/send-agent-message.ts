@@ -14,26 +14,18 @@ import type {
   AgentSessionState,
   WorkflowAgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
-import {
-  clearSessionTransientState,
-  type SessionTransientState,
-} from "../support/session-transient-state";
-import { isWorkflowAgentSession } from "../support/workflow-session";
-import type { PreparedSessionSend } from "./prepare-session-send";
 import {
   type ReadSessionSnapshot,
   requireLoadedSession,
   requireWorkspaceRepoPath,
-} from "./session-action-guards";
-
-type UpdateSession = (
-  identity: AgentSessionIdentity,
-  updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
-) => AgentSessionState | null;
+} from "../support/session-invariants";
+import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import { isWorkflowAgentSession } from "../support/workflow-session";
+import type { PreparedSessionSend } from "./prepare-session-send";
 
 export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
@@ -42,7 +34,8 @@ export type SendAgentMessageDependencies = {
   taskRef: { current: TaskCard[] };
   updateSession: UpdateSession;
   prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
-  sessionTransientState: SessionTransientState;
+  turnMetadata: SessionTurnMetadata;
+  clearSessionTurnState: (session: AgentSessionIdentity) => void;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
     timestamp: string | number,
@@ -56,18 +49,25 @@ export const settleStartingSession = (
   updateSession: UpdateSession,
 ): void => {
   const session = readSessionSnapshot(identity);
-  if (session?.status !== "starting") {
+  if (!session) {
     return;
   }
 
-  updateSession(
-    session,
-    (current) => ({
-      ...current,
-      status,
-    }),
-    { persist: false },
-  );
+  settleLoadedStartingSession(session, status, updateSession);
+};
+
+export const settleLoadedStartingSession = (
+  session: AgentSessionState,
+  status: Extract<AgentSessionState["status"], "idle" | "error">,
+  updateSession: UpdateSession,
+): void => {
+  if (session.status !== "starting") {
+    return;
+  }
+  updateSession(session, (current) => ({
+    ...current,
+    status,
+  }));
 };
 
 const prepareIdleSessionForSend = async ({
@@ -93,7 +93,7 @@ const markSessionRunningForSend = (
   session: AgentSessionState,
   dependencies: Pick<
     SendAgentMessageDependencies,
-    "recordTurnUserMessageTimestamp" | "sessionTransientState" | "updateSession"
+    "recordTurnUserMessageTimestamp" | "turnMetadata" | "updateSession"
   >,
 ): void => {
   const sessionKey = agentSessionIdentityKey(session);
@@ -102,20 +102,12 @@ const markSessionRunningForSend = (
     sessionKey,
     Date.now(),
   );
-  dependencies.sessionTransientState.turnMetadata.recordModel(sessionKey, selectedModel ?? null);
-  dependencies.updateSession(
-    session,
-    (current) => ({
-      ...current,
-      status: "running",
-      pendingUserMessageStartedAt,
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
-    }),
-    { persist: false },
-  );
+  dependencies.turnMetadata.recordModel(sessionKey, selectedModel ?? null);
+  dependencies.updateSession(session, (current) => ({
+    ...current,
+    status: "running",
+    pendingUserMessageStartedAt,
+  }));
 };
 
 const appendSendFailureNotice = (
@@ -123,25 +115,21 @@ const appendSendFailureNotice = (
   message: string,
   updateSession: UpdateSession,
 ): void => {
-  updateSession(
-    session,
-    (current) => ({
-      ...current,
-      messages: appendSessionMessage(current, {
-        id: crypto.randomUUID(),
-        role: "system",
-        content: `Failed to send message: ${message}`,
-        timestamp: now(),
-        meta: {
-          kind: "session_notice",
-          tone: "error",
-          reason: "session_error",
-          title: "Error",
-        },
-      }),
+  updateSession(session, (current) => ({
+    ...current,
+    messages: appendSessionMessage(current, {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: `Failed to send message: ${message}`,
+      timestamp: now(),
+      meta: {
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      },
     }),
-    { persist: false },
-  );
+  }));
 };
 
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {
@@ -194,7 +182,6 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       return;
     }
 
-    const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
     if (!isBusyQueuedSend) {
       markSessionRunningForSend(readySession, dependencies);
@@ -203,34 +190,20 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     try {
       await dependencies.adapter.sendUserMessage({
         ...toRuntimeSessionContextRef(preparedSend.repoPath, readySession),
-        externalSessionId: readySession.externalSessionId,
         parts: normalizedParts,
-        ...(selectedModel ? { model: selectedModel } : {}),
         ...(preparedSend.systemPrompt !== undefined
           ? { systemPrompt: preparedSend.systemPrompt }
           : {}),
       });
     } catch (error) {
-      dependencies.updateSession(
-        readySession,
-        (current) => ({
-          ...current,
-          status: isBusyQueuedSend ? current.status : "error",
-          pendingUserMessageStartedAt: undefined,
-          ...(isBusyQueuedSend
-            ? {}
-            : {
-                draftAssistantText: "",
-                draftAssistantMessageId: null,
-                draftReasoningText: "",
-                draftReasoningMessageId: null,
-              }),
-        }),
-        { persist: false },
-      );
+      dependencies.updateSession(readySession, (current) => ({
+        ...current,
+        status: isBusyQueuedSend ? current.status : "error",
+        pendingUserMessageStartedAt: undefined,
+      }));
       appendSendFailureNotice(readySession, errorMessage(error), dependencies.updateSession);
       if (!isBusyQueuedSend) {
-        clearSessionTransientState(dependencies.sessionTransientState, readySession);
+        dependencies.clearSessionTurnState(readySession);
       }
     }
   };

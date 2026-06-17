@@ -51,9 +51,10 @@ import {
 } from "./event-emitter";
 import { createEventStreamRuntime } from "./event-stream";
 import {
-  emitHistoryUserMessage,
+  emitAdmittedUserMessage,
   seedHistoryUserMessage,
 } from "./event-stream/message-events/user-emitter";
+import type { EventStreamRuntime } from "./event-stream/shared";
 import {
   applyOpencodeInFlightSendToRuntimeSnapshot,
   findOpencodeLocalRuntimeSnapshot,
@@ -613,13 +614,15 @@ export class OpencodeSdkAdapter
     });
     try {
       const tools = await this.resolveSessionToolSelection(session);
-      const knownUserMessageIds = new Set(session.emittedUserMessageSignatures.keys());
-      await sendUserMessage({
+      const admittedUserMessage = await sendUserMessage({
         session,
         request: input,
         tools,
       });
-      await this.publishNewRuntimeUserMessagesFromHistory(session, knownUserMessageIds);
+      emitAdmittedUserMessage(this.createRuntimeEventView(session), {
+        ...admittedUserMessage,
+        timestamp: this.now(),
+      });
     } catch (error) {
       markStreamTurnIdle(session);
       this.emit(input.externalSessionId, {
@@ -719,16 +722,23 @@ export class OpencodeSdkAdapter
     emitSessionEvent(this.listeners, externalSessionId, event);
   }
 
-  private createRuntimeEventView(session: SessionRecord) {
-    return createEventStreamRuntime({
+  private createRuntimeEventView(session: SessionRecord): EventStreamRuntime {
+    const runtime = createEventStreamRuntime({
       context: {
         externalSessionId: session.externalSessionId,
         input: session.input,
       },
       now: this.now,
       emit: this.emit.bind(this),
-      getSession: (sessionId) => this.sessions.get(sessionId),
+      getSession: (sessionId) =>
+        sessionId === session.externalSessionId ? session : this.sessions.get(sessionId),
     });
+    if (!runtime) {
+      throw new Error(
+        `Cannot create OpenCode runtime event view for session ${session.externalSessionId}.`,
+      );
+    }
+    return runtime;
   }
 
   private seedRuntimeUserMessagesFromHistory(
@@ -736,46 +746,10 @@ export class OpencodeSdkAdapter
     history: AgentSessionHistoryMessage[],
   ): void {
     const runtime = this.createRuntimeEventView(session);
-    if (!runtime) {
-      return;
-    }
-
     for (const message of history) {
       if (message.role === "user") {
         seedHistoryUserMessage(runtime, message);
       }
-    }
-  }
-
-  private async publishNewRuntimeUserMessagesFromHistory(
-    session: SessionRecord,
-    knownUserMessageIds: ReadonlySet<string>,
-  ): Promise<void> {
-    const runtime = this.createRuntimeEventView(session);
-    if (!runtime) {
-      return;
-    }
-
-    try {
-      const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
-        runtimeEndpoint: session.eventTransportKey,
-        workingDirectory: session.input.workingDirectory,
-        externalSessionId: session.externalSessionId,
-        session,
-      });
-
-      for (const message of history) {
-        if (message.role === "user" && !knownUserMessageIds.has(message.messageId)) {
-          emitHistoryUserMessage(runtime, message);
-        }
-      }
-    } catch (error) {
-      this.emit(session.externalSessionId, {
-        type: "session_error",
-        externalSessionId: session.externalSessionId,
-        timestamp: this.now(),
-        message: `Failed to publish new runtime user messages: ${error instanceof Error ? error.message : String(error)}`,
-      });
     }
   }
 

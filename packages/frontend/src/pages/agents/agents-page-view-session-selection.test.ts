@@ -88,7 +88,7 @@ describe("Agent Studio view session selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
     });
 
     expect(loadingSelection).toEqual({
@@ -104,7 +104,7 @@ describe("Agent Studio view session selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
     });
 
     expect(materializedSelection.sessionSummary).toBe(sessionSummary);
@@ -123,7 +123,7 @@ describe("Agent Studio view session selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
       selectionIntent: {
         role: "build",
         sessionIdentity: {
@@ -176,7 +176,7 @@ describe("Agent Studio view session selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "qa",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "qa",
+      sessionlessRole: "qa",
     });
 
     expect(selection.sessionSummary).toBe(liveBuildSummary);
@@ -209,7 +209,7 @@ describe("Agent Studio view session selection", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-        fallbackRole: "build",
+        sessionlessRole: "build",
       }).sessionIdentity?.externalSessionId,
     ).toBe("session-summary");
     expect(
@@ -220,7 +220,7 @@ describe("Agent Studio view session selection", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "planner",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
-        fallbackRole: "planner",
+        sessionlessRole: "planner",
       }).sessionIdentity?.externalSessionId,
     ).toBeUndefined();
     expect(
@@ -231,7 +231,7 @@ describe("Agent Studio view session selection", () => {
         hasExplicitRoleParam: false,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-        fallbackRole: "build",
+        sessionlessRole: "build",
       }).sessionIdentity?.externalSessionId,
     ).toBe("session-summary");
   });

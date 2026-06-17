@@ -45,7 +45,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     createdAt: "2026-02-22T12:00:00.000Z",
   },
   onOpenTaskDetails: mock(() => {}),
-  activeSession: { status: "running" },
+  selectedRole: "spec",
   sessionsForTaskLength: 1,
   agentStudioReady: true,
   isStarting: false,
@@ -80,7 +80,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
         liveSession: "none",
       },
     },
-    selectedInteractionRole: "spec",
     workflowSessionByRole: {
       spec: {
         role: "spec",
@@ -183,7 +182,6 @@ describe("useAgentStudioHeaderModel", () => {
     const harness = createHookHarness(
       createHookArgs({
         selectedTask: null,
-        activeSession: null,
         sessionsForTaskLength: 0,
       }),
     );

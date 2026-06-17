@@ -15,7 +15,6 @@ import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } fr
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
   runtimeKind: "opencode",
-  runtimeId: "runtime-build",
   workingDirectory: "/tmp/repo/worktree",
 };
 

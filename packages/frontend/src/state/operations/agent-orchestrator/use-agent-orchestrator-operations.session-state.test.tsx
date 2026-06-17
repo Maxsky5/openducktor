@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
-import { createAgentRuntimeRegistry } from "@/state/agent-runtime-registry";
-import { createAgentSessionCollection } from "@/state/agent-session-collection";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import {
   BUILD_SELECTION,
   buildBootstrapFixture,
@@ -34,9 +32,9 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("exposes startup read-model failures as one load state", async () => {
-    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
+    const originalAgentSessionsList = host.agentSessionsList;
 
-    host.agentSessionsListBulk = async () => {
+    host.agentSessionsList = async () => {
       throw new Error("session store unavailable");
     };
 
@@ -49,20 +47,62 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       const latest = await harness.waitFor(
-        (state) => state.sessionReadModelLoadState.kind === "failed",
+        (state) => state.readModelState.sessionReadModelLoadState.kind === "failed",
       );
 
-      expect(latest.sessionReadModelLoadState.kind).toBe("failed");
-      if (latest.sessionReadModelLoadState.kind !== "failed") {
+      const readModelLoadState = latest.readModelState.sessionReadModelLoadState;
+      expect(readModelLoadState.kind).toBe("failed");
+      if (readModelLoadState.kind !== "failed") {
         throw new Error("Expected failed session read-model load state.");
       }
-      expect(latest.sessionReadModelLoadState.message).toContain("session store unavailable");
-      expect(latest.readModelState.sessionReadModelLoadState).toEqual(
-        latest.sessionReadModelLoadState,
-      );
+      expect(readModelLoadState.message).toContain("session store unavailable");
     } finally {
       await harness.unmount();
-      host.agentSessionsListBulk = originalAgentSessionsListBulk;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("keeps the repo session read model loading until task data is ready", async () => {
+    const originalAgentSessionsList = host.agentSessionsList;
+    let sessionListCalls = 0;
+
+    host.agentSessionsList = async () => {
+      sessionListCalls += 1;
+      return [];
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [],
+      isLoadingTasks: true,
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().readModelState.sessionReadModelLoadState).toEqual({
+        kind: "loading",
+        workspaceRepoPath: "/tmp/repo",
+      });
+      expect(sessionListCalls).toBe(0);
+
+      await harness.updateArgs({
+        tasks: [taskFixture],
+        isLoadingTasks: false,
+      });
+
+      const latest = await harness.waitFor(
+        (state) => state.readModelState.sessionReadModelLoadState.kind === "ready",
+      );
+      expect(latest.readModelState.sessionReadModelLoadState).toEqual({
+        kind: "ready",
+        workspaceRepoPath: "/tmp/repo",
+      });
+      expect(sessionListCalls).toBe(1);
+    } finally {
+      await harness.unmount();
+      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
@@ -170,9 +210,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
 
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
       const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
       const session = loadedState.sessions[0];
       if (!session) {
@@ -414,9 +451,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
 
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
       const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
       const session = loadedState.sessions[0];
       if (!session) {
@@ -591,9 +625,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
 
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
       await harness.waitFor((state) =>
         state.sessions.some((entry) => entry.externalSessionId === "external-1"),
       );
@@ -632,7 +663,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("removeAgentSessions prunes only matching task roles from local state", async () => {
+  test("task session read-model refresh removes sessions whose durable records disappeared", async () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
@@ -650,9 +681,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
     try {
       await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
+      await harness.waitFor((state) => state.sessions.length === 2);
 
       expect(
         harness
@@ -661,8 +690,16 @@ describe("use-agent-orchestrator-operations session state", () => {
           .sort(),
       ).toEqual(["external-1", "external-spec"]);
 
+      host.agentSessionsList = async () => [
+        {
+          ...persistedSessionFixture,
+          externalSessionId: "external-spec",
+          role: "spec",
+        },
+      ];
+
       await harness.run(async () => {
-        harness.getLatest().removeAgentSessions({ taskId: "task-1", roles: ["build"] });
+        await harness.getLatest().readModelState.refreshTaskSessions("task-1");
       });
 
       expect(harness.getLatest().sessions.map((session) => session.externalSessionId)).toEqual([
@@ -674,60 +711,13 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("removeAgentSession removes local session state", async () => {
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-    });
-
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        harness.getLatest().sessionStore.setSessionCollection(
-          createAgentSessionCollection([
-            createAgentSessionFixture({
-              externalSessionId: "external-1",
-              taskId: "task-1",
-              runtimeKind: "opencode",
-              role: "build",
-              workingDirectory: "/tmp/repo/worktree",
-            }),
-          ]),
-        );
-      });
-
-      await harness.run(async () => {
-        await harness.getLatest().removeAgentSession({
-          externalSessionId: "external-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        });
-      });
-
-      expect(
-        harness.getLatest().sessionStore.getSessionSnapshot({
-          externalSessionId: "external-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        }),
-      ).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("revisit to the same repo refreshes task sessions again", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     let persistedListCalls = 0;
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
       return [persistedSessionFixture];
     };
-    host.agentSessionsListBulk = async () => ({
-      "task-1": [persistedSessionFixture],
-    });
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo-a",
@@ -747,11 +737,10 @@ describe("use-agent-orchestrator-operations session state", () => {
       });
       const loaded = await harness.waitFor((state) => state.sessions.length === 1);
       expect(loaded.sessions[0]?.externalSessionId).toBe("external-1");
-      expect(persistedListCalls).toBe(0);
+      expect(persistedListCalls).toBe(1);
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionsListBulk = originalAgentSessionsListBulk;
     }
   });
 
@@ -798,14 +787,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
       refreshTaskData: async () => {},
-      agentEngine: createAgentRuntimeRegistry().createAgentEngine(),
+      agentEngine: createAgentRuntimeServices().agentEngine,
     });
 
     try {
       await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
       const resolved = await harness.waitFor((state) =>
         state.sessions.some(
           (session) => session.externalSessionId === "external-1" && session.status === "running",
@@ -831,7 +817,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("passes prompt context to Codex session history loads", async () => {
-    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
+    const originalAgentSessionsList = host.agentSessionsList;
     const originalCodexLoadSessionHistory = CodexAppServerAdapter.prototype.loadSessionHistory;
     const originalCodexListSessionRuntimeSnapshots =
       CodexAppServerAdapter.prototype.listSessionRuntimeSnapshots;
@@ -846,9 +832,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         | null;
     } = { current: null };
 
-    host.agentSessionsListBulk = async () => ({
-      "task-1": [codexRecord],
-    });
+    host.agentSessionsList = async () => [codexRecord];
     CodexAppServerAdapter.prototype.listSessionRuntimeSnapshots = async () => [
       createAgentSessionRuntimeSnapshotFixture({
         ref: {
@@ -880,7 +864,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
       refreshTaskData: async () => {},
-      agentEngine: createAgentRuntimeRegistry().createAgentEngine(),
+      agentEngine: createAgentRuntimeServices().agentEngine,
     });
 
     try {
@@ -891,7 +875,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         ),
       );
       await harness.run(async () => {
-        await harness.getLatest().loadAgentSessionHistory({
+        await harness.getLatest().historyLoad.loadSessionHistory({
           externalSessionId: codexRecord.externalSessionId,
           runtimeKind: codexRecord.runtimeKind,
           workingDirectory: codexRecord.workingDirectory,
@@ -921,7 +905,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       ).toEqual([expect.stringContaining("System prompt:\n\n")]);
     } finally {
       await harness.unmount();
-      host.agentSessionsListBulk = originalAgentSessionsListBulk;
+      host.agentSessionsList = originalAgentSessionsList;
       CodexAppServerAdapter.prototype.loadSessionHistory = originalCodexLoadSessionHistory;
       CodexAppServerAdapter.prototype.listSessionRuntimeSnapshots =
         originalCodexListSessionRuntimeSnapshots;

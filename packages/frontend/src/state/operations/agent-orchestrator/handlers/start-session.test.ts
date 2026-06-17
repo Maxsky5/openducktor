@@ -275,6 +275,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         role: "planner",
         startMode: "fresh",
         selectedModel: PLANNER_SELECTION,
+        holdForPostStartMessage: true,
       });
 
       await waitForSessionCount(() => listAgentSessions(sessionCollection).length, 1);
@@ -294,7 +295,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("keeps fresh sessions starting after observer start", async () => {
+  test("keeps held fresh sessions starting after observer start", async () => {
     let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const lifecycleEvents: string[] = [];
     const sessionsRef = { current: sessionCollection };
@@ -338,10 +339,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "planner",
           startMode: "fresh",
           selectedModel: PLANNER_SELECTION,
+          holdForPostStartMessage: true,
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "planner-external" }));
 
       expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
+      expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe(
+        "not_requested",
+      );
       expect(lifecycleEvents).toContain("observer:started");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
@@ -702,6 +707,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
       const createdSession = getSession(sessionsRef.current, "external-created");
       expect(createdSession).toBeDefined();
+      expect(createdSession?.historyLoadState).toBe("not_requested");
       const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
       expect(createdHeaderMessage).toEqual({
         id: "history:system-prompt:external-created",
@@ -808,7 +814,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
       try {
         const expectedError = runtimeKind
-          ? `Unsupported runtime kind metadata: ${runtimeKind}.`
+          ? `Unsupported runtime kind '${runtimeKind}'.`
           : "Runtime kind is required to start build sessions. Select an explicit runtime before starting a session.";
 
         await expect(

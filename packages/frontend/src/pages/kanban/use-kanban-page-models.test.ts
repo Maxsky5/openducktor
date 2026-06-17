@@ -1,5 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
-import { isKanbanForegroundLoading, resetTaskAndReloadSessions } from "./use-kanban-page-models";
+import {
+  isKanbanForegroundLoading,
+  resetTaskAndRefreshTaskSessions,
+} from "./use-kanban-page-models";
 
 describe("isKanbanForegroundLoading", () => {
   test("keeps the initial empty-board load as foreground loading", () => {
@@ -39,44 +42,39 @@ describe("isKanbanForegroundLoading", () => {
   });
 });
 
-describe("resetTaskAndReloadSessions", () => {
-  test("removes every local session for a fully reset task", async () => {
+describe("resetTaskAndRefreshTaskSessions", () => {
+  test("refreshes the task session read model after resetting the task", async () => {
     const resetTask = mock(async () => {});
-    const removeAgentSessions = mock(async () => {});
-    const loadAgentSessions = mock(async () => {});
+    const refreshTaskSessions = mock(async () => {});
 
-    await resetTaskAndReloadSessions({
+    await resetTaskAndRefreshTaskSessions({
       taskId: "TASK-123",
       resetTask,
-      removeAgentSessions,
-      loadAgentSessions,
+      refreshTaskSessions,
     });
 
     expect(resetTask).toHaveBeenCalledWith("TASK-123");
-    expect(removeAgentSessions).toHaveBeenCalledWith({ taskId: "TASK-123" });
-    expect(loadAgentSessions).toHaveBeenCalledWith("TASK-123");
+    expect(refreshTaskSessions).toHaveBeenCalledWith("TASK-123");
   });
 
-  test("reports session refresh failures after local cleanup", async () => {
+  test("reports task session read-model refresh failures", async () => {
     const error = new Error("session refresh failed");
     const resetTask = mock(async () => {});
-    const removeAgentSessions = mock(async () => {});
-    const loadAgentSessions = mock(async () => {
+    const refreshTaskSessions = mock(async () => {
       throw error;
     });
     const onSessionRefreshError = mock(() => {});
 
     await expect(
-      resetTaskAndReloadSessions({
+      resetTaskAndRefreshTaskSessions({
         taskId: "TASK-123",
         resetTask,
-        removeAgentSessions,
-        loadAgentSessions,
+        refreshTaskSessions,
         onSessionRefreshError,
       }),
     ).rejects.toThrow("session refresh failed");
 
-    expect(removeAgentSessions).toHaveBeenCalledWith({ taskId: "TASK-123" });
+    expect(refreshTaskSessions).toHaveBeenCalledWith("TASK-123");
     expect(onSessionRefreshError).toHaveBeenCalledWith(error);
   });
 });

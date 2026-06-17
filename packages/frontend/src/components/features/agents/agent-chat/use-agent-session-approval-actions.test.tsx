@@ -33,7 +33,7 @@ const sessionIdentity = (
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeSession: sessionIdentity(),
+  sessionIdentity: sessionIdentity(),
   pendingApprovals: [createApprovalRequest("req-1")],
   agentStudioReady: true,
   replyAgentApproval: async () => {},
@@ -44,7 +44,7 @@ describe("useAgentSessionApprovalActions", () => {
   test("does nothing when session is missing or studio is not ready", async () => {
     const replyAgentApproval = mock(async () => {});
     const base = createBaseArgs({ replyAgentApproval });
-    const harness = createHookHarness({ ...base, activeSession: null });
+    const harness = createHookHarness({ ...base, sessionIdentity: null });
 
     try {
       await harness.mount();
@@ -162,7 +162,7 @@ describe("useAgentSessionApprovalActions", () => {
     }
   });
 
-  test("clears request state when the active session changes", async () => {
+  test("clears request state when the session identity changes", async () => {
     const replyAgentApproval = mock(async () => {
       throw new Error("session-bound failure");
     });
@@ -180,7 +180,7 @@ describe("useAgentSessionApprovalActions", () => {
 
       await harness.update({
         ...baseArgs,
-        activeSession: sessionIdentity(TEST_EXTERNAL_SESSION_IDS.secondary),
+        sessionIdentity: sessionIdentity(TEST_EXTERNAL_SESSION_IDS.secondary),
       });
 
       await harness.waitFor(

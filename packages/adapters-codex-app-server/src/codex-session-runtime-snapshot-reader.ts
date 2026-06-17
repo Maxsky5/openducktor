@@ -34,7 +34,7 @@ const toLocalRuntimeSnapshot = async (
   session: CodexSessionState,
   input?: ReadSessionRuntimeSnapshotInput,
 ): Promise<AgentSessionRuntimeSnapshot> => {
-  const inventory = await deps.threadInventory.refresh(
+  const inventory = await deps.threadInventory.read(
     deps.runtimeClients.clientForRuntime(session.runtimeId),
     session.runtimeId,
   );
@@ -48,7 +48,7 @@ const toLocalRuntimeSnapshot = async (
   });
 };
 
-const refreshRuntimeInventoryOnce = (
+const readRuntimeInventoryOnce = (
   deps: CodexSessionRuntimeSnapshotReaderDeps,
   inventoriesByRuntimeId: Map<string, Promise<CodexThreadInventory>>,
   runtimeId: string,
@@ -57,7 +57,7 @@ const refreshRuntimeInventoryOnce = (
   if (existing) {
     return existing;
   }
-  const inventory = deps.threadInventory.refresh(
+  const inventory = deps.threadInventory.read(
     deps.runtimeClients.clientForRuntime(runtimeId),
     runtimeId,
   );
@@ -78,7 +78,7 @@ export const listCodexSessionRuntimeSnapshots = async (
     localSessions.map(async (session) =>
       toRefreshedRuntimeSnapshot({
         session,
-        inventory: await refreshRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
+        inventory: await readRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
         pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
         pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),

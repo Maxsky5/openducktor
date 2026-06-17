@@ -1,26 +1,12 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  ActiveAgentSessionActivityState,
+  AgentSessionActivityState,
+  OptionalAgentSessionActivityState,
+  WorkingAgentSessionActivityState,
+} from "@/types/agent-session-activity";
 import { isAgentSessionWaitingInput } from "./agent-session-waiting-input";
 
-export type AgentSessionActivityState =
-  | "waiting_input"
-  | "starting"
-  | "running"
-  | "idle"
-  | "stopped"
-  | "error";
-export type ActiveAgentSessionActivityState = Extract<
-  AgentSessionActivityState,
-  "waiting_input" | "starting" | "running"
->;
-export type WorkingAgentSessionActivityState = Extract<
-  AgentSessionActivityState,
-  "starting" | "running"
->;
-export type OptionalAgentSessionActivityState =
-  | AgentSessionActivityState
-  | "none"
-  | null
-  | undefined;
 type AgentSessionStatus = AgentSessionState["status"];
 
 const AGENT_SESSION_ACTIVITY_LABELS: Record<AgentSessionActivityState, string> = {

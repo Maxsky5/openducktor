@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -7,6 +8,7 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createSessionStartWorkflowRunner } from "@/features/session-start";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { hostClient } from "@/lib/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -40,11 +42,32 @@ afterEach(() => {
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
+const createSessionRuntimeData = (
+  overrides: Partial<HookArgs["sessionRuntimeData"]> = {},
+): HookArgs["sessionRuntimeData"] => ({
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+  error: null,
+  ...overrides,
+});
+
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const createRunSessionStartWorkflow = (
+  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
+) =>
+  createSessionStartWorkflowRunner({
+    queryClient: new QueryClient(),
+    workspaceId: "workspace-1",
+    startAgentSession: async () => sessionIdentity("session-new"),
+    sendAgentMessage: async () => {},
+    ...overrides,
+  });
 
 const localSessionIdentity = (externalSessionId: string) =>
   toAgentSessionIdentity(createAgentSessionFixture({ externalSessionId }));
@@ -96,6 +119,7 @@ const createHookHarness = (initialProps: HookArgs) => {
                 profiles: [],
               }),
               loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeSkills: async () => ({ skills: [] }),
               loadRepoRuntimeFileSearch: async () => [],
             },
           },
@@ -107,51 +131,58 @@ const createHookHarness = (initialProps: HookArgs) => {
   return createCoreHookHarness(useAgentStudioSessionActions, initialProps, { wrapper });
 };
 
-const createBaseArgs = (): HookArgs => ({
-  activeWorkspaceId: "workspace-1",
-  workspaceRepoPath: "/repo",
-  taskId: "task-1",
-  role: "spec",
-  launchActionId: "spec_initial",
-  activeSession: createAgentSessionFixture({ externalSessionId: "session-existing" }),
-  activeSessionIsLoadingModelCatalog: false,
-  selectedModelSelection: null,
-  selectedModelDescriptor: {
-    id: "openai/gpt-5",
-    providerId: "openai",
-    providerName: "OpenAI",
-    modelId: "gpt-5",
-    modelName: "GPT-5",
-    variants: ["default"],
-    contextWindow: 200_000,
-    outputLimit: 8_192,
-    attachmentSupport: {
-      image: false,
-      audio: false,
-      video: false,
-      pdf: true,
+const createBaseArgs = (): HookArgs => {
+  const loadedSession = createAgentSessionFixture({ externalSessionId: "session-existing" });
+  const selectedSessionIdentity = localSessionIdentity("session-existing");
+
+  return {
+    activeWorkspaceId: "workspace-1",
+    workspaceRepoPath: "/repo",
+    taskId: "task-1",
+    role: "spec",
+    launchActionId: "spec_initial",
+    selectedSessionIdentity,
+    selectedSessionActivityState: "running",
+    selectedSessionModel: loadedSession.selectedModel,
+    loadedSession,
+    sessionRuntimeData: createSessionRuntimeData(),
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    selectedModelDescriptor: {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default"],
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+      attachmentSupport: {
+        image: false,
+        audio: false,
+        video: false,
+        pdf: true,
+      },
     },
-  },
-  sessionsForTask: [],
-  selectedTask: createTaskCardFixture(),
-  agentStudioReady: true,
-  isActiveTaskReady: true,
-  selectionForNewSession: {
-    runtimeKind: "opencode",
-    providerId: "openai",
-    modelId: "gpt-5",
-    variant: "default",
-    profileId: "spec",
-  },
-  reusablePrompts: [],
-  repoSettings: null,
-  startAgentSession: async () => sessionIdentity("session-new"),
-  settleStartedAgentSession: () => {},
-  sendAgentMessage: async () => {},
-  humanRequestChangesTask: async () => {},
-  answerAgentQuestion: async () => {},
-  updateQuery: () => {},
-});
+    sessionsForTask: [],
+    selectedTask: createTaskCardFixture(),
+    agentStudioReady: true,
+    isActiveTaskReady: true,
+    selectionForNewSession: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec",
+    },
+    reusablePrompts: [],
+    repoSettings: null,
+    runSessionStartWorkflow: createRunSessionStartWorkflow(),
+    sendAgentMessage: async () => {},
+    humanRequestChangesTask: async () => {},
+    answerAgentQuestion: async () => {},
+    updateQuery: () => {},
+  };
+};
 
 const createAttachmentDraft = (
   segments: AgentChatComposerDraft["segments"],

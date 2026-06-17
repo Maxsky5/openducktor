@@ -12,6 +12,7 @@ import type {
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import { createSessionMessagesState } from "../support/messages";
 import {
   createLoadAgentSessionHistory,
@@ -64,19 +65,20 @@ const createSession = (): AgentSessionState =>
 
 const createHistoryLoadHarness = (initialSession: AgentSessionState = createSession()) => {
   let sessionCollection = createAgentSessionCollection([initialSession]);
+  const updateSession: UpdateSession = (identity, updater) => {
+    const current = getAgentSession(sessionCollection, identity);
+    if (!current) {
+      return null;
+    }
+    const nextSession = updater(current);
+    sessionCollection = replaceAgentSession(sessionCollection, nextSession);
+    return nextSession;
+  };
+
   return {
     readSessionSnapshot: (identity: AgentSessionIdentity) =>
       getAgentSession(sessionCollection, identity),
-    updateSession: (
-      identity: AgentSessionIdentity,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = getAgentSession(sessionCollection, identity);
-      if (!current) {
-        return;
-      }
-      sessionCollection = replaceAgentSession(sessionCollection, updater(current));
-    },
+    updateSession,
     get session() {
       const session = getAgentSession(sessionCollection, initialSession);
       if (!session) {
@@ -90,8 +92,8 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState = createSess
 describe("session history loader", () => {
   test("treats a stale operation as neither applied nor failed", async () => {
     const loadSessionHistory = mock(async () => []);
-    const updateSession = mock(() => undefined);
     const harness = createHistoryLoadHarness();
+    const updateSession = mock(harness.updateSession);
 
     const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",

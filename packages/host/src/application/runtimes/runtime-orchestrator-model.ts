@@ -164,15 +164,6 @@ export const loadTargetSession = (
     }
     return session;
   });
-export const findWorkspaceRuntime = (
-  runtimes: RuntimeInstanceSummary[],
-  runtimeKind: string,
-  repoPath: string,
-): RuntimeInstanceSummary | undefined =>
-  runtimes.find(
-    (runtime) =>
-      runtime.kind === runtimeKind && runtime.repoPath === repoPath && runtime.role === "workspace",
-  );
 export const buildIdleStartupStatus = (
   runtimeKind: string,
   repoPath: string,

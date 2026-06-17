@@ -26,7 +26,6 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/session-started",
     }),
-    settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     updateAgentSessionModel: () => {},
@@ -37,59 +36,19 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 };
 
 const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
-  listAvailableModels: async () => ({
-    providers: [],
-    models: [],
-    variants: [],
-    profiles: [],
-    defaultModelsByProvider: {},
-  }),
   loadSessionTodos: async () => [],
   loadSessionHistory: async () => [],
-  listAvailableSlashCommands: async () => ({ commands: [] }),
-  listAvailableSkills: async () => ({ skills: [] }),
-  searchFiles: async () => [],
   ...overrides,
 });
 
 describe("agent-orchestrator-public-operations", () => {
-  test("shows toast and rethrows load errors", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {
-        throw new Error("load failed");
-      },
-      loadAgentSessionHistory: async () => {},
-      agentEngine: createAgentEngine(),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
-      sessionActions: createSessionActions(),
-    });
-
-    try {
-      await expect(operations.loadAgentSessions("task-1")).rejects.toThrow("load failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to load agent sessions", {
-        description: "load failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
-  });
-
   test("rethrows start errors without adding a toast", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
       agentEngine: createAgentEngine(),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         startAgentSession: async () => {
           throw new Error("start failed");
@@ -118,11 +77,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
       agentEngine: createAgentEngine(),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
           throw new Error("send failed");
@@ -148,11 +103,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
       agentEngine: createAgentEngine(),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         stopAgentSession: async () => {
           throw new Error("stop failed");
@@ -170,65 +121,12 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("forwards explicit single-session removal without toast wrapping", async () => {
-    const removeAgentSession = mock(async () => {});
-    const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
-      agentEngine: createAgentEngine(),
-      removeAgentSession,
-      removeAgentSessions: async () => {},
-      sessionActions: createSessionActions(),
-    });
-
-    const session = {
-      externalSessionId: "session-1",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/tmp/repo/worktree",
-    };
-
-    await operations.removeAgentSession(session);
-
-    expect(removeAgentSession).toHaveBeenCalledWith(session);
-  });
-
-  test("forwards explicit session removals without toast wrapping", async () => {
-    const removeAgentSessions = mock(async () => {});
-    const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
-      agentEngine: createAgentEngine(),
-      removeAgentSession: async () => {},
-      removeAgentSessions,
-      sessionActions: createSessionActions(),
-    });
-
-    await operations.removeAgentSessions({ taskId: "task-1", roles: ["build", "qa"] });
-
-    expect(removeAgentSessions).toHaveBeenCalledWith({
-      taskId: "task-1",
-      roles: ["build", "qa"],
-    });
-  });
-
-  test("delegates runtime reads directly to the agent engine", async () => {
-    const listAvailableModels = mock(createAgentEngine().listAvailableModels);
+  test("delegates session reads directly to the agent engine", async () => {
     const loadSessionTodos = mock(async () => []);
-    const listAvailableSlashCommands = mock(async () => ({ commands: [] }));
-    const listAvailableSkills = mock(async () => ({ skills: [] }));
-    const searchFiles = mock(async () => []);
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
       agentEngine: createAgentEngine({
-        listAvailableModels,
         loadSessionTodos,
-        listAvailableSlashCommands,
-        listAvailableSkills,
-        searchFiles,
       }),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
     const sessionRef = {
@@ -238,44 +136,17 @@ describe("agent-orchestrator-public-operations", () => {
       externalSessionId: "session-1",
     };
 
-    await operations.readSessionModelCatalog("/repo", "codex");
     await operations.readSessionTodos(sessionRef);
-    await operations.readSessionSlashCommands("/repo", "codex");
-    await operations.readSessionSkills?.("/repo", "codex", "/repo/worktree");
-    await operations.readSessionFileSearch("/repo", "codex", "/repo/worktree", "src");
 
-    expect(listAvailableModels).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-    });
     expect(loadSessionTodos).toHaveBeenCalledWith(sessionRef);
-    expect(listAvailableSlashCommands).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-    });
-    expect(listAvailableSkills).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/worktree",
-    });
-    expect(searchFiles).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/worktree",
-      query: "src",
-    });
   });
 
   test("forwards full session history inputs without stripping transient context", async () => {
     const readSessionHistory = mock(async () => []);
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessions: async () => {},
-      loadAgentSessionHistory: async () => {},
       agentEngine: createAgentEngine({
         loadSessionHistory: readSessionHistory,
       }),
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
 

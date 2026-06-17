@@ -1,5 +1,6 @@
 import type {
   AgentRuntimes,
+  RepoRuntimeRef,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
@@ -11,6 +12,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import {
   type Context,
@@ -24,6 +26,7 @@ import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionHistoryLoadContextValue,
   AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -46,6 +49,8 @@ export const DelegationStateContext = createContext<DelegationStateContextValue 
 export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
 export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
 export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
+export const AgentSessionHistoryLoadContext =
+  createContext<AgentSessionHistoryLoadContextValue | null>(null);
 export const AgentSessionReadModelStateContext =
   createContext<AgentSessionReadModelStateContextValue | null>(null);
 
@@ -61,22 +66,11 @@ export type RuntimeDefinitionsContextValue = {
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
-  loadRepoRuntimeCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  loadRepoRuntimeSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
   loadRepoRuntimeFileSearch: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
+    runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
 };
@@ -96,8 +90,9 @@ export type ChecksOperationsContextValue = {
   hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
 };
 
-export type TaskDataContextValue = {
+export type TaskSnapshotContextValue = {
   tasks: TaskCard[];
+  isLoadingTasks: boolean;
 };
 
 export type TaskRefreshOptions = {
@@ -129,7 +124,7 @@ export type WorkspaceOperationsContextValue = {
 export const ActiveWorkspaceContext = createContext<ActiveWorkspaceContextValue | null>(null);
 export const RuntimeDefinitionsContext = createContext<RuntimeDefinitionsContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
-export const TaskDataContext = createContext<TaskDataContextValue | null>(null);
+export const TaskSnapshotContext = createContext<TaskSnapshotContextValue | null>(null);
 export const TaskControlContext = createContext<TaskControlContextValue | null>(null);
 export const WorkspaceOperationsContext = createContext<WorkspaceOperationsContextValue | null>(
   null,
@@ -171,17 +166,15 @@ export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue
       refreshRuntimeDefinitions: runtimeContext.refreshRuntimeDefinitions,
       loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
-      ...(runtimeContext.loadRepoRuntimeSkills
-        ? { loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills }
-        : {}),
+      loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills,
       loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
     }),
     [runtimeContext],
   );
 };
 
-export const useTaskDataContext = (): TaskDataContextValue =>
-  useRequiredContext(TaskDataContext, "useTaskDataContext");
+export const useTaskSnapshotContext = (): TaskSnapshotContextValue =>
+  useRequiredContext(TaskSnapshotContext, "useTaskSnapshotContext");
 
 export const useTaskControlContext = (): TaskControlContextValue =>
   useRequiredContext(TaskControlContext, "useTaskControlContext");
@@ -194,6 +187,9 @@ export const useAgentSessionsContext = (): AgentSessionsStore =>
 
 export const useAgentOperationsContext = (): AgentOperationsContextValue =>
   useRequiredContext(AgentOperationsContext, "useAgentOperations");
+
+export const useAgentSessionHistoryLoadContext = (): AgentSessionHistoryLoadContextValue =>
+  useRequiredContext(AgentSessionHistoryLoadContext, "useAgentSessionHistoryLoadContext");
 
 export const useAgentSessionReadModelStateContext = (): AgentSessionReadModelStateContextValue =>
   useRequiredContext(AgentSessionReadModelStateContext, "useAgentSessionReadModelState");

@@ -26,10 +26,10 @@ export const buildInitialSession = ({
   taskId: startedCtx.taskId,
   runtimeKind: startedCtx.summary.runtimeKind,
   role: startedCtx.role,
-  status: "starting",
+  status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
   startedAt: startedCtx.summary.startedAt,
   workingDirectory: startedCtx.summary.workingDirectory,
-  historyLoadState: "loaded",
+  historyLoadState: initialMessages ? "loaded" : "not_requested",
   messages:
     initialMessages ??
     createSessionMessagesState(
@@ -40,10 +40,6 @@ export const buildInitialSession = ({
         startedAt: startedCtx.summary.startedAt,
       }),
     ),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   contextUsage: null,
   pendingApprovals: [],
   pendingQuestions: [],

@@ -7,24 +7,49 @@ export type AgentSessionCollectionUpdater =
   | AgentSessionCollection
   | ((current: AgentSessionCollection) => AgentSessionCollection);
 
-export const agentSessionCollectionKey = (identity: AgentSessionIdentity): string =>
-  agentSessionIdentityKey(identity);
-
 export const emptyAgentSessionCollection = (): AgentSessionCollection => new Map();
 
 export const listAgentSessions = (collection: AgentSessionCollection): AgentSessionState[] =>
   Array.from(collection.values());
 
-export const hasAgentSessionStateChanges = (
+export const areAgentSessionStatesEquivalent = (
   current: AgentSessionState,
   nextSession: AgentSessionState,
 ): boolean => {
-  for (const key of Object.keys(nextSession) as Array<keyof AgentSessionState>) {
-    if (nextSession[key] !== current[key]) {
-      return true;
+  const keys = new Set<keyof AgentSessionState>([
+    ...(Object.keys(current) as Array<keyof AgentSessionState>),
+    ...(Object.keys(nextSession) as Array<keyof AgentSessionState>),
+  ]);
+  for (const key of keys) {
+    if (current[key] !== nextSession[key]) {
+      return false;
     }
   }
-  return false;
+  return true;
+};
+
+export const hasAgentSessionStateChanges = (
+  current: AgentSessionState,
+  nextSession: AgentSessionState,
+): boolean => !areAgentSessionStatesEquivalent(current, nextSession);
+
+export const areAgentSessionCollectionsEquivalent = (
+  current: AgentSessionCollection,
+  next: AgentSessionCollection,
+): boolean => {
+  if (current === next) {
+    return true;
+  }
+  if (current.size !== next.size) {
+    return false;
+  }
+  for (const [key, currentSession] of current) {
+    const nextSession = next.get(key);
+    if (!nextSession || !areAgentSessionStatesEquivalent(currentSession, nextSession)) {
+      return false;
+    }
+  }
+  return true;
 };
 
 export const createAgentSessionCollection = (
@@ -44,15 +69,16 @@ export const getAgentSession = (
   if (!identity) {
     return null;
   }
-  return collection.get(agentSessionCollectionKey(identity)) ?? null;
+  return collection.get(agentSessionIdentityKey(identity)) ?? null;
 };
 
 export const replaceAgentSession = (
   collection: AgentSessionCollection,
   session: AgentSessionState,
 ): AgentSessionCollection => {
-  const key = agentSessionCollectionKey(session);
-  if (collection.get(key) === session) {
+  const key = agentSessionIdentityKey(session);
+  const current = collection.get(key);
+  if (current === session || (current && areAgentSessionStatesEquivalent(current, session))) {
     return collection;
   }
   const next = new Map(collection);
@@ -65,9 +91,13 @@ export const replaceAgentSessionByIdentity = (
   identity: AgentSessionIdentity,
   session: AgentSessionState,
 ): AgentSessionCollection => {
-  const currentKey = agentSessionCollectionKey(identity);
-  const nextKey = agentSessionCollectionKey(session);
-  if (currentKey === nextKey && collection.get(nextKey) === session) {
+  const currentKey = agentSessionIdentityKey(identity);
+  const nextKey = agentSessionIdentityKey(session);
+  const current = collection.get(nextKey);
+  if (
+    currentKey === nextKey &&
+    (current === session || (current && areAgentSessionStatesEquivalent(current, session)))
+  ) {
     return collection;
   }
 
@@ -81,32 +111,11 @@ export const removeAgentSession = (
   collection: AgentSessionCollection,
   identity: AgentSessionIdentity,
 ): AgentSessionCollection => {
-  const key = agentSessionCollectionKey(identity);
+  const key = agentSessionIdentityKey(identity);
   if (!collection.has(key)) {
     return collection;
   }
   const next = new Map(collection);
   next.delete(key);
   return next;
-};
-
-export const removeAgentSessions = (
-  collection: AgentSessionCollection,
-  identities: readonly AgentSessionIdentity[],
-): AgentSessionCollection => {
-  if (identities.length === 0) {
-    return collection;
-  }
-  const keysToRemove = new Set(identities.map(agentSessionCollectionKey));
-  let changed = false;
-  const next = new Map<string, AgentSessionState>();
-  for (const session of listAgentSessions(collection)) {
-    const key = agentSessionCollectionKey(session);
-    if (keysToRemove.has(key)) {
-      changed = true;
-      continue;
-    }
-    next.set(key, session);
-  }
-  return changed ? next : collection;
 };

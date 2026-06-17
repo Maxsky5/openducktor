@@ -4,7 +4,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type UseAgentSessionApprovalActionsParams = {
-  activeSession: AgentSessionIdentity | null;
+  sessionIdentity: AgentSessionIdentity | null;
   pendingApprovals: readonly AgentApprovalRequest[];
   agentStudioReady: boolean;
   replyAgentApproval: (
@@ -47,7 +47,7 @@ const filterStringMapByPendingRequestIds = (
 };
 
 export function useAgentSessionApprovalActions({
-  activeSession,
+  sessionIdentity,
   pendingApprovals,
   agentStudioReady,
   replyAgentApproval,
@@ -66,18 +66,18 @@ export function useAgentSessionApprovalActions({
     () => JSON.stringify(pendingApprovals.map((request) => request.requestId)),
     [pendingApprovals],
   );
-  const activeSessionKey = activeSession ? agentSessionIdentityKey(activeSession) : null;
+  const sessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
   const [resetInputs, setResetInputs] = useState({
-    activeSessionKey,
+    sessionKey,
     pendingApprovalRequestIdsKey,
   });
 
   if (
-    resetInputs.activeSessionKey !== activeSessionKey ||
+    resetInputs.sessionKey !== sessionKey ||
     resetInputs.pendingApprovalRequestIdsKey !== pendingApprovalRequestIdsKey
   ) {
-    const sessionChanged = resetInputs.activeSessionKey !== activeSessionKey;
-    setResetInputs({ activeSessionKey, pendingApprovalRequestIdsKey });
+    const sessionChanged = resetInputs.sessionKey !== sessionKey;
+    setResetInputs({ sessionKey, pendingApprovalRequestIdsKey });
 
     if (sessionChanged) {
       setIsSubmittingApprovalByRequestId({});
@@ -95,7 +95,7 @@ export function useAgentSessionApprovalActions({
 
   const onReplyApproval = useCallback(
     async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {
-      if (!activeSession || !agentStudioReady) {
+      if (!sessionIdentity || !agentStudioReady) {
         return;
       }
 
@@ -113,7 +113,7 @@ export function useAgentSessionApprovalActions({
       });
 
       try {
-        await replyAgentApproval(activeSession, requestId, outcome);
+        await replyAgentApproval(sessionIdentity, requestId, outcome);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0
@@ -134,7 +134,7 @@ export function useAgentSessionApprovalActions({
         });
       }
     },
-    [activeSession, agentStudioReady, replyAgentApproval],
+    [agentStudioReady, replyAgentApproval, sessionIdentity],
   );
 
   return {

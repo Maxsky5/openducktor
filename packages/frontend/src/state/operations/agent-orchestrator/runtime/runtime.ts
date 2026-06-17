@@ -12,7 +12,10 @@ import { appQueryClient } from "@/lib/query-client";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
+import {
+  ensureRuntimeAndInvalidateReadinessQueries,
+  type RepoRuntimeReady,
+} from "../../shared/runtime-readiness-publication";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
@@ -45,9 +48,19 @@ type EnsureRuntimeDependencies = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  hostClient?: Pick<typeof host, "buildStart" | "runtimeEnsure" | "taskWorktreeGet">;
+  hostClient?: RuntimeStartupHost;
   queryClient?: Pick<QueryClient, "invalidateQueries">;
   repoConfigLoader?: RepoConfigLoader;
+};
+
+type RuntimeStartupHost = {
+  buildStart(
+    repoPath: string,
+    taskId: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<BuildSessionBootstrap>;
+  runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RepoRuntimeReady>;
+  taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null>;
 };
 
 type RuntimeWorkspaceQueryHost = Pick<

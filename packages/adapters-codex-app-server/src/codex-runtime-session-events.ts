@@ -37,7 +37,6 @@ import {
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
-import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type {
   CodexAppServerAdapterOptions,
   CodexServerRequestRecord,
@@ -53,10 +52,7 @@ type CodexRuntimeSessionEventsDeps = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   sessionEvents: CodexSessionEventBus;
   pendingInput: CodexPendingInputState;
-  threadInventory: Pick<
-    CodexThreadInventoryReader,
-    "clearReadOnlyHistoryLoad" | "clearReadOnlyHistoryLoadForNotification"
-  >;
+  updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
 };
 
@@ -154,6 +150,7 @@ export class CodexRuntimeSessionEvents {
       ...session.summary,
       status: agentSessionStatusFromActivity(liveStatus.classification),
     };
+    this.deps.updateThreadStatus(session.runtimeId, session.threadId, liveStatus);
   }
 
   async continueTurnAfterPendingInput(activeTurn: ActiveCodexTurn): Promise<void> {
@@ -219,15 +216,7 @@ export class CodexRuntimeSessionEvents {
     threadId: string,
     event: { kind: "notification" | "server_request"; message: unknown },
   ): void {
-    const buffered = this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
-    if (buffered.kind === "notification") {
-      this.deps.threadInventory.clearReadOnlyHistoryLoadForNotification(
-        threadId,
-        buffered.notification,
-      );
-      return;
-    }
-    this.deps.threadInventory.clearReadOnlyHistoryLoad(threadId);
+    this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
 
   private emitUnroutableRuntimeServerRequest(runtimeId: string): void {

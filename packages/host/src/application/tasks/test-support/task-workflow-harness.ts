@@ -105,6 +105,7 @@ const createRuntimeRegistryPort = (port: Partial<RuntimeRegistryPort>): RuntimeR
     ensureWorkspaceRuntime: () =>
       unexpectedRuntimeRegistryCall("runtimeRegistry.ensureWorkspaceRuntime"),
     findRuntimeById: () => Effect.succeed(null),
+    findWorkspaceRuntime: () => Effect.succeed(null),
     listRuntimes: () => Effect.succeed([]),
     listRuntimesByRepo: () => Effect.succeed([]),
     stopRuntime: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopRuntime"),

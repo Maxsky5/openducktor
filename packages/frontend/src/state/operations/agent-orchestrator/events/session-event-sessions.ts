@@ -7,11 +7,11 @@ export const normalizeSessionId = (externalSessionId: string | undefined): strin
 };
 
 export const readSessionInEventRuntime = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   externalSessionId: string,
 ): AgentSessionState | null =>
   context.store.readSession({
     externalSessionId,
-    runtimeKind: context.store.sessionIdentity.runtimeKind,
-    workingDirectory: context.store.sessionIdentity.workingDirectory,
+    runtimeKind: context.session.identity.runtimeKind,
+    workingDirectory: context.session.identity.workingDirectory,
   });

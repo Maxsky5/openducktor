@@ -8,14 +8,14 @@ import {
   buildSession,
   buildThreadTranscriptState,
   buildTodoItem,
+  completeThreadModel,
 } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),
-  thread: {
+  thread: completeThreadModel({
     session: buildSession({
       status: "running" as const,
-      draftAssistantText: "",
     }),
     isSessionWorking: true,
     transcriptState: buildThreadTranscriptState(),
@@ -47,7 +47,7 @@ const buildModel = () => ({
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
     syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-  },
+  }),
   composer: {
     taskId: "task-1",
     displayedSessionKey: "session-1",

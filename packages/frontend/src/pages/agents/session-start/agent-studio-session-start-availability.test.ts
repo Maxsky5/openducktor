@@ -15,6 +15,12 @@ const availableTask = () =>
     },
   });
 
+const selectedSessionIdentity = {
+  externalSessionId: "session-1",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktree",
+};
+
 describe("agent studio session start availability", () => {
   test("requires task, runtime, active task readiness, and role availability", () => {
     expect(
@@ -61,7 +67,7 @@ describe("agent studio session start availability", () => {
       canExposeAgentStudioKickoff({
         canStartSession: true,
         launchActionId: "build_after_human_request_changes",
-        hasActiveSession: false,
+        selectedSessionIdentity: null,
       }),
     ).toBe(true);
 
@@ -69,21 +75,21 @@ describe("agent studio session start availability", () => {
       canExposeAgentStudioKickoff({
         canStartSession: true,
         launchActionId: "build_rebase_conflict_resolution",
-        hasActiveSession: false,
+        selectedSessionIdentity: null,
       }),
     ).toBe(false);
     expect(
       canExposeAgentStudioKickoff({
         canStartSession: true,
         launchActionId: "build_after_human_request_changes",
-        hasActiveSession: true,
+        selectedSessionIdentity,
       }),
     ).toBe(false);
     expect(
       canExposeAgentStudioKickoff({
         canStartSession: false,
         launchActionId: "build_after_human_request_changes",
-        hasActiveSession: false,
+        selectedSessionIdentity: null,
       }),
     ).toBe(false);
   });

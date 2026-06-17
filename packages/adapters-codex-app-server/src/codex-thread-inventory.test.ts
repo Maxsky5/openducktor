@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
+import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient } from "./types";
 
@@ -19,6 +20,22 @@ const threadListResponse = (
     },
   ],
   nextCursor: null,
+});
+
+const threadReadResponse = (
+  id: string,
+  cwd = "/repo",
+  status: Record<string, unknown> = { type: "idle" },
+  turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
+): unknown => ({
+  thread: {
+    id,
+    cwd,
+    createdAt: 1,
+    preview: "Stored thread",
+    status,
+    turns,
+  },
 });
 
 describe("CodexThreadInventoryReader", () => {
@@ -91,32 +108,54 @@ describe("CodexThreadInventoryReader", () => {
     expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
   });
 
-  test("resumes listed threads for history so Codex can replay restored token usage", async () => {
+  test("applies runtime status updates to cached inventory", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
+      threadList: async () =>
+        threadListResponse("thread-1", "Cached inventory", "/repo", {
+          type: "active",
+          activeFlags: [],
+        }),
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+    reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
+
+    const cached = await reader.read(client, "runtime-1");
+    expect(cached.threadsById.get("thread-1")?.status).toEqual({ classification: "idle" });
+  });
+
+  test("applies runtime status updates to in-flight inventory reads", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const loaded = createDeferred<unknown>();
+    const threads = createDeferred<unknown>();
+    const client = {
+      threadLoadedList: () => loaded.promise,
+      threadList: () => threads.promise,
+    } as unknown as CodexAppServerClient;
+
+    const inventoryRead = reader.refresh(client, "runtime-1");
+    reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
+    loaded.resolve({ data: ["thread-1"], nextCursor: null });
+    threads.resolve(
+      threadListResponse("thread-1", "Stale inventory", "/repo", {
+        type: "active",
+        activeFlags: [],
+      }),
+    );
+
+    const inventory = await inventoryRead;
+    expect(inventory.threadsById.get("thread-1")?.status).toEqual({ classification: "idle" });
+  });
+
+  test("reads stored threads for history without resuming them", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
     const client = {
-      threadLoadedList: async () => {
-        calls.push("thread/loaded/list");
-        return { data: [], nextCursor: null };
-      },
-      threadList: async () => {
-        calls.push("thread/list");
-        return threadListResponse("thread-idle", "Idle inventory");
-      },
-      threadResume: async () => {
-        calls.push("thread/resume");
-        return {
-          thread: {
-            id: "thread-idle",
-            cwd: "/repo",
-            status: { type: "idle" },
-            turns: [{ id: "turn-1", status: "completed", items: [] }],
-          },
-        };
-      },
       threadRead: async () => {
         calls.push("thread/read");
-        throw new Error("thread not loaded: thread-idle");
+        return threadReadResponse("thread-idle");
       },
       threadTurnsList: async () => {
         calls.push("thread/turns/list");
@@ -124,165 +163,74 @@ describe("CodexThreadInventoryReader", () => {
       },
     } as unknown as CodexAppServerClient;
 
-    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(historyLoad).toEqual(expect.objectContaining({ id: "thread-idle" }));
-    expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
+    expect(historyLoad).toEqual(threadReadResponse("thread-idle"));
+    expect(calls).toEqual(["thread/read", "thread/turns/list"]);
   });
 
-  test("returns the pre-load idle thread with history loads", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadLoadedList: async () => ({ data: ["thread-idle"], nextCursor: null }),
-      threadList: async () => threadListResponse("thread-idle", "Idle inventory"),
-      threadResume: async () => ({
-        thread: {
-          id: "thread-idle",
-          cwd: "/repo",
-          status: { type: "idle" },
-          turns: [{ id: "turn-1", status: "completed", items: [] }],
-        },
-      }),
-    } as unknown as CodexAppServerClient;
-
-    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
-      externalSessionId: "thread-idle",
-      workingDirectory: "/repo",
-    });
-
-    expect(historyLoad).toEqual(
-      expect.objectContaining({
-        id: "thread-idle",
-        status: expect.objectContaining({ classification: "idle" }),
-      }),
-    );
-  });
-
-  test("keeps a history-only idle load idle across runtime route changes", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const loadedResponses = [
-      { data: [], nextCursor: null },
-      { data: ["thread-idle"], nextCursor: null },
-    ];
-    const threadResponses = [
-      threadListResponse("thread-idle", "Idle inventory"),
-      threadListResponse("thread-idle", "Loaded by history read", "/repo", {
-        type: "active",
-        activeFlags: [],
-      }),
-    ];
-    const client = {
-      threadLoadedList: async () => {
-        const response = loadedResponses.shift();
-        if (!response) {
-          throw new Error("Unexpected thread/loaded/list call.");
-        }
-        return response;
-      },
-      threadList: async () => {
-        const response = threadResponses.shift();
-        if (!response) {
-          throw new Error("Unexpected thread/list call.");
-        }
-        return response;
-      },
-      threadResume: async () => ({
-        thread: {
-          id: "thread-idle",
-          cwd: "/repo",
-          status: { type: "idle" },
-          turns: [],
-        },
-      }),
-    } as unknown as CodexAppServerClient;
-
-    await reader.loadThreadForHistory(client, "runtime-ensure", {
-      externalSessionId: "thread-idle",
-      workingDirectory: "/repo",
-    });
-    const refreshedInventory = await reader.refresh(client, "runtime-live");
-
-    expect(refreshedInventory.threadsById.get("thread-idle")?.status).toMatchObject({
-      classification: "idle",
-    });
-  });
-
-  test("returns null without resuming when the thread is missing from inventory", async () => {
+  test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
     const client = {
-      threadLoadedList: async () => {
-        calls.push("thread/loaded/list");
-        return { data: [], nextCursor: null };
-      },
-      threadList: async () => {
-        calls.push("thread/list");
-        return threadListResponse("other-thread", "Other inventory");
-      },
-      threadResume: async () => {
-        calls.push("thread/resume");
-        throw new Error("thread/resume should not be called");
+      threadRead: async () => {
+        calls.push("thread/read");
+        throw new Error("thread not loaded: thread-idle");
       },
     } as unknown as CodexAppServerClient;
 
-    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
     expect(historyLoad).toBeNull();
-    expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
+    expect(calls).toEqual(["thread/read"]);
   });
 
-  test("returns null without resuming when the thread cwd does not match", async () => {
+  test("returns null when read-only history cwd does not match", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
     const client = {
-      threadLoadedList: async () => {
-        calls.push("thread/loaded/list");
-        return { data: [], nextCursor: null };
+      threadRead: async () => {
+        calls.push("thread/read");
+        return threadReadResponse("thread-idle", "/other");
       },
-      threadList: async () => {
-        calls.push("thread/list");
-        return threadListResponse("thread-idle", "Different cwd", "/other");
-      },
-      threadResume: async () => {
-        calls.push("thread/resume");
-        throw new Error("thread/resume should not be called");
+      threadTurnsList: async () => {
+        calls.push("thread/turns/list");
+        return { data: [] };
       },
     } as unknown as CodexAppServerClient;
 
-    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
     expect(historyLoad).toBeNull();
-    expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
+    expect(calls).toEqual(["thread/read", "thread/turns/list"]);
   });
 
-  test("propagates thread resume failures", async () => {
+  test("propagates thread/read history failures", async () => {
     const reader = new CodexThreadInventoryReader();
     const client = {
-      threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async () => threadListResponse("thread-idle", "Idle inventory"),
-      threadResume: async () => {
-        throw new Error("resume failed");
+      threadRead: async () => {
+        throw new Error("read failed");
       },
     } as unknown as CodexAppServerClient;
 
     await expect(
-      reader.loadThreadForHistory(client, "runtime-1", {
+      reader.readThreadHistory(client, {
         externalSessionId: "thread-idle",
         workingDirectory: "/repo",
       }),
-    ).rejects.toThrow("resume failed");
+    ).rejects.toThrow("read failed");
   });
 
-  test("uses an in-flight inventory read before resuming history", async () => {
+  test("read-only history does not wait for an in-flight inventory read", async () => {
     const reader = new CodexThreadInventoryReader();
     const loaded = createDeferred<unknown>();
     const threads = createDeferred<unknown>();
@@ -296,21 +244,18 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/list");
         return threads.promise;
       },
-      threadResume: async () => {
-        calls.push("thread/resume");
-        return {
-          thread: {
-            id: "thread-idle",
-            cwd: "/repo",
-            status: { type: "idle" },
-            turns: [],
-          },
-        };
+      threadRead: async () => {
+        calls.push("thread/read");
+        return threadReadResponse("thread-idle");
+      },
+      threadTurnsList: async () => {
+        calls.push("thread/turns/list");
+        return { data: [] };
       },
     } as unknown as CodexAppServerClient;
 
     const pendingRead = reader.read(client, "runtime-1");
-    const pendingHistoryLoad = reader.loadThreadForHistory(client, "runtime-1", {
+    const pendingHistoryLoad = reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
@@ -318,9 +263,12 @@ describe("CodexThreadInventoryReader", () => {
     threads.resolve(threadListResponse("thread-idle", "Idle inventory"));
 
     await expect(pendingRead).resolves.toMatchObject({ runtimeId: "runtime-1" });
-    await expect(pendingHistoryLoad).resolves.toMatchObject({
-      id: "thread-idle",
-    });
-    expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
+    await expect(pendingHistoryLoad).resolves.toEqual(threadReadResponse("thread-idle"));
+    expect(calls).toEqual([
+      "thread/loaded/list",
+      "thread/list",
+      "thread/read",
+      "thread/turns/list",
+    ]);
   });
 });

@@ -98,10 +98,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     try {
       await harness.mount();
 
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
-
       const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
       const session = sessionState.sessions[0];
       if (!session) {
@@ -131,7 +127,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("does not add a duplicate session observer when the same live session is loaded twice", async () => {
+  test("does not add a duplicate session observer during startup loading", async () => {
     let subscribeCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -172,10 +168,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     try {
       await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
+      await harness.waitFor((state) => state.sessions.length === 1);
 
       expect(subscribeCalls).toBe(1);
     } finally {
@@ -239,9 +232,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     try {
       await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1");
-      });
       const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
       const session = sessionState.sessions[0];
       if (!session) {
@@ -280,7 +270,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let persistedListCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -298,9 +287,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       persistedListCalls += 1;
       return [];
     };
-    host.agentSessionsListBulk = async () => ({
-      "task-1": [],
-    });
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -387,12 +373,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-in-memory");
       expect(secondSessionId).toBe("external-in-memory");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(0);
+      expect(persistedListCalls).toBe(1);
     } finally {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
@@ -421,7 +406,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }>();
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -438,9 +422,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       persistedListCalls += 1;
       return [];
     };
-    host.agentSessionsListBulk = async () => ({
-      "task-1": [],
-    });
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -525,12 +506,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-concurrent");
       expect(secondSessionId).toBe("external-concurrent");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(0);
+      expect(persistedListCalls).toBe(1);
     } finally {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;

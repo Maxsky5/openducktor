@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
@@ -25,16 +26,23 @@ const repoSettings = {
   },
 } satisfies RepoSettingsInput;
 
+const createSelectedSessionIdentity = (
+  runtimeKind: "codex" | "opencode" | null,
+): AgentSessionIdentity | null =>
+  runtimeKind
+    ? {
+        externalSessionId: "external-1",
+        runtimeKind,
+        workingDirectory: "/repo/worktree",
+      }
+    : null;
+
 describe("resolveSelectedSessionRuntimeTarget", () => {
   test("uses the selected session runtime before repository defaults", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         hasSelectedTask: true,
-        selectedSessionIdentity: {
-          externalSessionId: "external-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
+        selectedSessionIdentity: createSelectedSessionIdentity("opencode"),
         role: "build",
         repoSettings,
         isLoadingRepoSettings: true,
@@ -46,7 +54,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         hasSelectedTask: true,
-        selectedSessionIdentity: null,
+        selectedSessionIdentity: createSelectedSessionIdentity(null),
         role: "build",
         repoSettings: null,
         isLoadingRepoSettings: true,
@@ -58,7 +66,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         hasSelectedTask: true,
-        selectedSessionIdentity: null,
+        selectedSessionIdentity: createSelectedSessionIdentity(null),
         role: "build",
         repoSettings,
         isLoadingRepoSettings: false,
@@ -70,7 +78,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         hasSelectedTask: true,
-        selectedSessionIdentity: null,
+        selectedSessionIdentity: createSelectedSessionIdentity(null),
         role: "qa",
         repoSettings,
         isLoadingRepoSettings: false,
@@ -82,7 +90,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         hasSelectedTask: false,
-        selectedSessionIdentity: null,
+        selectedSessionIdentity: createSelectedSessionIdentity(null),
         role: "build",
         repoSettings: null,
         isLoadingRepoSettings: true,

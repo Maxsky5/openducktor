@@ -44,10 +44,6 @@ const createSessionFixture = (): AgentSessionState => ({
   workingDirectory: "/tmp/repo-a",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState("external-1"),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: null,
@@ -248,16 +244,11 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       await harness.mount();
 
       await harness.run((hook) => {
-        hook.sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp(
-          "session-1",
-          111,
-        );
+        hook.sessionTurnState.timing.recordTurnUserMessageTimestamp("session-1", 111);
       });
 
       expect(
-        harness
-          .getLatest()
-          .sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs("session-1"),
+        harness.getLatest().sessionTurnState.timing.readTurnUserMessageStartedAtMs("session-1"),
       ).toBe(111);
 
       await harness.update({
@@ -266,9 +257,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(
-        harness
-          .getLatest()
-          .sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs("session-1"),
+        harness.getLatest().sessionTurnState.timing.readTurnUserMessageStartedAtMs("session-1"),
       ).toBeUndefined();
     } finally {
       await harness.unmount();

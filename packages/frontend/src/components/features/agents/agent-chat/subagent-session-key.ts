@@ -1,4 +1,4 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type ParentSessionRuntimeIdentity = Pick<
@@ -19,11 +19,11 @@ export const toSubagentSessionIdentity = ({
     return null;
   }
 
-  return {
+  return toAgentSessionIdentity({
     externalSessionId: resolvedExternalSessionId,
     runtimeKind: parentSession.runtimeKind,
     workingDirectory,
-  };
+  });
 };
 
 export const getSubagentMessageSessionIdentity = ({

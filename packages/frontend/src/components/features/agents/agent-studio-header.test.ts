@@ -44,7 +44,6 @@ const buildModel = () => ({
   taskTitle: "Rework Agent Studio UI",
   taskId: "fairnest-97f",
   onOpenTaskDetails: () => {},
-  sessionStatus: "running" as const,
   selectedRole: "spec" as const,
   workflowSteps: [
     {

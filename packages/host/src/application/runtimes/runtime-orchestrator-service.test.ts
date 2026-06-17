@@ -50,15 +50,25 @@ describe("createRuntimeOrchestratorService", () => {
   });
   test("requires a live workspace runtime by kind and canonical repository", async () => {
     const runtime = createRuntime();
+    const workspaceLookups: unknown[] = [];
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
-      runtimeRegistry: createRegistry([runtime]),
+      runtimeRegistry: createRegistry([runtime], {
+        listRuntimesByRepo() {
+          return Effect.dieMessage("unexpected repo runtime list");
+        },
+        findWorkspaceRuntime(input) {
+          workspaceLookups.push(input);
+          return Effect.succeed(runtime);
+        },
+      }),
       taskReader: createTaskStore(),
     });
     await expect(
       Effect.runPromise(service.runtimeRequire({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toEqual(runtime);
+    expect(workspaceLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
   });
   test("fails when requiring a missing workspace runtime", async () => {
     const service = createRuntimeOrchestratorService({
@@ -125,9 +135,9 @@ describe("createRuntimeOrchestratorService", () => {
       startedAt: runtime.startedAt,
     });
   });
-  test("uses keyed repository lookup for runtime startup status", async () => {
+  test("uses registry workspace-runtime lookup for runtime startup status", async () => {
     const runtime = createRuntime();
-    const keyedLookups: unknown[] = [];
+    const workspaceLookups: unknown[] = [];
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -135,9 +145,12 @@ describe("createRuntimeOrchestratorService", () => {
         listRuntimes() {
           return Effect.dieMessage("unexpected full runtime list");
         },
-        listRuntimesByRepo(input) {
-          keyedLookups.push(input);
-          return Effect.succeed([runtime]);
+        listRuntimesByRepo() {
+          return Effect.dieMessage("unexpected repo runtime list");
+        },
+        findWorkspaceRuntime(input) {
+          workspaceLookups.push(input);
+          return Effect.succeed(runtime);
         },
       }),
       taskReader: createTaskStore(),
@@ -150,7 +163,7 @@ describe("createRuntimeOrchestratorService", () => {
       stage: "runtime_ready",
       runtime,
     });
-    expect(keyedLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
+    expect(workspaceLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
   });
   test("reports waiting startup status while runtime ensure is in flight", async () => {
     let resolveEnsure: (runtime: RuntimeInstanceSummary) => void = () => {};

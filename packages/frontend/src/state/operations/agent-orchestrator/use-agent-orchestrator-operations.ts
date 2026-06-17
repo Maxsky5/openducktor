@@ -2,15 +2,17 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
-  idleAgentSessionReadModelLoadState,
+  currentAgentSessionReadModelLoadState,
+  unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionHistoryLoadContextValue,
   AgentSessionReadModelStateContextValue,
-  AgentStateContextValue,
 } from "@/types/state-slices";
 import type { UpdateSession } from "./events/session-event-types";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
@@ -31,6 +33,7 @@ import { isWorkflowAgentSession } from "./support/workflow-session";
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
+  isLoadingTasks: boolean;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -45,15 +48,17 @@ type UseAgentOrchestratorOperationsArgs = {
   dependencies?: AgentOrchestratorDependencies;
 };
 
-type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
+type UseAgentOrchestratorOperationsResult = {
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
+  historyLoad: AgentSessionHistoryLoadContextValue;
 };
 
 export function useAgentOrchestratorOperations({
   activeWorkspace,
   tasks,
+  isLoadingTasks,
   refreshTaskData,
   agentEngine,
   dependencies,
@@ -61,7 +66,16 @@ export function useAgentOrchestratorOperations({
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const workspaceId = activeWorkspace?.workspaceId ?? null;
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
-    useState<AgentSessionReadModelLoadState>(idleAgentSessionReadModelLoadState);
+    useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
+  const currentSessionReadModelLoadState = useMemo(
+    () =>
+      currentAgentSessionReadModelLoadState({
+        workspaceRepoPath,
+        state: sessionReadModelLoadState,
+      }),
+    [sessionReadModelLoadState, workspaceRepoPath],
+  );
   const resolvedDependencies = useMemo(
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
@@ -74,7 +88,7 @@ export function useAgentOrchestratorOperations({
     repoEpochRef,
     sessionStartGateRef,
     sessionObserversRef,
-    sessionTransientState,
+    sessionTurnState,
   } = useOrchestratorSessionState({
     workspaceRepoPath,
     tasks,
@@ -84,7 +98,6 @@ export function useAgentOrchestratorOperations({
     [workspaceRepoPath, queryClient, hostPort],
   );
   const { persistSessionRecord, invalidateSessionStopQueries } = sessionCacheEffects;
-  const { assistantTurnTiming } = sessionTransientState;
   const updateSession = useCallback<UpdateSession>(
     (identity, updater, options) => {
       const shouldPersist = options?.persist === true;
@@ -122,25 +135,17 @@ export function useAgentOrchestratorOperations({
     (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
     [queryClient],
   );
-  const { observeAgentSession, removeAgentSession, removeAgentSessions } = useAgentSessionObservers(
-    {
-      agentEngine,
-      workspaceId,
-      loadRepoPromptOverrides: queryBackedPromptOverrides,
-      sessionObserversRef,
-      sessionTransientState,
-      readSessions: sessionStore.getSessionsSnapshot,
-      readSession: sessionStore.getSessionSnapshot,
-      setSessionCollection: sessionStore.setSessionCollection,
-      updateSession,
-      queryClient,
-      recordTurnActivityTimestamp: assistantTurnTiming.recordTurnActivityTimestamp,
-      recordTurnUserMessageTimestamp: assistantTurnTiming.recordTurnUserMessageTimestamp,
-      resolveTurnDurationMs: assistantTurnTiming.resolveTurnDurationMs,
-      clearTurnDuration: assistantTurnTiming.clearTurnDuration,
-      refreshTaskData,
-    },
-  );
+  const { observeAgentSession, cleanupLocalSessions } = useAgentSessionObservers({
+    agentEngine,
+    workspaceId,
+    loadRepoPromptOverrides: queryBackedPromptOverrides,
+    sessionObserversRef,
+    sessionTurnState,
+    readSession: sessionStore.getSessionSnapshot,
+    updateSession,
+    queryClient,
+    refreshTaskData,
+  });
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
@@ -151,12 +156,14 @@ export function useAgentOrchestratorOperations({
         readSessionCollection: sessionStore.getSessionCollectionSnapshot,
         setSessionCollection: sessionStore.setSessionCollection,
         observeAgentSession,
+        cleanupLocalSessions,
         queryClient,
       }),
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
+      cleanupLocalSessions,
       queryClient,
       repoEpochRef,
       sessionStore,
@@ -190,14 +197,16 @@ export function useAgentOrchestratorOperations({
   );
   useRepoSessionReadModelEffects({
     workspaceRepoPath,
-    tasks,
+    taskIds,
+    isLoadingTasks,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     readSessionCollection: sessionStore.getSessionCollectionSnapshot,
     setSessionCollection: sessionStore.setSessionCollection,
     agentEngine,
     observeAgentSession,
-    setSessionReadModelLoadState,
+    cleanupLocalSessions,
+    commitSessionReadModelLoadState: setSessionReadModelLoadState,
     queryClient,
   });
   const ensureRuntime = useMemo(
@@ -225,9 +234,7 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef,
         sessionStartGateRef,
         sessionObserversRef,
-        sessionTransientState,
-        recordTurnUserMessageTimestamp: assistantTurnTiming.recordTurnUserMessageTimestamp,
-        readTurnUserMessageStartedAtMs: assistantTurnTiming.readTurnUserMessageStartedAtMs,
+        sessionTurnState,
         updateSession,
         observeAgentSession,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
@@ -257,46 +264,40 @@ export function useAgentOrchestratorOperations({
       sessionObserversRef,
       sessionStore,
       sessionStartGateRef,
-      sessionTransientState,
+      sessionTurnState,
       taskRef,
-      assistantTurnTiming.recordTurnUserMessageTimestamp,
-      assistantTurnTiming.readTurnUserMessageStartedAtMs,
       updateSession,
       workspaceId,
       workspaceRepoPath,
     ],
   );
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
-    const readModelState = { sessionReadModelLoadState };
-    const operations = createOrchestratorPublicOperations({
-      loadAgentSessions,
-      loadAgentSessionHistory: async (session) => {
+    const readModelState = {
+      sessionReadModelLoadState: currentSessionReadModelLoadState,
+      refreshTaskSessions: loadAgentSessions,
+    };
+    const historyLoad = {
+      loadSessionHistory: async (session: AgentSessionIdentity) => {
         await loadAgentSessionHistory(session);
       },
+    };
+    const operations = createOrchestratorPublicOperations({
       agentEngine,
-      removeAgentSession,
-      removeAgentSessions,
       sessionActions,
     });
 
     return {
-      get sessions() {
-        return sessionStore.getSessionsSnapshot();
-      },
-      ...readModelState,
-      ...operations,
       sessionStore,
       operations,
       readModelState,
+      historyLoad,
     };
   }, [
-    sessionReadModelLoadState,
+    currentSessionReadModelLoadState,
     sessionStore,
     agentEngine,
-    loadAgentSessions,
     loadAgentSessionHistory,
-    removeAgentSessions,
-    removeAgentSession,
+    loadAgentSessions,
     sessionActions,
   ]);
 }

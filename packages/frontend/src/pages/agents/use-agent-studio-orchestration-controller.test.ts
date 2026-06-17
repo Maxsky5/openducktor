@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   createAgentSessionFixture,
@@ -79,6 +80,7 @@ const baseActiveSessionRuntimeData = {
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
+  error: null,
 };
 
 const baseArgs: BuildArgs = {
@@ -91,10 +93,10 @@ const baseArgs: BuildArgs = {
     selectedTask: task,
     sessionsForTask: [sessionSummary],
     allSessionSummaries: [sessionSummary],
-    activeSession: session,
-    activeSessionRuntimeData: baseActiveSessionRuntimeData,
+    selectedSessionIdentity: toAgentSessionIdentity(session),
+    loadedSession: session,
+    sessionRuntimeData: baseActiveSessionRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     transcriptState: createSelectedSessionTranscriptStateFixture(),
     documents: baseDocuments,
@@ -138,7 +140,7 @@ const baseArgs: BuildArgs = {
     handleSelectModel,
     handleSelectVariant,
     agentAccentColorsByProfileId: {},
-    activeSessionContextUsage: null,
+    selectedSessionContextUsage: null,
   },
   chatSettings: {
     showThinkingMessages: true,
@@ -158,7 +160,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
-    expect(mapped.selectedSession.runtime.transcriptState).toEqual({
+    expect(mapped.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
@@ -215,13 +217,16 @@ describe("buildAgentStudioPageModelsArgs", () => {
       ...baseArgs,
       selectedSession: {
         ...baseArgs.selectedSession,
-        runtime: {
-          ...baseArgs.selectedSession.runtime,
-          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "failed" }),
-        },
+        transcriptState: createSelectedSessionTranscriptStateFixture({
+          kind: "failed",
+          message: "Selected session failed",
+        }),
       },
     });
 
-    expect(failed.selectedSession.runtime.transcriptState).toEqual({ kind: "failed" });
+    expect(failed.selectedSession.transcriptState).toEqual({
+      kind: "failed",
+      message: "Selected session failed",
+    });
   });
 });

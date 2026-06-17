@@ -143,7 +143,6 @@ describe("agent-chat-thread windowing helpers", () => {
   test("buildAgentChatWindowRowsState does not append synthetic thinking rows", () => {
     const session = buildSession({
       messages: [],
-      draftAssistantText: "",
       pendingQuestions: [],
       status: "running",
     });

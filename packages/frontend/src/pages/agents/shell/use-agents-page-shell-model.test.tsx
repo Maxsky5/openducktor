@@ -1,11 +1,22 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ReactElement } from "react";
+import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import * as appStateContexts from "@/state/app-state-contexts";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  AgentOperationsContext,
+  AgentSessionsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+  TasksStateContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type {
+  AgentOperationsContextValue,
+  ChecksStateContextValue,
   RepoSettingsInput,
   TasksStateContextValue,
   WorkspaceStateContextValue,
@@ -17,14 +28,10 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 
 enableReactActEnvironment();
-
-const actualReactRouterDomModule = await import("react-router-dom");
-const actualAppStateContextsModule = appStateContexts;
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
@@ -41,7 +48,7 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
-const handleResolveRebaseConflict = mock(async () => {});
+const handleResolveRebaseConflict = mock(async () => true);
 
 type QuerySyncState = {
   taskIdParam: string;
@@ -63,13 +70,15 @@ type SelectionState = {
     selectedTask: typeof task | null;
     sessionsForTask: SessionFixture[];
     selectedSessionSummary: SessionFixture | null;
-    activeSession: SessionFixture | null;
+    loadedSession: SessionFixture | null;
+    selectedSessionIdentity: ReturnType<typeof sessionIdentity> | null;
+    selectedSessionActivityState: null;
     sessionRuntimeData: {
       modelCatalog: null;
       todos: [];
       isLoadingModelCatalog: false;
+      error: null;
     };
-    sessionRuntimeDataError: null;
     runtimeReadiness: {
       readinessState: "ready";
       isReady: true;
@@ -109,7 +118,10 @@ type OrchestrationState = {
     rightPanelToggleModel: { label: string };
   };
 };
-type OrchestrationControllerArgs = Parameters<typeof useAgentStudioOrchestrationController>[0];
+type OrchestrationControllerArgs = {
+  selection: SelectionState & { isLoadingTasks: boolean };
+  draftStateKey: string;
+};
 
 type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
@@ -123,7 +135,10 @@ type AgentsPageShellModelState = {
   modalContent: AgentsPageModalContentModel;
 };
 
-let workspaceState = {
+let workspaceState: Pick<
+  WorkspaceStateContextValue,
+  "activeWorkspace" | "activeBranch" | "branches"
+> = {
   activeWorkspace: {
     workspaceId: "workspace-repo",
     workspaceName: "Repo",
@@ -134,7 +149,7 @@ let workspaceState = {
     defaultWorktreeBasePath: "/tmp/default-worktrees",
     effectiveWorktreeBasePath: "/tmp/default-worktrees",
   },
-  activeBranch: "main",
+  activeBranch: { name: "main", detached: false },
   branches: [],
 };
 let checksState = {
@@ -167,9 +182,7 @@ let tasksState: TasksStateContextValue = {
   pendingMergedPullRequest: null,
 };
 let agentSessions = [createSession()];
-let agentSessionReadModelState = {
-  sessionReadModelLoadState: { kind: "idle" as const },
-};
+let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: {
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
@@ -182,19 +195,9 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
-let agentOperations = {
-  loadAgentSessions: mock(async () => undefined),
-  loadAgentSessionHistory: mock(async () => undefined),
-  readSessionFileSearch: mock(async () => []),
-  readSessionModelCatalog: mock(async () => ({
-    providers: [],
-    models: [],
-    variants: [],
-    profiles: [],
-    defaultModelsByProvider: {},
-  })),
-  readSessionSlashCommands: mock(async () => ({ commands: [] })),
+let agentOperations: AgentOperationsContextValue = {
   readSessionTodos: mock(async () => []),
+  readSessionHistory: mock(async () => []),
   startAgentSession: mock(async () => sessionIdentity("session-1")),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
@@ -222,13 +225,15 @@ let selectionState: SelectionState = {
     selectedTask: task,
     sessionsForTask: [initialSelectionSession],
     selectedSessionSummary: initialSelectionSession,
-    activeSession: initialSelectionSession,
+    loadedSession: initialSelectionSession,
+    selectedSessionIdentity: null,
+    selectedSessionActivityState: null,
     sessionRuntimeData: {
       modelCatalog: null,
       todos: [],
       isLoadingModelCatalog: false,
+      error: null,
     },
-    sessionRuntimeDataError: null,
     runtimeReadiness: {
       readinessState: "ready",
       isReady: true,
@@ -307,113 +312,191 @@ let orchestrationState: OrchestrationState = {
   },
 };
 let orchestrationControllerArgs: OrchestrationControllerArgs[] = [];
+let lastOrchestrationSelectionSource: SelectionState | null = null;
+let lastOrchestrationSelectionLoadingTasks: boolean | null = null;
+let lastOrchestrationSelection: OrchestrationControllerArgs["selection"] | null = null;
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
+const syncAgentSessionsStore = (): void => {
+  sessionStore.setSessionCollection(createAgentSessionCollection(agentSessions));
+};
+
+const workspaceStateValue = (): WorkspaceStateContextValue => ({
+  isSwitchingWorkspace: false,
+  isLoadingBranches: false,
+  isSwitchingBranch: false,
+  branchSyncDegraded: false,
+  workspaces: [],
+  addWorkspace: async () => undefined,
+  selectWorkspace: async () => undefined,
+  reorderWorkspaces: async () => undefined,
+  refreshBranches: async () => undefined,
+  switchBranch: async () => undefined,
+  loadRepoSettings: async () => {
+    if (!repoSettingsState.repoSettings) {
+      throw new Error("repo settings are not available");
+    }
+    return repoSettingsState.repoSettings;
+  },
+  saveRepoSettings: async () => undefined,
+  loadSettingsSnapshot: async () => {
+    throw new Error("loadSettingsSnapshot is not used in this test");
+  },
+  detectGithubRepository: async () => null,
+  saveGlobalGitConfig: async () => undefined,
+  saveSettingsSnapshot: async () => undefined,
+  ...workspaceState,
+});
+
+const checksStateValue = (): ChecksStateContextValue => ({
+  runtimeCheck: null,
+  taskStoreCheck: null,
+  runtimeCheckFailureKind: null,
+  taskStoreCheckFailureKind: null,
+  ...checksState,
+});
+
+const runtimeDefinitionsValue = () => ({
+  runtimeDefinitions: [],
+  availableRuntimeDefinitions: [],
+  agentRuntimes: {},
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  refreshRuntimeDefinitions: async () => [],
+  loadRepoRuntimeCatalog: async () => ({
+    providers: [],
+    models: [],
+    variants: [],
+    profiles: [],
+    defaultModelsByProvider: {},
+  }),
+  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+  loadRepoRuntimeSkills: async () => ({ skills: [] }),
+  loadRepoRuntimeFileSearch: async () => [],
+});
+
+const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
+  <WorkspaceStateContext.Provider value={workspaceStateValue()}>
+    <ChecksStateContext.Provider value={checksStateValue()}>
+      <TasksStateContext.Provider value={tasksState}>
+        <AgentOperationsContext.Provider value={agentOperations}>
+          <AgentSessionsContext.Provider value={sessionStore}>
+            <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+              {children}
+            </RuntimeDefinitionsContext.Provider>
+          </AgentSessionsContext.Provider>
+        </AgentOperationsContext.Provider>
+      </TasksStateContext.Provider>
+    </ChecksStateContext.Provider>
+  </WorkspaceStateContext.Provider>
+);
+
 const mockedModuleResets = [
-  ["react-router-dom", async () => actualReactRouterDomModule],
-  ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
-  ["@/state/app-state-contexts", async () => actualAppStateContextsModule],
-  [
-    "../query-sync/use-agent-studio-query-sync",
-    () => import("../query-sync/use-agent-studio-query-sync"),
-  ],
-  [
-    "../use-agent-studio-selection-controller",
-    () => import("../use-agent-studio-selection-controller"),
-  ],
   ["../use-agent-studio-repo-settings", () => import("../use-agent-studio-repo-settings")],
+  ["./use-agents-page-route-session-model", () => import("./use-agents-page-route-session-model")],
   [
-    "../query-sync/use-agent-studio-query-session-sync",
-    () => import("../query-sync/use-agent-studio-query-session-sync"),
+    "./use-agents-page-orchestration-shell-model",
+    () => import("./use-agents-page-orchestration-shell-model"),
   ],
-  [
-    "../use-agent-studio-orchestration-controller",
-    () => import("../use-agent-studio-orchestration-controller"),
-  ],
-  [
-    "../use-agent-studio-rebase-conflict-resolution",
-    () => import("../use-agent-studio-rebase-conflict-resolution"),
-  ],
+  ["./use-agent-studio-right-panel-bridge", () => import("./use-agent-studio-right-panel-bridge")],
 ] as const;
 
 const registerModuleMocks = (): void => {
-  const stateModule = {
-    AppStateProvider: ({ children }: { children: ReactElement }) => children,
-    useWorkspaceState: () => workspaceState,
-    useChecksState: () => checksState,
-    useTasksState: () => tasksState,
-    useAgentOperations: () => agentOperations,
-    useAgentSessionReadModelState: () => agentSessionReadModelState,
-    useAgentSessions: () => agentSessions,
-    useAgentSessionSummaries: () =>
-      agentSessions.map((entry) => ({
-        externalSessionId: entry.externalSessionId,
-        taskId: entry.taskId,
-        role: entry.role,
-        status: entry.status,
-        startedAt: entry.startedAt,
-        workingDirectory: entry.workingDirectory,
-        pendingApprovals: entry.pendingApprovals,
-        pendingQuestions: entry.pendingQuestions,
-        selectedModel: entry.selectedModel,
-        runtimeKind: entry.runtimeKind,
-      })),
-    useAgentSession: (externalSessionId: string | null) =>
-      externalSessionId
-        ? (agentSessions.find((entry) => entry.externalSessionId === externalSessionId) ?? null)
-        : null,
-    useAgentState: () => ({
-      sessions: agentSessions,
-      ...agentSessionReadModelState,
-      ...agentOperations,
+  mock.module("./use-agents-page-route-session-model", () => ({
+    useAgentsPageRouteSessionModel: () => ({
+      navigationPersistenceError: querySyncState.navigationPersistenceError,
+      retryNavigationPersistence: querySyncState.retryNavigationPersistence,
+      scheduleQueryUpdate: querySyncState.updateQuery,
+      selection: selectionState,
+      scheduleSelectionIntent: mock(() => {}),
     }),
-    useSpecState: () => {
-      throw new Error("useSpecState is not used in this test");
-    },
-  };
-
-  mock.module("react-router-dom", () => ({
-    useNavigationType: () => "PUSH",
-    useSearchParams: () => [new URLSearchParams(), mock(() => {})],
-  }));
-
-  mock.module("@/state/app-state-provider", () => stateModule);
-
-  mock.module("@/state/app-state-contexts", () => ({
-    ...appStateContexts,
-    useDelegationEventsContext: () => ({
-      setEvents: mock(() => {}),
-      runCompletionSignal: null,
-      setRunCompletionSignal: mock(() => {}),
-    }),
-  }));
-
-  mock.module("../query-sync/use-agent-studio-query-sync", () => ({
-    useAgentStudioQuerySync: () => querySyncState,
-  }));
-
-  mock.module("../use-agent-studio-selection-controller", () => ({
-    useAgentStudioSelectionController: () => selectionState,
   }));
 
   mock.module("../use-agent-studio-repo-settings", () => ({
     useAgentStudioRepoSettings: () => repoSettingsState,
   }));
 
-  mock.module("../query-sync/use-agent-studio-query-session-sync", () => ({
-    useAgentStudioQuerySessionSync: () => undefined,
-  }));
+  mock.module("./use-agents-page-orchestration-shell-model", () => ({
+    useAgentsPageOrchestrationShellModel: ({
+      isForegroundLoadingTasks,
+      routeSession,
+    }: {
+      isForegroundLoadingTasks: boolean;
+      routeSession: { selection: SelectionState };
+    }) => {
+      if (
+        lastOrchestrationSelectionSource !== routeSession.selection ||
+        lastOrchestrationSelectionLoadingTasks !== isForegroundLoadingTasks
+      ) {
+        lastOrchestrationSelectionSource = routeSession.selection;
+        lastOrchestrationSelectionLoadingTasks = isForegroundLoadingTasks;
+        lastOrchestrationSelection = {
+          ...routeSession.selection,
+          isLoadingTasks: isForegroundLoadingTasks,
+        };
+      }
 
-  mock.module("../use-agent-studio-orchestration-controller", () => ({
-    useAgentStudioOrchestrationController: (args: OrchestrationControllerArgs) => {
-      orchestrationControllerArgs.push(args);
-      return orchestrationState;
+      const loadedSession = routeSession.selection.view.loadedSession;
+      const draftStateKey = [
+        routeSession.selection.view.taskId,
+        routeSession.selection.view.role,
+        loadedSession ? agentSessionIdentityKey(loadedSession) : "new",
+      ].join(":");
+
+      if (!lastOrchestrationSelection) {
+        throw new Error("Missing orchestration selection");
+      }
+
+      orchestrationControllerArgs.push({
+        selection: lastOrchestrationSelection,
+        draftStateKey,
+      });
+
+      return {
+        orchestration: orchestrationState,
+        orchestrationSelection: lastOrchestrationSelection,
+        handleResolveRebaseConflict,
+        agentStudioHeaderModel: orchestrationState.agentStudioHeaderModel,
+      };
     },
   }));
 
-  mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
-    useAgentStudioRebaseConflictResolution: () => ({
-      handleResolveRebaseConflict,
+  mock.module("./use-agent-studio-right-panel-bridge", () => ({
+    useAgentStudioRightPanelBridge: ({
+      selection,
+      panel,
+      documentsModel,
+    }: {
+      selection: OrchestrationControllerArgs["selection"];
+      panel: OrchestrationState["rightPanel"];
+      documentsModel: OrchestrationState["agentStudioWorkspaceSidebarModel"];
+    }) => ({
+      isRightPanelVisible: panel.isPanelOpen,
+      rightPanelBridge: {
+        buildWorktreeRefresh: {
+          panelKind: panel.panelKind,
+          isPanelOpen: panel.isPanelOpen,
+          selectedView: {
+            role: selection.view.role,
+            loadedSession: selection.view.loadedSession,
+          },
+        },
+        rightPanel: {
+          activeWorkspace: workspaceState.activeWorkspace,
+          branches: workspaceState.branches,
+          activeBranch: workspaceState.activeBranch,
+          selectedView: selection.view,
+          panelKind: panel.panelKind,
+          isPanelOpen: panel.isPanelOpen,
+          documentsModel,
+          repoSettings: orchestrationState.repoSettings,
+          setTaskTargetBranch: tasksState.setTaskTargetBranch,
+          detectingPullRequestTaskId: tasksState.detectingPullRequestTaskId,
+          onDetectPullRequest: tasksState.syncPullRequests,
+          onResolveGitConflict: handleResolveRebaseConflict,
+          onGitConflictQuickActionContextChange: mock(() => {}),
+        },
+      } satisfies AgentStudioRightPanelBridgeModel,
     }),
   }));
 };
@@ -433,7 +516,7 @@ beforeEach(async () => {
       defaultWorktreeBasePath: "/tmp/default-worktrees",
       effectiveWorktreeBasePath: "/tmp/default-worktrees",
     },
-    activeBranch: "main",
+    activeBranch: { name: "main", detached: false },
     branches: [],
   };
   checksState = {
@@ -467,26 +550,15 @@ beforeEach(async () => {
   };
   const session = createSession();
   agentSessions = [session];
-  agentSessionReadModelState = {
-    sessionReadModelLoadState: { kind: "idle" },
-  };
+  sessionStore = createAgentSessionsStore("/repo");
+  syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
     isLoadingRepoSettings: false,
   };
   agentOperations = {
-    loadAgentSessions: mock(async () => undefined),
-    loadAgentSessionHistory: mock(async () => undefined),
-    readSessionFileSearch: mock(async () => []),
-    readSessionModelCatalog: mock(async () => ({
-      providers: [],
-      models: [],
-      variants: [],
-      profiles: [],
-      defaultModelsByProvider: {},
-    })),
-    readSessionSlashCommands: mock(async () => ({ commands: [] })),
     readSessionTodos: mock(async () => []),
+    readSessionHistory: mock(async () => []),
     startAgentSession: mock(async () => sessionIdentity("session-1")),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
@@ -513,13 +585,15 @@ beforeEach(async () => {
       selectedTask: task,
       sessionsForTask: [session],
       selectedSessionSummary: session,
-      activeSession: session,
+      loadedSession: session,
+      selectedSessionIdentity: null,
+      selectedSessionActivityState: null,
       sessionRuntimeData: {
         modelCatalog: null,
         todos: [],
         isLoadingModelCatalog: false,
+        error: null,
       },
-      sessionRuntimeDataError: null,
       runtimeReadiness: {
         readinessState: "ready",
         isReady: true,
@@ -563,6 +637,9 @@ beforeEach(async () => {
     },
   };
   orchestrationControllerArgs = [];
+  lastOrchestrationSelectionSource = null;
+  lastOrchestrationSelectionLoadingTasks = null;
+  lastOrchestrationSelection = null;
 });
 
 afterEach(async () => {
@@ -570,7 +647,9 @@ afterEach(async () => {
 });
 
 const createHookHarness = () =>
-  createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined);
+  createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined, {
+    wrapper: AppStateTestWrapper,
+  });
 
 describe("useAgentsPageShellModel", () => {
   test("surfaces hook state and wires modal/controller models", async () => {
@@ -611,9 +690,6 @@ describe("useAgentsPageShellModel", () => {
         orchestrationState.agentStudioWorkspaceSidebarModel,
       );
       expect(state.modalContent.sessionStartModal).toBe(orchestrationState.sessionStartModal);
-      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(
-        tasksState.tasks,
-      );
       expect(state.modalContent.humanReviewFeedbackModal).toBe(
         orchestrationState.humanReviewFeedbackModal,
       );
@@ -665,7 +741,7 @@ describe("useAgentsPageShellModel", () => {
         taskId: "",
         selectedTask: null,
         selectedSessionSummary: null,
-        activeSession: null,
+        loadedSession: null,
         sessionsForTask: [],
       },
       taskId: "",
@@ -699,15 +775,19 @@ describe("useAgentsPageShellModel", () => {
       const secondSelection = orchestrationControllerArgs.at(-1)?.selection;
       expect(secondSelection).toBe(firstSelection);
 
-      tasksState = {
-        ...tasksState,
-        isForegroundLoadingTasks: true,
+      selectionState = {
+        ...selectionState,
+        view: {
+          ...selectionState.view,
+          taskId: "task-2",
+        },
+        taskId: "task-2",
       };
 
       await harness.update(undefined);
       const thirdSelection = orchestrationControllerArgs.at(-1)?.selection;
       expect(thirdSelection).not.toBe(firstSelection);
-      expect(thirdSelection?.isLoadingTasks).toBe(true);
+      expect(thirdSelection?.view.taskId).toBe("task-2");
     } finally {
       await harness.unmount();
     }

@@ -1,4 +1,5 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-health";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -25,7 +26,7 @@ export function useSessionTranscriptSurfaceModel({
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
-  const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
+  const { replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const liveSession = useAgentSession(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
@@ -48,7 +49,6 @@ export function useSessionTranscriptSurfaceModel({
     target,
     repoReadinessState: runtimeReadiness.readinessState,
     liveSession,
-    readSessionHistory,
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     session: sessionHistory.session,
@@ -59,16 +59,13 @@ export function useSessionTranscriptSurfaceModel({
   });
 
   const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({
-    isOpen,
-    hasWorkspace,
-    hasTarget: target !== null,
-    hasSession: transcriptInteractions.session !== null,
     transcriptState: sessionHistory.transcriptState,
-    historyError: sessionHistory.historyError,
     chatSettingsError,
   });
+  const sessionKey = target ? agentSessionIdentityKey(target) : null;
 
   const model = useAgentChatSurfaceModel({
+    sessionKey,
     session: transcriptInteractions.session,
     transcriptState: sessionHistory.transcriptState,
     chatSettings,

@@ -1,7 +1,5 @@
 import { toast } from "sonner";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { hasAgentSessionStateChanges } from "@/state/agent-session-collection";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionEventBatcher,
   isImmediateSessionEvent,
@@ -106,6 +104,53 @@ const isObservedSessionMounted = ({
 }: Pick<ObserveAgentSessionParams, "sessionRef" | "readSession">): boolean =>
   readSession(sessionRef) !== null;
 
+const applyQueuedSessionEvents = (
+  context: ObserveAgentSessionParams,
+  readyEvents: readonly QueuedSessionEvent[],
+): void => {
+  let nextSession = context.readSession(context.sessionRef);
+  if (!nextSession) {
+    return;
+  }
+
+  const queuedContext = createSessionEventContext({
+    ...context,
+    readSession: (identity) => {
+      if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
+        return nextSession;
+      }
+      return context.readSession(identity);
+    },
+    updateSession: (targetSessionIdentity, updater, options) => {
+      if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
+        return context.updateSession(targetSessionIdentity, updater, options);
+      }
+      if (options?.persist === true) {
+        throw new Error(
+          `Queued session event for '${context.sessionRef.externalSessionId}' requested durable persistence.`,
+        );
+      }
+      if (!nextSession) {
+        return null;
+      }
+
+      nextSession = updater(nextSession);
+      return nextSession;
+    },
+  });
+
+  for (const queuedEvent of readyEvents) {
+    handleSessionEvent(queuedContext, queuedEvent);
+  }
+
+  const committedSession = nextSession;
+  if (!committedSession) {
+    return;
+  }
+
+  context.updateSession(context.sessionRef, () => committedSession);
+};
+
 export const listenToAgentSessionEvents = async (
   context: ObserveAgentSessionParams,
 ): Promise<() => void> => {
@@ -141,65 +186,7 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    let bufferedSession: AgentSessionState | null = context.readSession(context.sessionRef);
-    let shouldPersistBufferedSession = false;
-    let hasBufferedSessionUpdate = false;
-    const batchedHandlerContext = createSessionEventContext({
-      ...context,
-      readSession: (identity) => {
-        if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
-          return bufferedSession;
-        }
-        return context.readSession(identity);
-      },
-      updateSession: (targetSessionIdentity, updater, options) => {
-        if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
-          return context.updateSession(targetSessionIdentity, updater, options);
-        }
-
-        const current = bufferedSession;
-        if (!current) {
-          return null;
-        }
-
-        const next = updater(current);
-        if (next === current || !hasAgentSessionStateChanges(current, next)) {
-          return null;
-        }
-
-        hasBufferedSessionUpdate = true;
-        if (options?.persist === true) {
-          shouldPersistBufferedSession = true;
-        }
-        bufferedSession = next;
-        return next;
-      },
-    });
-
-    for (const queuedEvent of readyEvents) {
-      handleSessionEvent(batchedHandlerContext, queuedEvent);
-    }
-
-    if (!hasBufferedSessionUpdate) {
-      if (queuedEvents.length > 0) {
-        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-      }
-      return;
-    }
-
-    const nextSession = bufferedSession;
-    if (!nextSession) {
-      if (queuedEvents.length > 0) {
-        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-      }
-      return;
-    }
-
-    context.updateSession(
-      context.sessionRef,
-      () => nextSession,
-      shouldPersistBufferedSession ? { persist: true } : undefined,
-    );
+    applyQueuedSessionEvents(context, readyEvents);
 
     if (queuedEvents.length > 0) {
       scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);

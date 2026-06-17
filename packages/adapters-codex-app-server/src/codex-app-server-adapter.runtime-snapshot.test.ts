@@ -82,7 +82,7 @@ class RestoreIdleThreadListActiveTransport extends MutableThreadListTransport {
   }
 }
 
-class HistoryOnlyIdleTransport extends RecordingTransport {
+class ReadOnlyHistoryTransport extends RecordingTransport {
   includeThread = true;
   loaded = false;
   threadStatus: Record<string, unknown> = { type: "idle" };
@@ -113,9 +113,8 @@ class HistoryOnlyIdleTransport extends RecordingTransport {
         backwardsCursor: null,
       } as Response;
     }
-    if (request.method === "thread/resume") {
+    if (request.method === "thread/read") {
       this.calls.push(request);
-      this.loaded = true;
       return {
         thread: {
           id: "thread-idle",
@@ -138,8 +137,14 @@ class HistoryOnlyIdleTransport extends RecordingTransport {
             },
           ],
         },
-        startedAt: "2026-05-07T00:00:10.000Z",
       } as Response;
+    }
+    if (request.method === "thread/turns/list") {
+      this.calls.push(request);
+      return { data: [], nextCursor: null } as Response;
+    }
+    if (request.method === "thread/resume") {
+      throw new Error("Read-only history must not resume Codex threads.");
     }
     return super.request<Response>(request);
   }
@@ -315,8 +320,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
   });
 
-  test("does not treat a history-only idle Codex resume as running runtime snapshot", async () => {
-    const transport = new HistoryOnlyIdleTransport("runtime-live", false);
+  test("does not create runtime presence while reading Codex history", async () => {
+    const transport = new ReadOnlyHistoryTransport("runtime-live", false);
     const { adapter } = createHarness({
       transportFactory: mock(() => transport),
     });
@@ -327,7 +332,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
     });
-    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
+    expect(transport.calls.some((call) => call.method === "thread/read")).toBe(true);
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
     transport.threadStatus = { type: "active", activeFlags: [] };
 
     await expect(
@@ -338,8 +344,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         externalSessionId: "thread-idle",
       }),
     ).resolves.toMatchObject({
-      availability: "runtime",
-      classification: "idle",
+      availability: "missing",
     });
     await expect(
       adapter.listSessionRuntimeSnapshots({
@@ -347,29 +352,12 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         runtimeKind: "codex",
         directories: ["/repo"],
       }),
-    ).resolves.toContainEqual(
-      expect.objectContaining({
-        classification: "idle",
-        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-      }),
-    );
-    await expect(
-      adapter.listSessionRuntimeSnapshots({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        directories: ["/repo"],
-      }),
-    ).resolves.toContainEqual(
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-        classification: "idle",
-      }),
-    );
+    ).resolves.toEqual([]);
     expect(localSessions(adapter).has("thread-idle")).toBe(false);
   });
 
-  test("keeps real pending input visible after a history-only Codex resume", async () => {
-    const transport = new HistoryOnlyIdleTransport("runtime-live", false);
+  test("keeps real pending input visible after a read-only Codex history load", async () => {
+    const transport = new ReadOnlyHistoryTransport("runtime-live", false);
     const { adapter } = createHarness({
       transportFactory: mock(() => transport),
     });
@@ -380,7 +368,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
     });
-    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
+    transport.loaded = true;
     transport.threadStatus = { type: "active", activeFlags: ["waitingOnUserInput"] };
 
     await expect(
@@ -393,47 +382,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ).resolves.toMatchObject({
       availability: "runtime",
       classification: "waiting_for_question",
-    });
-  });
-
-  test("clears a history-only idle marker when the Codex thread disappears", async () => {
-    const transport = new HistoryOnlyIdleTransport("runtime-live", false);
-    const { adapter } = createHarness({
-      transportFactory: mock(() => transport),
-    });
-
-    await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "thread-idle",
-    });
-    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
-
-    transport.loaded = false;
-    transport.includeThread = false;
-    await expect(
-      adapter.listSessionRuntimeSnapshots({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        directories: ["/repo"],
-      }),
-    ).resolves.toEqual([]);
-
-    transport.loaded = true;
-    transport.includeThread = true;
-    transport.threadStatus = { type: "active", activeFlags: [] };
-
-    await expect(
-      adapter.readSessionRuntimeSnapshot({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-idle",
-      }),
-    ).resolves.toMatchObject({
-      availability: "runtime",
-      classification: "running",
     });
   });
 

@@ -1,59 +1,27 @@
 import {
-  type AgentSessionActivityState,
-  getAgentSessionActivityStateFromSession,
-} from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
+  areAgentSessionCollectionsEquivalent,
   emptyAgentSessionCollection,
   getAgentSession,
   hasAgentSessionStateChanges,
-  listAgentSessions,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
-import type {
-  AgentSessionIdentity,
-  AgentSessionState,
-  WorkflowAgentSessionState,
-} from "@/types/agent-orchestrator";
-import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
+import {
+  type AgentActivitySessionsSnapshot,
+  type AgentSessionSummary,
+  createAgentSessionSnapshots,
+  createEmptyAgentSessionSnapshots,
+} from "@/state/agent-session-snapshots";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type AgentSessionSummary = Pick<
-  AgentSessionState,
-  "externalSessionId" | "title" | "taskId" | "role" | "status" | "startedAt" | "workingDirectory"
-> & {
-  activityState: AgentSessionActivityState;
-  pendingApprovalCount: number;
-  pendingQuestionCount: number;
-  selectedModel: AgentSessionState["selectedModel"];
-  runtimeKind: AgentSessionState["runtimeKind"];
-};
-
-export type WorkflowAgentSessionSummary = AgentSessionSummary &
-  Pick<WorkflowAgentSessionState, "role">;
-
-export const isWorkflowAgentSessionSummary = (
-  session: AgentSessionSummary | null | undefined,
-): session is WorkflowAgentSessionSummary => {
-  if (!session) {
-    return false;
-  }
-
-  return session.role !== null;
-};
-
-export type AgentActivitySessionSummary = Pick<
-  WorkflowAgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "startedAt"
-> & {
-  activityState: AgentSessionActivityState;
-};
-
-export type AgentActivitySessionsSnapshot = {
-  workspaceRepoPath: string | null;
-  sessions: AgentActivitySessionSummary[];
-};
+export {
+  type AgentActivitySessionsSnapshot,
+  type AgentSessionSummary,
+  isWorkflowAgentSessionSummary,
+  toAgentSessionSummary,
+  type WorkflowAgentSessionSummary,
+} from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
 
@@ -61,7 +29,6 @@ export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getSessionsSnapshot: () => AgentSessionState[];
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
-  getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionCollectionSnapshot: () => AgentSessionCollection;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
@@ -73,108 +40,12 @@ export type AgentSessionsStore = {
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
-const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
-  left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
-
-export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
-  externalSessionId: session.externalSessionId,
-  ...(session.title ? { title: session.title } : {}),
-  taskId: session.taskId,
-  role: session.role,
-  status: session.status,
-  activityState: getAgentSessionActivityStateFromSession(session),
-  startedAt: session.startedAt,
-  workingDirectory: session.workingDirectory,
-  selectedModel: session.selectedModel,
-  runtimeKind: session.runtimeKind,
-  pendingApprovalCount: session.pendingApprovals.length,
-  pendingQuestionCount: session.pendingQuestions.length,
-});
-
-export const toAgentActivitySessionSummary = (
-  session: AgentSessionState,
-): AgentActivitySessionSummary => {
-  if (!shouldIncludeAgentSessionInActivity(session)) {
-    throw new Error(`Session '${session.externalSessionId}' is not a workflow session`);
-  }
-
-  return {
-    externalSessionId: session.externalSessionId,
-    runtimeKind: session.runtimeKind,
-    workingDirectory: session.workingDirectory,
-    taskId: session.taskId,
-    role: session.role,
-    startedAt: session.startedAt,
-    activityState: getAgentSessionActivityStateFromSession(session),
-  };
-};
-
-const areSummariesEquivalent = (
-  left: AgentSessionSummary | undefined,
-  right: AgentSessionSummary,
-): boolean => {
-  return (
-    left !== undefined &&
-    agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
-    left?.title === right.title &&
-    left.taskId === right.taskId &&
-    left.role === right.role &&
-    left.status === right.status &&
-    left.activityState === right.activityState &&
-    left.startedAt === right.startedAt &&
-    left.workingDirectory === right.workingDirectory &&
-    left.selectedModel === right.selectedModel &&
-    left.runtimeKind === right.runtimeKind &&
-    left.pendingApprovalCount === right.pendingApprovalCount &&
-    left.pendingQuestionCount === right.pendingQuestionCount
-  );
-};
-
-const areActivitySummariesEquivalent = (
-  left: AgentActivitySessionSummary | undefined,
-  right: AgentActivitySessionSummary,
-): boolean => {
-  return (
-    left !== undefined &&
-    agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
-    left.taskId === right.taskId &&
-    left.role === right.role &&
-    left.runtimeKind === right.runtimeKind &&
-    left.workingDirectory === right.workingDirectory &&
-    left.startedAt === right.startedAt &&
-    left.activityState === right.activityState
-  );
-};
-
-const areArraysReferenceEqual = <T>(left: T[], right: T[]): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const createActivitySnapshot = (
-  workspaceRepoPath: string | null,
-  sessions: AgentActivitySessionSummary[],
-): AgentActivitySessionsSnapshot => ({
-  workspaceRepoPath,
-  sessions,
-});
-
 export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
-  let sessions: AgentSessionState[] = [];
-  let sessionSummaries: AgentSessionSummary[] = [];
-  let activitySessionSummaries: AgentActivitySessionSummary[] = [];
-  let activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
+  let snapshots = createEmptyAgentSessionSnapshots(workspaceRepoPath);
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
@@ -185,54 +56,16 @@ export const createAgentSessionsStore = (
 
   const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
     const nextCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-    if (nextCollection === sessionCollection) {
+    if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return;
     }
 
-    const previousSummaryByIdentity = new Map(
-      sessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
-    );
-    const previousActivitySummaryByIdentity = new Map(
-      activitySessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
-    );
-    const nextSessions = listAgentSessions(nextCollection).sort(sortByStartedAtDesc);
-    const nextSessionSummaries = nextSessions.flatMap((session) => {
-      if (!shouldIncludeAgentSessionInActivity(session)) {
-        return [];
-      }
-      const nextSummary = toAgentSessionSummary(session);
-      const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
-      return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
-        ? [previousSummary]
-        : [nextSummary];
-    });
-    const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
-      if (!shouldIncludeAgentSessionInActivity(session)) {
-        return [];
-      }
-      const nextSummary = toAgentActivitySessionSummary(session);
-      const previousSummary = previousActivitySummaryByIdentity.get(
-        agentSessionIdentityKey(session),
-      );
-      return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
-        ? [previousSummary]
-        : [nextSummary];
-    });
-
     sessionCollection = nextCollection;
-    sessions = nextSessions;
-    sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
-      ? sessionSummaries
-      : nextSessionSummaries;
-    activitySessionSummaries = areArraysReferenceEqual(
-      activitySessionSummaries,
-      nextActivitySessionSummaries,
-    )
-      ? activitySessionSummaries
-      : nextActivitySessionSummaries;
-    if (activitySnapshot.sessions !== activitySessionSummaries) {
-      activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
-    }
+    snapshots = createAgentSessionSnapshots({
+      collection: nextCollection,
+      previous: snapshots,
+      workspaceRepoPath,
+    });
     notifyListeners();
   };
 
@@ -243,10 +76,9 @@ export const createAgentSessionsStore = (
         listeners.delete(listener);
       };
     },
-    getSessionsSnapshot: () => sessions,
-    getSessionSummariesSnapshot: () => sessionSummaries,
-    getActivitySessionsSnapshot: () => activitySessionSummaries,
-    getActivitySnapshot: () => activitySnapshot,
+    getSessionsSnapshot: () => snapshots.sessions,
+    getSessionSummariesSnapshot: () => snapshots.sessionSummaries,
+    getActivitySnapshot: () => snapshots.activitySnapshot,
     getSessionCollectionSnapshot: () => sessionCollection,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     setSessionCollection,
@@ -267,10 +99,7 @@ export const createAgentSessionsStore = (
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = emptyAgentSessionCollection();
-      sessions = [];
-      sessionSummaries = [];
-      activitySessionSummaries = [];
-      activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
+      snapshots = createEmptyAgentSessionSnapshots(workspaceRepoPath);
       notifyListeners();
     },
   };

@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 
 const baseInput = {
-  isOpen: true,
-  hasWorkspace: true,
-  hasTarget: true,
-  hasSession: false,
-  transcriptState: { kind: "empty" as const },
-  historyError: null,
+  transcriptState: { kind: "empty" as const, reason: "unavailable" as const },
   chatSettingsError: null,
 };
 
@@ -16,8 +11,7 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
     expect(
       deriveRuntimeTranscriptSurfaceState({
         ...baseInput,
-        transcriptState: { kind: "failed" },
-        historyError: "history unavailable",
+        transcriptState: { kind: "failed", message: "history unavailable" },
       }).emptyState,
     ).toEqual({
       title: "Failed to load conversation: history unavailable",
@@ -28,7 +22,7 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
     expect(
       deriveRuntimeTranscriptSurfaceState({
         ...baseInput,
-        historyError: "history unavailable",
+        transcriptState: { kind: "failed", message: "history unavailable" },
         chatSettingsError: new Error("settings unavailable"),
       }).emptyState,
     ).toEqual({
@@ -55,7 +49,7 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
     expect(
       deriveRuntimeTranscriptSurfaceState({
         ...baseInput,
-        hasTarget: false,
+        transcriptState: { kind: "empty", reason: "inactive" },
       }).emptyState,
     ).toEqual({
       title: "Select a repository and session to view the conversation.",
@@ -66,7 +60,6 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
     expect(
       deriveRuntimeTranscriptSurfaceState({
         ...baseInput,
-        hasSession: true,
         transcriptState: { kind: "visible" },
       }).emptyState,
     ).toBeNull();

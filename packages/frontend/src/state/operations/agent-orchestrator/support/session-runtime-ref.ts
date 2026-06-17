@@ -5,39 +5,29 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  readPersistedRuntimeKind,
-  requireSessionRuntimeKindForPersistence,
-} from "./session-runtime-metadata";
+import { readPersistedSessionRuntimeKind } from "./session-runtime-kind";
 
 export type ObserveAgentSession = (session: AgentSessionRef) => Promise<void>;
-
-export type RuntimeWorkingDirectoryAccessState = Pick<
-  AgentSessionIdentity,
-  "runtimeKind" | "workingDirectory"
+type RuntimeSessionContextSource = Pick<
+  AgentSessionState,
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"
 >;
 
-export type RuntimeWorkingDirectoryRefState = {
-  runtimeRef: RuntimeWorkingDirectoryRef | null;
-  runtimeRefError: string | null;
-};
-
-const toRuntimeWorkingDirectoryRefFromMetadata = ({
+export const toRuntimeWorkingDirectoryRef = ({
   repoPath,
   runtimeKind,
   workingDirectory,
   action,
 }: {
-  repoPath: string | null | undefined;
+  repoPath: string;
   runtimeKind: AgentSessionIdentity["runtimeKind"];
   workingDirectory: AgentSessionIdentity["workingDirectory"];
   action: string;
 }): RuntimeWorkingDirectoryRef => {
   const runtimeRef = requireRepoRuntimeRef(
     {
-      ...(repoPath !== null && repoPath !== undefined ? { repoPath } : {}),
+      repoPath,
       runtimeKind,
     },
     action,
@@ -48,62 +38,14 @@ const toRuntimeWorkingDirectoryRefFromMetadata = ({
   };
 };
 
-export const toRuntimeWorkingDirectoryRef = ({
-  repoPath,
-  session,
-  action,
-}: {
-  repoPath: string | null | undefined;
-  session: RuntimeWorkingDirectoryAccessState;
-  action: string;
-}): RuntimeWorkingDirectoryRef =>
-  toRuntimeWorkingDirectoryRefFromMetadata({
-    repoPath,
-    runtimeKind: session.runtimeKind,
-    workingDirectory: session.workingDirectory,
-    action,
-  });
-
-export const resolveRuntimeWorkingDirectoryRefState = ({
-  repoPath,
-  session,
-}: {
-  repoPath: string | null | undefined;
-  session: RuntimeWorkingDirectoryAccessState | null | undefined;
-}): RuntimeWorkingDirectoryRefState => {
-  if (!session) {
-    return {
-      runtimeRef: null,
-      runtimeRefError: null,
-    };
-  }
-
-  try {
-    return {
-      runtimeRef: toRuntimeWorkingDirectoryRef({
-        repoPath,
-        session,
-        action: "read active session runtime data",
-      }),
-      runtimeRefError: null,
-    };
-  } catch (error) {
-    return {
-      runtimeRef: null,
-      runtimeRefError: errorMessage(error),
-    };
-  }
-};
-
 export const toRuntimeSessionRef = (
   repoPath: string,
-  session: AgentSessionState,
+  session: AgentSessionIdentity,
 ): AgentSessionRef => {
-  const runtimeKind = requireSessionRuntimeKindForPersistence(session);
   return {
-    ...toRuntimeWorkingDirectoryRefFromMetadata({
+    ...toRuntimeWorkingDirectoryRef({
       repoPath,
-      runtimeKind,
+      runtimeKind: session.runtimeKind,
       workingDirectory: session.workingDirectory,
       action: `reach session '${session.externalSessionId}'`,
     }),
@@ -118,9 +60,9 @@ export const toPersistedRuntimeSessionRef = ({
   repoPath: string;
   record: AgentSessionRecord;
 }): AgentSessionRef => ({
-  ...toRuntimeWorkingDirectoryRefFromMetadata({
+  ...toRuntimeWorkingDirectoryRef({
     repoPath,
-    runtimeKind: readPersistedRuntimeKind(record),
+    runtimeKind: readPersistedSessionRuntimeKind(record),
     workingDirectory: record.workingDirectory,
     action: `reach persisted session '${record.externalSessionId}'`,
   }),
@@ -129,7 +71,7 @@ export const toPersistedRuntimeSessionRef = ({
 
 export const toRuntimeSessionContextRef = (
   repoPath: string,
-  session: AgentSessionState,
+  session: RuntimeSessionContextSource,
 ): AgentSessionRuntimeRef => ({
   ...toRuntimeSessionRef(repoPath, session),
   taskId: session.taskId,

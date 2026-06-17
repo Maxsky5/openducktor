@@ -70,8 +70,9 @@ When adding a new workspace app/package under `apps/*` or `packages/*`, update `
 - Treat runtime definitions, runtime routes, and runtime connections as different layers.
 - Shared host-visible runtime/run payloads live in `packages/contracts/src/run-schemas.ts`.
 - `RuntimeInstanceSummary` is live runtime-instance metadata only: keep `kind`, `runtimeId`, `repoPath`, nullable `taskId`, `role`, `workingDirectory`, `runtimeRoute`, `startedAt`, and `descriptor`. Do not reintroduce top-level `endpoint`, `port`, or duplicate `capabilities` fields there.
+- Keep `runtimeId` and `runtimeRoute` at runtime-registry/adapter depth. UI and orchestration should carry `runtimeKind`, repository path, working directory, and session id.
 - Request-scoped agent engine operations use `runtimeConnection` objects, not raw shared `runtimeEndpoint` strings. Build adapter-local client inputs from the connection at the adapter boundary.
-- Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route during hydration.
+- Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route only at the adapter call boundary.
 - Keep runtime routing fail-fast. Never fall back from a session/build runtime to the repo default runtime when loading session history, todos, diff, or file status.
 - Keep runtime capability definitions in runtime descriptors (`packages/contracts/src/agent-runtime-schemas.ts`). Do not duplicate capability booleans onto runtime-instance summaries.
 

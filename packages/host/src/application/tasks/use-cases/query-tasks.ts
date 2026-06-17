@@ -1,6 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
   enrichTasks,
@@ -14,11 +12,7 @@ export const createTaskQueryUseCases = ({
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
   TaskService,
-  | "listTasks"
-  | "getTaskMetadata"
-  | "agentSessionsList"
-  | "agentSessionsListBulk"
-  | "agentSessionUpsert"
+  "listTasks" | "getTaskMetadata" | "agentSessionsList" | "agentSessionUpsert"
 > => ({
   listTasks(input) {
     return Effect.gen(function* () {
@@ -37,38 +31,6 @@ export const createTaskQueryUseCases = ({
       const metadata = yield* taskStore.getTaskMetadata(input);
 
       return metadata.agentSessions;
-    });
-  },
-
-  agentSessionsListBulk(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskIds } = input;
-      if (taskIds.length === 0) {
-        return {};
-      }
-
-      const availableTaskIds = new Set(
-        (yield* taskStore.listTasks({ repoPath })).map((task) => task.id),
-      );
-      for (const taskId of taskIds) {
-        if (!availableTaskIds.has(taskId)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskIds",
-              message: `Task not found: ${taskId}`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-      }
-
-      const sessionsByTask: Record<string, AgentSessionRecord[]> = {};
-      for (const taskId of taskIds) {
-        const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-        sessionsByTask[taskId] = metadata.agentSessions;
-      }
-
-      return sessionsByTask;
     });
   },
 

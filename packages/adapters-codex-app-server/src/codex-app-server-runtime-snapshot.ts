@@ -5,7 +5,6 @@ import type {
   AgentSessionRuntimeSnapshot,
   ReadSessionRuntimeSnapshotInput,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
 
@@ -39,13 +38,7 @@ export const resolveCodexRuntimeSnapshotSource = ({
     return { type: "missing" };
   }
 
-  if (
-    hasPendingInput ||
-    hasActiveTurn ||
-    (session.liveStatus &&
-      agentSessionStatusFromActivity(session.liveStatus.classification) === "idle" &&
-      agentSessionStatusFromActivity(thread.status.classification) === "running")
-  ) {
+  if (hasPendingInput || hasActiveTurn) {
     return { type: "local" };
   }
 

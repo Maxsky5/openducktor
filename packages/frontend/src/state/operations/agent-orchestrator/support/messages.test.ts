@@ -3,14 +3,17 @@ import {
   createSessionMessagesFixture,
   type SessionMessagesFixtureInput,
   sessionMessageAt,
+  sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
   createSessionMessagesState,
   everySessionMessage,
+  findFirstChangedSessionMessageIndex,
   findLastToolSessionMessage,
   findLastUserSessionMessage,
+  getSessionMessageAt,
   getSessionMessageCount,
   isFinalAssistantChatMessage,
   updateLastSessionMessage,
@@ -177,5 +180,85 @@ describe("agent-orchestrator/support/messages", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  test("finds the final changed message index for tail-only message updates", () => {
+    const previousSession = createSession(
+      Array.from({ length: 400 }, (_, index) => ({
+        id: `message-${index}`,
+        role: "assistant" as const,
+        content: `Message ${index}`,
+        timestamp: `2026-02-22T08:${String(index % 60).padStart(2, "0")}:00.000Z`,
+        meta: {
+          kind: "assistant" as const,
+          agentRole: "build" as const,
+          isFinal: true,
+        },
+      })),
+    );
+    const previousMessages = previousSession.messages;
+    const nextMessages = sessionMessagesToArray(previousSession);
+    const lastMessage = getSessionMessageAt(previousSession, 399);
+    if (!lastMessage) {
+      throw new Error("Expected last message fixture");
+    }
+
+    nextMessages[399] = {
+      ...lastMessage,
+      content: "Updated final message",
+    };
+
+    expect(
+      findFirstChangedSessionMessageIndex(previousMessages, {
+        ...previousSession,
+        messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
+      }),
+    ).toBe(399);
+  });
+
+  test("finds the append point when new messages are added", () => {
+    const previousSession = createSession([
+      {
+        id: "message-0",
+        role: "assistant",
+        content: "Message 0",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "Message 1",
+        timestamp: "2026-02-22T08:01:00.000Z",
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        content: "Message 2",
+        timestamp: "2026-02-22T08:02:00.000Z",
+      },
+      {
+        id: "message-3",
+        role: "assistant",
+        content: "Message 3",
+        timestamp: "2026-02-22T08:03:00.000Z",
+      },
+    ]);
+    const previousMessages = previousSession.messages;
+    const nextMessages = [
+      ...sessionMessagesToArray(previousSession),
+      {
+        id: "message-4",
+        role: "assistant" as const,
+        content: "Message 4",
+        timestamp: "2026-02-22T08:04:00.000Z",
+      },
+    ];
+
+    expect(
+      findFirstChangedSessionMessageIndex(previousMessages, {
+        ...previousSession,
+        messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
+      }),
+    ).toBe(4);
   });
 });

@@ -1,4 +1,4 @@
-import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, ReusablePrompt } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -6,47 +6,47 @@ import type {
   AgentRole,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { useActiveSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-active-session-context-usage";
+import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
-import { toRoleDefaultModelSelection } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import { resolveSelectedRuntimeKindForChatComposer } from "@/features/agent-chat-composer/model-selection/selected-runtime-kind";
 import {
-  resolveRoleDefaultSelectionForComposer,
-  resolveSelectedModelSelection,
-  resolveSelectionCatalogLoading,
-  resolveSelectionForNewSession,
-} from "@/features/agent-chat-composer/model-selection/selection-resolution";
-import { useActiveSessionModelSelectionRepair } from "@/features/agent-chat-composer/model-selection/use-active-session-model-selection-repair";
+  resolveAvailableRoleDefaultModelSelection,
+  resolveChatComposerModelSelections,
+  resolveChatComposerSelectedRuntimeKind,
+} from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
 import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
-import {
-  getChatComposerPromptInputRuntimeKind,
-  resolveChatComposerPromptInputTarget,
-} from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target";
+import { resolveChatComposerPromptInputRuntime } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
-import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeCatalogQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
-  activeSession: AgentSessionState | null;
+  loadedSession: AgentSessionState | null;
   selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionModel: AgentSessionState["selectedModel"] | null;
-  activeSessionModelCatalog: AgentModelCatalog | null;
-  activeSessionIsLoadingModelCatalog: boolean;
+  selectedSessionModel: AgentSessionState["selectedModel"];
+  sessionRuntimeData: SelectedSessionRuntimeData;
+  repoReadinessState: RepoRuntimeReadinessState;
   role: AgentRole;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
@@ -54,34 +54,11 @@ type UseAgentStudioChatComposerArgs = {
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
-  loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
-  loadSlashCommands?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  loadSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
+  loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadSlashCommands?: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
   loadFileSearch?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  readSessionSlashCommands?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
-  readSessionFileSearch?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
+    runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
 };
@@ -109,19 +86,27 @@ type AgentStudioChatComposerState = {
   modelGroups: ReturnType<typeof resolveModelSelectionOptions>["modelGroups"];
   variantOptions: ComboboxOption[];
   agentAccentColorsByProfileId: Record<string, string>;
-  activeSessionContextUsage: AgentStudioContextUsage;
+  selectedSessionContextUsage: AgentStudioContextUsage;
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
+const skippedComposerCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+  skippedQueryOptions<AgentModelCatalog>({
+    queryKey: runtimeRef
+      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+      : runtimeCatalogQueryKeys.all,
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
-  activeSession,
-  selectedSessionIdentity: selectedSessionIdentityFromView,
-  selectedSessionModel: selectedSessionModelFromView,
-  activeSessionModelCatalog,
-  activeSessionIsLoadingModelCatalog,
+  loadedSession,
+  selectedSessionIdentity,
+  selectedSessionModel,
+  sessionRuntimeData,
+  repoReadinessState,
   role,
   reusablePrompts,
   repoSettings,
@@ -130,9 +115,6 @@ export function useAgentStudioChatComposer({
   loadSlashCommands,
   loadSkills,
   loadFileSearch,
-  readSessionSlashCommands,
-  readSessionSkills,
-  readSessionFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const {
     availableRuntimeDefinitions,
@@ -145,77 +127,68 @@ export function useAgentStudioChatComposer({
   const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
-  const loadSkillsForRepo =
-    loadSkills ??
-    loadRepoRuntimeSkills ??
-    (async (): Promise<AgentSkillCatalog> => {
-      throw new Error("Runtime skill catalog loading is unavailable.");
-    });
+  const loadSkillsForRepo = loadSkills ?? loadRepoRuntimeSkills;
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
-  const activeLoadedSessionIdentity: AgentSessionIdentity | null = activeSession
-    ? toAgentSessionIdentity(activeSession)
-    : null;
-  const selectedSessionIdentity = activeLoadedSessionIdentity ?? selectedSessionIdentityFromView;
-  const selectedSessionModel = activeSession
-    ? activeSession.selectedModel
-    : selectedSessionModelFromView;
-  const activeSessionRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
+  const sessionModelCatalog = sessionRuntimeData.modelCatalog;
+  const isSessionModelCatalogLoading = sessionRuntimeData.isLoadingModelCatalog;
+  const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
   const hasSessionTarget = selectedSessionIdentity !== null;
-  const hasLoadedSessionTarget = activeSession !== null;
-  const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    const selection = toRoleDefaultModelSelection(
-      repoSettings?.agentDefaults[role],
-      repoSettings?.defaultRuntimeKind,
-    );
-    if (!selection) {
-      return null;
-    }
-    const runtimeKind = selection.runtimeKind;
-    if (!runtimeKind) {
-      return null;
-    }
-    return findRuntimeDefinition(availableRuntimeDefinitions, runtimeKind) ? selection : null;
-  }, [
-    availableRuntimeDefinitions,
-    repoSettings?.agentDefaults,
-    repoSettings?.defaultRuntimeKind,
-    role,
-  ]);
+  const hasLoadedSessionTarget = loadedSessionIdentity !== null;
+  const roleDefaultSelection = useMemo(
+    () =>
+      resolveAvailableRoleDefaultModelSelection({
+        repoSettings,
+        role,
+        runtimeDefinitions: availableRuntimeDefinitions,
+      }),
+    [availableRuntimeDefinitions, repoSettings, role],
+  );
   const {
     draftSelection,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     applyDraftSelection,
-    repairDraftSelection,
+    syncDraftSelection,
   } = useAgentStudioDraftModelSelectionState({ workspaceRepoPath, repoSettings, role });
-  const selectedRuntimeKind = useMemo<RuntimeKind | null>(() => {
-    return resolveSelectedRuntimeKindForChatComposer({
-      selectedSessionModel,
-      draftSelection,
-      roleDefaultSelection,
-      repoDefaultRuntimeKind:
-        repoSettings?.defaultRuntimeKind &&
-        findRuntimeDefinition(availableRuntimeDefinitions, repoSettings.defaultRuntimeKind)
-          ? repoSettings.defaultRuntimeKind
-          : null,
-    });
-  }, [
-    selectedSessionModel,
-    draftSelection,
-    repoSettings?.defaultRuntimeKind,
-    roleDefaultSelection,
-    availableRuntimeDefinitions,
-  ]);
-  const promptInputTarget = useMemo(
+  const selectedRuntimeKind = useMemo(
     () =>
-      resolveChatComposerPromptInputTarget({
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel,
+        draftSelection,
+        roleDefaultSelection,
+        repoDefaultRuntimeKind: repoSettings?.defaultRuntimeKind,
+        runtimeDefinitions: availableRuntimeDefinitions,
+      }),
+    [
+      availableRuntimeDefinitions,
+      draftSelection,
+      repoSettings?.defaultRuntimeKind,
+      roleDefaultSelection,
+      selectedSessionModel,
+    ],
+  );
+  const selectedRepoRuntimeRef = useMemo<RepoRuntimeRef | null>(() => {
+    if (!workspaceRepoPath || !selectedRuntimeKind) {
+      return null;
+    }
+    return {
+      repoPath: workspaceRepoPath,
+      runtimeKind: selectedRuntimeKind,
+    };
+  }, [selectedRuntimeKind, workspaceRepoPath]);
+  const promptInputRuntime = useMemo(
+    () =>
+      resolveChatComposerPromptInputRuntime({
         workspaceRepoPath,
-        activeSession,
         selectedSessionIdentity,
+        repoReadinessState,
         selectedRuntimeKind,
       }),
-    [activeSession, selectedSessionIdentity, selectedRuntimeKind, workspaceRepoPath],
+    [repoReadinessState, selectedSessionIdentity, selectedRuntimeKind, workspaceRepoPath],
   );
-  const promptInputRuntimeKind = getChatComposerPromptInputRuntimeKind(promptInputTarget);
+  const promptInputRuntimeKind =
+    promptInputRuntime.state === "available"
+      ? promptInputRuntime.runtimeRef.runtimeKind
+      : promptInputRuntime.runtimeKind;
   const promptInputRuntimeDefinitions = hasSessionTarget
     ? allRuntimeDefinitions
     : availableRuntimeDefinitions;
@@ -228,7 +201,9 @@ export function useAgentStudioChatComposer({
     [promptInputRuntimeDefinitions, promptInputRuntimeKind],
   );
   const supportsProfiles = useMemo(() => {
-    const runtimeKind = hasSessionTarget ? activeSessionRuntimeKind : selectedRuntimeKind;
+    const runtimeKind = hasSessionTarget
+      ? selectedSessionIdentity.runtimeKind
+      : selectedRuntimeKind;
     if (!runtimeKind) {
       return true;
     }
@@ -238,21 +213,21 @@ export function useAgentStudioChatComposer({
     const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
     return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
   }, [
-    activeSessionRuntimeKind,
     allRuntimeDefinitions,
     availableRuntimeDefinitions,
     hasSessionTarget,
+    selectedSessionIdentity,
     selectedRuntimeKind,
   ]);
 
-  const composerCatalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(workspaceRepoPath, selectedRuntimeKind, loadCatalogForRepo),
-    enabled: workspaceRepoPath !== null && !hasLoadedSessionTarget && selectedRuntimeKind !== null,
-  });
+  const composerCatalogQuery = useQuery(
+    selectedRepoRuntimeRef && !hasLoadedSessionTarget
+      ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalogForRepo)
+      : skippedComposerCatalogQueryOptions(selectedRepoRuntimeRef),
+  );
   const composerCatalog = composerCatalogQuery.data ?? null;
   const isLoadingComposerCatalog =
-    composerCatalogQuery.isLoading ||
-    (hasLoadedSessionTarget && activeSessionIsLoadingModelCatalog);
+    composerCatalogQuery.isLoading || (hasLoadedSessionTarget && isSessionModelCatalogLoading);
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -260,102 +235,60 @@ export function useAgentStudioChatComposer({
     slashCommandsError,
     isSlashCommandsLoading,
   } = useChatComposerSlashCommands({
-    promptInputTarget,
+    promptInputRuntime,
     runtimeSupportsSlashCommands,
     reusablePrompts,
     loadSlashCommandsForRepo,
-    ...(readSessionSlashCommands ? { readSessionSlashCommands } : {}),
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
-    promptInputTarget,
+    promptInputRuntime,
     supportsSkillReferences,
     loadSkillsForRepo,
-    ...(readSessionSkills ? { readSessionSkills } : {}),
   });
   useEffect(() => {
-    repairDraftSelection({
+    syncDraftSelection({
       hasSessionTarget,
       composerCatalog,
       roleDefaultSelection,
     });
-  }, [composerCatalog, hasSessionTarget, repairDraftSelection, roleDefaultSelection]);
+  }, [composerCatalog, hasSessionTarget, roleDefaultSelection, syncDraftSelection]);
 
-  useActiveSessionModelSelectionRepair({
-    activeSession: activeLoadedSessionIdentity,
-    activeSessionModelCatalog,
-    activeSessionSelectedModel: activeSession?.selectedModel ?? null,
-    roleDefaultSelection,
-    updateAgentSessionModel,
-  });
-
-  const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
-    return resolveRoleDefaultSelectionForComposer({
-      hasSessionTarget,
+  const { selectionCatalog, selectedModelSelection, selectionForNewSession } = useMemo(
+    () =>
+      resolveChatComposerModelSelections({
+        hasSessionTarget,
+        sessionModelCatalog,
+        composerCatalog,
+        selectedSessionModel,
+        draftSelection,
+        roleDefaultSelection,
+        isAwaitingRepoSettingsForWorkspaceRepoPath,
+      }),
+    [
       composerCatalog,
+      draftSelection,
+      hasSessionTarget,
       isAwaitingRepoSettingsForWorkspaceRepoPath,
       roleDefaultSelection,
-    });
-  }, [
-    hasSessionTarget,
-    composerCatalog,
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
-    roleDefaultSelection,
-  ]);
-  const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
+      selectedSessionModel,
+      sessionModelCatalog,
+    ],
+  );
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({
-        promptInputTarget,
+        promptInputRuntime,
         supportsFileSearch,
         queryClient,
         loadFileSearchForRepo,
-        ...(readSessionFileSearch ? { readSessionFileSearch } : {}),
       }),
-    [
-      loadFileSearchForRepo,
-      promptInputTarget,
-      queryClient,
-      readSessionFileSearch,
-      supportsFileSearch,
-    ],
+    [loadFileSearchForRepo, promptInputRuntime, queryClient, supportsFileSearch],
   );
-  const isSelectionCatalogLoading = resolveSelectionCatalogLoading({
-    hasSessionTarget,
-    activeSessionIsLoadingModelCatalog,
-    activeSessionModelCatalog,
-    composerCatalog,
-    isLoadingComposerCatalog,
-  });
-  const fallbackCatalogSelection = useMemo(
-    () => pickDefaultVisibleSelectionForCatalog(selectionCatalog),
-    [selectionCatalog],
-  );
-  const selectedModelSelection = useMemo(
-    () =>
-      resolveSelectedModelSelection({
-        selectedSessionModel,
-        draftSelection,
-        roleDefaultSelectionForComposer,
-        fallbackCatalogSelection,
-      }),
-    [
-      selectedSessionModel,
-      draftSelection,
-      fallbackCatalogSelection,
-      roleDefaultSelectionForComposer,
-    ],
-  );
-
-  const selectionForNewSession = useMemo(
-    () =>
-      resolveSelectionForNewSession({
-        draftSelection,
-        roleDefaultSelectionForComposer,
-        selectionCatalog,
-        fallbackCatalogSelection,
-      }),
-    [draftSelection, fallbackCatalogSelection, roleDefaultSelectionForComposer, selectionCatalog],
-  );
+  const isSelectionCatalogLoading = hasSessionTarget
+    ? !sessionModelCatalog &&
+      !composerCatalog &&
+      (isSessionModelCatalogLoading || isLoadingComposerCatalog)
+    : isLoadingComposerCatalog;
 
   const {
     selectedModelEntry,
@@ -369,15 +302,15 @@ export function useAgentStudioChatComposer({
     [selectedModelSelection, selectionCatalog],
   );
 
-  const activeSessionContextUsage = useActiveSessionContextUsage({
-    activeSession,
-    activeSessionModelCatalog,
+  const selectedSessionContextUsage = useSelectedSessionContextUsage({
+    selectedSession: loadedSession,
+    sessionModelCatalog,
     selectedModelEntry,
   });
 
   const { handleSelectAgentProfile, handleSelectModel, handleSelectVariant } =
     useModelSelectionActions({
-      activeSession: activeLoadedSessionIdentity,
+      loadedSessionIdentity,
       updateAgentSessionModel,
       applyDraftSelection,
       selectedModelSelection,
@@ -408,7 +341,7 @@ export function useAgentStudioChatComposer({
     modelGroups,
     variantOptions,
     agentAccentColorsByProfileId,
-    activeSessionContextUsage,
+    selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectModel,
     handleSelectVariant,

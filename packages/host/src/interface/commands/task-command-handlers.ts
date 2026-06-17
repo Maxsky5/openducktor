@@ -1,7 +1,6 @@
 import type { TaskService } from "../../application/tasks/task-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import {
-  parseAgentSessionsListBulkInput,
   parseAgentSessionUpsertInput,
   parseBuildBlockedInput,
   parseBuildCompletedInput,
@@ -27,8 +26,6 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
     taskService.agentSessionUpsert(parseAgentSessionUpsertInput(args)),
   agent_sessions_list: (args) =>
     taskService.agentSessionsList(parseTaskIdInput(args, "agent_sessions_list input")),
-  agent_sessions_list_bulk: (args) =>
-    taskService.agentSessionsListBulk(parseAgentSessionsListBulkInput(args)),
   build_blocked: (args) => taskService.buildBlocked(parseBuildBlockedInput(args)),
   build_completed: (args) => taskService.buildCompleted(parseBuildCompletedInput(args)),
   build_resumed: (args) => taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),

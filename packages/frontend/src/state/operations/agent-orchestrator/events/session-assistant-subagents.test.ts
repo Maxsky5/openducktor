@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   buildSession,
-  createSessionDraftBuffers,
   createSessionsRef,
   createSessionTurnMetadata,
   createSessionUpdater,
@@ -17,7 +16,7 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session assistant and subagent updates", () => {
-  test("finalizes assistant draft through status transitions", async () => {
+  test("keeps streamed assistant text through status transitions", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -84,7 +83,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
-    expect(findSession(sessionsRef, "session-1")?.draftAssistantText).toBe("");
     expect(
       getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Partial answer"),
@@ -367,7 +365,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     ).toBe(true);
   });
 
-  test("writes live text parts into transcript messages instead of draft state", async () => {
+  test("writes live text parts into transcript messages", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -441,7 +439,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages?.[0]?.id).toBe("assistant-live-1");
     expect(assistantMessages?.[0]?.content).toBe("First pass refined");
-    expect(findSession(sessionsRef, "session-1")?.draftAssistantText).toBe("");
   });
 
   test("records explicit tool start timing for live assistant turns", async () => {
@@ -451,25 +448,16 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const sessionKey = agentSessionIdentityKey(session);
 
     const context: SessionPartEventContext = {
+      session: {
+        identity: session,
+        key: sessionKey,
+      },
       store: {
-        sessionIdentity: session,
-        sessionKey,
-        externalSessionId: "session-1",
         updateSession: createSessionUpdater(sessionsRef),
         readSession: (identity) => findSession(sessionsRef, identity.externalSessionId) ?? null,
-        hasSession: (identity) =>
-          findSession(sessionsRef, identity.externalSessionId) !== undefined,
-      },
-      drafts: {
-        sessionIdentity: session,
-        sessionKey,
-        externalSessionId: "session-1",
-        buffers: createSessionDraftBuffers(),
+        isSessionObserved: (identity) => identity.externalSessionId === session.externalSessionId,
       },
       turn: {
-        sessionIdentity: session,
-        sessionKey,
-        externalSessionId: "session-1",
         turnMetadata: createSessionTurnMetadata(),
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp: () => {},
@@ -481,7 +469,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         refreshTaskData: async () => {},
         resolveWorkflowToolAliasesByCanonical: () => undefined,
       },
-      runtimeData: {
+      todos: {
         updateSessionTodos: () => {},
       },
     };
@@ -889,7 +877,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagentMessages[0].meta.endedAtMs).toBe(250);
   });
 
-  test("absorbs a unique fallback session-correlated subagent row into the existing live row", async () => {
+  test("bridges a unique session-scoped subagent update into the existing part-scoped live row", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -972,7 +960,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagent.meta.endedAtMs).toBe(300);
   });
 
-  test("keeps fallback session-correlated subagent rows separate when multiple same-prompt live rows exist", async () => {
+  test("keeps session-scoped subagent updates separate when multiple same-prompt live rows exist", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {

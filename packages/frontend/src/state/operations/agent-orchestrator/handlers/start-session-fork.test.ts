@@ -109,6 +109,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         "/tmp/repo/worktree",
       );
       const forkedSession = getSession(sessionsRef.current, "external-forked-pr-session");
+      expect(forkedSession?.historyLoadState).toBe("loaded");
       const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
       expect(forkedMessages.slice(0, 3)).toEqual([
         {
@@ -244,6 +245,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         },
       ]);
       const forkedSession = getSession(sessionsRef.current, "external-forked-from-loaded-source");
+      expect(forkedSession?.historyLoadState).toBe("loaded");
       const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
       expect(forkedMessages.slice(0, 2)).toEqual([
         {

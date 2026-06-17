@@ -11,8 +11,8 @@ import type {
 } from "@/components/features/agents";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type { RunSessionStartWorkflow } from "@/features/session-start";
+import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
@@ -37,18 +37,14 @@ type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
   openTaskDetails: () => void;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  stopAgentSession: AgentStateContextValue["stopAgentSession"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
-  readSessionFileSearch: AgentStateContextValue["readSessionFileSearch"];
-  readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
-  readSessionSkills: AgentStateContextValue["readSessionSkills"];
+  runSessionStartWorkflow: RunSessionStartWorkflow;
+  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
+  updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  replyAgentApproval: AgentStateContextValue["replyAgentApproval"];
-  answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
+  replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeWorkspaceId: string | null;
@@ -122,7 +118,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "modelOptions"
   | "modelGroups"
   | "variantOptions"
-  | "activeSessionContextUsage"
+  | "selectedSessionContextUsage"
   | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
   | "handleSelectModel"
@@ -180,7 +176,7 @@ export const buildAgentStudioPageModelsArgs = ({
     modelSelection: {
       ...restOfModelSelection,
       agentOptions: agentProfileOptions,
-      activeSessionAgentColors: agentAccentColorsByProfileId,
+      agentAccentColorsByProfileId,
       onSelectAgent: handleSelectAgentProfile,
       onSelectModel: handleSelectModel,
       onSelectVariant: handleSelectVariant,
@@ -214,14 +210,10 @@ export function useAgentStudioOrchestrationController({
   const agentStudioReady = view.runtimeReadiness.isReady;
   const {
     updateQuery,
-    startAgentSession,
-    settleStartedAgentSession,
+    runSessionStartWorkflow,
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
-    readSessionFileSearch,
-    readSessionSlashCommands,
-    readSessionSkills,
     humanRequestChangesTask,
     setTaskTargetBranch,
     replyAgentApproval,
@@ -234,7 +226,8 @@ export function useAgentStudioOrchestrationController({
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     workspaceRepoPath,
     taskId: view.taskId,
-    activeSession: view.activeSession,
+    selectedSessionIdentity: view.selectedSessionIdentity,
+    loadedSession: view.loadedSession,
     selectedTask: view.selectedTask,
   });
 
@@ -261,24 +254,21 @@ export function useAgentStudioOrchestrationController({
     modelGroups,
     variantOptions,
     agentAccentColorsByProfileId,
-    activeSessionContextUsage,
+    selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectModel,
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
-    activeSession: view.activeSession,
+    loadedSession: view.loadedSession,
     selectedSessionIdentity: view.selectedSessionIdentity,
     selectedSessionModel: view.selectedSessionModel,
-    activeSessionModelCatalog: view.sessionRuntimeData.modelCatalog,
-    activeSessionIsLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
+    sessionRuntimeData: view.sessionRuntimeData,
+    repoReadinessState: view.runtimeReadiness.readinessState,
     role: view.role,
     reusablePrompts,
     repoSettings,
     updateAgentSessionModel,
-    readSessionFileSearch,
-    readSessionSlashCommands,
-    ...(readSessionSkills ? { readSessionSkills } : {}),
   });
 
   const {
@@ -307,10 +297,12 @@ export function useAgentStudioOrchestrationController({
     taskId: view.taskId,
     role: view.role,
     launchActionId: view.launchActionId,
-    activeSession: view.activeSession,
-    activeSessionIsLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
-    activeSessionRuntimeDescriptor: view.sessionRuntimeData.modelCatalog?.runtime ?? null,
-    selectedModelSelection,
+    selectedSessionIdentity: view.selectedSessionIdentity,
+    selectedSessionActivityState: view.selectedSessionActivityState,
+    selectedSessionModel: view.selectedSessionModel,
+    loadedSession: view.loadedSession,
+    sessionRuntimeData: view.sessionRuntimeData,
+    runtimeDefinitions,
     selectedModelDescriptor,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,
@@ -320,8 +312,7 @@ export function useAgentStudioOrchestrationController({
     reusablePrompts,
     repoSettings,
     workspaceRepoPath,
-    startAgentSession,
-    settleStartedAgentSession,
+    runSessionStartWorkflow,
     sendAgentMessage,
     humanRequestChangesTask,
     setTaskTargetBranch,
@@ -332,8 +323,8 @@ export function useAgentStudioOrchestrationController({
 
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeSession: view.activeSession ? toAgentSessionIdentity(view.activeSession) : null,
-      pendingApprovals: view.activeSession?.pendingApprovals ?? [],
+      sessionIdentity: view.selectedSessionIdentity,
+      pendingApprovals: view.loadedSession?.pendingApprovals ?? [],
       agentStudioReady,
       replyAgentApproval,
     });
@@ -347,13 +338,10 @@ export function useAgentStudioOrchestrationController({
         selectedTask: view.selectedTask,
         sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
-        activeSession: view.activeSession,
-        activeSessionRuntimeData: {
-          todos: view.sessionRuntimeData.todos,
-          isLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
-        },
+        selectedSessionIdentity: view.selectedSessionIdentity,
+        loadedSession: view.loadedSession,
+        sessionRuntimeData: view.sessionRuntimeData,
         runtimeDefinitions,
-        sessionRuntimeDataError: view.sessionRuntimeDataError,
         hasActiveGitConflict,
         transcriptState: view.transcriptState,
         runtimeReadiness: view.runtimeReadiness,
@@ -446,7 +434,7 @@ export function useAgentStudioOrchestrationController({
       modelOptions,
       modelGroups,
       variantOptions,
-      activeSessionContextUsage,
+      selectedSessionContextUsage,
       agentAccentColorsByProfileId,
       handleSelectAgentProfile,
       handleSelectModel,
@@ -467,10 +455,9 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioPageModels(pageModelsArgs);
 
   const rightPanel = useAgentStudioRightPanel({
-    role: selectedSessionContext.rightPanel.role,
-    hasTaskContext: selectedSessionContext.rightPanel.hasTaskContext,
-    hasDocumentPanel: selectedSessionContext.rightPanel.hasDocumentPanel,
-    hasBuildToolsPanel: selectedSessionContext.rightPanel.hasBuildToolsPanel,
+    role: selectedSessionContext.role,
+    hasTaskContext: Boolean(selectedSessionContext.taskId),
+    hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
   });
 
   return {

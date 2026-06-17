@@ -47,8 +47,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   useAgentStudioBuildWorktreeRefresh({
     selectedView: {
       role: panelKind === "build_tools" && isPanelOpen ? selectedView.role : null,
-      activeSession: selectedView.activeSession,
-      transcriptState: selectedView.transcriptState,
+      loadedSession: selectedView.loadedSession,
     },
     refreshWorktree,
   });

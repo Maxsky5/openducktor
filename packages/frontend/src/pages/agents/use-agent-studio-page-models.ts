@@ -93,13 +93,12 @@ export function useAgentStudioPageModels({
     sessionCreateOptions,
     quickActions,
     primaryQuickAction,
-    selectedInteractionRole,
   } = selectedSession.workflow;
 
   const agentStudioHeaderModel = useAgentStudioHeaderModel({
     selectedTask: selectedSession.selectedTask,
     onOpenTaskDetails: selectedSession.selectedTask ? sessionActions.openTaskDetails : null,
-    activeSession: selectedSession.activeSession,
+    selectedRole: selectedSession.role,
     sessionsForTaskLength: selectedSession.sessionsForTask.length,
     agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
     isStarting: sessionActions.isStarting,
@@ -110,7 +109,6 @@ export function useAgentStudioPageModels({
     onResolveGitConflictQuickAction: null,
     workflow: {
       workflowStateByRole,
-      selectedInteractionRole,
       workflowSessionByRole,
       sessionSelectorAutofocusByValue,
       sessionSelectorValue,

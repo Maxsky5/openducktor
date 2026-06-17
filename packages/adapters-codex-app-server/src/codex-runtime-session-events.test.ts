@@ -7,11 +7,6 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import type { CodexSessionState } from "./types";
 
-const createThreadInventory = () => ({
-  clearReadOnlyHistoryLoad: () => undefined,
-  clearReadOnlyHistoryLoadForNotification: () => undefined,
-});
-
 const createRuntimeEvents = () =>
   new CodexRuntimeSessionEvents({
     subscribeEvents: undefined,
@@ -22,7 +17,6 @@ const createRuntimeEvents = () =>
     activeTurnsBySessionId: new Map(),
     sessionEvents: new CodexSessionEventBus(),
     pendingInput: new CodexPendingInputState(),
-    threadInventory: createThreadInventory(),
     flushQueuedUserMessagesLater: () => undefined,
   });
 

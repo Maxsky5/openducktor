@@ -16,23 +16,23 @@ export type PendingInputRoute = {
 };
 
 const isLinkedChildEventForObservedSession = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: PendingInputRequiredEvent,
   childExternalSessionId: string | null,
 ): boolean =>
   Boolean(
     childExternalSessionId &&
-      event.parentExternalSessionId === context.store.externalSessionId &&
-      childExternalSessionId !== context.store.externalSessionId,
+      event.parentExternalSessionId === context.session.identity.externalSessionId &&
+      childExternalSessionId !== context.session.identity.externalSessionId,
   );
 
 const isObservedSession = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   session: AgentSessionIdentity | null,
-): boolean => Boolean(session && context.store.hasSessionObserver?.(session));
+): boolean => Boolean(session && context.store.isSessionObserved(session));
 
 export const resolvePendingInputRoute = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: PendingInputRequiredEvent,
 ): PendingInputRoute => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
@@ -41,8 +41,8 @@ export const resolvePendingInputRoute = (
   if (!isLinkedChildEventForObservedSession(context, event, childExternalSessionId)) {
     return {
       shouldPatchParentLink,
-      pendingSession: context.store.sessionIdentity,
-      approvalReplySession: context.store.sessionIdentity,
+      pendingSession: context.session.identity,
+      approvalReplySession: context.session.identity,
     };
   }
 
@@ -61,12 +61,12 @@ export const resolvePendingInputRoute = (
   return {
     shouldPatchParentLink,
     pendingSession: childSession,
-    approvalReplySession: context.store.sessionIdentity,
+    approvalReplySession: context.session.identity,
   };
 };
 
 export const resolveResolvedPendingInputSession = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: PendingInputResolvedEvent,
 ): AgentSessionState | null => {
   const targetSessionId =

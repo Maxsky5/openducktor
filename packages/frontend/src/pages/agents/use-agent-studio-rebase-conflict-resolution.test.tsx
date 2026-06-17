@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
   createAgentSessionSummaryFixture,
@@ -65,13 +65,14 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     selection: {
       view: {
         taskId: "task-1",
+        role: "planner",
         selectedTask: createTaskCardFixture({
           id: "task-1",
           title: "Resolve rebase conflict",
           description: "Fix the branch divergence.",
         }),
-        activeSession: null,
-        selectedSessionSummary: plannerSession,
+        loadedSession: null,
+        selectedSessionIdentity: toAgentSessionIdentity(plannerSession),
         sessionsForTask: [builderSession],
       },
     },
@@ -309,8 +310,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         ...baseSelection,
         view: {
           ...baseSelection.view,
-          activeSession: liveBuilderSession,
-          selectedSessionSummary: null,
+          loadedSession: liveBuilderSession,
+          selectedSessionIdentity: toAgentSessionIdentity(liveBuilderSession),
           sessionsForTask: [],
         },
       },

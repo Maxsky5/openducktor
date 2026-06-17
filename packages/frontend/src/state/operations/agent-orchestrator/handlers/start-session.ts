@@ -3,7 +3,6 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
-import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
   RuntimeDependencies,
   SessionDependencies,
@@ -26,6 +25,7 @@ import {
 
 export type {
   StartAgentSessionInput,
+  StartAgentSessionResult,
   StartSessionDependencies,
 } from "./start-session.types";
 
@@ -111,16 +111,14 @@ export const createStartAgentSession = ({
       workspaceId,
       taskId,
       role,
+      holdForPostStartMessage:
+        input.startMode !== "reuse" && input.holdForPostStartMessage === true,
       isStaleRepoOperation,
     };
 
     if (input.startMode === "fresh" && role === "qa") {
       resolveStartTask({ ctx: startCtx, task });
     }
-    if (input.startMode === "fresh") {
-      void requireSelectedModelRuntimeKindForStart(role, input.selectedModel);
-    }
-
     const sourceSessionKey =
       input.startMode === "fresh" ? "" : agentSessionIdentityKey(input.sourceSession);
     const freshStartTarget = await resolveFreshStartTarget({

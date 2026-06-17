@@ -481,7 +481,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads loaded idle history from Codex token usage replay", async () => {
+  test("loads idle history without resuming the Codex thread", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     drainNotifications.mockImplementation(async () => [
@@ -508,7 +508,7 @@ describe("CodexAppServerAdapter history loading", () => {
 
     expect(
       transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/read"),
     ).toBe(true);
@@ -548,7 +548,7 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("resumes listed idle history so restored context usage is replayed", async () => {
+  test("loads paginated stored history without resuming the Codex thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -563,29 +563,7 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/resume") {
-          return {
-            thread: {
-              id: "thread-unloaded",
-              cwd: "/repo",
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  startedAt: 1,
-                  completedAt: 2,
-                  items: [
-                    {
-                      id: "msg-1",
-                      type: "agentMessage",
-                      phase: "final_answer",
-                      text: "Partial from resume",
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          throw new Error("Stored Codex history must be read without resuming the thread.");
         }
         if (request.method === "thread/read") {
           return {
@@ -648,13 +626,7 @@ describe("CodexAppServerAdapter history loading", () => {
         text: "Hydrated from paginated history",
       }),
     );
-    expect(calls.map((call) => call.method)).toEqual([
-      "thread/loaded/list",
-      "thread/list",
-      "thread/resume",
-      "thread/read",
-      "thread/turns/list",
-    ]);
+    expect(calls.map((call) => call.method)).toEqual(["thread/read", "thread/turns/list"]);
   });
 
   test("loads documented thread-read tool item shapes", async () => {
@@ -938,21 +910,15 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("returns empty history without loading an absent Codex thread", async () => {
+  test("returns empty history when Codex has no stored thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
-        if (request.method === "thread/loaded/list") {
-          return { data: [], nextCursor: null } as Response;
-        }
-        if (request.method !== "thread/list") {
+        if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        return {
-          data: [{ id: "other-thread", cwd: "/repo", createdAt: 1, status: { type: "idle" } }],
-          nextCursor: null,
-        } as Response;
+        throw new Error("thread not loaded: missing-thread");
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -967,8 +933,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ).resolves.toEqual([]);
 
     expect(calls).toEqual([
-      { method: "thread/loaded/list", params: { cursor: null, limit: 100 } },
-      { method: "thread/list", params: { cursor: null, limit: 100 } },
+      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: true } },
     ]);
   });
 

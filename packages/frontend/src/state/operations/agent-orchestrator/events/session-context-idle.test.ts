@@ -486,7 +486,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("routes reasoning deltas into thinking draft state without finalizing assistant text", async () => {
+  test("keeps reasoning-only deltas out of assistant transcript messages", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -527,8 +527,11 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:02.000Z",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.draftAssistantText).toBe("");
-    expect(findSession(sessionsRef, "session-1")?.draftReasoningText).toBe("Reason silently");
+    expect(
+      getSessionMessages(sessionsRef).some((message) =>
+        message.content.includes("Reason silently"),
+      ),
+    ).toBe(false);
 
     handleEvent({
       type: "session_idle",
@@ -536,7 +539,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.draftReasoningText).toBe("");
     expect(
       getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Reason silently"),
@@ -633,7 +635,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(findSession(sessionsRef, "session-1")?.pendingUserMessageStartedAt).toBeUndefined();
   });
 
-  test("flushes buffered text drafts before terminal idle settlement", async () => {
+  test("keeps streamed text messages through terminal idle settlement", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -674,8 +676,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:02.000Z",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.draftAssistantText).toBe("");
-
     handleEvent({
       type: "session_idle",
       externalSessionId: "session-1",
@@ -691,7 +691,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       (message) => message.id === "assistant-buffered-1",
     );
     expect(streamedAssistant?.meta).toMatchObject({ kind: "assistant", isFinal: false });
-    expect(findSession(sessionsRef, "session-1")?.draftAssistantText).toBe("");
   });
 
   test("upserts the finalized assistant message instead of appending a duplicate", async () => {

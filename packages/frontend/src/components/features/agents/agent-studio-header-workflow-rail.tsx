@@ -112,7 +112,10 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (attentionVariant === "blocked_task") {
     return "Task is blocked and waiting for user action";
   }
-  if (isAgentSessionActivityWorking(entry.state.liveSession)) {
+  if (
+    entry.state.liveSession !== "none" &&
+    isAgentSessionActivityWorking(entry.state.liveSession)
+  ) {
     return "Step in progress";
   }
   if (entry.state.liveSession === "error") {
@@ -151,7 +154,8 @@ function WorkflowStepButton({
   onSelect: (role: AgentRole, sessionValue: string | null) => void;
 }): ReactElement {
   const Icon = step.icon;
-  const shouldSpinInProgress = isAgentSessionActivityWorking(step.state.liveSession);
+  const shouldSpinInProgress =
+    step.state.liveSession !== "none" && isAgentSessionActivityWorking(step.state.liveSession);
   const attentionVariant = getWorkflowStepAttentionVariant(step);
 
   return (

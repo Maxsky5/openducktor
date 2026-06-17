@@ -2,27 +2,26 @@ import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import {
   type AgentSessionCollection,
+  createAgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { normalizeWorkingDirectory } from "../support/core";
-import { fromPersistedSessionRecord } from "../support/persistence";
+import {
+  fromPersistedSessionRecord,
+  type PersistedTaskSessionRecord,
+} from "../support/persistence";
 import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   type AgentSessionRuntimeSnapshot,
-  applyAgentSessionRuntimeSnapshotToSession,
+  applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
 } from "./session-runtime-snapshot";
-
-type TaskSessionRecord = {
-  taskId: string;
-  record: AgentSessionRecord;
-};
 
 export type TaskSessionRecords = {
   id: string;
@@ -34,42 +33,17 @@ export type RepoRuntimeSessionSnapshots = Map<string, AgentSessionRuntimeSnapsho
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: AgentSessionRef[];
+  removedSessionRefs: AgentSessionRef[];
 };
 
-const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionRecord[] => {
-  const records: TaskSessionRecord[] = [];
+const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): PersistedTaskSessionRecord[] => {
+  const records: PersistedTaskSessionRecord[] = [];
   for (const task of tasks) {
     for (const record of task.agentSessions) {
       records.push({ taskId: task.id, record });
     }
   }
   return records;
-};
-
-const collectPersistedSessionKeys = (records: TaskSessionRecord[]): Set<string> =>
-  new Set(records.map(({ record }) => agentSessionIdentityKey(record)));
-
-const shouldKeepLocalSession = (
-  session: AgentSessionState,
-  persistedSessionKeys: Set<string>,
-): boolean => {
-  return (
-    !persistedSessionKeys.has(agentSessionIdentityKey(session)) && session.status === "starting"
-  );
-};
-
-const selectLocalSessions = (
-  currentSessionCollection: AgentSessionCollection,
-  taskSessionRecords: TaskSessionRecord[],
-): AgentSessionCollection => {
-  const persistedSessionKeys = collectPersistedSessionKeys(taskSessionRecords);
-  let localSessions = emptyAgentSessionCollection();
-  for (const session of listAgentSessions(currentSessionCollection)) {
-    if (shouldKeepLocalSession(session, persistedSessionKeys)) {
-      localSessions = replaceAgentSession(localSessions, session);
-    }
-  }
-  return localSessions;
 };
 
 const toPersistedSessionView = ({
@@ -81,7 +55,7 @@ const toPersistedSessionView = ({
   record: AgentSessionRecord;
   current: AgentSessionState | undefined;
 }): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord(record, taskId);
+  const persisted = fromPersistedSessionRecord({ taskId, record });
   if (!current) {
     return persisted;
   }
@@ -95,6 +69,9 @@ const toPersistedSessionView = ({
     selectedModel: persisted.selectedModel,
   };
 };
+
+const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
+  session.status === "starting";
 
 export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
@@ -148,8 +125,26 @@ export const buildRepoSessionReadModel = ({
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
+  const loadedTaskIds = new Set(tasks.map((task) => task.id));
+  const persistedSessionKeys = new Set(
+    taskSessionRecords.map(({ record }) =>
+      agentSessionIdentityKey(toPersistedRuntimeSessionRef({ repoPath, record })),
+    ),
+  );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
-  let sessionCollection = selectLocalSessions(currentSessions, taskSessionRecords);
+  const currentSessionsOutsideLoadedTasks = listAgentSessions(currentSessions).filter(
+    (session) =>
+      !loadedTaskIds.has(session.taskId) || shouldKeepLocalSessionWithoutPersistedRecord(session),
+  );
+  const removedSessionRefs = listAgentSessions(currentSessions)
+    .filter(
+      (session) =>
+        loadedTaskIds.has(session.taskId) &&
+        !persistedSessionKeys.has(agentSessionIdentityKey(session)) &&
+        !shouldKeepLocalSessionWithoutPersistedRecord(session),
+    )
+    .map((session) => toRuntimeSessionRef(repoPath, session));
+  let sessionCollection = createAgentSessionCollection(currentSessionsOutsideLoadedTasks);
   const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
@@ -162,7 +157,7 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const session = applyAgentSessionRuntimeSnapshotToSession(persistedSessionView, snapshot);
+    const session = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (shouldObserveAgentSessionRuntimeSnapshot(snapshot)) {
@@ -170,5 +165,5 @@ export const buildRepoSessionReadModel = ({
     }
   }
 
-  return { sessionCollection, liveSessionRefs };
+  return { sessionCollection, liveSessionRefs, removedSessionRefs };
 };

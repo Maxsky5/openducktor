@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
-import {
-  deriveAgentChatThreadProjection,
-  getAgentChatThreadState,
-} from "./agent-chat-thread-state";
+import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 
 const readyTranscriptState = buildThreadTranscriptState();
 
@@ -17,46 +14,70 @@ const readyRuntimeReadiness = {
   refreshChecks: async () => {},
 };
 
-describe("getAgentChatThreadState", () => {
+describe("projectAgentChatThreadState", () => {
   test("keeps the session renderable when the transcript is visible", () => {
     const session = buildSession({
       externalSessionId: "session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
     });
-    const projection = deriveAgentChatThreadProjection({
+    const sessionKey = agentSessionIdentityKey(session);
+    const projection = projectAgentChatThreadState({
+      sessionKey,
       session,
       transcriptState: buildThreadTranscriptState({ kind: "visible" }),
+      runtimeReadiness: readyRuntimeReadiness,
     });
 
     expect(projection.threadSession).toEqual(session);
-    expect(projection.activeSessionKey).toBe(agentSessionIdentityKey(session));
+    expect(projection.displayedSessionKey).toBe(sessionKey);
   });
 
   test("hides the session and marks the transcript pending while transcript state is loading", () => {
     const session = buildSession();
-    const projection = deriveAgentChatThreadProjection({
+    const sessionKey = agentSessionIdentityKey(session);
+    const projection = projectAgentChatThreadState({
+      sessionKey,
       session,
       transcriptState: buildThreadTranscriptState({ kind: "session_loading", reason: "history" }),
+      runtimeReadiness: readyRuntimeReadiness,
     });
 
     expect(projection.threadSession).toBeNull();
-    expect(projection.activeSessionKey).toBeNull();
+    expect(projection.displayedSessionKey).toBe(sessionKey);
+  });
+
+  test("keeps the selected key while a selected session is loading before session state exists", () => {
+    const sessionKey = "session-1|opencode|%2Frepo%2Fworktree";
+    const projection = projectAgentChatThreadState({
+      sessionKey,
+      session: null,
+      transcriptState: buildThreadTranscriptState({ kind: "session_loading", reason: "history" }),
+      runtimeReadiness: readyRuntimeReadiness,
+    });
+
+    expect(projection.threadSession).toBeNull();
+    expect(projection.displayedSessionKey).toBe(sessionKey);
   });
 
   test("hides the session without pending state when transcript state failed", () => {
     const session = buildSession();
-    const projection = deriveAgentChatThreadProjection({
+    const sessionKey = agentSessionIdentityKey(session);
+    const projection = projectAgentChatThreadState({
+      sessionKey,
       session,
       transcriptState: buildThreadTranscriptState({ kind: "failed" }),
+      runtimeReadiness: readyRuntimeReadiness,
     });
 
     expect(projection.threadSession).toBeNull();
-    expect(projection.activeSessionKey).toBeNull();
+    expect(projection.displayedSessionKey).toBe(sessionKey);
   });
 
   test("keeps runtime waiting separate from conversation hiding", () => {
-    const state = getAgentChatThreadState({
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -69,7 +90,9 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("treats history load as conversation-loading state", () => {
-    const state = getAgentChatThreadState({
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "session_loading", reason: "history" }),
       runtimeReadiness: readyRuntimeReadiness,
     });
@@ -81,7 +104,9 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("does not reset the transcript window for a visible transcript state", () => {
-    const state = getAgentChatThreadState({
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: readyTranscriptState,
       runtimeReadiness: readyRuntimeReadiness,
     });
@@ -91,7 +116,9 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("surfaces failed selected-session history as a transcript notice", () => {
-    const state = getAgentChatThreadState({
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "failed" }),
       runtimeReadiness: readyRuntimeReadiness,
     });
@@ -105,7 +132,10 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("does not let blocked runtime readiness hide a renderable transcript", () => {
-    const state = getAgentChatThreadState({
+    const session = buildSession();
+    const state = projectAgentChatThreadState({
+      sessionKey: agentSessionIdentityKey(session),
+      session,
       transcriptState: buildThreadTranscriptState({ kind: "visible" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -120,7 +150,9 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("keeps history failures distinct from runtime readiness failures", () => {
-    const state = getAgentChatThreadState({
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "failed" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -139,7 +171,9 @@ describe("getAgentChatThreadState", () => {
   });
 
   test("shows blocked runtime notice only when no transcript can render", () => {
-    const visible = getAgentChatThreadState({
+    const visible = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -148,7 +182,9 @@ describe("getAgentChatThreadState", () => {
         blockedReason: "Runtime unavailable",
       },
     });
-    const hidden = getAgentChatThreadState({
+    const hidden = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,

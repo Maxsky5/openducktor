@@ -10,6 +10,7 @@ import {
   createElement,
   type PropsWithChildren,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
@@ -41,6 +42,7 @@ type HookHarnessOptions = {
   queryClient?: QueryClient;
   runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
+  wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
 export const enableReactActEnvironment = (): void => {
@@ -63,9 +65,19 @@ const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
   workingDirectory: "/repo",
 };
 
+type TranscriptStateFixtureInput =
+  | AgentSessionTranscriptState
+  | { kind: "failed"; message?: string };
+
 export const createSelectedSessionTranscriptStateFixture = (
-  transcriptState: AgentSessionTranscriptState = { kind: "visible" },
-): AgentSessionTranscriptState => transcriptState;
+  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
+): AgentSessionTranscriptState =>
+  transcriptState.kind === "failed"
+    ? {
+        kind: "failed",
+        message: transcriptState.message ?? "The selected conversation could not be loaded.",
+      }
+    : transcriptState;
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,
@@ -145,6 +157,7 @@ export const createRuntimeDefinitionsContextValue = (
       }),
     loadRepoRuntimeSlashCommands:
       overrides.loadRepoRuntimeSlashCommands ?? (async () => ({ commands: [] })),
+    loadRepoRuntimeSkills: overrides.loadRepoRuntimeSkills ?? (async () => ({ skills: [] })),
     loadRepoRuntimeFileSearch: overrides.loadRepoRuntimeFileSearch ?? (async () => []),
   };
 };
@@ -208,6 +221,13 @@ export const createHookHarness = <Props, State>(
 
     return createElement(QueryProvider, { useIsolatedClient: true }, children);
   };
+  const renderOwnerProviders = (children: ReactNode): ReactNode => {
+    if (!options?.wrapper) {
+      return children;
+    }
+
+    return createElement(options.wrapper, null, children);
+  };
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -217,7 +237,7 @@ export const createHookHarness = <Props, State>(
         createElement(
           RuntimeDefinitionsContext.Provider,
           { value: runtimeDefinitionsContextRef.current },
-          children,
+          renderOwnerProviders(children),
         ),
       ),
     );

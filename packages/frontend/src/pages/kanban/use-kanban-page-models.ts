@@ -1,19 +1,21 @@
 import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
+import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import {
   useAgentOperations,
+  useAgentSessionReadModelState,
   useAgentSessionSummaries,
   useTasksState,
   useWorkspaceState,
 } from "@/state";
-import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
+import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -28,27 +30,24 @@ type UseKanbanPageModelsArgs = {
   onCloseDetails: () => void;
 };
 
-type ResetTaskAndReloadSessionsArgs = {
+type ResetTaskAndRefreshTaskSessionsArgs = {
   taskId: string;
   resetTask: (taskId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string }) => Promise<void>;
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  refreshTaskSessions: (taskId: string) => Promise<void>;
   onSessionRefreshError?: (error: unknown) => void;
 };
 
 const EMPTY_KANBAN_TASKS = Object.freeze([]) as unknown as TaskCard[];
 
-export const resetTaskAndReloadSessions = async ({
+export const resetTaskAndRefreshTaskSessions = async ({
   taskId,
   resetTask,
-  removeAgentSessions,
-  loadAgentSessions,
+  refreshTaskSessions,
   onSessionRefreshError,
-}: ResetTaskAndReloadSessionsArgs): Promise<void> => {
+}: ResetTaskAndRefreshTaskSessionsArgs): Promise<void> => {
   await resetTask(taskId);
-  await removeAgentSessions({ taskId });
   try {
-    await loadAgentSessions(taskId);
+    await refreshTaskSessions(taskId);
   } catch (error: unknown) {
     onSessionRefreshError?.(error);
     throw error;
@@ -77,13 +76,8 @@ export function useKanbanPageModels({
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
-  const {
-    loadAgentSessions,
-    removeAgentSessions,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
-  } = useAgentOperations();
+  const { startAgentSession, sendAgentMessage } = useAgentOperations();
+  const { refreshTaskSessions } = useAgentSessionReadModelState();
   const sessions = useAgentSessionSummaries();
   const {
     refreshTasks,
@@ -133,22 +127,28 @@ export function useKanbanPageModels({
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
   const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
   const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
-  const historicalSessionsQuery = useQuery({
-    ...agentSessionBulkQueryOptions(workspaceRepoPath ?? "", kanbanTaskIds),
-    enabled: shouldLoadHistoricalSessions,
+  const historicalSessionQueries = useQueries({
+    queries:
+      shouldLoadHistoricalSessions && workspaceRepoPath
+        ? kanbanTaskIds.map((taskId) => agentSessionListQueryOptions(workspaceRepoPath, taskId))
+        : [],
   });
   const historicalSessionsByTaskId = useMemo(
-    () => new Map(Object.entries(historicalSessionsQuery.data ?? {})),
-    [historicalSessionsQuery.data],
+    () =>
+      new Map(
+        kanbanTaskIds.map((taskId, index) => [taskId, historicalSessionQueries[index]?.data ?? []]),
+      ),
+    [historicalSessionQueries, kanbanTaskIds],
   );
+  const historicalSessionsError = historicalSessionQueries.find((query) => query.isError)?.error;
   const reportedHistoricalSessionsErrorRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!historicalSessionsQuery.isError) {
+    if (!historicalSessionsError) {
       reportedHistoricalSessionsErrorRef.current = null;
       return;
     }
 
-    const description = errorMessage(historicalSessionsQuery.error);
+    const description = errorMessage(historicalSessionsError);
     if (reportedHistoricalSessionsErrorRef.current === description) {
       return;
     }
@@ -157,7 +157,7 @@ export function useKanbanPageModels({
     toast.error("Failed to load task session history", {
       description,
     });
-  }, [historicalSessionsQuery.error, historicalSessionsQuery.isError]);
+  }, [historicalSessionsError]);
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
@@ -166,6 +166,11 @@ export function useKanbanPageModels({
     isKanbanPending: false,
   });
   const navigate = useNavigate();
+  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+    workspaceId: activeWorkspaceId,
+    startAgentSession,
+    sendAgentMessage,
+  });
 
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeWorkspaceId,
@@ -178,9 +183,7 @@ export function useKanbanPageModels({
     workspaceRepoPath,
     humanRequestChangesTask,
     setTaskTargetBranch,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
+    runSessionStartWorkflow,
   });
   const {
     humanReviewFeedbackModal,
@@ -213,11 +216,13 @@ export function useKanbanPageModels({
   );
   const onResetTask = useCallback(
     async (taskId: string): Promise<void> => {
-      await resetTaskAndReloadSessions({
+      if (!workspaceRepoPath) {
+        throw new Error("Active workspace is required to refresh task sessions.");
+      }
+      await resetTaskAndRefreshTaskSessions({
         taskId,
         resetTask,
-        removeAgentSessions,
-        loadAgentSessions,
+        refreshTaskSessions,
         onSessionRefreshError: (error) => {
           toast.error("Failed to refresh sessions", {
             description: errorMessage(error),
@@ -225,7 +230,7 @@ export function useKanbanPageModels({
         },
       });
     },
-    [loadAgentSessions, removeAgentSessions, resetTask],
+    [workspaceRepoPath, refreshTaskSessions, resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
     workspaceId: activeWorkspaceId,
@@ -268,8 +273,7 @@ export function useKanbanPageModels({
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks: kanbanTasks,
     sessions,
-    loadAgentSessions,
-    removeAgentSessions,
+    refreshTaskSessions,
     resetTaskImplementation,
     closeTaskDetails: onCloseDetails,
   });

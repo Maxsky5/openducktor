@@ -1,15 +1,25 @@
-import { describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
-import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
+import {
+  createSessionStartWorkflowRunner,
+  resolveBuildContinuationLaunchAction,
+} from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { parsePersistedTaskTabs } from "../agents/agent-studio-task-tabs-storage";
 import {
   createAgentSessionSummaryFixture,
   createDeferred,
@@ -17,7 +27,6 @@ import {
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
-import { parsePersistedTaskTabs } from "../agents/agents-page-session-tabs";
 import { toTabsStorageKey } from "../agents/query-sync/agent-studio-navigation";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 
@@ -30,6 +39,17 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const createRunSessionStartWorkflow = (
+  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
+) =>
+  createSessionStartWorkflowRunner({
+    queryClient: new QueryClient(),
+    workspaceId: "workspace-1",
+    startAgentSession: async () => sessionIdentity("session-new"),
+    sendAgentMessage: async () => {},
+    ...overrides,
+  });
 
 const agentStudioSessionUrl = (
   taskId: string,
@@ -127,6 +147,7 @@ const createHookHarness = (initialProps: HookArgs) => {
               refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
               loadRepoRuntimeCatalog: async () => createModalCatalog(),
               loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeSkills: async () => ({ skills: [] }),
               loadRepoRuntimeFileSearch: async () => [],
             },
           },
@@ -152,6 +173,32 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
     planner: null,
     build: null,
     qa: null,
+  },
+});
+
+const createRepoConfigFixture = (): RepoConfig => ({
+  workspaceId: "workspace-1",
+  workspaceName: "Workspace",
+  repoPath: "/repo",
+  defaultRuntimeKind: "opencode",
+  worktreeBasePath: undefined,
+  branchPrefix: "odt",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: {
+    providers: {},
+  },
+  hooks: {
+    preStart: [],
+    postComplete: [],
+  },
+  devServers: [],
+  worktreeCopyPaths: [],
+  promptOverrides: {},
+  agentDefaults: {
+    spec: undefined,
+    planner: undefined,
+    build: undefined,
+    qa: undefined,
   },
 });
 
@@ -201,9 +248,7 @@ const createBaseArgs = (): HookArgs => ({
   navigate: mock(() => {}),
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
-  startAgentSession: async () => sessionIdentity("session-new"),
-  settleStartedAgentSession: () => {},
-  sendAgentMessage: async () => {},
+  runSessionStartWorkflow: createRunSessionStartWorkflow(),
 });
 
 describe("resolveBuildContinuationLaunchAction", () => {
@@ -232,6 +277,19 @@ describe("resolveBuildContinuationLaunchAction", () => {
 });
 
 describe("useKanbanSessionStartFlow", () => {
+  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
+  beforeEach(() => {
+    host.workspaceGetRepoConfig = async () => createRepoConfigFixture();
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+  });
+
+  afterEach(() => {
+    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
   test("rejects session starts while settings are unavailable", async () => {
     const args = createBaseArgs();
     args.openAgentStudioTabOnBackgroundSessionStart = null;
@@ -412,7 +470,7 @@ describe("useKanbanSessionStartFlow", () => {
         qa: null,
       },
     };
-    args.startAgentSession = startAgentSession;
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({ startAgentSession });
 
     const harness = createHookHarness(args);
 
@@ -486,7 +544,7 @@ describe("useKanbanSessionStartFlow", () => {
     };
     args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
     args.setTaskTargetBranch = setTaskTargetBranch;
-    args.startAgentSession = startAgentSession;
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({ startAgentSession });
 
     const harness = createHookHarness(args);
     await harness.mount();
@@ -665,8 +723,9 @@ describe("useKanbanSessionStartFlow", () => {
     const baseArgs = createBaseArgs();
     const harness = createHookHarness({
       ...baseArgs,
+      tasks: [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })],
       sessions: baseArgs.sessions.map((session) => ({ ...session, selectedModel: null })),
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
     });
 
     const taskWorktreeGet = mock(async () => ({
@@ -678,8 +737,9 @@ describe("useKanbanSessionStartFlow", () => {
     try {
       await harness.mount();
 
+      let startPromise: Promise<string | undefined> | undefined;
       await harness.run((state) => {
-        state.onDelegate("TASK-1");
+        startPromise = state.onPullRequestGenerate("TASK-1");
       });
 
       const modal = harness.getLatest().sessionStartModal;
@@ -712,7 +772,11 @@ describe("useKanbanSessionStartFlow", () => {
         }),
       );
 
-      startSessionDeferred.resolve(sessionIdentity("session-new"));
+      await harness.run(async () => {
+        startSessionDeferred.resolve(sessionIdentity("session-new"));
+        await startPromise;
+      });
+      await expect(startPromise).resolves.toBe("session-new");
     } finally {
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       await harness.unmount();
@@ -726,8 +790,10 @@ describe("useKanbanSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       humanRequestChangesTask,
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     });
 
     await harness.mount();
@@ -898,7 +964,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("onOpenSession uses explicit session identity even when it is not currently hydrated", async () => {
+  test("onOpenSession uses explicit session identity even when it is not currently loaded", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
 

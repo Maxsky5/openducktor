@@ -437,7 +437,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
   test("handles question/todo updates and terminal finish", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const runtimeData = createRecordingSessionTodosUpdater();
+    const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
@@ -450,7 +450,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-    const updateSessionOptions: unknown[] = [];
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
@@ -463,7 +463,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       externalSessionId: "session-1",
       sessionsRef,
       updateSession,
-      updateSessionTodos: runtimeData.updateSessionTodos,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -501,10 +501,56 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
-    expect(runtimeData.getTodos()).toHaveLength(1);
+    expect(todosRecorder.getTodos()).toHaveLength(1);
     expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
-    expect(updateSessionOptions).toContainEqual({ persist: false });
+    expect(updateSessionOptions).toContain(undefined);
+    expect(updateSessionOptions).toContainEqual({ persist: true });
+  });
+
+  test("does not update runtime todos when the observed session is gone", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const todosRecorder = createRecordingSessionTodosUpdater();
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    sessionsRef.current = createSessionsRef([]).current;
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_todos_updated",
+      externalSessionId: "session-1",
+      todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(todosRecorder.getTodos()).toEqual([]);
   });
 
   test("renders a cancelled session notice when a user-requested stop finishes normally", async () => {

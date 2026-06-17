@@ -115,7 +115,7 @@ type AgentStudioSessionSelectionInput = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
-  fallbackRole: AgentRole;
+  sessionlessRole: AgentRole;
   keepExplicitRoleSessionless?: boolean;
 };
 
@@ -133,13 +133,13 @@ export const resolveAgentStudioSessionSelection = ({
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
-  fallbackRole,
+  sessionlessRole,
   keepExplicitRoleSessionless = false,
 }: AgentStudioSessionSelectionInput): {
-  activeSession: AgentSessionSummary | null;
+  sessionSummary: AgentSessionSummary | null;
   role: AgentRole;
 } => {
-  const activeSession =
+  const activeSessionSummary =
     sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
       if (!isActiveSessionSelectionCandidate(session)) {
         return latest;
@@ -164,7 +164,7 @@ export const resolveAgentStudioSessionSelection = ({
 
   const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
     return {
-      activeSession: session,
+      sessionSummary: session,
       role,
     };
   };
@@ -174,7 +174,7 @@ export const resolveAgentStudioSessionSelection = ({
     if (explicitSession?.role) {
       return toSelection(explicitSession.role, explicitSession);
     }
-    return toSelection(fallbackRole, null);
+    return toSelection(sessionlessRole, null);
   }
 
   if (hasExplicitRoleParam) {
@@ -184,12 +184,12 @@ export const resolveAgentStudioSessionSelection = ({
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
-  if (activeSession?.role) {
-    return toSelection(activeSession.role, activeSession);
+  if (activeSessionSummary?.role) {
+    return toSelection(activeSessionSummary.role, activeSessionSummary);
   }
 
   if (!selectedTask) {
-    return toSelection(fallbackRole, null);
+    return toSelection(sessionlessRole, null);
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
@@ -207,7 +207,7 @@ export const resolveAgentStudioSessionSelection = ({
   );
 
   const withRoleFallback = (session: AgentSessionSummary | null) =>
-    toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
+    toSelection(session?.role ?? defaultRole ?? sessionlessRole, session);
 
   switch (selectedTask.status) {
     case "open": {
@@ -225,7 +225,7 @@ export const resolveAgentStudioSessionSelection = ({
     case "closed":
       return withRoleFallback(latestSessionByRole("build") ?? mostRecentSession);
     default:
-      return toSelection(defaultRole ?? fallbackRole, null);
+      return toSelection(defaultRole ?? sessionlessRole, null);
   }
 };
 
@@ -296,7 +296,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
-  fallbackRole,
+  sessionlessRole,
   keepExplicitRoleSessionless = false,
   selectionIntent = null,
 }: {
@@ -306,7 +306,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
-  fallbackRole: AgentRole;
+  sessionlessRole: AgentRole;
   keepExplicitRoleSessionless?: boolean;
   selectionIntent?: AgentStudioViewSessionSelectionIntent | null;
 }): {
@@ -352,15 +352,15 @@ export const resolveAgentStudioViewSessionSelection = ({
     hasExplicitRoleParam,
     roleFromQuery,
     selectedTask,
-    fallbackRole,
+    sessionlessRole,
     keepExplicitRoleSessionless: keepExplicitRoleSessionless && resolvedSessionKey === null,
   });
   return {
     role: selection.role,
-    sessionIdentity: selection.activeSession
-      ? toAgentSessionIdentity(selection.activeSession)
+    sessionIdentity: selection.sessionSummary
+      ? toAgentSessionIdentity(selection.sessionSummary)
       : null,
-    sessionSummary: selection.activeSession,
+    sessionSummary: selection.sessionSummary,
   };
 };
 

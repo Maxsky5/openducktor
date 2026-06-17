@@ -13,10 +13,14 @@ import type {
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { AgentSessionActivityState } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -33,23 +37,23 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
-export type AgentChatThreadSession = Pick<
-  AgentSessionState,
-  | "externalSessionId"
-  | "title"
-  | "runtimeKind"
-  | "workingDirectory"
-  | "pendingApprovals"
-  | "pendingQuestions"
-  | "selectedModel"
-> & {
-  activityState: AgentSessionActivityState;
-  messages: SessionMessagesState;
-  todos: AgentSessionTodoItem[];
+export type AgentChatThreadSession = AgentSessionIdentity &
+  Pick<AgentSessionState, "title" | "pendingApprovals" | "pendingQuestions" | "selectedModel"> & {
+    activityState: AgentSessionActivityState;
+    messages: SessionMessagesState;
+    todos: AgentSessionTodoItem[];
+  };
+
+export type AgentChatTranscriptNotice = {
+  kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
+  severity: "loading" | "error";
+  title: string;
+  description: string;
 };
 
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
+  displayedSessionKey: string | null;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
@@ -69,6 +73,8 @@ export type AgentChatThreadModel = {
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   sessionAuxiliaryError: string | null;
+  shouldResetTranscriptWindow: boolean;
+  transcriptNotice: AgentChatTranscriptNotice | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;

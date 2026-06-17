@@ -3,13 +3,14 @@ import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
-import type { SessionTransientState } from "../support/session-transient-state";
+import type { SessionTurnState } from "../support/session-turn-state";
 import { createPendingInputActions } from "./pending-input-actions";
 import { createPrepareSessionSend } from "./prepare-session-send";
-import { createSendAgentMessage, settleStartingSession } from "./send-agent-message";
+import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
 import { createStopAgentSession, type StopAgentSessionDependencies } from "./stop-session";
@@ -25,17 +26,8 @@ type SessionActionsDependencies = {
   currentWorkspaceRepoPathRef: { current: string | null };
   sessionStartGateRef: { current: SessionStartGate<AgentSessionIdentity> };
   sessionObserversRef: { current: SessionObservers };
-  sessionTransientState: SessionTransientState;
-  recordTurnUserMessageTimestamp: (
-    sessionKey: string,
-    timestamp: string | number,
-  ) => number | undefined;
-  readTurnUserMessageStartedAtMs: (sessionKey: string) => number | undefined;
-  updateSession: (
-    identity: AgentSessionIdentity,
-    updater: (current: AgentSessionState) => AgentSessionState,
-    options?: { persist?: boolean },
-  ) => AgentSessionState | null;
+  sessionTurnState: SessionTurnState;
+  updateSession: UpdateSession;
   observeAgentSession: ObserveAgentSession;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: EnsureRuntime;
@@ -64,9 +56,7 @@ export const createAgentSessionActions = ({
   currentWorkspaceRepoPathRef,
   sessionStartGateRef,
   sessionObserversRef,
-  sessionTransientState,
-  recordTurnUserMessageTimestamp,
-  readTurnUserMessageStartedAtMs,
+  sessionTurnState,
   updateSession,
   observeAgentSession,
   resolveTaskWorktree,
@@ -80,7 +70,6 @@ export const createAgentSessionActions = ({
   stopAuthoritativeSession,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
-  const { turnMetadata } = sessionTransientState;
   const prepareSessionSend = createPrepareSessionSend({
     workspaceRepoPath,
     workspaceId,
@@ -100,8 +89,9 @@ export const createAgentSessionActions = ({
     taskRef,
     updateSession,
     prepareSessionSend,
-    sessionTransientState,
-    recordTurnUserMessageTimestamp,
+    turnMetadata: sessionTurnState.metadata,
+    clearSessionTurnState: sessionTurnState.clearSession,
+    recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
   });
 
   const startAgentSession = createStartAgentSession({
@@ -142,7 +132,7 @@ export const createAgentSessionActions = ({
     readSessionSnapshot,
     updateSession,
     sessionObserversRef,
-    sessionTransientState,
+    clearSessionTurnState: sessionTurnState.clearSession,
     persistSessionRecord,
     stopAuthoritativeSession,
     invalidateSessionStopQueries,
@@ -155,9 +145,9 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
-    turnMetadata,
-    recordTurnUserMessageTimestamp,
-    readTurnUserMessageStartedAtMs,
+    turnMetadata: sessionTurnState.metadata,
+    recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
+    readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,
   });
 
   const modelActions = createSessionModelActions({
@@ -170,9 +160,6 @@ export const createAgentSessionActions = ({
   return {
     sendAgentMessage,
     startAgentSession,
-    settleStartedAgentSession: (session: AgentSessionIdentity): void => {
-      settleStartingSession(session, "idle", readSessionSnapshot, updateSession);
-    },
     stopAgentSession,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,
     replyAgentApproval: pendingInputActions.replyAgentApproval,

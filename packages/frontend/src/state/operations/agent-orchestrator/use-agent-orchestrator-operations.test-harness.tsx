@@ -3,6 +3,8 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contrac
 import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
@@ -78,19 +80,34 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
       };
 
 type ActiveWorkspace = ReturnType<typeof createDefaultActiveWorkspace>;
+type OrchestratorHookState = ReturnType<typeof useAgentOrchestratorOperations>;
+type OrchestratorHarnessState = OrchestratorHookState &
+  AgentOperationsContextValue & {
+    sessions: AgentSessionState[];
+  };
+
+const toHarnessState = (state: OrchestratorHookState): OrchestratorHarnessState => ({
+  get sessions() {
+    return state.sessionStore.getSessionsSnapshot();
+  },
+  ...state.operations,
+  ...state,
+});
 
 export const createHookHarness = (args: {
   activeRepo: string | null;
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
+  isLoadingTasks?: boolean;
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: AgentEnginePort;
   dependencies?: OrchestratorDependencies;
 }) => {
-  let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
+  let latest: OrchestratorHookState | null = null;
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
+    isLoadingTasks: args.isLoadingTasks ?? false,
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
   };
 
@@ -118,6 +135,7 @@ export const createHookHarness = (args: {
       activeRepo: string | null;
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
+      isLoadingTasks: boolean;
       refreshTaskData: (repoPath: string) => Promise<void>;
       agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;
@@ -144,10 +162,8 @@ export const createHookHarness = (args: {
     });
   };
 
-  const waitFor = async (
-    predicate: (state: ReturnType<typeof useAgentOrchestratorOperations>) => boolean,
-  ) => {
-    await sharedHarness.waitFor(() => latest !== null && predicate(latest));
+  const waitFor = async (predicate: (state: OrchestratorHarnessState) => boolean) => {
+    await sharedHarness.waitFor(() => latest !== null && predicate(toHarnessState(latest)));
     return getLatest();
   };
 
@@ -155,7 +171,7 @@ export const createHookHarness = (args: {
     if (!latest) {
       throw new Error("Hook state unavailable");
     }
-    return latest;
+    return toHarnessState(latest);
   };
 
   return {

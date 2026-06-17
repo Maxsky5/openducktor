@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
@@ -26,6 +26,9 @@ const createSession = (
   });
 
 const roleLabelByRole = { ...AGENT_ROLE_LABELS } as const;
+
+const selectedIdentityFromSession = (session: AgentSessionSummary | null = null) =>
+  session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
   test("buildActiveDocumentForRole maps documents by role", () => {
@@ -85,14 +88,13 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: unavailablePlannerTask,
       sessionsForTask: [plannerSession],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "planner",
       isSessionWorking: false,
       hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
-    expect(context.selectedInteractionRole).toBe("planner");
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
     const plannerSessionValue = agentSessionIdentityKey(plannerSession);
@@ -125,7 +127,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: task,
       sessionsForTask: [specSession, qaWaitingSession],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "spec",
       isSessionWorking: false,
       hasActiveGitConflict: false,
@@ -163,7 +165,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskWithFeedback,
       sessionsForTask: [activeSession],
-      activeSession,
+      selectedSessionIdentity: selectedIdentityFromSession(activeSession),
       role: "spec",
       isSessionWorking: true,
       hasActiveGitConflict: false,
@@ -202,7 +204,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskInAiReview,
       sessionsForTask: [],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
       hasActiveGitConflict: false,
@@ -233,7 +235,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskWithApprovedQa,
       sessionsForTask: [],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
       hasActiveGitConflict: false,

@@ -18,20 +18,16 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
   AgentModelSelection,
-  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionRef,
   AgentSessionTodoItem,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
+import type { AgentSessionIdentity } from "./agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
+import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -161,63 +157,19 @@ export type SpecStateContextValue = {
 
 export type AgentSessionReadModelStateContextValue = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  refreshTaskSessions: (taskId: string) => Promise<void>;
+};
+
+export type AgentSessionHistoryLoadContextValue = {
+  loadSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
 };
 
 export type AgentOperationsContextValue = {
-  loadAgentSessions: (taskId: string) => Promise<void>;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  readSessionSlashCommands: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
-  readSessionFileSearch: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (session: AgentSessionIdentity) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
-  startAgentSession: (
-    input:
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          startMode: "reuse";
-          sourceSession: AgentSessionIdentity;
-        }
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          selectedModel: AgentModelSelection;
-          startMode: "fresh";
-          targetWorkingDirectory?: string | null;
-        }
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          selectedModel: AgentModelSelection;
-          startMode: "fork";
-          sourceSession: AgentSessionIdentity;
-        },
-  ) => Promise<AgentSessionIdentity>;
-  settleStartedAgentSession: (session: AgentSessionIdentity) => void;
+  startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
@@ -236,8 +188,3 @@ export type AgentOperationsContextValue = {
     answers: string[][],
   ) => Promise<void>;
 };
-
-export type AgentStateContextValue = AgentSessionReadModelStateContextValue &
-  AgentOperationsContextValue & {
-    sessions: AgentSessionState[];
-  };

@@ -1,14 +1,17 @@
 import type { AgentRole } from "@openducktor/core";
-import {
-  type ActiveAgentSessionActivityState,
-  isAgentSessionActivityActive,
-} from "@/lib/agent-session-activity-state";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
   type WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
-import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  WorkflowAgentSessionState,
+} from "@/types/agent-orchestrator";
+import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
 
 export type KanbanSessionPresentationState = ActiveAgentSessionActivityState;
 
@@ -21,13 +24,11 @@ export type ActiveTaskSessionContext = {
 
 export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionContext>;
 
-export type KanbanTaskSession = Pick<
-  WorkflowAgentSessionState,
-  "externalSessionId" | "role" | "runtimeKind" | "workingDirectory"
-> & {
-  startedAt?: AgentSessionState["startedAt"];
-  presentationState: KanbanSessionPresentationState;
-};
+export type KanbanTaskSession = AgentSessionIdentity &
+  Pick<WorkflowAgentSessionState, "role"> & {
+    startedAt?: AgentSessionState["startedAt"];
+    presentationState: KanbanSessionPresentationState;
+  };
 
 export const toKanbanSessionPresentationState = (
   session: Pick<AgentSessionSummary, "activityState">,
@@ -39,6 +40,13 @@ export const toKanbanSessionPresentationState = (
   }
   return session.activityState;
 };
+
+export const toKanbanTaskSession = (session: WorkflowAgentSessionSummary): KanbanTaskSession => ({
+  ...toAgentSessionIdentity(session),
+  role: session.role,
+  startedAt: session.startedAt,
+  presentationState: toKanbanSessionPresentationState(session),
+});
 
 export const isKanbanActiveTaskSession = (
   session: AgentSessionSummary,

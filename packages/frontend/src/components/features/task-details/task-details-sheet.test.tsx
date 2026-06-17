@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryProvider } from "@/lib/query-provider";
@@ -7,13 +7,10 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 enableReactActEnvironment();
-
-const actualAppStateProviderModule = await import("../../../state/app-state-provider");
 
 const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
@@ -59,22 +56,6 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
 );
 
 describe("TaskDetailsSheet", () => {
-  beforeEach(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
-    ]);
-    mock.module("@/state/app-state-provider", () => ({
-      ...actualAppStateProviderModule,
-      useWorkspaceState: () => createWorkspaceStateValue(),
-    }));
-  });
-
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
-    ]);
-  });
-
   test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
 
@@ -152,10 +133,6 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("renders without the top-right close control", async () => {
-    mock.module("@/state/app-state-provider", () => ({
-      ...actualAppStateProviderModule,
-      useWorkspaceState: () => createWorkspaceStateValue(),
-    }));
     const { TaskDetailsSheet } = await import("./task-details-sheet");
 
     const task = createTaskCardFixture({
@@ -168,30 +145,23 @@ describe("TaskDetailsSheet", () => {
       },
     });
 
-    let html = "";
-    try {
-      html = renderToStaticMarkup(
-        createElement(
-          IsolatedProviders,
-          null,
-          createElement(TaskDetailsSheet, {
-            activeWorkspace: {
-              workspaceId: "workspace-a",
-              workspaceName: "Workspace A",
-              repoPath: "/repo-a",
-            },
-            task,
-            allTasks: [task],
-            open: true,
-            onOpenChange: () => {},
-          }),
-        ),
-      );
-    } finally {
-      await restoreMockedModules([
-        ["@/state/app-state-provider", async () => actualAppStateProviderModule],
-      ]);
-    }
+    const html = renderToStaticMarkup(
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(TaskDetailsSheet, {
+          activeWorkspace: {
+            workspaceId: "workspace-a",
+            workspaceName: "Workspace A",
+            repoPath: "/repo-a",
+          },
+          task,
+          allTasks: [task],
+          open: true,
+          onOpenChange: () => {},
+        }),
+      ),
+    );
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
   });

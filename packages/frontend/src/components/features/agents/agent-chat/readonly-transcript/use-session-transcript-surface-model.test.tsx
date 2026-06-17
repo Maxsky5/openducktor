@@ -2,9 +2,16 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import type { ChatSettings, SettingsSnapshot } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  AgentOperationsContext,
+  AgentSessionsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -14,6 +21,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue, ChecksStateContextValue } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 
@@ -36,16 +44,12 @@ const readSessionHistory = mock(
 );
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
-const useAgentSessionMock = mock(
-  (_identity: AgentSessionIdentity | null): AgentSessionState | null => null,
-);
 let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
-let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
-let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("@/lib/use-repo-runtime-readiness")>;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
+let sessionStore = createAgentSessionsStore("/repo-a");
 let runtimeReadiness: RepoRuntimeReadiness = {
   readinessState: "ready",
   isReady: true,
@@ -106,10 +110,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     workingDirectory: "/repo-a",
     historyLoadState: "not_requested",
     messages: createSessionMessagesState("session-subagent-1"),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     contextUsage: null,
     pendingApprovals: [makePendingApproval()],
     pendingQuestions: [makePendingQuestion()],
@@ -117,30 +117,83 @@ function makeLiveTranscriptSession(): AgentSessionState {
   };
 }
 
-function mockLiveTranscriptSessionLookup(session = makeLiveTranscriptSession()): void {
-  useAgentSessionMock.mockImplementation((identity: AgentSessionIdentity | null) =>
-    matchesAgentSessionIdentity(session, identity) ? session : null,
-  );
+function setLiveTranscriptSessions(...sessions: AgentSessionState[]): void {
+  sessionStore.setSessionCollection(createAgentSessionCollection(sessions));
 }
 
 function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
   return createSettingsSnapshotFixture({ chat });
 }
 
+function agentOperationsValue(): AgentOperationsContextValue {
+  return {
+    readSessionHistory,
+    readSessionTodos: async () => [],
+    startAgentSession: async () => ({
+      externalSessionId: "session-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+    }),
+    sendAgentMessage: async () => undefined,
+    stopAgentSession: async () => undefined,
+    updateAgentSessionModel: () => undefined,
+    replyAgentApproval,
+    answerAgentQuestion,
+  };
+}
+
+function checksStateValue(): ChecksStateContextValue {
+  return {
+    runtimeCheck: null,
+    taskStoreCheck: null,
+    runtimeCheckFailureKind: null,
+    taskStoreCheckFailureKind: null,
+    runtimeHealthByRuntime: {},
+    isLoadingChecks: false,
+    refreshChecks: async () => undefined,
+  };
+}
+
+function runtimeDefinitionsValue() {
+  return {
+    runtimeDefinitions: [],
+    availableRuntimeDefinitions: [],
+    agentRuntimes: {},
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [],
+    loadRepoRuntimeCatalog: async () => ({
+      providers: [],
+      models: [],
+      variants: [],
+      profiles: [],
+      defaultModelsByProvider: {},
+    }),
+    loadRepoRuntimeSlashCommands: async () => ({
+      commands: [],
+    }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+}
+
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-  <QueryProvider useIsolatedClient>{children}</QueryProvider>
+  <QueryProvider useIsolatedClient>
+    <AgentOperationsContext.Provider value={agentOperationsValue()}>
+      <AgentSessionsContext.Provider value={sessionStore}>
+        <ChecksStateContext.Provider value={checksStateValue()}>
+          <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+            {children}
+          </RuntimeDefinitionsContext.Provider>
+        </ChecksStateContext.Provider>
+      </AgentSessionsContext.Provider>
+    </AgentOperationsContext.Provider>
+  </QueryProvider>
 );
 
 describe("useSessionTranscriptSurfaceModel", () => {
   beforeAll(async () => {
-    [
-      actualAppStateProvider,
-      actualAppStateContexts,
-      actualHostOperations,
-      actualRepoRuntimeReadiness,
-    ] = await Promise.all([
-      import("@/state/app-state-provider"),
-      import("@/state/app-state-contexts"),
+    [actualHostOperations, actualRepoRuntimeReadiness] = await Promise.all([
       import("@/state/operations/host"),
       import("@/lib/use-repo-runtime-readiness"),
     ]);
@@ -164,10 +217,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     );
     replyAgentApproval.mockClear();
     answerAgentQuestion.mockClear();
-    useAgentSessionMock.mockClear();
-    useAgentSessionMock.mockImplementation(
-      (_identity: AgentSessionIdentity | null): AgentSessionState | null => null,
-    );
+    sessionStore = createAgentSessionsStore("/repo-a");
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
     runtimeReadiness = {
@@ -186,32 +236,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       return makeSettingsSnapshot();
     };
 
-    mock.module("@/state/app-state-provider", () => ({
-      useAgentOperations: () => ({
-        readSessionHistory,
-        replyAgentApproval,
-        answerAgentQuestion,
-      }),
-      useAgentSession: useAgentSessionMock,
-      useChecksState: () => ({
-        runtimeHealthByRuntime: {},
-        isLoadingChecks: false,
-        refreshChecks: async () => {},
-      }),
-    }));
-
-    mock.module("@/state/app-state-contexts", () => ({
-      useChecksOperationsContext: () => ({
-        refreshRepoRuntimeHealthForRepo: async () => ({}),
-        hasCachedRepoRuntimeHealth: () => true,
-      }),
-      useRuntimeDefinitionsContext: () => ({
-        runtimeDefinitions: [],
-        isLoadingRuntimeDefinitions: false,
-        runtimeDefinitionsError: null,
-      }),
-    }));
-
     mock.module("@/lib/use-repo-runtime-readiness", () => ({
       useRepoRuntimeReadiness: (args: RepoRuntimeReadinessArgs) => {
         runtimeReadinessCalls.push(args);
@@ -222,8 +246,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
-      ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["@/lib/use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
     ]);
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
@@ -313,11 +335,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(useAgentSessionMock).toHaveBeenCalledWith({
-        externalSessionId: "session-requested",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo-a",
-      });
       expect(readSessionHistory).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         runtimeKind: "opencode",
@@ -524,7 +541,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("prefers an already-live transcript session when it exists locally", async () => {
     const liveSession = makeLiveTranscriptSession();
-    mockLiveTranscriptSessionLookup(liveSession);
+    setLiveTranscriptSessions(liveSession);
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -553,7 +570,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("uses live subagent approvals on the transcript session", async () => {
     const pendingApproval = makePendingApproval();
-    mockLiveTranscriptSessionLookup();
+    setLiveTranscriptSessions(makeLiveTranscriptSession());
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -580,7 +597,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("replies to live subagent approvals through the runtime transcript session", async () => {
-    mockLiveTranscriptSessionLookup();
+    setLiveTranscriptSessions(makeLiveTranscriptSession());
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -614,7 +631,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("uses and replies to live subagent questions through the runtime transcript session", async () => {
     const pendingQuestion = makePendingQuestion();
-    mockLiveTranscriptSessionLookup();
+    setLiveTranscriptSessions(makeLiveTranscriptSession());
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -646,11 +663,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("keeps question submission disabled when the active session id does not match the transcript target", async () => {
-    useAgentSessionMock.mockImplementation(() => ({
+  test("keeps question submission disabled when the live session id does not match the transcript target", async () => {
+    setLiveTranscriptSessions({
       ...makeLiveTranscriptSession(),
       externalSessionId: "session-other",
-    }));
+    });
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -699,6 +716,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(readSessionHistory).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().model.thread.transcriptState).toEqual({
         kind: "failed",
+        message: "history unavailable",
       });
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: history unavailable",

@@ -60,10 +60,6 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     startedAt: "2026-02-22T12:00:00.000Z",
     workingDirectory: "/repo",
     messages: createSessionMessagesFixture(externalSessionId, messages),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     pendingApprovals: [],
     pendingQuestions: [],
     selectedModel: null,
@@ -151,7 +147,6 @@ describe("agents-page-view-model", () => {
     const model = buildAgentStudioHeaderModel({
       selectedTask: createTaskCard("task-1"),
       onOpenTaskDetails: mock(() => {}),
-      activeSession,
       roleOptions: [
         { role: "spec", label: "Spec", icon: Sparkles },
         { role: "planner", label: "Planner", icon: Sparkles },
@@ -226,7 +221,6 @@ describe("agents-page-view-model", () => {
     const model = buildAgentStudioHeaderModel({
       selectedTask: null,
       onOpenTaskDetails: mock(() => {}),
-      activeSession: null,
       roleOptions: [],
       workflowStateByRole: {
         spec: {

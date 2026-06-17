@@ -1,20 +1,19 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  canAbsorbLoadedPartSubagentIntoCurrentSessionRow,
-  matchesLoadedSubagent,
-  mergeSubagentMessages,
-} from "./history-subagent-message-merge";
 import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
 import {
-  appendSessionMessage,
   createSessionMessagesState,
   findSessionMessageById,
   forEachSessionMessage,
   getSessionMessagesSlice,
   isFinalAssistantChatMessage,
+  someSessionMessage,
 } from "./messages";
 import { isSessionSystemPromptMessage } from "./session-prompt";
-import { isSubagentMessage } from "./subagent-messages";
+import {
+  findCurrentSubagentMessagesForLoadedHistory,
+  isSubagentMessage,
+  mergeSubagentMessages,
+} from "./subagent-messages";
 
 const mergeReasoningMessages = (
   loadedMessage: AgentChatMessage,
@@ -70,51 +69,6 @@ const findMatchingCurrentToolMessages = ({
   return matches;
 };
 
-const findMatchingCurrentSubagentMessages = ({
-  currentOwner,
-  loadedMessage,
-  sameIdCurrentMessage,
-  absorbedCurrentMessageIds,
-}: {
-  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
-  loadedMessage: AgentChatMessage;
-  sameIdCurrentMessage: AgentChatMessage | undefined;
-  absorbedCurrentMessageIds: ReadonlySet<string>;
-}): AgentChatMessage[] => {
-  const matches: AgentChatMessage[] = [];
-  const seenIds = new Set<string>();
-  if (sameIdCurrentMessage && !absorbedCurrentMessageIds.has(sameIdCurrentMessage.id)) {
-    matches.push(sameIdCurrentMessage);
-    seenIds.add(sameIdCurrentMessage.id);
-  }
-
-  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
-  const fallbackCandidates: AgentChatMessage[] = [];
-  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
-    const candidate = currentSlice[index];
-    if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
-      continue;
-    }
-    if (matchesLoadedSubagent(loadedMessage, candidate)) {
-      matches.push(candidate);
-      seenIds.add(candidate.id);
-      continue;
-    }
-    if (canAbsorbLoadedPartSubagentIntoCurrentSessionRow(loadedMessage, candidate)) {
-      fallbackCandidates.push(candidate);
-    }
-  }
-
-  if (matches.length === 0 && fallbackCandidates.length === 1) {
-    const [fallbackCandidate] = fallbackCandidates;
-    if (fallbackCandidate) {
-      matches.push(fallbackCandidate);
-    }
-  }
-
-  return matches;
-};
-
 const findMatchingCurrentMessages = ({
   currentOwner,
   loadedMessage,
@@ -127,7 +81,7 @@ const findMatchingCurrentMessages = ({
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
   if (isSubagentMessage(loadedMessage)) {
-    return findMatchingCurrentSubagentMessages({
+    return findCurrentSubagentMessagesForLoadedHistory({
       currentOwner,
       loadedMessage,
       sameIdCurrentMessage,
@@ -212,9 +166,20 @@ export const mergeHistoryMessages = (
 ): AgentSessionState["messages"] => {
   const currentOwner = { externalSessionId, messages: currentMessages };
   const loadedOwner = { externalSessionId, messages: loadedMessages };
+  const loadedHasSystemPrompt = someSessionMessage(loadedOwner, isSessionSystemPromptMessage);
   const loadedMessageIds = new Set<string>();
   const absorbedCurrentMessageIds = new Set<string>();
-  let mergedMessages = createSessionMessagesState(externalSessionId);
+  const mergedMessages: AgentChatMessage[] = [];
+
+  if (!loadedHasSystemPrompt) {
+    forEachSessionMessage(currentOwner, (message) => {
+      if (!isSessionSystemPromptMessage(message)) {
+        return;
+      }
+      absorbedCurrentMessageIds.add(message.id);
+      mergedMessages.push(message);
+    });
+  }
 
   forEachSessionMessage(loadedOwner, (message) => {
     const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
@@ -233,18 +198,18 @@ export const mergeHistoryMessages = (
         mergeSameMessageId(currentMerged, matchingCurrentMessage),
       message,
     );
-    mergedMessages = appendSessionMessage(
-      { externalSessionId, messages: mergedMessages },
-      mergedMessage,
-    );
+    mergedMessages.push(mergedMessage);
   });
 
   forEachSessionMessage(currentOwner, (message) => {
     if (loadedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
     }
-    mergedMessages = appendSessionMessage({ externalSessionId, messages: mergedMessages }, message);
+    if (isSessionSystemPromptMessage(message)) {
+      return;
+    }
+    mergedMessages.push(message);
   });
 
-  return mergedMessages;
+  return createSessionMessagesState(externalSessionId, mergedMessages, currentMessages.version + 1);
 };

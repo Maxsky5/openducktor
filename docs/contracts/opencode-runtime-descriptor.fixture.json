@@ -83,7 +83,7 @@
       "stableItemOrder": true,
       "exposesCompletionState": false,
       "limitations": [
-        "OpenCode session history is hydrated at message-level fidelity."
+        "OpenCode session history is loaded at message-level fidelity."
       ]
     },
     "approvals": {

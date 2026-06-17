@@ -7,6 +7,11 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
+  failedAgentSessionReadModelLoadState,
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+} from "@/types/agent-session-read-model";
+import {
   deriveRuntimeTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
 } from "./session-transcript-state";
@@ -29,10 +34,6 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     workingDirectory: "/tmp/repo/worktree",
     historyLoadState: "not_requested",
     messages: createSessionMessagesFixture(externalSessionId, messages),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     contextUsage: null,
     pendingApprovals: [],
     pendingQuestions: [],
@@ -41,11 +42,15 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
   };
 };
 
-const selectedSessionIdentity = {
-  externalSessionId: "external-1",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/tmp/repo/worktree",
-};
+const repoPath = "/tmp/repo";
+
+const sessionIdentityFor = (session: AgentSessionState) => ({
+  externalSessionId: session.externalSessionId,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
+});
+
+const selectedSessionIdentity = sessionIdentityFor(createSession());
 
 const deriveSelectedSessionTranscriptStateForSession = ({
   session,
@@ -55,11 +60,11 @@ const deriveSelectedSessionTranscriptStateForSession = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }) =>
   deriveSelectedAgentSessionTranscriptState({
-    selectedSessionIdentity,
+    selectedSessionIdentity: sessionIdentityFor(session),
     session,
     hasSelectedTask: true,
     repoReadinessState,
-    sessionReadModelLoadState: { kind: "idle" },
+    sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
   });
 
 describe("deriveSelectedAgentSessionTranscriptState for loaded sessions", () => {
@@ -110,7 +115,10 @@ describe("deriveSelectedAgentSessionTranscriptState for loaded sessions", () => 
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "failed" });
+    expect(transcriptState).toEqual({
+      kind: "failed",
+      message: "The selected conversation could not be loaded.",
+    });
   });
 
   test("renders running sessions immediately without view readiness loading", () => {
@@ -244,18 +252,18 @@ describe("deriveRuntimeTranscriptState", () => {
     const transcriptState = deriveRuntimeTranscriptState({
       hasVisibleTranscript: false,
       hasHistoryTarget: false,
-      hasHistoryFailed: false,
+      historyFailureMessage: null,
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "empty" });
+    expect(transcriptState).toEqual({ kind: "empty", reason: "inactive" });
   });
 
   test("waits for runtime readiness before surfacing history loading", () => {
     const transcriptState = deriveRuntimeTranscriptState({
       hasVisibleTranscript: false,
       hasHistoryTarget: true,
-      hasHistoryFailed: false,
+      historyFailureMessage: null,
       repoReadinessState: "checking",
     });
 
@@ -266,7 +274,7 @@ describe("deriveRuntimeTranscriptState", () => {
     const transcriptState = deriveRuntimeTranscriptState({
       hasVisibleTranscript: false,
       hasHistoryTarget: true,
-      hasHistoryFailed: false,
+      historyFailureMessage: null,
       repoReadinessState: "ready",
     });
 
@@ -277,18 +285,18 @@ describe("deriveRuntimeTranscriptState", () => {
     const transcriptState = deriveRuntimeTranscriptState({
       hasVisibleTranscript: false,
       hasHistoryTarget: true,
-      hasHistoryFailed: true,
+      historyFailureMessage: "history unavailable",
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "failed" });
+    expect(transcriptState).toEqual({ kind: "failed", message: "history unavailable" });
   });
 
   test("shows the transcript when a live or history-loaded session exists", () => {
     const transcriptState = deriveRuntimeTranscriptState({
       hasVisibleTranscript: true,
       hasHistoryTarget: true,
-      hasHistoryFailed: false,
+      historyFailureMessage: null,
       repoReadinessState: "ready",
     });
 
@@ -303,7 +311,7 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
-      sessionReadModelLoadState: { kind: "idle" },
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -317,10 +325,16 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
-      sessionReadModelLoadState: { kind: "failed", message: "Session history failed" },
+      sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
+        repoPath,
+        "Session history failed",
+      ),
     });
 
-    expect(transcriptState).toEqual({ kind: "failed" });
+    expect(transcriptState).toEqual({
+      kind: "failed",
+      message: "Session history failed",
+    });
   });
 
   test("delegates selected active session readiness to the session transcript state", () => {
@@ -329,7 +343,7 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: createSession({ historyLoadState: "not_requested", messages: [] }),
       hasSelectedTask: true,
       repoReadinessState: "ready",
-      sessionReadModelLoadState: { kind: "idle" },
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -344,7 +358,7 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
-      sessionReadModelLoadState: { kind: "idle" },
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -358,7 +372,7 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
-      sessionReadModelLoadState: { kind: "loading" },
+      sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -372,7 +386,7 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
-      sessionReadModelLoadState: { kind: "loading" },
+      sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -381,15 +395,15 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
     });
   });
 
-  test("keeps sessionless selection inactive once runtime is ready", () => {
+  test("keeps sessionless selection explicit once runtime is ready", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
       selectedSessionIdentity: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
-      sessionReadModelLoadState: { kind: "idle" },
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
-    expect(transcriptState).toEqual({ kind: "empty" });
+    expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
   });
 });

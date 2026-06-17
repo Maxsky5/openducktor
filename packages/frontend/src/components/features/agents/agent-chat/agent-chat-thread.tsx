@@ -11,7 +11,7 @@ import {
   useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { cn } from "@/lib/utils";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -19,7 +19,6 @@ import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import { type AgentChatThreadState, getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
@@ -58,7 +57,7 @@ type AgentChatTranscriptProps = {
   renderedTurns: AgentChatRenderedTurn[];
   allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  transcriptNotice: AgentChatThreadState["transcriptNotice"];
+  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
   runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 };
 
@@ -66,7 +65,7 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
   notice,
   runtimeReadiness,
 }: {
-  notice: NonNullable<AgentChatThreadState["transcriptNotice"]>;
+  notice: NonNullable<AgentChatThreadModel["transcriptNotice"]>;
   runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 }): ReactElement {
   const isLoadingNotice = notice.severity === "loading";
@@ -432,7 +431,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
-    transcriptState: selectedSessionTranscriptState,
+    displayedSessionKey,
     runtimeReadiness,
     isInteractionEnabled,
     emptyState,
@@ -451,6 +450,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     onReplyApproval,
     sessionAuxiliaryError,
     isSessionWorking,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
     todoPanelCollapsed,
     onToggleTodoPanel,
     messagesContainerRef,
@@ -462,14 +463,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     () => (session ? toAgentSessionIdentity(session) : null),
     [session],
   );
-  const activeSessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
   const { transcriptState: transcriptRowsState } = useAgentChatTranscriptRows({
     session,
     showThinkingMessages,
-  });
-  const { shouldResetTranscriptWindow, transcriptNotice } = getAgentChatThreadState({
-    transcriptState: selectedSessionTranscriptState,
-    runtimeReadiness,
   });
 
   const rows = transcriptRowsState.rows;
@@ -488,7 +484,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   } = useAgentChatWindow({
     rows,
     turns: transcriptTurns,
-    activeSessionKey,
+    displayedSessionKey,
     shouldResetForTranscriptLoad: shouldResetTranscriptWindow,
     isSessionWorking,
     messagesContainerRef,
@@ -541,12 +537,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   // Keep the newest turn measured after completion too. Re-applying content-visibility to the
   // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
   const latestUserTurnKey = useMemo(() => {
-    if (!activeSessionKey || !transcriptRowsState.lastUserMessageId) {
+    if (!displayedSessionKey || !transcriptRowsState.lastUserMessageId) {
       return null;
     }
 
-    return `${activeSessionKey}:${transcriptRowsState.lastUserMessageId}`;
-  }, [activeSessionKey, transcriptRowsState.lastUserMessageId]);
+    return `${displayedSessionKey}:${transcriptRowsState.lastUserMessageId}`;
+  }, [displayedSessionKey, transcriptRowsState.lastUserMessageId]);
   const activeStreamingAssistantMessageId = transcriptRowsState.activeStreamingAssistantMessageId;
   const renderedTurns = useMemo(() => {
     return windowedTurns.map((turn) => ({

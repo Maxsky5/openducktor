@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import type { UpdateSession } from "../events/session-event-types";
 import {
   buildSession,
   createSessionActions,
@@ -18,7 +19,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
+    const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
 
     const actions = createSessionActions({
       adapter,
@@ -43,8 +44,53 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
       });
 
       expect(modelCalls).toHaveLength(1);
+      expect(modelCalls[0]).toEqual({
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        model: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      });
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
       expect(updateSessionOptions).toEqual([{ persist: true }]);
+    } finally {
+      adapter.updateSessionModel = originalUpdateSessionModel;
+    }
+  });
+
+  test("fails instead of silently ignoring model changes for an unloaded session", () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalUpdateSessionModel = adapter.updateSessionModel;
+    const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
+    adapter.updateSessionModel = (input) => {
+      modelCalls.push(input);
+    };
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: createSessionsRef([]),
+    });
+
+    try {
+      expect(() =>
+        actions.updateAgentSessionModel(
+          {
+            externalSessionId: "missing-session",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
+          {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        ),
+      ).toThrow("Session 'missing-session' is not loaded.");
+      expect(modelCalls).toHaveLength(0);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }

@@ -18,7 +18,7 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type HarnessProps = {
   rows: AgentChatWindowRow[];
-  activeSessionKey: string | null;
+  displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
   syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
@@ -303,7 +303,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -319,7 +319,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -327,7 +327,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -341,7 +341,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       {
@@ -365,7 +365,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -394,7 +394,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       {
@@ -427,7 +427,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -457,7 +457,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -492,7 +492,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows: [],
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: true,
     });
 
@@ -500,7 +500,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -511,10 +511,10 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("resolves the latest turn window immediately when the active session changes", () => {
+  test("resolves the latest turn window immediately when the displayed session changes", () => {
     expect(
       resolveAgentChatEffectiveTurnStart({
-        activeSessionKey: "session-2",
+        displayedSessionKey: "session-2",
         previousSessionKey: "session-1",
         turnStart: 0,
         latestTurnStart: 12,
@@ -530,7 +530,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -546,7 +546,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionKey: "session-2",
+      displayedSessionKey: "session-2",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -564,7 +564,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -586,7 +586,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionKey: "session-2",
+      displayedSessionKey: "session-2",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -611,7 +611,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -633,13 +633,13 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: [],
-      activeSessionKey: "session-2",
+      displayedSessionKey: "session-2",
       shouldResetForTranscriptLoad: true,
     });
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionKey: "session-2",
+      displayedSessionKey: "session-2",
       shouldResetForTranscriptLoad: false,
     });
 
@@ -662,7 +662,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -698,7 +698,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
@@ -726,7 +726,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
@@ -764,7 +764,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
@@ -797,7 +797,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: initialRows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
@@ -823,7 +823,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: nextRows,
-      activeSessionKey: "session-1",
+      displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
       isSessionWorking: true,
     });
@@ -845,7 +845,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
@@ -883,7 +883,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
@@ -928,7 +928,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,
@@ -970,7 +970,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionKey: "session-1",
+        displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,

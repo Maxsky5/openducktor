@@ -1,5 +1,4 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
@@ -16,8 +15,7 @@ type ResetImplementationOptions = {
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
-  loadAgentSessions: (taskId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
+  refreshTaskSessions: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
@@ -43,8 +41,7 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 export function useTaskResetFlow({
   tasks,
   sessions,
-  loadAgentSessions,
-  removeAgentSessions,
+  refreshTaskSessions,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs): {
@@ -109,35 +106,26 @@ export function useTaskResetFlow({
     setIsSubmitting(true);
     setModalError(null);
 
-    void resetTaskImplementation(task.id)
-      .then(() => {
-        removeAgentSessions({
-          taskId: task.id,
-          roles: ["build", "qa"],
-        });
+    void (async () => {
+      try {
+        await resetTaskImplementation(task.id);
+        await refreshTaskSessions(task.id);
         setTaskId(null);
         setCloseDetailsAfterReset(false);
         if (closeDetailsAfterReset) {
           closeTaskDetails();
         }
-        void loadAgentSessions(task.id).catch((error: unknown) => {
-          toast.error("Failed to refresh sessions", {
-            description: errorMessage(error),
-          });
-        });
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         setModalError(errorMessage(error));
-      })
-      .finally(() => {
+      } finally {
         setIsSubmitting(false);
-      });
+      }
+    })();
   }, [
     closeTaskDetails,
     closeDetailsAfterReset,
     isSubmitting,
-    loadAgentSessions,
-    removeAgentSessions,
+    refreshTaskSessions,
     resetTaskImplementation,
     task,
   ]);

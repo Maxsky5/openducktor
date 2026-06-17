@@ -1,11 +1,8 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { describe, expect, test } from "bun:test";
 import { unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../shared/host";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
   createBuildContinuationTargetFixture,
@@ -15,24 +12,6 @@ import {
   createStartSessionContextFixture,
   createTaskDependenciesFixture,
 } from "./start-session-strategy-test-fixtures";
-
-const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind?: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
-): AgentSessionRecord => ({
-  runtimeKind: input.runtimeKind ?? "opencode",
-  externalSessionId: input.externalSessionId,
-  role: input.role,
-  startedAt: input.startedAt,
-  workingDirectory: input.workingDirectory,
-  selectedModel: input.selectedModel ?? null,
-});
 
 const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
   current: createAgentSessionCollection(sessions),
@@ -59,69 +38,52 @@ const createQaAvailableTaskDependencies = () =>
   });
 
 describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
-  beforeEach(async () => {
-    await clearAppQueryClient();
-  });
-
   test("loads and returns a persisted reusable session", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
     const sessionsRef = createSessionsRef();
     let loadCalls = 0;
-    host.agentSessionsList = async () => [
-      persistedSessionRecord({
-        externalSessionId: "ext-build",
-        role: "build",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ];
 
-    try {
-      const sessionDependencies = createSessionDependenciesFixture({
-        sessionsRef,
-        loadAgentSessions: async () => {
-          loadCalls += 1;
-          sessionsRef.current = createAgentSessionCollection([
-            createBuildSessionFixture({
-              externalSessionId: "ext-build",
-            }),
-          ]);
-        },
-      });
-      await expect(
-        executeReuseStart({
-          ctx: createStartSessionContextFixture(),
-          input: {
-            sourceSession: {
-              externalSessionId: "ext-build",
-              runtimeKind: "opencode",
-              workingDirectory: "/tmp/repo/worktree",
-            },
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef,
+      loadAgentSessions: async () => {
+        loadCalls += 1;
+        sessionsRef.current = createAgentSessionCollection([
+          createBuildSessionFixture({
+            externalSessionId: "ext-build",
+          }),
+        ]);
+      },
+    });
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture(),
+        input: {
+          sourceSession: {
+            externalSessionId: "ext-build",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
           },
-          deps: {
-            session: sessionDependencies,
-            runtime: createRuntimeDependenciesFixture({
-              resolveTaskWorktree: async () =>
-                createBuildContinuationTargetFixture("/tmp/repo/worktree"),
-            }),
-            task: createTaskDependenciesFixture(),
-            model: {
-              loadRepoPromptOverrides: async () => ({}),
-            },
-          },
-        }),
-      ).resolves.toMatchObject({
-        kind: "reused",
-        session: {
-          externalSessionId: "ext-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
         },
-      });
-      expect(loadCalls).toBe(1);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveTaskWorktree: async () =>
+              createBuildContinuationTargetFixture("/tmp/repo/worktree"),
+          }),
+          task: createTaskDependenciesFixture(),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "reused",
+      session: {
+        externalSessionId: "ext-build",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+    expect(loadCalls).toBe(1);
   });
 
   test("rejects reuse when the build continuation target no longer matches", async () => {

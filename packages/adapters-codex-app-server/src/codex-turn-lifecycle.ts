@@ -57,6 +57,17 @@ const flushQueuedUserMessages = async (
   }
 };
 
+const emitAcceptedUserMessage = (
+  context: CodexTurnLifecycleContext,
+  activeTurn: ActiveCodexTurn,
+  parts: AgentUserMessagePart[],
+): void => {
+  if (!context.subscribeEvents && context.shouldDrainNotifications) {
+    return;
+  }
+  context.emitUserMessage(activeTurn.session, parts, activeTurn.model);
+};
+
 export const flushQueuedUserMessagesLater = (
   context: CodexTurnLifecycleContext,
   activeTurn: ActiveCodexTurn,
@@ -85,6 +96,7 @@ const steerActiveTurn = async (
   }
   if (!activeTurn.turnId) {
     activeTurn.queuedUserMessages.push(input);
+    emitAcceptedUserMessage(context, activeTurn, parts);
     return true;
   }
   await context.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
@@ -92,6 +104,7 @@ const steerActiveTurn = async (
     input,
     expectedTurnId: activeTurn.turnId,
   });
+  emitAcceptedUserMessage(context, activeTurn, parts);
   return true;
 };
 

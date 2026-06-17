@@ -8,16 +8,12 @@ import {
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
+  type CodexThreadStatusSnapshot,
   codexLoadedThreadIds,
   codexThreadList,
-  codexThreadStatusSnapshot,
+  threadSnapshotFromReadResponse,
 } from "./codex-app-server-threads";
-import type { CodexAppServerClient, CodexNotificationRecord } from "./types";
-
-type ReadOnlyIdleHistoryLoad = {
-  workingDirectory: string;
-  status: CodexThreadSnapshot["status"];
-};
+import type { CodexAppServerClient } from "./types";
 
 type PendingInventoryRead = {
   mode: "read" | "refresh";
@@ -27,34 +23,15 @@ type PendingInventoryRead = {
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, PendingInventoryRead>();
-  private readonly readOnlyIdleHistoryLoadsByThreadId = new Map<string, ReadOnlyIdleHistoryLoad>();
+  private readonly statusUpdatesByRuntimeId = new Map<
+    string,
+    Map<string, CodexThreadStatusSnapshot>
+  >();
 
   clear(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
     this.pendingInventoryByRuntimeId.delete(runtimeId);
-  }
-
-  clearReadOnlyHistoryLoad(threadId: string): void {
-    this.readOnlyIdleHistoryLoadsByThreadId.delete(threadId);
-  }
-
-  clearReadOnlyHistoryLoadForNotification(
-    threadId: string,
-    notification: CodexNotificationRecord,
-  ): void {
-    if (!this.hasReadOnlyHistoryLoad(threadId)) {
-      return;
-    }
-    if (notification.method === "turn/started") {
-      this.clearReadOnlyHistoryLoad(threadId);
-      return;
-    }
-    if (notification.method !== "thread/status/changed" || !isPlainObject(notification.params)) {
-      return;
-    }
-    if (codexThreadStatusSnapshot(notification.params.status).classification !== "idle") {
-      this.clearReadOnlyHistoryLoad(threadId);
-    }
+    this.statusUpdatesByRuntimeId.delete(runtimeId);
   }
 
   async read(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
@@ -87,11 +64,12 @@ export class CodexThreadInventoryReader {
       mode,
       promise: this.fetch(client, runtimeId).then(
         (inventory) => {
+          const updatedInventory = this.applyStatusUpdates(runtimeId, inventory);
           if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
-            this.inventoryByRuntimeId.set(runtimeId, inventory);
+            this.inventoryByRuntimeId.set(runtimeId, updatedInventory);
             this.pendingInventoryByRuntimeId.delete(runtimeId);
           }
-          return inventory;
+          return updatedInventory;
         },
         (error) => {
           if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
@@ -103,6 +81,46 @@ export class CodexThreadInventoryReader {
     };
     this.pendingInventoryByRuntimeId.set(runtimeId, nextPending);
     return nextPending.promise;
+  }
+
+  updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void {
+    const statusUpdates =
+      this.statusUpdatesByRuntimeId.get(runtimeId) ?? new Map<string, CodexThreadStatusSnapshot>();
+    statusUpdates.set(threadId, status);
+    this.statusUpdatesByRuntimeId.set(runtimeId, statusUpdates);
+
+    const inventory = this.inventoryByRuntimeId.get(runtimeId);
+    if (!inventory) {
+      return;
+    }
+    this.applyStatusUpdate(inventory, threadId, status);
+  }
+
+  private applyStatusUpdates(
+    runtimeId: string,
+    inventory: CodexThreadInventory,
+  ): CodexThreadInventory {
+    const statusUpdates = this.statusUpdatesByRuntimeId.get(runtimeId);
+    if (!statusUpdates) {
+      return inventory;
+    }
+    for (const [threadId, status] of statusUpdates) {
+      this.applyStatusUpdate(inventory, threadId, status);
+    }
+    return inventory;
+  }
+
+  private applyStatusUpdate(
+    inventory: CodexThreadInventory,
+    threadId: string,
+    status: CodexThreadStatusSnapshot,
+  ): void {
+    const thread = inventory.threadsById.get(threadId);
+    if (!thread) {
+      return;
+    }
+    inventory.loadedIds.add(threadId);
+    inventory.threadsById.set(threadId, { ...thread, status });
   }
 
   async findThread(
@@ -148,23 +166,24 @@ export class CodexThreadInventoryReader {
     return true;
   }
 
-  async loadThreadForHistory(
+  async readThreadHistory(
     client: CodexAppServerClient,
-    runtimeId: string,
     input: { externalSessionId: string; workingDirectory: string },
-  ): Promise<CodexThreadSnapshot | null> {
-    const inventory = await this.read(client, runtimeId);
-    const thread = inventory.threadsById.get(input.externalSessionId) ?? null;
+  ): Promise<unknown | null> {
+    let response: unknown;
+    try {
+      response = await this.readThreadWithTurns(client, input.externalSessionId);
+    } catch (error) {
+      if (isCodexThreadNotLoadedError(error)) {
+        return null;
+      }
+      throw error;
+    }
+    const thread = threadSnapshotFromReadResponse(response);
     if (!thread || thread.cwd !== input.workingDirectory) {
       return null;
     }
-    await client.threadResume({
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-    });
-    this.rememberReadOnlyIdleHistoryLoad(thread);
-    this.clear(runtimeId);
-    return thread;
+    return response;
   }
 
   async readThreadWithTurns(client: CodexAppServerClient, threadId: string): Promise<unknown> {
@@ -195,57 +214,11 @@ export class CodexThreadInventoryReader {
       this.fetchLoadedThreadIds(client),
       this.fetchThreads(client),
     ]);
-    return this.withReadOnlyHistoryStatuses({
+    return {
       runtimeId,
       loadedIds,
       threadsById: new Map(threads.map((thread) => [thread.id, thread])),
-    });
-  }
-
-  private hasReadOnlyHistoryLoad(threadId: string): boolean {
-    return this.readOnlyIdleHistoryLoadsByThreadId.has(threadId);
-  }
-
-  private rememberReadOnlyIdleHistoryLoad(thread: CodexThreadSnapshot): void {
-    if (thread.status.classification !== "idle") {
-      this.clearReadOnlyHistoryLoad(thread.id);
-      return;
-    }
-    this.readOnlyIdleHistoryLoadsByThreadId.set(thread.id, {
-      workingDirectory: thread.cwd,
-      status: thread.status,
-    });
-  }
-
-  private withReadOnlyHistoryStatuses(inventory: CodexThreadInventory): CodexThreadInventory {
-    if (this.readOnlyIdleHistoryLoadsByThreadId.size === 0) {
-      return inventory;
-    }
-
-    const threadsById = new Map(inventory.threadsById);
-    for (const [threadId, readOnlyLoad] of this.readOnlyIdleHistoryLoadsByThreadId) {
-      const thread = threadsById.get(threadId);
-      if (!thread) {
-        this.clearReadOnlyHistoryLoad(threadId);
-        continue;
-      }
-      if (thread.cwd !== readOnlyLoad.workingDirectory || !inventory.loadedIds.has(threadId)) {
-        this.clearReadOnlyHistoryLoad(threadId);
-        continue;
-      }
-      if (thread.status.classification !== "running") {
-        if (thread.status.classification !== "idle") {
-          this.clearReadOnlyHistoryLoad(threadId);
-        }
-        continue;
-      }
-      threadsById.set(threadId, {
-        ...thread,
-        status: readOnlyLoad.status,
-      });
-    }
-
-    return { ...inventory, threadsById };
+    };
   }
 
   private async fetchLoadedThreadIds(client: CodexAppServerClient): Promise<Set<string>> {

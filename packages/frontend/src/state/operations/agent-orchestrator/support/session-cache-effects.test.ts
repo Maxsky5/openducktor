@@ -41,6 +41,24 @@ describe("createSessionCacheEffects", () => {
     ).toEqual([sessionRecord]);
   });
 
+  test("fails instead of silently dropping a session record without an active workspace", async () => {
+    const queryClient = createQueryClient();
+    const upsert = mock(async () => undefined);
+    const effects = createSessionCacheEffects({
+      workspaceRepoPath: null,
+      queryClient,
+      hostPort: { agentSessionUpsert: upsert },
+    });
+
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toThrow(
+      "Active workspace repo path is unavailable.",
+    );
+    expect(upsert).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toBeUndefined();
+  });
+
   test("invalidates stop-related queries on the injected query client", async () => {
     const queryClient = createQueryClient();
     const invalidatedKeys: unknown[] = [];

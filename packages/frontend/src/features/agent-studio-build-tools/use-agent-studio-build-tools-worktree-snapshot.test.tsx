@@ -2,16 +2,18 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DiffDataState } from "@/features/agent-studio-git";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   createDeferred,
-  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
   type useAgentStudioBuildToolsWorktreeSnapshot,
@@ -98,21 +100,51 @@ const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] 
 });
 
 type HookArgs = Parameters<UseSnapshotHook>[0];
+type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
+  loadedSession?: AgentSessionState | null;
+  selectedSessionIdentity?: AgentSessionIdentity | null;
+  selectedSessionSummary?: AgentSessionSummary | null;
+};
 
-const createSelectedView = (
-  overrides: Partial<HookArgs["selectedView"]> = {},
-): HookArgs["selectedView"] => ({
-  role: "build",
-  taskId: "task-24",
-  selectedTask: createTaskCardFixture({ id: "task-24" }),
-  activeSession: createAgentSessionFixture({
+const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["selectedView"] => {
+  const {
+    loadedSession: loadedSessionOverride,
+    selectedSessionIdentity: selectedSessionIdentityOverride,
+    selectedSessionSummary: selectedSessionSummaryOverride,
+    role = "build",
+    ...viewOverrides
+  } = overrides;
+  const defaultSession = createAgentSessionFixture({
     role: "build",
     status: "running",
     workingDirectory: "/repo",
-  }),
-  transcriptState: createSelectedSessionTranscriptStateFixture(),
-  ...overrides,
-});
+  });
+  const loadedSession =
+    "loadedSession" in overrides ? (loadedSessionOverride ?? null) : defaultSession;
+  const selectedSessionSummary =
+    "selectedSessionSummary" in overrides
+      ? (selectedSessionSummaryOverride ?? null)
+      : loadedSession
+        ? toAgentSessionSummary(loadedSession)
+        : null;
+  const selectedSessionIdentity =
+    "selectedSessionIdentity" in overrides
+      ? (selectedSessionIdentityOverride ?? null)
+      : (selectedSessionSummary ?? (loadedSession ? toAgentSessionIdentity(loadedSession) : null));
+  const selectedSessionActivityState =
+    "selectedSessionActivityState" in overrides
+      ? (overrides.selectedSessionActivityState ?? null)
+      : (selectedSessionSummary?.activityState ?? null);
+
+  return {
+    role,
+    taskId: "task-24",
+    selectedTask: createTaskCardFixture({ id: "task-24" }),
+    selectedSessionIdentity,
+    selectedSessionActivityState,
+    ...viewOverrides,
+  };
+};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
@@ -121,7 +153,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   panelKind: "build_tools",
   isPanelOpen: true,
   repoSettings: null,
-  worktreeRecoveryKey: "recovery-key-a",
   ...overrides,
 });
 
@@ -161,13 +192,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          activeSession: createAgentSessionFixture({
+          loadedSession: createAgentSessionFixture({
             role: "build",
             status: "running",
             workingDirectory: "/repo/.worktrees/task-24",
           }),
         }),
-        worktreeRecoveryKey: "recovery-key-b",
       }),
     );
 
@@ -186,6 +216,42 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         repoPath: "/repo",
         worktreePath: "/repo/.worktrees/task-24",
         worktreeResolutionTaskId: null,
+        shouldBlockDiffLoading: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the selected session summary while the full session is still loading", async () => {
+    const selectedSessionSummary = toAgentSessionSummary(
+      createAgentSessionFixture({
+        role: "build",
+        status: "running",
+        workingDirectory: "/repo/.worktrees/task-24",
+      }),
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          loadedSession: null,
+          selectedSessionSummary,
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().context).toMatchObject({
+        isSelectedBuilderWorking: true,
+        sessionWorkingDirectory: "/repo/.worktrees/task-24",
+      });
+      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
         shouldBlockDiffLoading: false,
       });
     } finally {
@@ -222,7 +288,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const taskWorktreeFetch = createDeferred<{ workingDirectory: string } | null>();
     let didResolveTaskWorktreeFetch = false;
     queryClient.setQueryData(
-      taskWorktreeQueryKeys.taskWorktree("/repo", "task-25", "recovery-key-a"),
+      taskWorktreeQueryKeys.taskWorktree({
+        repoPath: "/repo",
+        taskId: "task-25",
+        taskVersion: "2026-02-22T12:00:00.000Z",
+      }),
       { workingDirectory: "/repo/.worktrees/task-25" },
       { updatedAt: 1 },
     );
@@ -314,7 +384,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           role: "spec",
-          activeSession: repoSession,
+          loadedSession: repoSession,
         }),
       }),
     );
@@ -335,7 +405,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           role: "spec",
-          activeSession: createAgentSessionFixture({
+          loadedSession: createAgentSessionFixture({
             role: "spec",
             status: "running",
             workingDirectory: "/repo",

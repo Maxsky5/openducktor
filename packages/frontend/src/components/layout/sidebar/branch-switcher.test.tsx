@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { act, createElement, useSyncExternalStore } from "react";
+import { act, type PropsWithChildren, useSyncExternalStore } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  type AppStateProviderModule,
-  createAppStateProviderModuleMock,
-} from "@/test-utils/app-state-provider-mock";
+import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
 
-const actualAppStateProviderModule = await import("../../../state/app-state-provider");
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
 
 let branchSyncDegraded = false;
@@ -21,7 +17,7 @@ const branchStateListeners = new Set<() => void>();
 
 const switchBranch = mock(async (_branchName: string) => {});
 
-type BranchState = ReturnType<AppStateProviderModule["useWorkspaceBranchState"]>;
+type BranchState = WorkspaceBranchStateContextValue;
 
 let branchState: BranchState;
 
@@ -90,7 +86,6 @@ const createDeferred = <T,>() => {
 
 const restoreBranchSwitcherMocks = async (): Promise<void> => {
   await restoreMockedModules([
-    ["@/state/app-state-provider", async () => actualAppStateProviderModule],
     ["@/components/features/repository/branch-selector", async () => actualBranchSelectorModule],
   ]);
 };
@@ -103,46 +98,34 @@ const importBranchSwitcher = async (): Promise<
   return BranchSwitcher;
 };
 
+const BranchStateProvider = ({ children }: PropsWithChildren) => {
+  const currentBranchState = useSyncExternalStore(
+    (listener) => {
+      branchStateListeners.add(listener);
+      return () => branchStateListeners.delete(listener);
+    },
+    () => branchState,
+    () => branchState,
+  );
+
+  return (
+    <WorkspaceBranchStateContext.Provider value={currentBranchState}>
+      {children}
+    </WorkspaceBranchStateContext.Provider>
+  );
+};
+
+const renderBranchSwitcherMarkup = (
+  BranchSwitcher: typeof import("./branch-switcher").BranchSwitcher,
+): string =>
+  renderToStaticMarkup(
+    <BranchStateProvider>
+      <BranchSwitcher />
+    </BranchStateProvider>,
+  );
+
 describe("BranchSwitcher", () => {
   beforeEach(() => {
-    const stateModule = createAppStateProviderModuleMock({
-      useAgentState: () => {
-        throw new Error("useAgentState is not used in this test");
-      },
-      useAgentOperations: () => {
-        throw new Error("useAgentOperations is not used in this test");
-      },
-      useAgentSessions: () => {
-        throw new Error("useAgentSessions is not used in this test");
-      },
-      useAgentSessionSummaries: () => {
-        throw new Error("useAgentSessionSummaries is not used in this test");
-      },
-      useAgentSession: () => {
-        throw new Error("useAgentSession is not used in this test");
-      },
-      useChecksState: () => {
-        throw new Error("useChecksState is not used in this test");
-      },
-      useSpecState: () => {
-        throw new Error("useSpecState is not used in this test");
-      },
-      useTasksState: () => {
-        throw new Error("useTasksState is not used in this test");
-      },
-      useWorkspaceBranchState: (() =>
-        useSyncExternalStore(
-          (listener) => {
-            branchStateListeners.add(listener);
-            return () => branchStateListeners.delete(listener);
-          },
-          () => branchState,
-          () => branchState,
-        )) as AppStateProviderModule["useWorkspaceBranchState"],
-    });
-
-    mock.module("@/state/app-state-provider", () => stateModule);
-
     mock.module("@/components/features/repository/branch-selector", () => ({
       BranchSelector: ({
         value,
@@ -179,14 +162,14 @@ describe("BranchSwitcher", () => {
     branchSyncDegraded = true;
     resetBranchState();
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderToStaticMarkup(createElement(BranchSwitcher));
+    const html = renderBranchSwitcherMarkup(BranchSwitcher);
 
     expect(html).toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
   test("hides degraded sync status when branch probe health is restored", async () => {
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderToStaticMarkup(createElement(BranchSwitcher));
+    const html = renderBranchSwitcherMarkup(BranchSwitcher);
 
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
@@ -195,7 +178,7 @@ describe("BranchSwitcher", () => {
     isSwitchingWorkspace = true;
     resetBranchState();
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderToStaticMarkup(createElement(BranchSwitcher));
+    const html = renderBranchSwitcherMarkup(BranchSwitcher);
 
     expect(html).toContain('data-disabled="true"');
   });
@@ -204,7 +187,7 @@ describe("BranchSwitcher", () => {
     activeBranchName = "feature/desloppify";
     resetBranchState();
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderToStaticMarkup(createElement(BranchSwitcher));
+    const html = renderBranchSwitcherMarkup(BranchSwitcher);
 
     expect(html).toContain('data-branch-value="feature/desloppify"');
   });
@@ -215,8 +198,11 @@ describe("BranchSwitcher", () => {
     resetBranchState();
     const BranchSwitcher = await importBranchSwitcher();
 
-    const renderBranchSwitcher = (): ReactElement => createElement(BranchSwitcher);
-    const rendered = render(renderBranchSwitcher());
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
 
     expect(latestOnValueChange).toBeDefined();
 

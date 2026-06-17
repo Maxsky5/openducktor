@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { createSessionStartWorkflowRunner } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -27,6 +29,17 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const createRunSessionStartWorkflow = (
+  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
+) =>
+  createSessionStartWorkflowRunner({
+    queryClient: new QueryClient(),
+    workspaceId: null,
+    startAgentSession: async () => sessionIdentity("session-new"),
+    sendAgentMessage: async () => {},
+    ...overrides,
+  });
 
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
@@ -94,6 +107,7 @@ const createHookHarness = (initialProps: HookArgs) => {
                 ],
               }),
               loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeSkills: async () => ({ skills: [] }),
               loadRepoRuntimeFileSearch: async () => [],
             },
           },
@@ -111,7 +125,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",
-  activeSession: null,
+  loadedSession: null,
   sessionsForTask: [],
   selectedTask: createTaskCardFixture(),
   canStartRole: () => true,
@@ -124,9 +138,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     profileId: "spec",
   },
   repoSettings: null,
-  startAgentSession: async () => sessionIdentity("session-new"),
-  settleStartedAgentSession: () => {},
-  sendAgentMessage: async () => {},
+  runSessionStartWorkflow: createRunSessionStartWorkflow(),
   humanRequestChangesTask: async () => {},
   updateQuery: () => {},
   ...overrides,
@@ -162,8 +174,10 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        startAgentSession,
-        sendAgentMessage,
+        runSessionStartWorkflow: createRunSessionStartWorkflow({
+          startAgentSession,
+          sendAgentMessage,
+        }),
       }),
     );
 
@@ -176,11 +190,11 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
         state.sessionStartModal !== null &&
         state.sessionStartModal.isSelectionCatalogLoading === false,
     );
-    await harness.run((state) => {
+    await harness.run(async (state) => {
       state.sessionStartModal?.onSelectModel("openai/gpt-5");
       state.sessionStartModal?.onSelectAgent("spec");
       state.sessionStartModal?.onSelectVariant("default");
-      state.sessionStartModal?.onConfirm({
+      await state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
         sourceSessionOptionValue: null,

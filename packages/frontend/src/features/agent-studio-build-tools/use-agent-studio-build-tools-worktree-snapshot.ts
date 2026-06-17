@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { hostClient } from "@/lib/host-client";
 import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
@@ -27,13 +28,8 @@ import {
 } from "./agent-studio-build-tools-worktree-snapshot";
 import {
   type BuildToolsSelectedView,
-  isBuildToolsSessionContextStable,
   useAgentStudioBuildToolsBootstrap,
 } from "./use-agent-studio-build-tools-bootstrap";
-
-type BuildToolsActiveSessionRole =
-  | NonNullable<BuildToolsSelectedView["activeSession"]>["role"]
-  | null;
 
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceRepoPath: string | null;
@@ -42,7 +38,6 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  worktreeRecoveryKey: string;
 };
 
 type AgentStudioBuildToolsWorktreeSnapshotDependencies = {
@@ -68,9 +63,8 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     taskId: string | null;
     selectedTaskId: string | null;
     viewRole: BuildToolsSelectedView["role"];
-    activeSessionRole: BuildToolsActiveSessionRole;
+    isSelectedBuilderWorking: boolean;
     sessionWorkingDirectory: string | null;
-    isSessionContextStable: boolean;
     hasSelectedTask: boolean;
   };
   gitPanelContextMode: AgentStudioGitPanelContextMode;
@@ -127,14 +121,11 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     panelKind,
     isPanelOpen,
     repoSettings,
-    worktreeRecoveryKey,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
-  const activeSession = selectedView.activeSession;
-  const activeSessionRole = activeSession?.role ?? null;
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
-    activeSessionRole === "build" ? "worktree" : "repository";
+    selectedView.role === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
     gitPanelContextMode === "repository"
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
@@ -142,10 +133,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const selectedTaskId = resolveBuildToolsSelectedTaskId({
     viewTaskId: selectedView.taskId,
     viewSelectedTaskId: selectedView.selectedTask?.id ?? null,
-  });
-  const isSessionContextStable = isBuildToolsSessionContextStable({
-    activeSession,
-    transcriptState: selectedView.transcriptState,
   });
   const hasSelectedTask = selectedTaskId != null;
   const taskTargetBranchState = useMemo(
@@ -179,6 +166,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
   const taskId = isEnabled ? selectedTaskId : null;
+  const taskWorktreeVersion = selectedView.selectedTask?.updatedAt ?? null;
   const devServerTaskId = isEnabled ? (selectedView.selectedTask?.id ?? null) : null;
   const isDevServerEnabled = isEnabled && devServerTaskId != null;
   const directWorktreePath = resolveDirectBuildWorktreePath({
@@ -191,12 +179,12 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     repoPath != null &&
     taskId != null &&
     directWorktreePath == null;
-  const taskWorktreeOptions = taskWorktreeQueryOptions(
-    repoPath ?? "",
-    taskId ?? "",
-    dependencies.taskWorktreeHost,
-    shouldQueryTaskWorktree && !directWorktreePath ? worktreeRecoveryKey : null,
-  );
+  const taskWorktreeOptions = taskWorktreeQueryOptions({
+    repoPath: repoPath ?? "",
+    taskId: taskId ?? "",
+    hostClient: dependencies.taskWorktreeHost,
+    taskVersion: shouldQueryTaskWorktree && !directWorktreePath ? taskWorktreeVersion : null,
+  });
   const taskWorktreeQuery = useQuery({
     ...taskWorktreeOptions,
     enabled: shouldQueryTaskWorktree,
@@ -311,9 +299,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         taskId,
         selectedTaskId,
         viewRole: selectedView.role,
-        activeSessionRole,
+        isSelectedBuilderWorking:
+          selectedView.role === "build" &&
+          isAgentSessionActivityWorking(selectedView.selectedSessionActivityState),
         sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-        isSessionContextStable,
         hasSelectedTask,
       },
       gitPanelContextMode,
@@ -332,13 +321,12 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       gitPanelContextMode,
       hasSelectedTask,
       isEnabled,
-      isSessionContextStable,
       openInTarget,
       repoPath,
       resolvedGitPanelBranch,
       selectedTaskId,
       selectedView.role,
-      activeSessionRole,
+      selectedView.selectedSessionActivityState,
       taskTargetBranchState,
       taskId,
       worktree,

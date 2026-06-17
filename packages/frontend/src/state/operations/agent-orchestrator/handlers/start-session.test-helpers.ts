@@ -57,11 +57,11 @@ export const persistedSessionRecord = (
     role: AgentSessionRecord["role"];
     startedAt: string;
     workingDirectory: string;
-    runtimeKind?: AgentSessionRecord["runtimeKind"];
+    runtimeKind: AgentSessionRecord["runtimeKind"];
     selectedModel?: AgentSessionRecord["selectedModel"];
   } & Record<string, unknown>,
 ): AgentSessionRecord => ({
-  runtimeKind: input.runtimeKind ?? "opencode",
+  runtimeKind: input.runtimeKind,
   externalSessionId: input.externalSessionId,
   role: input.role,
   startedAt: input.startedAt,
@@ -136,10 +136,6 @@ export const sessionFixture = (
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "not_requested",
   messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: null,

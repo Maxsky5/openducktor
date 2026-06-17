@@ -13,12 +13,7 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import {
-  createSessionDraftBuffers,
-  createSessionTurnMetadata,
-  createSessionTurnTiming,
-  type SessionTransientState,
-} from "../support/session-transient-state";
+import { createSessionTurnState } from "../support/session-turn-state";
 import {
   createAgentSessionRuntimeSnapshotFixture,
   createSessionObserversRefFixture,
@@ -43,10 +38,6 @@ export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessio
     startedAt: "2026-02-22T08:00:00.000Z",
     workingDirectory: "/tmp/repo/worktree",
     messages: createSessionMessagesFixture(externalSessionId, messages),
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
     pendingApprovals: [],
     pendingQuestions: [],
     selectedModel: null,
@@ -73,11 +64,16 @@ export const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
   current: createAgentSessionCollection(sessions),
 });
 
-export const createSessionTransientStateFixture = (): SessionTransientState => ({
-  draftBuffers: createSessionDraftBuffers(),
-  assistantTurnTiming: createSessionTurnTiming(),
-  turnMetadata: createSessionTurnMetadata(),
-});
+export const createSessionTurnStateFixture = () => {
+  const sessionTurnState = createSessionTurnState();
+
+  return {
+    assistantTurnTiming: sessionTurnState.timing,
+    turnMetadata: sessionTurnState.metadata,
+    clearSessionTurnState: sessionTurnState.clearSession,
+    sessionTurnState,
+  };
+};
 
 export const mockAgentSessionRuntimeSnapshot = (
   adapter: OpencodeSdkAdapter,
@@ -100,8 +96,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
   const adapter = actionOverrides.adapter ?? new OpencodeSdkAdapter();
   const sessionsRef = overrideSessionsRef ?? createSessionsRef();
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
-  const sessionTransientState =
-    actionOverrides.sessionTransientState ?? createSessionTransientStateFixture();
+  const sessionTurnState = createSessionTurnStateFixture();
 
   const dependencies: SessionActionDependencies = {
     workspaceRepoPath: "/tmp/repo",
@@ -114,11 +109,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
     sessionStartGateRef: { current: createSessionStartGate() },
     sessionObserversRef: createSessionObserversRefFixture(),
-    sessionTransientState,
-    recordTurnUserMessageTimestamp:
-      sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp,
-    readTurnUserMessageStartedAtMs:
-      sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs,
+    sessionTurnState: sessionTurnState.sessionTurnState,
     updateSession: (identity, updater) => {
       const current = getAgentSession(sessionsRef.current, identity);
       if (!current) {

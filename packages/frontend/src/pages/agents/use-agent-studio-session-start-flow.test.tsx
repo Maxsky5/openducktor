@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import * as sonnerActual from "sonner";
-import type { SessionStartWorkflowResult } from "@/features/session-start";
+import {
+  createSessionStartWorkflowRunner,
+  type SessionStartWorkflowResult,
+} from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -48,6 +52,17 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const createRunSessionStartWorkflow = (
+  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
+) =>
+  createSessionStartWorkflowRunner({
+    queryClient: new QueryClient(),
+    workspaceId: "workspace-1",
+    startAgentSession: async () => sessionIdentity("session-new"),
+    sendAgentMessage: async () => {},
+    ...overrides,
+  });
 
 const createModalCatalog = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -143,6 +158,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
               refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
               loadRepoRuntimeCatalog: async () => createModalCatalog(),
               loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeSkills: async () => ({ skills: [] }),
               loadRepoRuntimeFileSearch: async () => [],
             },
           },
@@ -187,7 +203,7 @@ const createBaseArgs = (): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",
-  activeSession: null,
+  loadedSession: null,
   sessionsForTask: [],
   selectedTask: createTask(),
   canStartRole: () => true,
@@ -196,9 +212,7 @@ const createBaseArgs = (): HookArgs => ({
     ...MODEL_SELECTION,
   },
   repoSettings: REPO_SETTINGS,
-  startAgentSession: async () => sessionIdentity("session-new"),
-  settleStartedAgentSession: () => {},
-  sendAgentMessage: async () => {},
+  runSessionStartWorkflow: createRunSessionStartWorkflow(),
   humanRequestChangesTask: async () => {},
   updateQuery: () => {},
 });
@@ -354,7 +368,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startSession starts a fresh session even when another session is active", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
-    const activeSession = createSession({
+    const loadedSession = createSession({
       taskId: "task-1",
       externalSessionId: "session-active",
       role: "spec",
@@ -362,7 +376,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession,
+      loadedSession,
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -400,7 +414,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "planner",
       selectionForNewSession: null,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -435,6 +449,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
+      holdForPostStartMessage: false,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -454,8 +469,10 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "planner",
       selectionForNewSession: null,
       input: "",
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     } as HookArgs & { input?: string });
 
     await harness.mount();
@@ -481,6 +498,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
+      holdForPostStartMessage: true,
     });
 
     await harness.unmount();
@@ -492,7 +510,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
+      loadedSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createPromptTask({
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: true, completed: true },
@@ -502,7 +520,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         },
       }),
       selectionForNewSession: null,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -537,6 +555,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
+      holdForPostStartMessage: true,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -556,13 +575,15 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
+      loadedSession: createSession({
         taskId: "task-1",
         externalSessionId: "session-spec",
         role: "spec",
       }),
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -605,8 +626,10 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     });
 
     await harness.mount();
@@ -631,9 +654,11 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.update({
       ...createBaseArgs(),
       role: "planner",
-      startAgentSession,
-      sendAgentMessage,
-      activeSession: null,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
+      loadedSession: null,
     });
 
     await harness.waitFor((state) => state.isStarting);
@@ -656,7 +681,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "qa",
-      activeSession: createSession({
+      loadedSession: createSession({
         taskId: "task-1",
         externalSessionId: "session-qa",
         role: "qa",
@@ -675,8 +700,10 @@ describe("useAgentStudioSessionStartFlow", () => {
           qa: { required: true, canSkip: false, available: false, completed: false },
         },
       }),
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -711,6 +738,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "builder",
       },
       startMode: "fresh" as const,
+      holdForPostStartMessage: true,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -743,7 +771,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "qa",
-      activeSession: createSession({
+      loadedSession: createSession({
         taskId: "task-1",
         externalSessionId: "session-qa",
         role: "qa",
@@ -757,8 +785,10 @@ describe("useAgentStudioSessionStartFlow", () => {
         },
       }),
       sessionsForTask: summarizeSessions([existingSession]),
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -824,7 +854,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "qa",
-      activeSession: createSession({
+      loadedSession: createSession({
         taskId: "task-1",
         externalSessionId: "session-qa",
         role: "qa",
@@ -846,7 +876,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           workingDirectory: "/repo/worktrees/session-existing",
         }),
       ]),
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -890,7 +920,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -930,7 +960,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       canStartRole: () => false,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -970,8 +1000,10 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "build",
       launchActionId: "build_after_human_request_changes",
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -1005,8 +1037,10 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "build",
       launchActionId: "build_after_human_request_changes",
       canStartRole: () => false,
-      startAgentSession,
-      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -1035,7 +1069,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({

@@ -216,40 +216,36 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const activeSession = context.store.readSession(context.store.sessionIdentity);
+  const activeSession = context.store.readSession(context.session.identity);
   const taskId = activeSession?.taskId;
   const workflowToolAliasesByCanonical = activeSession
     ? context.refresh.resolveWorkflowToolAliasesByCanonical(activeSession.runtimeKind)
     : undefined;
 
   if (todoUpdateFromTool && activeSession) {
-    context.runtimeData.updateSessionTodos((todos) =>
+    context.todos.updateSessionTodos((todos) =>
       mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
     );
   }
 
-  context.store.updateSession(
-    context.store.sessionIdentity,
-    (current) => {
-      const { nextState, refreshDecision } = composeToolPartSessionUpdate({
-        current,
-        prepareCurrent,
-        part,
-        status: resolvedStatus,
-        observedEventTimestampMs,
-        input,
-        output,
-        error,
-        timestamp: event.timestamp,
-        workflowToolAliasesByCanonical,
-      });
+  context.store.updateSession(context.session.identity, (current) => {
+    const { nextState, refreshDecision } = composeToolPartSessionUpdate({
+      current,
+      prepareCurrent,
+      part,
+      status: resolvedStatus,
+      observedEventTimestampMs,
+      input,
+      output,
+      error,
+      timestamp: event.timestamp,
+      workflowToolAliasesByCanonical,
+    });
 
-      shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
+    shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
 
-      return nextState;
-    },
-    { persist: false },
-  );
+    return nextState;
+  });
 
   if (shouldRefreshTaskData) {
     runOrchestratorSideEffect(
@@ -258,7 +254,7 @@ export const handleToolPart = (
       {
         tags: {
           repoPath: context.refresh.repoPath,
-          externalSessionId: context.store.externalSessionId,
+          externalSessionId: context.session.identity.externalSessionId,
           tool: part.tool,
         },
       },

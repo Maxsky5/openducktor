@@ -12,13 +12,12 @@ import {
   useRef,
 } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
+import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
 
 const parseDraftStateKey = (draftStateKey: string) => {
   const [taskId = "", role = "", sessionKey = ""] = draftStateKey.split(":");
@@ -37,11 +36,6 @@ const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string)
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 
-type ComposerActiveSession = AgentSessionIdentity &
-  Pick<AgentSessionState, "selectedModel"> & {
-    isLoadingModelCatalog: boolean;
-  };
-
 export const invokeStopAgentSession = (
   session: AgentSessionIdentity | null,
   stopAgentSession: StopAgentSession | undefined,
@@ -54,7 +48,9 @@ export const invokeStopAgentSession = (
 
 export type AgentChatComposerConfig = {
   taskId: string;
-  activeSession: ComposerActiveSession | null;
+  displayedSessionKey: string | null;
+  loadedSession: (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel">) | null;
+  isSessionModelCatalogLoading: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   waitingInputPlaceholder: string | null;
@@ -186,19 +182,18 @@ export function useAgentChatComposerModel({
     [scrollToBottomOnSendRef],
   );
 
-  const composerRuntimeKind =
-    composer?.activeSession?.runtimeKind ?? composer?.selectedModelSelection?.runtimeKind ?? null;
-  const composerAccentAgentName = composer?.activeSession
-    ? composer.activeSession.selectedModel?.profileId
-    : composer?.selectedModelSelection?.profileId;
-  const composerAccentColor = useMemo(
+  const composerState = useMemo(
     () =>
-      resolveAgentSessionAccentColor({
-        agentName: composerAccentAgentName,
-        agentColors: sessionAgentColors,
-        runtimeKind: composerRuntimeKind,
-      }),
-    [composerAccentAgentName, composerRuntimeKind, sessionAgentColors],
+      composer
+        ? deriveAgentChatComposerModelState({
+            loadedSession: composer.loadedSession,
+            selectedModelSelection: composer.selectedModelSelection,
+            isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
+            isRuntimeReady: runtimeReadiness.isReady,
+            sessionAgentColors,
+          })
+        : null,
+    [composer, runtimeReadiness.isReady, sessionAgentColors],
   );
 
   return useMemo(() => {
@@ -206,18 +201,10 @@ export function useAgentChatComposerModel({
       return undefined;
     }
 
-    const isModelSelectionPending = Boolean(
-      composer.activeSession?.isLoadingModelCatalog && !composer.activeSession.selectedModel,
-    );
-    const displayedSessionKey = composer.activeSession
-      ? agentSessionIdentityKey(composer.activeSession)
-      : null;
-    const isComposerInteractionEnabled = runtimeReadiness.isReady;
-
     return {
       taskId: composer.taskId,
-      displayedSessionKey,
-      isInteractionEnabled: isComposerInteractionEnabled,
+      displayedSessionKey: composer.displayedSessionKey,
+      isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
@@ -229,7 +216,7 @@ export function useAgentChatComposerModel({
       isSessionWorking: composer.isSessionWorking,
       isWaitingInput: composer.isWaitingInput,
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
-      isModelSelectionPending,
+      isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
       ...(composer.selectedModelDescriptor !== undefined
         ? { selectedModelDescriptor: composer.selectedModelDescriptor }
@@ -257,11 +244,11 @@ export function useAgentChatComposerModel({
       onSelectAgent: composer.onSelectAgent,
       onSelectModel: composer.onSelectModel,
       onSelectVariant: composer.onSelectVariant,
-      accentColor: composerAccentColor,
+      accentColor: composerState?.accentColor,
       contextUsage: composer.contextUsage,
       canStopSession: composer.canStopSession,
       onStopSession: () =>
-        invokeStopAgentSession(composer.activeSession, composer.stopAgentSession),
+        invokeStopAgentSession(composer.loadedSession, composer.stopAgentSession),
       composerFormRef,
       composerEditorRef,
       onComposerEditorInput: resizeComposerEditor,
@@ -270,12 +257,11 @@ export function useAgentChatComposerModel({
     };
   }, [
     composer,
-    composerAccentColor,
+    composerState,
     composerEditorRef,
     composerFormRef,
     pendingInlineCommentCount,
     resizeComposerEditor,
-    runtimeReadiness.isReady,
     scrollToBottomOnSendRef,
     submitComposerDraft,
     syncBottomAfterComposerLayoutRef,

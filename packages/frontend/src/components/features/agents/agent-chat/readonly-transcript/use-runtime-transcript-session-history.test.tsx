@@ -2,10 +2,12 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
@@ -15,8 +17,33 @@ import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-ses
 
 type HookArgs = Parameters<typeof useRuntimeTranscriptSessionHistory>[0];
 
+const readSessionHistoryRef: {
+  current: AgentOperationsContextValue["readSessionHistory"];
+} = {
+  current: async () => [],
+};
+
+const operationsValue = (): AgentOperationsContextValue => ({
+  readSessionHistory: readSessionHistoryRef.current,
+  readSessionTodos: async () => [],
+  startAgentSession: async () => ({
+    externalSessionId: "session-started",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo-a",
+  }),
+  sendAgentMessage: async () => undefined,
+  stopAgentSession: async () => undefined,
+  updateAgentSessionModel: () => undefined,
+  replyAgentApproval: async () => undefined,
+  answerAgentQuestion: async () => undefined,
+});
+
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-  <QueryProvider useIsolatedClient>{children}</QueryProvider>
+  <QueryProvider useIsolatedClient>
+    <AgentOperationsContext.Provider value={operationsValue()}>
+      {children}
+    </AgentOperationsContext.Provider>
+  </QueryProvider>
 );
 
 const createHookHarness = (initialProps: HookArgs) =>
@@ -45,14 +72,14 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
   repoReadinessState: "ready",
   liveSession: null,
-  readSessionHistory: mock(async () => [createHistoryMessage()]),
   ...overrides,
 });
 
 describe("useRuntimeTranscriptSessionHistory", () => {
   test("loads history and builds a readonly transcript session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
-    const harness = createHookHarness(createBaseArgs({ readSessionHistory }));
+    readSessionHistoryRef.current = readSessionHistory;
+    const harness = createHookHarness(createBaseArgs());
 
     try {
       await harness.mount();
@@ -71,7 +98,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.activityState).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
-      expect(harness.getLatest().historyError).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -79,6 +105,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
   test("prefers an already-live runtime session over history loading", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
     const liveSession = createAgentSessionFixture({
       externalSessionId: "session-1",
       status: "running",
@@ -88,7 +115,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const harness = createHookHarness(
       createBaseArgs({
         liveSession,
-        readSessionHistory,
       }),
     );
 
@@ -105,6 +131,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
   test("loads history when a same-id live session belongs to another source", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
     const harness = createHookHarness(
       createBaseArgs({
         liveSession: createAgentSessionFixture({
@@ -113,7 +140,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo-b/worktree",
         }),
-        readSessionHistory,
       }),
     );
 
@@ -136,10 +162,10 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
   test("waits for runtime readiness before loading history", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
     const harness = createHookHarness(
       createBaseArgs({
         repoReadinessState: "checking",
-        readSessionHistory,
       }),
     );
 
@@ -150,7 +176,50 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(harness.getLatest()).toMatchObject({
         session: null,
         transcriptState: { kind: "runtime_waiting" },
-        historyError: null,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("stays inactive while the transcript dialog is closed", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
+    const harness = createHookHarness(
+      createBaseArgs({
+        isOpen: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toMatchObject({
+        session: null,
+        transcriptState: { kind: "empty", reason: "inactive" },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps transcript unavailable when history needs a workspace repo path", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
+    const harness = createHookHarness(
+      createBaseArgs({
+        repoPath: null,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toMatchObject({
+        session: null,
+        transcriptState: { kind: "empty", reason: "unavailable" },
       });
     } finally {
       await harness.unmount();
@@ -161,16 +230,16 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => {
       throw new Error("history unavailable");
     });
-    const harness = createHookHarness(createBaseArgs({ readSessionHistory }));
+    readSessionHistoryRef.current = readSessionHistory;
+    const harness = createHookHarness(createBaseArgs());
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.historyError !== null);
+      await harness.waitFor((state) => state.transcriptState.kind === "failed");
 
       expect(harness.getLatest()).toMatchObject({
         session: null,
-        transcriptState: { kind: "failed" },
-        historyError: "history unavailable",
+        transcriptState: { kind: "failed", message: "history unavailable" },
       });
     } finally {
       await harness.unmount();

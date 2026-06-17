@@ -7,7 +7,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentStudioQuickActionOption,
   buildAgentStudioQuickActions,
@@ -16,8 +16,8 @@ import {
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
+  buildLiveSessionByRoleMap,
   buildRoleEnabledMapForTask,
-  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,
@@ -38,10 +38,7 @@ export type AgentStudioSessionContextUsage = {
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  activeSession: Pick<
-    AgentSessionState,
-    "externalSessionId" | "runtimeKind" | "workingDirectory" | "role"
-  > | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
   role: AgentRole;
   isSessionWorking: boolean;
   hasActiveGitConflict: boolean;
@@ -53,7 +50,6 @@ const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
 };
 
 export type WorkflowModelContext = {
-  latestSessionByRole: ReturnType<typeof buildLatestSessionByRoleMap>;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
   sessionSelectorGroups: ComboboxGroup[];
@@ -62,7 +58,6 @@ export type WorkflowModelContext = {
   sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
   quickActions: AgentStudioQuickActionOption[];
   primaryQuickAction: AgentStudioQuickActionOption | null;
-  selectedInteractionRole: AgentRole;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
   createSessionDisabled: boolean;
@@ -71,7 +66,7 @@ export type WorkflowModelContext = {
 export const buildWorkflowModelContext = ({
   selectedTask,
   sessionsForTask,
-  activeSession,
+  selectedSessionIdentity,
   role,
   isSessionWorking,
   hasActiveGitConflict,
@@ -79,18 +74,17 @@ export const buildWorkflowModelContext = ({
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
-  const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
-  const roleSessionByRole = buildRoleSessionSummaryMap(sessionsForTask);
+  const workflowSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
+  const liveSessionByRole = buildLiveSessionByRoleMap(sessionsForTask);
   const workflowStateByRole = buildWorkflowStateByRole({
     task: selectedTask,
     roleWorkflowsByTask,
-    roleSessionByRole,
+    liveSessionByRole,
   });
-  const selectedInteractionRole = activeSession?.role ?? role;
-  const selectedRoleAvailable = roleWorkflowsByTask[selectedInteractionRole].available;
+  const selectedRoleAvailable = roleWorkflowsByTask[role].available;
   const selectedRoleReadOnlyReason = selectedRoleAvailable
     ? null
-    : `${roleLabelByRole[selectedInteractionRole]} is unavailable for this task right now.`;
+    : `${roleLabelByRole[role]} is unavailable for this task right now.`;
   const sessionSelectorGroups = buildSessionSelectorGroups({
     sessionsForTask,
     roleLabelByRole,
@@ -103,13 +97,13 @@ export const buildWorkflowModelContext = ({
         session.activityState !== "waiting_input",
     ]),
   );
-  const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];
-  const sessionSelectorValue = activeSession
-    ? agentSessionIdentityKey(activeSession)
+  const fallbackSessionForSelectedRole = workflowSessionByRole[role];
+  const sessionSelectorValue = selectedSessionIdentity
+    ? agentSessionIdentityKey(selectedSessionIdentity)
     : fallbackSessionForSelectedRole
       ? agentSessionIdentityKey(fallbackSessionForSelectedRole)
       : "";
-  const createSessionDisabled = Boolean(activeSession && isSessionWorking);
+  const createSessionDisabled = Boolean(selectedSessionIdentity && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     roleEnabledByTask,
     hasQaRejection: isQaRejectedTask(selectedTask),
@@ -126,13 +120,7 @@ export const buildWorkflowModelContext = ({
   });
 
   return {
-    latestSessionByRole,
-    workflowSessionByRole: {
-      spec: roleSessionByRole.spec.workflowSession,
-      planner: roleSessionByRole.planner.workflowSession,
-      build: roleSessionByRole.build.workflowSession,
-      qa: roleSessionByRole.qa.workflowSession,
-    },
+    workflowSessionByRole,
     workflowStateByRole,
     sessionSelectorGroups,
     sessionSelectorAutofocusByValue,
@@ -140,7 +128,6 @@ export const buildWorkflowModelContext = ({
     sessionCreateOptions,
     quickActions,
     primaryQuickAction: selectPrimaryAgentStudioQuickAction(quickActions),
-    selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
     createSessionDisabled,

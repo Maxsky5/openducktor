@@ -21,12 +21,12 @@ Files:
 
 - `packages/frontend/src/state/agent-sessions-store.ts`
 - `hooks/use-orchestrator-session-state.ts`
-- `support/local-session-removal.ts`
+- `support/local-session-cleanup.ts`
 
 Owns:
 
 - the current in-memory `AgentSessionState` collection for the active workspace
-- derived session summaries and activity summaries
+- derived session summaries and the activity snapshot
 - notifying React subscribers when the collection changes
 
 Invariant: `AgentSessionsStore` is the only in-memory owner for loaded
@@ -39,12 +39,9 @@ generic mutable-state bridge that hides which concept owns which value.
 `useAgentOrchestratorOperations` owns the session commit callback that writes to
 `AgentSessionsStore` and optionally persists durable workflow records. Do not
 split this into a single-use mutation hook.
-Observer cleanup and runtime event handlers must read from `AgentSessionsStore`,
-and session removal must remove through
-`AgentSessionsStore.setSessionCollection`, not direct ref reads.
-Local session removal must stay atomic: removing a session from the store,
-removing its observer, and clearing transient draft/turn state are one operation
-owned by `support/local-session-removal.ts`.
+Observer cleanup and runtime event handlers must read from `AgentSessionsStore`.
+Session removal updates the store collection once; `support/local-session-cleanup.ts`
+only clears the matching observers and turn state for the removed identities.
 Repo session read-model refreshes should read the current collection through
 the session store snapshot reader, never through the mutable event-stream bridge.
 Session history loading, session preparation, and start/reuse policies should read
@@ -64,15 +61,16 @@ Must not own:
 
 Files:
 
+- `packages/frontend/src/types/agent-session-activity.ts`
 - `packages/frontend/src/lib/agent-session-activity-state.ts`
 - `packages/frontend/src/lib/agent-session-waiting-input.ts`
 
 Owns:
 
-- deriving product-facing session activity from raw status and pending input
-- the precedence rule that pending questions or approvals beat raw starting/running/idle status
 - the shared `waiting_input`, `starting`, `running`, `idle`, `stopped`, and `error`
   UI activity vocabulary
+- deriving product-facing session activity from raw status and pending input
+- the precedence rule that pending questions or approvals beat raw starting/running/idle status
 
 Invariant: UI surfaces such as Agent Studio tabs, Kanban activity, active-session
 sidebars, selected-session action state, and transcript surfaces must use this
@@ -102,27 +100,36 @@ Files:
 
 Owns:
 
-- reading persisted task session records supplied by the task-session-record query
+- reading persisted task session records from the per-task session-list query
 - scanning runtime snapshots by repo path, runtime kind, and working directory
 - merging persisted records plus runtime snapshots into `AgentSessionState`
 - returning live runtime session refs
 
 Invariant: a missing runtime snapshot means the runtime did not report the session
-as live. When rebuilding from persisted records without a mounted session, the
-projection starts from durable session identity only and must not invent
-live-only status, pending input, or streaming state. When a matching mounted
-session already exists, a missing snapshot is absence of runtime evidence, not
-an idle event; it must not demote the mounted session or clear current pending
-input, draft output, or pending user sends.
-Runtime events own live state only after the runtime snapshot proves the session
-is live and an observer is running.
+as live. For a cold persisted record, that means the local shell starts idle with
+no runtime-owned pending input or in-flight turn state. For a mounted session, a
+missing snapshot is only absence of evidence; it must preserve the current
+status, pending input, pending send state, transcript, and history until an
+actual runtime snapshot or runtime event changes them.
+Runtime events own subsequent live state only after the runtime snapshot proves
+the session is live and an observer is running.
+The repo read model overlays persisted session records and runtime snapshots onto
+the current live session collection for the task IDs it loaded. For those loaded
+task IDs, the durable task-session records are authoritative: a local session
+whose identity no longer appears in the records is removed from the collection,
+and the read model reports that identity so the observer owner can remove local
+observer and turn state.
+The per-task session-list query is the only frontend cache for persisted session
+records. Do not add a separate bulk session-record cache; startup read-model
+loads, Kanban history summaries, and session upserts must observe the same
+per-task query keys.
 
 Must not own:
 
 - model catalog, slash commands, file search, diffs, or other active-session reads
 - runtime startup policy
 - page navigation state
-- history target selection or history loading
+- history source selection or history loading
 - permission/question polling
 
 ### Runtime Readiness
@@ -159,25 +166,71 @@ Must not own:
 Files:
 
 - `history/session-history-loader.ts`
+- `history/use-selected-session-history-load.ts`
+- `support/session-history-chat-messages.ts`
 - `support/session-prompt.ts`
+- `support/subagent-messages.ts`
 
 Owns:
 
 - claiming, applying, failing, and releasing session history load state
+- resolving the selected-session history-load target from selected session,
+  history state, and runtime readiness
 - building transient runtime prompt context through the shared prompt helper and
   passing it to history loads without storing it in session state
-- merging runtime history into transcript messages without erasing live messages
+- projecting runtime history into transcript messages and context usage without
+  erasing live messages
+- resolving subagent row identity when runtime history and live events expose
+  separate part-scoped and session-scoped correlation keys
 
-Invariant: history loading is explicit and singular. The selected session view or
-session action asks to load one concrete session route; this command owner claims,
-applies, fails, or releases that concrete load. The repo projection never bulk-loads
-transcripts.
+Invariant: history loading is explicit and singular. The selected-session
+history-load owner or a session action asks to load one concrete session route;
+this command owner claims, applies, fails, or releases that concrete load. The
+repo projection never bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 read mutable collection snapshots directly.
+Selected-session history load effects are fire-and-forget UI effects, but they
+must run through the orchestrator async side-effect owner with session identity
+tags. Do not discard history-load promises with raw `void` calls.
+
+`support/session-history-chat-messages.ts` owns history-message projection only.
+It must not read or write durable session records.
+`support/subagent-messages.ts` owns subagent row formatting, status merge, and
+part/session correlation matching. Event handlers and history merge must call
+that helper instead of growing their own subagent matching rules.
 
 Invariant: transcript storage is owned by the session message helpers. UI chat
 models receive a `SessionMessagesState` handle; raw message arrays may be
 normalized at boundaries but must not leak into transcript rendering.
+
+### Durable Session Records
+
+Files:
+
+- `support/persistence.ts`
+- `support/session-cache-effects.ts`
+- `support/session-invariants.ts`
+
+Owns:
+
+- converting workflow session state to durable task-store session records
+- converting durable task-store session records back to unloaded local session
+  shells
+- writing durable records through the host port and the per-task session-list
+  query cache for one active repository
+- fail-fast workspace/session invariants shared by action and persistence
+  boundaries
+
+Must not own:
+
+- runtime history projection
+- transcript rendering
+- pending permissions or questions
+- system prompt display
+
+Invariant: durable session writes require an active `workspaceRepoPath`.
+Missing repository identity is a broken caller invariant, not an empty workspace
+case; do not silently drop the host write or query update.
 
 ### Event Stream
 
@@ -190,22 +243,26 @@ Files:
 - `events/session-pending-input-routing.ts`
 - `events/session-subagent-links.ts`
 - `events/session-tool-parts.ts`
-- `support/session-transient-state.ts`
+- `support/session-turn-metadata.ts`
+- `support/session-turn-timing.ts`
 
 Owns:
 
 - applying runtime events to loaded sessions
-- routing runtime todo events into the selected-session runtime-data writer
+- routing runtime todo events into the selected-session todos query owner
 - pending permission and question updates after startup
 - transcript streaming and batching
 - terminal status transitions such as idle, finished, and error
-- transient assistant draft buffers for streaming reasoning text
+- active-turn model/context anchors and duration timing
 
 Invariant: permissions and questions are fetched at startup through runtime snapshot/history reads;
 after that they come from runtime events. Do not add polling.
 Invariant: event handlers consume narrow runtime policies only. Runtime descriptor
 lookup is owned by the observer boundary; do not pass runtime descriptors or
 definition resolvers into event handlers.
+Invariant: the observed event target has exactly one owner: `SessionEventContext.session`.
+`store`, `turn`, and `todos` are capability groups only; they must not duplicate
+session identity, key, external session id, or selected-session runtime-data fields.
 Invariant: a pending permission or question belongs to exactly one `AgentSessionState`.
 Parent subagent rows may link to child session ids in message metadata, but they must
 not copy child pending input.
@@ -213,11 +270,16 @@ Pending-input ownership and approval reply routing live in
 `events/session-pending-input-routing.ts`; subagent row link patching lives in
 `events/session-subagent-links.ts`. The pending-input event handler applies the
 route and mutates pending state, but must not reimplement parent/child routing.
-Invariant: draft buffers live behind `SessionTransientState.draftBuffers`. Do not
-pass raw draft maps or timeout refs through observer/event boundaries.
+Invariant: transcript content belongs to `session.messages` only. Do not add
+parallel assistant/reasoning draft state to `AgentSessionState` or event context.
 Invariant: active-turn model and context-usage message anchors live behind
-`SessionTransientState.turnMetadata`. Event handlers may record/read/clear that owner,
-but must not pass raw per-session maps or refs through observer/event boundaries.
+`SessionTurnMetadata`. Import turn-metadata APIs from
+`support/session-turn-metadata.ts`. Event handlers may record/read/clear that
+owner, but must not pass raw per-session maps or refs through observer/event
+boundaries.
+Invariant: turn timing lives behind `SessionTurnTiming`. The orchestrator hook
+owns cross-store cleanup by calling the concrete owners directly; do not
+reintroduce an aggregate transient-state module or barrel.
 Invariant: event batching is only a local coalescing/throttling policy for noisy
 runtime stream events. It must not grow into session reconciliation, history
 loading, polling, or runtime readiness logic.
@@ -228,7 +290,7 @@ Files:
 
 - `hooks/use-orchestrator-session-state.ts`
 - `support/assistant-turn-duration.ts`
-- `support/session-transient-state.ts`
+- `support/session-turn-timing.ts`
 
 Owns:
 
@@ -237,9 +299,9 @@ Owns:
 - previous assistant completion timestamps used to bound duration calculations
 - duration resolution for assistant transcript metadata
 
-Invariant: timing state lives behind the `SessionTransientState.assistantTurnTiming`
-store. Do not expose the raw map, reintroduce a React timing hook, add proxy bridges,
-or duplicate timestamp stores in event handlers.
+Invariant: timing state lives behind the `SessionTurnTiming` store. Do not expose
+the raw map, reintroduce a React timing hook, add proxy bridges, or duplicate
+timestamp stores in event handlers.
 
 ### Runtime Session References
 
@@ -302,52 +364,137 @@ runtime-data query gating live in their owner modules, not in the transcript
 state model. Page route/task switching is orchestration state and must not be
 stored in the transcript state model. Do not mirror runtime readiness on it.
 Readonly transcript surfaces pass direct facts into the transcript-state owner:
-whether a transcript is visible, whether a history target exists, and whether
-the history read failed. They must not synthesize session-shaped history
-snapshots or maintain a separate transcript loading state machine.
-Readonly transcript surfaces resolve their live-session/history-session target
-through `readonly-transcript/runtime-transcript-history-target.ts`; hooks must not
-inline that selection logic. The target resolver does not own runtime readiness or
-query enablement; it only returns `none`, `live`, or a concrete history ref.
+whether a transcript is visible, whether a history source exists, why an empty
+source is empty, and whether the history read failed. They must not synthesize
+session-shaped history snapshots or maintain a separate transcript loading state
+machine.
+Readonly transcript history is owned by
+`readonly-transcript/use-runtime-transcript-session-history.ts`. That hook
+chooses exactly one source: matching live session, runtime history read, or empty
+reason. It also owns the query enablement boundary because it has the complete
+facts: open state, target identity, repo path, live session, and runtime
+readiness. Do not recreate a separate source resolver or source-shaped state
+machine.
 Readonly transcript presentation state is derived in
 `readonly-transcript/runtime-transcript-surface-state.ts`; hooks must not inline
 empty/loading/error policy. Displayed-session working state stays with the hook
 that passes the session into the shared chat model.
-Agent chat renderable-thread projection, transcript notice copy, and
-reset-window policy are derived in `agent-chat/agent-chat-thread-state.ts`;
-surface hooks and rendering components must not interpret transcript state
-directly or pass a separate transcript-pending boolean beside transcript state.
+Agent chat renderable-thread projection is derived once in
+`agent-chat/agent-chat-thread-state.ts`. That projection owns the renderable
+thread session, active session key, transcript notice copy, and reset-window
+policy; surface hooks and rendering components must not reinterpret transcript
+state directly or pass a separate transcript-pending boolean beside transcript
+state.
 Agent chat types must reference the canonical selected-session transcript state and
 repo-runtime readiness contracts instead of declaring local lookalike shapes.
-Selected-session transcript state is the source of truth for transcript loading.
-The selected-session view starts history loading only when transcript state is
-`session_loading` with reason `history`; it must not recompute that condition from
-runtime readiness and session history fields. Shell, right-panel, and build-tool
-modules may derive edge booleans from `viewTranscriptState`, but central selection
-must not expose a second `isSessionViewLoading` field.
+Selected-session history loading is owned by
+`history/use-selected-session-history-load.ts` plus
+`AgentSessionState.historyLoadState`. That hook starts a history load when the
+selected session exists, its history has not been requested, and the runtime is
+ready. The selected-session view is passive: it returns selected session facts,
+runtime readiness, runtime data, and transcript state, but it must not call
+runtime/session operations. Transcript state is display-only: it renders runtime
+waiting, session loading, visible, or failed from the current owner facts, but it
+must not drive the data load. Shell, right-panel, and build-tool modules may
+derive edge booleans from `viewTranscriptState`, but central selection must not
+expose a second `isSessionViewLoading` field.
+Selected-session model choice belongs to the selected session summary until the
+full session is loaded, then to `AgentSessionState.selectedModel`. The selected
+view may expose that display fallback only as `selectedSessionModel`; do not wrap
+it in a session-shaped selected-view projection.
+Selected-session existence is the selected-session identity itself. Do not pass
+`hasSelectedSession` booleans through transcript, kickoff, or send policies; pass
+`selectedSessionIdentity` and derive the boolean locally when a branch truly
+needs it. Likewise, pass `selectedSessionModel` instead of a mirrored
+`hasSelectedSessionModel` flag.
+`use-agent-studio-selected-session-view.ts` owns the selected-session view shape.
+Selection controllers may add task/tab context, but must not rename the selected
+session, runtime-data, readiness, role, launch-action, or transcript fields into
+a parallel view model.
+`selected-session-context.ts` exposes transcript state as selected-session state,
+not as runtime state. Runtime context contains runtime definitions, readiness,
+and selected-session runtime data only.
+Build-tool worktree refresh is not a transcript surface. It observes build
+session messages and `historyLoadState` only; do not pass transcript loading
+state through the shell to suppress historical tool completions.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
 loading and error fields; selected-session transcript state is the only place that
 interprets read-model load state against runtime readiness and route selection.
+Expose that value only through `AgentSessionReadModelStateContext`; do not put it
+back on aggregate agent state or operations values.
+`useAgentOrchestratorOperations` returns explicit owned buckets only:
+`sessionStore`, `operations`, and `readModelState`. Do not reintroduce a
+legacy aggregate hook result that spreads operation methods and session snapshots
+beside those buckets.
+Do not reintroduce `useAgentState` or `AgentStateContextValue`; consumers must
+read sessions and operations through the dedicated hooks/contexts.
+Page shell, route, and selection-controller modules must not accept or forward
+`sessionReadModelLoadState`; the selected-session view owner reads it directly
+from the context when deriving transcript state.
+The exposed read-model load state must be current for the active repository and
+the current read-model inputs; while either input is not ready, expose a loading
+state instead of an empty/ready state.
+`currentAgentSessionReadModelLoadState` owns that public projection. The repo
+read-model effect owns only the actual repo read lifecycle: start the repo read,
+commit ready, or commit failed. It must not also write the no-workspace or
+input-loading display states.
+The repo read-model effect is keyed by the selected repository plus the task id
+set. Task metadata changes and task order changes must not restart the repo
+session read model, because that would temporarily demote selected sessions back
+to loading and cause transcript/status flicker.
+For the task id set it loaded, the repo read model treats durable task-session
+records as the session existence source. Missing records remove non-starting
+local sessions for those tasks and report the removed refs to the observer owner.
+Only local `starting` sessions may remain without a visible record while session
+registration catches up.
 The transcript-state module exposes selected-session and runtime transcript-state
 derivation only; do not add parallel session-source or target state helpers.
 
 Invariant: subagent waiting badges are derived from child session summaries.
 Selected-session state must not maintain parent-owned pending-input projections.
+Workflow context builders receive selected session identity and selected session
+role as separate facts. Do not fabricate partial `AgentSessionState` objects just
+to drive workflow/session-selector state. The selected role comes from the
+selection resolver; loaded session state must not repair or override it.
+
+### Agent Studio Task Tabs
+
+Files:
+
+- `pages/agents/agent-studio-task-tabs-storage.ts`
+- `pages/agents/agent-studio-task-tabs-list.ts`
+- `pages/agents/agents-page-session-tabs.ts`
+
+Owns:
+
+- repo-scoped task-tab persistence in localStorage
+- pure task-tab list operations such as ensure, reorder, fallback, and close
+- workflow/session projection for tab status, workflow rail state, session
+  selector options, and session creation options
+
+Invariant: tab persistence and tab-list operations do not own session status,
+runtime readiness, selected-session identity, or workflow rail state. Keep those
+concerns in `agents-page-session-tabs.ts`, and do not reintroduce localStorage or
+generic tab-array helpers into the workflow/session projection module.
 
 ### Selected Session Runtime Data
 
 Files:
 
 - `hooks/use-session-runtime-data.ts`
-- `support/session-runtime-data-target.ts`
-- `state/queries/agent-session-runtime.ts`
+- `support/session-runtime-data-refs.ts`
+- `types/selected-session-runtime-data.ts`
+- `state/queries/agent-session-todos.ts`
+- `state/queries/runtime-catalog.ts`
 - `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`
 
 Owns:
 
-- deciding whether the selected session has enough stable runtime context to read runtime data
-- reading selected-session model catalog and todos through TanStack Query
+- resolving selected-session runtime-data query refs from the session and runtime definitions
+- gating selected-session runtime-data reads on repo runtime readiness without changing the refs
+- reading selected-session model catalog through the runtime-catalog query owner
+- reading selected-session todos through the session-todos query owner
 - owning live todo state through the same todos query cache used for selected-session reads
 - reporting selected-session runtime-data read errors
 - providing view-only runtime data to Agent Studio
@@ -357,6 +504,7 @@ Must not own:
 - `AgentSessionState` identity, status, transcript messages, or history load state
 - canonical session todos; todos are runtime data, not session state
 - task session records
+- model catalog, slash-command catalog, skills catalog, or file-search query ownership
 - runtime route resolution
 
 Invariant: runtime-data reads and runtime todo events must not rewrite the session
@@ -365,10 +513,43 @@ store. Agent Studio may compose a chat thread session from raw
 boundary, but lifecycle decisions must use the raw selected `AgentSessionState`.
 Runtime events update todos through `updateSessionTodosQueryData`; do not
 reintroduce a writer object or pass a second session route through event context.
-Runtime-data query keys, unavailable keys, stale windows, and disabled-target
-fail-fast behavior live in `state/queries/agent-session-runtime.ts`; the selected
-session runtime-data target owns read eligibility and stable runtime/session
-refs. The React hook owns only query wiring and view composition.
+Session-todos query keys, unavailable keys, stale windows, and disabled-query
+fail-fast behavior live in `state/queries/agent-session-todos.ts`. Readonly
+transcript history query keys live in `state/queries/agent-session-history.ts`.
+Runtime catalog query keys and catalog reads live in
+`state/queries/runtime-catalog.ts` for model catalogs, slash commands, skills, and
+file search. The selected session runtime-data refs resolver owns read eligibility
+and stable runtime/session refs. The React hook owns only query wiring and view
+composition. Agent Studio passes selected-session runtime data as one object:
+model catalog, todos, loading state, and read error stay together. Do not add
+parallel `runtimeDataError` or `activeSessionRuntimeData` fields that split this
+concept across view models. The orchestration controller must forward that object
+to selected-session consumers such as the chat composer and session actions; it
+must not project model catalog/loading/runtime descriptor fields into separate
+hook arguments.
+
+### Agent Studio Documents
+
+Files:
+
+- `pages/agents/use-agent-studio-documents.ts`
+
+Owns:
+
+- loading and refreshing task documents for the selected task
+- applying optimistic document updates from completed workflow tool messages
+- deduping processed document-tool events for the selected session
+
+Invariant: document event tracking is keyed by selected-session identity, not by
+loaded session availability. The loaded session is only the message source. If the
+selected identity remains the same while loaded session state temporarily catches
+up, processed document events must not reset or replay.
+
+Must not own:
+
+- selected-session transcript loading state
+- session status, runtime readiness, or runtime data
+- workflow/session-selector identity
 
 ### Agent Chat Composer
 
@@ -376,47 +557,115 @@ Files:
 
 - `pages/agents/agent-studio-chat-surface-state.ts`
 - `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`
-- `features/agent-chat-composer/context-usage/use-active-session-context-usage.ts`
-- `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.ts`
+- `features/agent-chat-composer/context-usage/use-selected-session-context-usage.ts`
+- `features/agent-chat-composer/model-selection/model-selection-preferences.ts`
+- `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.ts`
 - `features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands.ts`
 - `features/agent-chat-composer/prompt-input/use-chat-composer-skills.ts`
 
 Owns:
 
 - composing model-selection choices for a new message or new session
+- resolving selected composer runtime kind from selected-session model, draft
+  selection, role default, and repo default
 - deriving Agent Studio chat empty-state/kickoff visibility and composer
   read-only state
 - keeping selected-session target identity and selected-model fallback available
   while the full selected session is still loading
 - deriving context usage from the loaded session's live context usage and messages
-- resolving the single prompt-input target directly from the loaded session,
-  selected session summary, repo runtime selection, and unavailable runtime
-  context
+- resolving the single prompt-input runtime state from the selected session
+  identity, repo-runtime readiness, repo runtime selection, and unavailable
+  runtime context
+- passing runtime-backed composer tools a `RuntimeWorkingDirectoryRef` for both
+  loaded-session and pre-session repo targets
 
 Must not own:
 
 - selected-session transcript loading state
 - canonical session status, messages, pending input, or history load state
 - runtime route resolution beyond the already-derived working-directory ref
+- duplicate session-named catalog APIs for model catalogs, slash commands, skills,
+  or file search
 
-Invariant: a session summary may identify the selected target and selected model,
+Invariant: a session summary may identify the selected session and selected model,
 but it must not provide loaded-session status, messages, or context usage.
-Session-scoped slash-command and skill reads require a loaded session; summary-only
-targets are loading targets, not live-session state. Slash commands, skills, and
-file search must consume the shared prompt-input target instead of recomputing
-session/repo/loading/runtime-error booleans independently.
+Summary-only sessions are waiting prompt-input state, not an alternate session
+catalog path. Slash commands, skills, and file search must consume the shared
+prompt-input runtime state and runtime-catalog query owner instead of recomputing
+session/repo/loading/runtime-error booleans independently or exposing duplicate
+`readSession*Catalog` APIs.
+Pre-session repo tools use the repository root as their working directory, but
+they still pass that through the same runtime working-directory ref shape as
+loaded-session tools.
 
 Invariant: Agent Studio chat surface state receives selected-session transcript state
 and already-computed start availability. It must not recompute task workflow
 availability or runtime readiness.
+It receives the selected-session key directly; do not wrap task/workflow/session
+facts into a local selected-session object or pass a mirrored
+`hasSelectedSession` boolean.
 The generic chat composer may receive an already-computed waiting-input
 placeholder string, but it must not receive pending approval/question payloads or
 derive pending-input copy from `AgentSessionState`.
+Agent Studio passes selected-session identity and loaded session state as
+separate facts into the composer model. Do not reintroduce a copied
+composer-only session object, store runtime-data loading on a session-shaped
+object, or pass the full loaded session into prompt-input runtime helpers.
+Prompt-input helpers consume only the selected session identity plus the
+repo-runtime readiness state. Session activity is transcript/UI state; it must
+not be reused as a runtime readiness proxy.
+The selected-session view owns selected-session identity. The composer may use a
+loaded session for model, context-usage, and activity facts, but it must not
+replace the selected-session identity with an identity derived from the loaded
+session object. The chat surface receives the selected-session key once and
+passes it to thread layout/windowing and composer autofocus; neither path should
+rederive that key from a loaded session that can temporarily be unavailable while
+session state catches up. Runtime kind and working directory are identity-owned
+facts exposed as `selectedSessionIdentity`. Do not wrap them in a
+session-shaped projection object, recover identity from a loaded session or
+summary snapshot, or expose mirrored top-level selected-session fields.
+Selected-session existence is `selectedSessionIdentity !== null`; do not expose a
+duplicate `hasSession` projection field.
+Selected-session activity is exposed separately as `selectedSessionActivityState`.
+Consumers that own action or build-tool policy can derive local booleans from
+that activity fact.
+Selected interaction role belongs to the selected-session view, not
+selected-session identity; do not mirror it as a selected-session field.
+Workflow/header model builders receive selected-session identity only, not the
+whole selected-session view. The selected-session context owns the selected
+role; workflow context must not mirror it as a second selected-role field. The
+selected-session context owns only the active document, not right-panel
+availability. The right-panel hook derives panel kind, open state, and toggle
+visibility from role plus task/document availability at the usage site.
+Model-selection actions receive a loaded selected-session identity only when a
+user explicitly changes the selected session model; otherwise they update the
+new-session draft selection. Do not add automatic loaded-session model sync
+effects, and do not store a mirrored loaded-session identity. The composer can
+derive that action target from the loaded session it already receives.
+Selected-session model fallback is exposed separately as `selectedSessionModel`
+and remains display-only until the user changes the model.
+An explicit session model action requires that selected session to be loaded.
+Missing loaded-session state is a caller invariant error, not a no-op model
+update.
+
+Invariant: build-tools worktree reads are owned by
+`features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`.
+Their query identity is the repo, task id, and task version. Do not pass
+transcript loading, active-session identity, or task-loading flags through the
+Agent Studio shell to force worktree refreshes.
+Build-tool Git refreshes are owned by
+`features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh.ts`.
+That hook may ignore history-load snapshots through `AgentSessionState.historyLoadState`,
+but it must not depend on selected-session transcript presentation state.
 
 Invariant: prompt-input capability helpers receive one already-selected runtime
 kind. The Agent Studio composer chooses whether that runtime kind came from a
 session target or a new-session selection; helper modules must not know about
 session-vs-new-session branching.
+Model-selection preference rules live in
+`features/agent-chat-composer/model-selection/model-selection-preferences.ts`.
+The Agent Studio composer hook wires data and queries; it must not reimplement
+selected-session/new-session model fallback or runtime-kind priority rules.
 
 ### Session Actions
 
@@ -439,8 +688,43 @@ Owns:
 
 Invariant: session-action availability answers whether an action is valid for
 the selected task, role, launch action, and current loaded session. It must not
-gate transcript empty-state actions on selection-resolution or runtime-loading
+gate transcript empty-state actions on selection timing or runtime-loading
 timing; selected-session transcript state owns that loading-vs-empty distinction.
+Selected-session send policy must resolve runtime capabilities from selected-session
+runtime data or `AgentSessionState.runtimeKind`; it must not use composer model
+selection as a substitute runtime source for an already-selected session.
+Session actions receive `selectedSessionModel` for the catalog-loading send
+guard. Do not pass a mirrored `hasSelectedSessionModel` flag, and keep
+model-selection details with the composer/model-selection owner.
+Send, question, and approval action sub-hooks receive selected-session identity
+for their runtime target. They must not rederive that identity from the loaded
+session object, because the loaded session can temporarily be unavailable while
+the selected target stays valid.
+Session-action derived state owns busy, waiting-input, queued-message, and busy
+send-blocking policy only. Selected-session existence is the selected-session
+identity itself; do not add a mirrored `hasSelectedSession` field to action state.
+Selected Session Runtime Data owns model-catalog loading; do not mirror that
+loading state through action state.
+Pending-question and pending-approval payloads still come from the loaded
+session. The selected-session store owns those payloads; action hooks only track
+local submit state and call the runtime reply operation.
+Once an action reaches the session operation boundary with a concrete session
+identity, that session must be loaded for mutating operations such as send,
+model update, and pending-input reply. Missing loaded session state is an
+invariant error, not a silent no-op.
+Fresh and fork starts that need an immediate post-start message are held in
+`starting` by the start-session flow before creation; releasing that held state
+belongs to the send-message path and must not be exposed through page-level code.
+After the start modal returns a concrete decision, every Agent Studio session
+start is tracked as starting by the start-session flow. Do not add per-call
+tracking flags or start paths that bypass starting activity publication.
+Post-start messages are part of the session-start workflow and are awaited by the
+single `RunSessionStartWorkflow` command. Do not add detached/fire-and-forget
+kickoff sends; a session start must not complete before the kickoff send has
+finished or failed. Post-start send failures are returned on
+`SessionStartWorkflowResult.postStartActionError`; entry surfaces may report that
+result, but the shared workflow runner must not accept UI/reporting callbacks for
+the same error.
 Sessionless sends and message-first selection must use the same start-availability
 policy as explicit starts. Parent Agent Studio action wiring owns that predicate;
 sub-hooks receive the resulting boolean/function and must not accept selected-task
@@ -448,11 +732,17 @@ or task-readiness inputs just to re-check workflow availability.
 The session-start flow may use `selectedTask` for modal context, target branch,
 and human-review prompts, but it consumes parent-owned start predicates instead
 of recomputing task/runtime readiness.
+Agent Studio, Kanban, and Autopilot start entry points consume a single
+`RunSessionStartWorkflow` command. Only shell/provider composition wires that
+command from `startAgentSession` and `sendAgentMessage`; page/business modules
+must not receive both low-level operations and reassemble post-start behavior.
 Kickoff visibility composes from the already-computed start decision plus the
 launch action metadata; it must not re-read task workflow readiness.
 Busy-send blocking and queued-follow-up support are derived by the session-action
 state module from the active session plus runtime descriptor. Parent action wiring
 passes that decision through; it must not rebuild the runtime capability message.
+Session-action state derivation is pure: runtime definitions are passed from the
+orchestration boundary, not read from React context inside lower action helpers.
 
 ### Readonly Runtime Transcripts
 
@@ -485,8 +775,8 @@ Files:
 
 Owns:
 
-- reading durable task session records from the host
-- seeding per-task session-record query caches after bulk reads
+- reading durable task session records through per-task session-list queries
+- keeping per-task session-list query keys as the only frontend cache for persisted session records
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
 Must not own:
@@ -498,15 +788,21 @@ Must not own:
 Invariant: UI decisions must not read session history from `TaskCard.agentSessions`.
 Use task session record queries instead, so task cards remain task summaries and
 session history has one frontend read boundary.
+Repo startup session loading is keyed by task IDs only. Task title, status,
+document, or workflow metadata changes must not reload the repo session read
+model. Task-session query invalidation/refresh owns persisted session-record
+changes for UI history surfaces; orchestrator internals may reload the repo
+session read model after start/stop/reuse paths, but `loadAgentSessions` must not
+be exposed through public app operation contexts.
 
 ## Startup Flow
 
-1. The app loads tasks from the task store.
-2. `use-repo-session-read-model-effects.ts` passes all task session records to
-   `loadRepoAgentSessions`.
+1. The app loads task IDs from the task store.
+2. `use-repo-session-read-model-effects.ts` loads task session records for those
+   task IDs and passes the records to `loadRepoAgentSessions`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence is `missing` and clears runtime-owned activity while preserving mounted transcript/history state.
+5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle but does not demote mounted sessions or clear their live transcript state.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.
@@ -524,7 +820,8 @@ Use these compact tests as the first-line safety net:
 | --- | --- |
 | Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
 | Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
-| Missing runtime evidence cannot preserve stale running state | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/load-sessions.test.ts` |
+| Missing runtime evidence preserves mounted live state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/load-sessions.test.ts` |
+| Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model-effects.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
 | Running-session history baseline after reload | `session-read-model/load-sessions.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
@@ -532,7 +829,8 @@ Use these compact tests as the first-line safety net:
 | Per-session history failure isolation | `session-read-model/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
-| Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
+| Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |
+| Composer summary runtime cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Existing idle session send preparation | `handlers/prepare-session-send.test.ts` and `handlers/session-actions-send.test.ts` |
 | Runtime snapshot projection onto session state | `session-read-model/session-runtime-snapshot.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
@@ -558,20 +856,27 @@ Use these compact tests as the first-line safety net:
   sessions. They must share the same transient prompt-context boundary.
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
-- Do not preserve a mounted `running` status, pending input, or draft assistant
-  turn when the runtime snapshot is missing. Preserve transcript/history only.
+- Do not treat a missing runtime snapshot as an idle runtime event. A cold
+  persisted session starts idle from its durable record, but a mounted session
+  keeps its current status, pending input, drafts, transcript, and history state
+  until an actual runtime snapshot or runtime event changes them.
 - Keep runtime ids and runtime routes in low-level adapters/registry code. UI and
   page modules should carry runtime kind plus working directory, not live routes.
+- Keep frontend runtime dispatch direct: `agent-runtime-services.ts` owns adapter
+  selection from the required `runtimeKind` and exposes only the agent engine plus
+  runtime catalog operations. Do not reintroduce optional-runtime dispatch helpers
+  or missing-runtime repair there.
 - Do not store live runtime routes, pending permissions, pending questions, or
   transcript stream state in task records.
 - Do not pass generic mutable ref bundles between session hooks. Session
-  observers receive the observer registry plus `SessionTransientState`; other
-  refs stay with the owner that actually needs them.
+  observers receive the observer registry plus the concrete turn-state owners
+  they use; other refs stay with the owner that actually needs them.
 - Do not add pass-through reader hooks that only wrap `agentEngine` runtime reads.
   The public operations boundary adapts `agentEngine` directly.
 - Do not add parent-session pending-input overlays for subagents. Child sessions
   own pending requests; parent rows only link to child session ids.
-- Do not make operations context carry read-model state. Read-model state has its
-  own context.
+- Do not make operations context carry read-model state or task-session refresh.
+  Read-model load state and explicit task-session refresh live in the read-model
+  context.
 - Do not split selected-session identity between a summary branch and a persisted
   record branch. Build one candidate list and resolve once.

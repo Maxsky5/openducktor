@@ -8,13 +8,7 @@ import {
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { createSessionObservers, type SessionObservers } from "../support/session-observers";
-import {
-  clearAllSessionTransientState,
-  createSessionDraftBuffers,
-  createSessionTurnMetadata,
-  createSessionTurnTiming,
-  type SessionTransientState,
-} from "../support/session-transient-state";
+import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
 type UseOrchestratorSessionStateRefs = {
   taskRef: MutableRefObject<TaskCard[]>;
@@ -22,7 +16,7 @@ type UseOrchestratorSessionStateRefs = {
   repoEpochRef: MutableRefObject<number>;
   sessionStartGateRef: MutableRefObject<SessionStartGate<AgentSessionIdentity>>;
   sessionObserversRef: MutableRefObject<SessionObservers>;
-  sessionTransientState: SessionTransientState;
+  sessionTurnState: SessionTurnState;
 };
 
 type UseOrchestratorSessionStateArgs = {
@@ -48,17 +42,7 @@ export const useOrchestratorSessionState = ({
   const repoEpochRef = useRef(0);
   const sessionStartGateRef = useRef(createSessionStartGate<AgentSessionIdentity>());
   const sessionObserversRef = useRef(createSessionObservers());
-  const draftBuffers = useMemo(() => createSessionDraftBuffers(), []);
-  const assistantTurnTiming = useMemo(() => createSessionTurnTiming(), []);
-  const turnMetadata = useMemo(() => createSessionTurnMetadata(), []);
-  const sessionTransientState = useMemo<SessionTransientState>(
-    () => ({
-      draftBuffers,
-      assistantTurnTiming,
-      turnMetadata,
-    }),
-    [assistantTurnTiming, draftBuffers, turnMetadata],
-  );
+  const sessionTurnState = useMemo(() => createSessionTurnState(), []);
 
   useEffect(() => {
     taskRef.current = tasks;
@@ -72,16 +56,16 @@ export const useOrchestratorSessionState = ({
     currentWorkspaceRepoPathRef.current = workspaceRepoPath;
 
     sessionObserversRef.current.clear();
-    clearAllSessionTransientState(sessionTransientState);
+    sessionTurnState.clearAll();
     sessionStartGateRef.current.clear();
     sessionStore.resetWorkspace(workspaceRepoPath);
-  }, [sessionTransientState, workspaceRepoPath, sessionStore]);
+  }, [sessionTurnState, workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
     sessionObserversRef.current.clear();
-    clearAllSessionTransientState(sessionTransientState);
+    sessionTurnState.clearAll();
     sessionStartGateRef.current.clear();
-  }, [sessionTransientState]);
+  }, [sessionTurnState]);
 
   useEffect(() => clearMutableSessionState, [clearMutableSessionState]);
 
@@ -93,8 +77,8 @@ export const useOrchestratorSessionState = ({
       repoEpochRef,
       sessionStartGateRef,
       sessionObserversRef,
-      sessionTransientState,
+      sessionTurnState,
     }),
-    [sessionTransientState, sessionStore],
+    [sessionStore, sessionTurnState],
   );
 };

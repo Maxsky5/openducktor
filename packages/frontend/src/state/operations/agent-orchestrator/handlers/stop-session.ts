@@ -1,12 +1,9 @@
-import type {
-  AgentSessionRecord,
-  AgentSessionStopTarget,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, AgentSessionStopTarget } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
+import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
@@ -16,18 +13,9 @@ import {
 } from "../support/session-notice-messages";
 import type { SessionObservers } from "../support/session-observers";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
-import {
-  clearSessionTransientState,
-  type SessionTransientState,
-} from "../support/session-transient-state";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 
 type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
-type UpdateSession = (
-  identity: AgentSessionIdentity,
-  updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
-) => AgentSessionState | null;
 
 export type StopAgentSessionDependencies = {
   workspaceRepoPath: string | null;
@@ -35,14 +23,10 @@ export type StopAgentSessionDependencies = {
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   sessionObserversRef: { current: SessionObservers };
-  sessionTransientState: SessionTransientState;
+  clearSessionTurnState: (session: AgentSessionIdentity) => void;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopAuthoritativeSession: (target: AgentSessionStopTarget) => Promise<void>;
-  invalidateSessionStopQueries: (input: {
-    repoPath: string;
-    taskId: string;
-    runtimeKind?: RuntimeKind;
-  }) => Promise<void>;
+  invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -72,7 +56,7 @@ export const createStopAgentSession = ({
   readSessionSnapshot,
   updateSession,
   sessionObserversRef,
-  sessionTransientState,
+  clearSessionTurnState,
   persistSessionRecord,
   stopAuthoritativeSession,
   invalidateSessionStopQueries,
@@ -87,14 +71,10 @@ export const createStopAgentSession = ({
     const externalSessionId = session.externalSessionId;
     let stopRepoPath: string | null = null;
 
-    updateSession(
-      session,
-      (current) => ({
-        ...current,
-        stopRequestedAt: now(),
-      }),
-      { persist: false },
-    );
+    updateSession(session, (current) => ({
+      ...current,
+      stopRequestedAt: now(),
+    }));
 
     try {
       stopRepoPath = workspaceRepoPath;
@@ -110,14 +90,10 @@ export const createStopAgentSession = ({
         workingDirectory: session.workingDirectory,
       });
     } catch (error) {
-      updateSession(
-        session,
-        (current) => ({
-          ...current,
-          stopRequestedAt: null,
-        }),
-        { persist: false },
-      );
+      updateSession(session, (current) => ({
+        ...current,
+        stopRequestedAt: null,
+      }));
       throw new Error(
         `Failed to stop ${session.role} session '${externalSessionId}': ${errorMessage(error)}`,
       );
@@ -133,7 +109,7 @@ export const createStopAgentSession = ({
     }
 
     sessionObserversRef.current.remove(stoppedSessionRef);
-    clearSessionTransientState(sessionTransientState, stoppedSessionRef);
+    clearSessionTurnState(stoppedSessionRef);
 
     const stoppedAt = now();
     const nextStoppedSession = updateSession(session, (current) => {
@@ -144,10 +120,6 @@ export const createStopAgentSession = ({
         messages: shouldAppendUserStoppedNotice
           ? appendUserStoppedNotice(current, stoppedAt)
           : current.messages,
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
         stopRequestedAt: null,
         pendingApprovals: [],
         pendingQuestions: [],

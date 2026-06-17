@@ -8,38 +8,30 @@ export type AgentStudioChatSurfaceState = {
   composerReadOnlyReason: string | null;
 };
 
-type AgentStudioChatSurfaceSelectedSession = {
+type DeriveAgentStudioChatSurfaceStateInput = {
   taskId: string;
-  activeSession: AgentStudioSelectedSessionContext["activeSession"];
+  selectedSessionKey: string | null;
+  transcriptState: AgentStudioSelectedSessionContext["transcriptState"];
   workflow: Pick<
     AgentStudioSelectedSessionContext["workflow"],
     "selectedRoleAvailable" | "selectedRoleReadOnlyReason"
   >;
-};
-
-type AgentStudioChatSurfaceSessionActions = {
   isStarting: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   startLaunchKickoff: () => Promise<void>;
 };
 
-type DeriveAgentStudioChatSurfaceStateInput = {
-  selectedSession: AgentStudioChatSurfaceSelectedSession;
-  transcriptState: AgentStudioSelectedSessionContext["runtime"]["transcriptState"];
-  sessionActions: AgentStudioChatSurfaceSessionActions;
-};
-
 const deriveAgentStudioChatEmptyState = ({
   taskId,
-  transcriptStateKind,
+  transcriptState,
   isStarting,
   canKickoff,
   kickoffLabel,
   startLaunchKickoff,
 }: {
   taskId: string;
-  transcriptStateKind: AgentSessionTranscriptState["kind"];
+  transcriptState: AgentSessionTranscriptState;
   isStarting: boolean;
   canKickoff: boolean;
   kickoffLabel: string;
@@ -51,14 +43,24 @@ const deriveAgentStudioChatEmptyState = ({
     };
   }
 
-  if (transcriptStateKind !== "empty") {
+  if (transcriptState.kind !== "empty") {
     return null;
+  }
+
+  if (transcriptState.reason === "unavailable") {
+    return {
+      title: "Conversation unavailable.",
+    };
   }
 
   if (isStarting) {
     return {
       title: "Initializing session...",
     };
+  }
+
+  if (transcriptState.reason !== "sessionless") {
+    return null;
   }
 
   if (canKickoff) {
@@ -77,25 +79,27 @@ const deriveAgentStudioChatEmptyState = ({
 };
 
 export const deriveAgentStudioChatSurfaceState = ({
-  selectedSession,
+  taskId,
+  selectedSessionKey,
   transcriptState,
-  sessionActions,
+  workflow,
+  isStarting,
+  canKickoffNewSession,
+  kickoffLabel,
+  startLaunchKickoff,
 }: DeriveAgentStudioChatSurfaceStateInput): AgentStudioChatSurfaceState => {
-  const composerReadOnly =
-    !selectedSession.activeSession && !selectedSession.workflow.selectedRoleAvailable;
+  const composerReadOnly = selectedSessionKey === null && !workflow.selectedRoleAvailable;
 
   return {
     emptyState: deriveAgentStudioChatEmptyState({
-      taskId: selectedSession.taskId,
-      transcriptStateKind: transcriptState.kind,
-      isStarting: sessionActions.isStarting,
-      canKickoff: sessionActions.canKickoffNewSession,
-      kickoffLabel: sessionActions.kickoffLabel,
-      startLaunchKickoff: sessionActions.startLaunchKickoff,
+      taskId,
+      transcriptState,
+      isStarting,
+      canKickoff: canKickoffNewSession,
+      kickoffLabel,
+      startLaunchKickoff,
     }),
     composerReadOnly,
-    composerReadOnlyReason: composerReadOnly
-      ? selectedSession.workflow.selectedRoleReadOnlyReason
-      : null,
+    composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
   };
 };

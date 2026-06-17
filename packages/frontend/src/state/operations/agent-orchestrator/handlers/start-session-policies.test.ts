@@ -16,6 +16,7 @@ describe("agent-orchestrator/handlers/start-session-policies", () => {
           workspaceId: "workspace-1",
           taskId: "task-1",
           role: "build",
+          holdForPostStartMessage: false,
           isStaleRepoOperation: () => false,
         },
         task: {

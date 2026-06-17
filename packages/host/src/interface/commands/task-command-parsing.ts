@@ -130,14 +130,6 @@ export const parsePlanSubtasks = (value: unknown): PlanSubtaskInput[] => {
   );
 };
 
-export const parseTaskIdList = (value: unknown, label: string): string[] => {
-  if (!Array.isArray(value)) {
-    throw invalidInput(`${label} must be an array.`, label);
-  }
-
-  return value.map((entry, index) => requireString(entry, `${label}[${index}]`));
-};
-
 const normalizeAgentSessionInput = (value: unknown): unknown => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value;

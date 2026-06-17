@@ -11,8 +11,8 @@ import {
   isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
-  toKanbanSessionPresentationState,
   toKanbanTaskActivityState,
+  toKanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import {
   compareActiveSessionForPrimary,
@@ -28,22 +28,7 @@ const comparePrimaryTaskSession = (
   left: WorkflowAgentSessionSummary,
   right: WorkflowAgentSessionSummary,
 ): number => {
-  return compareActiveSessionForPrimary(
-    {
-      externalSessionId: left.externalSessionId,
-      runtimeKind: left.runtimeKind,
-      workingDirectory: left.workingDirectory,
-      presentationState: toKanbanSessionPresentationState(left),
-      startedAt: left.startedAt,
-    },
-    {
-      externalSessionId: right.externalSessionId,
-      runtimeKind: right.runtimeKind,
-      workingDirectory: right.workingDirectory,
-      presentationState: toKanbanSessionPresentationState(right),
-      startedAt: right.startedAt,
-    },
-  );
+  return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
 
 export const buildActiveTaskSessionContextByTaskId = (
@@ -67,7 +52,7 @@ export const buildActiveTaskSessionContextByTaskId = (
       taskId,
       {
         role: session.role,
-        presentationState: toKanbanSessionPresentationState(session),
+        presentationState: toKanbanTaskSession(session).presentationState,
       },
     ]),
   );
@@ -147,14 +132,7 @@ export const buildTaskSessionsByTaskId = (
   return new Map(
     Array.from(sessionsByTaskId.entries()).map(([taskId, taskSessions]) => [
       taskId,
-      taskSessions.map((session) => ({
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
-        externalSessionId: session.externalSessionId,
-        role: session.role,
-        startedAt: session.startedAt,
-        presentationState: toKanbanSessionPresentationState(session),
-      })),
+      taskSessions.map(toKanbanTaskSession),
     ]),
   );
 };

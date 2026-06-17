@@ -597,7 +597,6 @@ describe("createTaskService build and review", () => {
     );
     expect(bootstrap).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/worktrees/repo/task-1",
     });
     expect(calls).toEqual([

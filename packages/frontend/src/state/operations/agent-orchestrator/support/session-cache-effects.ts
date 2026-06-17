@@ -6,6 +6,7 @@ import {
 } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
+import { requireWorkspaceRepoPath } from "./session-invariants";
 
 type CreateSessionCacheEffectsArgs = {
   workspaceRepoPath: string | null;
@@ -22,11 +23,9 @@ export const createSessionCacheEffects = ({
     taskId: string,
     record: AgentSessionRecord,
   ): Promise<void> => {
-    if (!workspaceRepoPath) {
-      return;
-    }
-    await hostPort.agentSessionUpsert(workspaceRepoPath, taskId, record);
-    upsertAgentSessionRecordInQuery(queryClient, workspaceRepoPath, taskId, record);
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
+    await hostPort.agentSessionUpsert(repoPath, taskId, record);
+    upsertAgentSessionRecordInQuery(queryClient, repoPath, taskId, record);
   };
 
   const invalidateSessionStopQueries = async ({

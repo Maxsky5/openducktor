@@ -7,7 +7,7 @@ import type {
   AgentChatSurfaceModel,
   AgentChatThreadSession,
 } from "./agent-chat.types";
-import { deriveAgentChatThreadProjection } from "./agent-chat-thread-state";
+import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,
@@ -25,6 +25,7 @@ export { invokeStopAgentSession };
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
+  sessionKey: string | null;
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
   chatSettings: ChatSettings;
@@ -42,6 +43,7 @@ type UseAgentChatSurfaceModelArgs = {
 };
 
 export function useAgentChatSurfaceModel({
+  sessionKey,
   session,
   transcriptState,
   chatSettings,
@@ -57,14 +59,16 @@ export function useAgentChatSurfaceModel({
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
-  const { threadSession, activeSessionKey } = deriveAgentChatThreadProjection({
+  const threadState = projectAgentChatThreadState({
+    sessionKey,
     session,
     transcriptState,
+    runtimeReadiness,
   });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      activeSessionKey,
+      displayedSessionKey: threadState.displayedSessionKey,
       syncBottomAfterComposerLayoutRef,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
@@ -94,8 +98,7 @@ export function useAgentChatSurfaceModel({
     syncBottomAfterComposerLayoutRef,
   });
   const threadModel = useAgentChatThreadModel({
-    threadSession,
-    activeSessionKey,
+    threadState,
     transcriptState,
     runtimeReadiness,
     isSessionWorking,

@@ -9,10 +9,7 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
-import {
-  createSessionDraftBuffers,
-  createSessionTurnMetadata,
-} from "../support/session-transient-state";
+import { createSessionTurnMetadata } from "../support/session-turn-metadata";
 import {
   createDeferred,
   createSessionObserversRefFixture,
@@ -22,7 +19,7 @@ import {
   buildSession,
   createSessionActions,
   createSessionsRef,
-  createSessionTransientStateFixture,
+  createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
 
@@ -134,8 +131,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       }),
     ]);
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
-    const sessionTransientState = createSessionTransientStateFixture();
-    sessionTransientState.turnMetadata.recordModel(sessionKey, null);
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.turnMetadata.recordModel(sessionKey, null);
 
     const stopAuthoritativeSession = async () => {
       throw new Error("build stop failed");
@@ -153,7 +150,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
           },
         },
       ]),
-      sessionTransientState,
+      sessionTurnState: sessionTurnState.sessionTurnState,
       stopAuthoritativeSession,
     });
 
@@ -163,7 +160,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       );
       expect(localStopCalls).toBe(0);
       expect(unsubscribeCalls).toBe(0);
-      expect(sessionTransientState.turnMetadata.readModel(sessionKey)).toBeNull();
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeNull();
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
       expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(1);
@@ -275,11 +272,11 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       },
-      draftBuffers: createSessionDraftBuffers(),
       turnMetadata: createSessionTurnMetadata(),
       readSession: (identity) => getAgentSession(sessionsRef.current, identity),
       updateSession,
       updateSessionTodos: () => {},
+      isSessionObserved: (identity) => identity.externalSessionId === "session-1",
       buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
       recordTurnActivityTimestamp: () => {},
       recordTurnUserMessageTimestamp: () => {},
@@ -428,20 +425,16 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([buildSession()]);
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
-    const sessionTransientState = createSessionTransientStateFixture();
-    sessionTransientState.draftBuffers.writeChannel(sessionKey, "reasoning", {
-      raw: "draft",
-      source: "delta",
-    });
-    sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
-    sessionTransientState.turnMetadata.recordModel(sessionKey, null);
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
+    sessionTurnState.turnMetadata.recordModel(sessionKey, null);
 
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       taskRef: { current: [] },
       sessionObserversRef,
-      sessionTransientState,
+      sessionTurnState: sessionTurnState.sessionTurnState,
       stopAuthoritativeSession: async () => {
         callOrder.push("host-stop");
       },
@@ -454,11 +447,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       await expect(actions.stopAgentSession(getSession(sessionsRef))).resolves.toBeUndefined();
       expect(callOrder).toEqual(["host-stop", "local-release"]);
       expect(unsubscribeCalls).toBe(1);
-      expect(sessionTransientState.draftBuffers.readChannel(sessionKey, "reasoning").raw).toBe("");
       expect(
-        sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
+        sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
       ).toBeUndefined();
-      expect(sessionTransientState.turnMetadata.readModel(sessionKey)).toBeUndefined();
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeUndefined();
       expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
       adapter.releaseSession = originalReleaseSession;

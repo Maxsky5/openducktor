@@ -16,17 +16,58 @@ const mergedMessages = (
   currentMessages: AgentChatMessage[],
 ): AgentChatMessage[] => {
   return sessionMessagesToArray(
-    createSession(
-      mergeHistoryMessages(
-        EXTERNAL_SESSION_ID,
-        createSessionMessagesState(EXTERNAL_SESSION_ID, historyMessages),
-        createSessionMessagesState(EXTERNAL_SESSION_ID, currentMessages),
-      ),
-    ),
+    createSession(mergedMessageState(historyMessages, currentMessages)),
+  );
+};
+
+const mergedMessageState = (
+  historyMessages: AgentChatMessage[],
+  currentMessages: AgentChatMessage[],
+  currentVersion = 0,
+): SessionMessagesState => {
+  return mergeHistoryMessages(
+    EXTERNAL_SESSION_ID,
+    createSessionMessagesState(EXTERNAL_SESSION_ID, historyMessages),
+    createSessionMessagesState(EXTERNAL_SESSION_ID, currentMessages, currentVersion),
   );
 };
 
 describe("agent-orchestrator/support/history-message-merge", () => {
+  test("commits loaded history as one transcript revision", () => {
+    const merged = mergedMessageState(
+      [
+        {
+          id: "history-user",
+          role: "user",
+          content: "History user message",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+        {
+          id: "history-assistant",
+          role: "assistant",
+          content: "History assistant message",
+          timestamp: "2026-03-01T09:00:01.000Z",
+        },
+      ],
+      [
+        {
+          id: "live-user",
+          role: "user",
+          content: "Live message still pending",
+          timestamp: "2026-03-01T09:00:02.000Z",
+        },
+      ],
+      41,
+    );
+
+    expect(merged.version).toBe(42);
+    expect(sessionMessagesToArray(createSession(merged)).map((message) => message.id)).toEqual([
+      "history-user",
+      "history-assistant",
+      "live-user",
+    ]);
+  });
+
   test("prefers history final assistant messages while preserving current metadata", () => {
     const merged = mergedMessages(
       [
@@ -386,8 +427,45 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     );
 
     expect(merged.map((message) => message.id)).toEqual([
-      "assistant-1",
       "history:system-prompt:session-1",
+      "assistant-1",
+    ]);
+  });
+
+  test("does not duplicate the local system prompt header when runtime history provides one", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "codex-system-prompt:session-1",
+          role: "system",
+          content: "System prompt:\n\nRuntime-owned prompt.",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Runtime history answer",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "history:system-prompt:session-1",
+          role: "system",
+          content: "System prompt:\n\nLocal computed prompt.",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "codex-system-prompt:session-1",
+      "assistant-1",
     ]);
   });
 
@@ -561,7 +639,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     expect(merged[1]?.meta?.kind === "subagent" ? merged[1].meta.startedAtMs : null).toBe(110);
   });
 
-  test("absorbs a fallback-matched subagent session row only once", () => {
+  test("bridges a unique current session-scoped subagent row only once", () => {
     const merged = mergedMessages(
       [
         {

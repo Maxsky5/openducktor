@@ -66,6 +66,10 @@ export type RuntimeRegistryPort = {
     input: RuntimeEnsureWorkspaceInput,
   ): Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>;
   findRuntimeById(runtimeId: string): Effect.Effect<RuntimeInstanceSummary | null, never>;
+  findWorkspaceRuntime(input: {
+    repoPath: string;
+    runtimeKind: string;
+  }): Effect.Effect<RuntimeInstanceSummary | null, RuntimeRegistryError>;
   listRuntimes(): Effect.Effect<RuntimeInstanceSummary[], never>;
   listRuntimesByRepo(input: {
     repoPath: string;

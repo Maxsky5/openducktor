@@ -11,7 +11,6 @@ import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
-  AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
@@ -20,15 +19,9 @@ import type {
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
-import type {
-  AgentActivitySessionSummary,
-  AgentActivitySessionsSnapshot,
-  AgentSessionSummary,
-} from "./agent-sessions-store";
+import { createAgentRuntimeServices } from "./agent-runtime-services";
+import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
 import {
-  AgentOperationsContext,
-  AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
@@ -42,7 +35,6 @@ import {
   useWorkspacePresenceContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
-import { createHostRuntimeCatalogOperations } from "./operations/shared/runtime-catalog";
 import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
 import { AppRuntimeProvider } from "./providers/app-runtime-provider";
@@ -54,11 +46,7 @@ import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
-  const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
-  const runtimeCatalogOperations = useMemo(() => {
-    return createHostRuntimeCatalogOperations(runtimeRegistry.getAdapter);
-  }, [runtimeRegistry]);
+  const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
   const checkRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>
       runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
@@ -120,7 +108,7 @@ export const useAgentOperations = (): AgentOperationsContextValue => useAgentOpe
 export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
   useAgentSessionReadModelStateContext();
 
-export const useAgentSessions = (): AgentStateContextValue["sessions"] => {
+export const useAgentSessions = (): AgentSessionState[] => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
@@ -135,15 +123,6 @@ export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
     sessionStore.subscribe,
     sessionStore.getSessionSummariesSnapshot,
     sessionStore.getSessionSummariesSnapshot,
-  );
-};
-
-export const useAgentActivitySessions = (): AgentActivitySessionSummary[] => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getActivitySessionsSnapshot,
-    sessionStore.getActivitySessionsSnapshot,
   );
 };
 
@@ -164,25 +143,5 @@ export const useAgentSession = (
     sessionStore.subscribe,
     () => sessionStore.getSessionSnapshot(identity),
     () => sessionStore.getSessionSnapshot(identity),
-  );
-};
-
-export const useAgentState = (): AgentStateContextValue => {
-  const sessionStore = useRequiredContext(AgentSessionsContext, "useAgentState");
-  const operations = useRequiredContext(AgentOperationsContext, "useAgentState");
-  const readModelState = useAgentSessionReadModelStateContext();
-  const sessions = useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getSessionsSnapshot,
-    sessionStore.getSessionsSnapshot,
-  );
-
-  return useMemo(
-    () => ({
-      sessions,
-      ...readModelState,
-      ...operations,
-    }),
-    [operations, readModelState, sessions],
   );
 };

@@ -2,27 +2,22 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import { annotateQuestionToolMessage } from "../support/question-messages";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
-import type { SessionTransientState } from "../support/session-transient-state";
 import {
   type ReadSessionSnapshot,
   requireLoadedSession,
   requireWorkspaceRepoPath,
-} from "./session-action-guards";
-
-type UpdateSession = (
-  identity: AgentSessionIdentity,
-  updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
-) => AgentSessionState | null;
+} from "../support/session-invariants";
+import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
 export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "replyApproval" | "replyQuestion">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  turnMetadata: SessionTransientState["turnMetadata"];
+  turnMetadata: SessionTurnMetadata;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
     timestamp: string | number,
@@ -92,14 +87,10 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       ...(message ? { message } : {}),
     });
 
-    dependencies.updateSession(
-      session,
-      (current) => ({
-        ...current,
-        pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
-      }),
-      { persist: false },
-    );
+    dependencies.updateSession(session, (current) => ({
+      ...current,
+      pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
+    }));
   };
 
   const answerAgentQuestion = async (
@@ -116,23 +107,19 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       answers,
     });
 
-    dependencies.updateSession(
-      session,
-      (current) => {
-        const { pendingQuestions, messages } = applyQuestionAnswerToSession(
-          current,
-          requestId,
-          answers,
-        );
+    dependencies.updateSession(session, (current) => {
+      const { pendingQuestions, messages } = applyQuestionAnswerToSession(
+        current,
+        requestId,
+        answers,
+      );
 
-        return {
-          ...current,
-          pendingQuestions,
-          messages,
-        };
-      },
-      { persist: false },
-    );
+      return {
+        ...current,
+        pendingQuestions,
+        messages,
+      };
+    });
   };
 
   return {

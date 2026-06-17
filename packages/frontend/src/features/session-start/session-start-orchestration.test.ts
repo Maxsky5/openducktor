@@ -17,8 +17,6 @@ const BUILD_SELECTION = {
   profileId: "build-agent",
 };
 
-const settleStartedAgentSession = () => undefined;
-
 const CODEX_BUILD_SELECTION = {
   ...BUILD_SELECTION,
   runtimeKind: "codex" as const,
@@ -36,14 +34,14 @@ const sessionIdentity = (
 });
 
 describe("session-start-orchestration", () => {
-  test("prefers the active reusable session and task defaults when building a modal request", () => {
+  test("prefers the preferred reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
-    const activeSession = createAgentSessionSummaryFixture({
+    const preferredSourceSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
@@ -59,8 +57,8 @@ describe("session-start-orchestration", () => {
         postStartAction: "kickoff",
       },
       selectedModel: BUILD_SELECTION,
-      taskSessions: [latestSession, activeSession],
-      activeSession,
+      taskSessions: [latestSession, preferredSourceSession],
+      preferredSourceSession,
       selectedTask: createTaskCardFixture({
         id: "TASK-1",
         targetBranch: {
@@ -84,7 +82,7 @@ describe("session-start-orchestration", () => {
     ]);
   });
 
-  test("falls back to the latest reusable session when no active session matches", () => {
+  test("falls back to the latest reusable session when no preferred source session matches", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
@@ -140,14 +138,14 @@ describe("session-start-orchestration", () => {
     expect(request.targetWorkingDirectory).toBe("/repo/worktrees/TASK-1");
   });
 
-  test("keeps an explicit initial source session override even when another active session matches", () => {
+  test("keeps an explicit initial source session override even when another preferred source session matches", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
-    const activeSession = createAgentSessionSummaryFixture({
+    const preferredSourceSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
@@ -164,8 +162,8 @@ describe("session-start-orchestration", () => {
         postStartAction: "kickoff",
       },
       selectedModel: null,
-      taskSessions: [latestSession, activeSession],
-      activeSession,
+      taskSessions: [latestSession, preferredSourceSession],
+      preferredSourceSession,
     });
 
     expect(request.initialSourceSession).toEqual(sessionIdentity("builder-session-2"));
@@ -226,7 +224,6 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
-      settleStartedAgentSession,
     });
 
     expect(result).toEqual({
@@ -285,9 +282,7 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
-      settleStartedAgentSession,
       sendAgentMessage,
-      postStartExecution: "await",
     });
 
     expect(result).toEqual({
@@ -335,7 +330,6 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
-      settleStartedAgentSession,
     });
 
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -351,12 +345,11 @@ describe("session-start-orchestration", () => {
     );
   });
 
-  test("reports detached post-start failures without losing the started session", async () => {
+  test("returns post-start failures after the kickoff send finishes", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {
       throw new Error("kickoff failed");
     });
-    const onPostStartActionError = mock(() => {});
 
     const result = await executeSessionStartFromDecision({
       workspaceId: null,
@@ -373,22 +366,19 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
-      settleStartedAgentSession,
       sendAgentMessage,
-      onPostStartActionError,
     });
 
     expect(result).toEqual({
       ...sessionIdentity("session-new"),
-      postStartActionError: null,
+      postStartActionError: expect.objectContaining({ message: "kickoff failed" }),
     });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onPostStartActionError).toHaveBeenCalledWith(
-      "kickoff",
-      expect.objectContaining({ message: "kickoff failed" }),
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "fresh",
+        holdForPostStartMessage: true,
+      }),
     );
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
+import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
-  useAgentSessionReadModelState,
   useAgentSessionSummaries,
   useChecksState,
   useTasksState,
@@ -52,6 +52,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     availableRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
+    loadRepoRuntimeCatalog,
   } = useRuntimeAvailabilityContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
@@ -71,22 +72,19 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
-  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const {
-    loadAgentSessionHistory,
-    readSessionFileSearch,
-    readSessionModelCatalog,
-    readSessionSlashCommands,
-    readSessionSkills,
-    readSessionTodos,
     startAgentSession,
-    settleStartedAgentSession,
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
+  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+    workspaceId: activeWorkspaceId,
+    startAgentSession,
+    sendAgentMessage,
+  });
   const sessions = useAgentSessionSummaries();
 
   const {
@@ -106,15 +104,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     tasks,
     isForegroundLoadingTasks,
     sessions,
-    sessionReadModelLoadState,
     repoSettings,
     isLoadingRepoSettings,
-    loadAgentSessionHistory,
-    readSessionModelCatalog,
-    readSessionTodos,
+    loadRepoRuntimeCatalog,
   });
-  const { navigationPersistenceError, retryNavigationPersistence, selection, worktreeRecoveryKey } =
-    routeSession;
+  const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
@@ -147,12 +141,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     gitConflictQuickActionContext,
     gitConflictQuickActionContextRef,
     openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
+    runSessionStartWorkflow,
     agentOperations: {
-      readSessionFileSearch,
-      readSessionSlashCommands,
-      ...(readSessionSkills ? { readSessionSkills } : {}),
-      startAgentSession,
-      settleStartedAgentSession,
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
@@ -171,7 +161,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     panel: orchestration.rightPanel,
     documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
     repoSettings: orchestration.repoSettings,
-    worktreeRecoveryKey,
     setTaskTargetBranch,
     detectingPullRequestTaskId,
     onDetectPullRequest: taskActions.onDetectPullRequest,

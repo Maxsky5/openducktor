@@ -7,6 +7,7 @@ import { createSessionMessagesState } from "@/state/operations/agent-orchestrato
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
+  type AgentChatThreadModelInput,
   buildApprovalRequest,
   buildMessage,
   buildModelSelection,
@@ -14,6 +15,7 @@ import {
   buildSession,
   buildThreadTranscriptState,
   buildTodoItem,
+  completeThreadModel,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
@@ -59,11 +61,11 @@ const buildBaseModel = () => ({
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 
-const AgentChatThread = (props: Parameters<typeof AgentChatThreadComponent>[0]) =>
+const AgentChatThread = ({ model }: { model: AgentChatThreadModelInput }) =>
   createElement(
     AgentChatSettingsProvider,
     { value: DEFAULT_TEST_CHAT_SETTINGS },
-    createElement(AgentChatThreadComponent, props),
+    createElement(AgentChatThreadComponent, { model: completeThreadModel(model) }),
   );
 
 const flush = async (): Promise<void> => {
@@ -256,7 +258,6 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             status: "running",
-            draftAssistantText: "",
             pendingQuestions: [],
           }),
         },
@@ -266,7 +267,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Agent is thinking...");
   });
 
-  test("keeps the transcript area blank when active session has no renderable rows yet", () => {
+  test("keeps the transcript area blank when displayed session has no renderable rows yet", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -274,7 +275,6 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "stopped",
             messages: [],
-            draftAssistantText: "",
             pendingQuestions: [],
             pendingApprovals: [],
           }),
@@ -297,7 +297,6 @@ describe("AgentChatThread", () => {
               buildMessage("thinking", "Reasoning trace 1", { id: "thinking-1" }),
               buildMessage("thinking", "Reasoning trace 2", { id: "thinking-2" }),
             ],
-            draftAssistantText: "",
             pendingQuestions: [],
             pendingApprovals: [],
           }),

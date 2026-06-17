@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -39,6 +39,13 @@ const createInput = (
 ): AgentStudioSelectedSessionContextInput => {
   const selectedTask = createTaskCardFixture({ id: "task-1", title: "Task 1" });
   const sessionsForTask = overrides.sessionsForTask ?? [];
+  const loadedSession = overrides.loadedSession ?? null;
+  const selectedSessionIdentity =
+    overrides.selectedSessionIdentity !== undefined
+      ? overrides.selectedSessionIdentity
+      : loadedSession
+        ? toAgentSessionIdentity(loadedSession)
+        : null;
 
   return {
     taskId: "task-1",
@@ -46,13 +53,15 @@ const createInput = (
     selectedTask,
     sessionsForTask,
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
-    activeSession: null,
-    activeSessionRuntimeData: {
+    selectedSessionIdentity,
+    loadedSession,
+    sessionRuntimeData: {
+      modelCatalog: null,
       todos: [],
       isLoadingModelCatalog: false,
+      error: null,
     },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     transcriptState: createSelectedSessionTranscriptStateFixture(),
     documents: {
@@ -91,17 +100,15 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         selectedTask: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        activeSession: null,
+        loadedSession: null,
       }),
     );
 
     expect(context.documents.activeDocument).toBeNull();
-    expect(context.rightPanel.hasTaskContext).toBe(false);
-    expect(context.rightPanel.hasDocumentPanel).toBe(false);
-    expect(context.runtime.sessionRuntimeDataError).toBeNull();
+    expect(context.runtime.runtimeData.error).toBeNull();
   });
 
-  test("maps active document and right-panel availability from selected role semantics", () => {
+  test("maps active document from selected role semantics", () => {
     const expectedByRole: Record<AgentRole, string | null> = {
       spec: "Specification",
       planner: "Implementation Plan",
@@ -117,16 +124,41 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       const context = buildAgentStudioSelectedSessionContext(
         createInput({
           role,
-          activeSession: session,
+          loadedSession: session,
           sessionsForTask: [toAgentSessionSummary(session)],
           allSessionSummaries: [toAgentSessionSummary(session)],
         }),
       );
 
       expect(context.documents.activeDocument?.title ?? null).toBe(expectedTitle);
-      expect(context.rightPanel.hasDocumentPanel).toBe(expectedTitle !== null);
-      expect(context.rightPanel.hasBuildToolsPanel).toBe(role === "build");
     }
+  });
+
+  test("keeps selected-session identity authoritative when loaded session state is stale", () => {
+    const selectedSession = createSession({
+      externalSessionId: "shared-session",
+      role: "planner",
+      workingDirectory: "/repo/selected-worktree",
+    });
+    const staleLoadedSession = createSession({
+      externalSessionId: "shared-session",
+      role: "spec",
+      workingDirectory: "/repo/stale-worktree",
+    });
+    const context = buildAgentStudioSelectedSessionContext(
+      createInput({
+        role: "planner",
+        selectedSessionIdentity: toAgentSessionIdentity(selectedSession),
+        loadedSession: staleLoadedSession,
+        sessionsForTask: [toAgentSessionSummary(selectedSession)],
+        allSessionSummaries: [toAgentSessionSummary(selectedSession)],
+      }),
+    );
+
+    expect(context.selectedSessionIdentity).toEqual(toAgentSessionIdentity(selectedSession));
+    expect(context.workflow.sessionSelectorValue).toBe(agentSessionIdentityKey(selectedSession));
+    expect(context.role).toBe("planner");
+    expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
   });
 
   test("marks unavailable selected role read-only and disables kickoff affordance", () => {
@@ -146,7 +178,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.workflow.selectedInteractionRole).toBe("planner");
+    expect(context.role).toBe("planner");
     expect(context.workflow.selectedRoleAvailable).toBe(false);
     expect(context.workflow.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
   });
@@ -166,38 +198,45 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         role: "qa",
         selectedTask: unavailableQaTask,
-        activeSession: qaSession,
+        loadedSession: qaSession,
         sessionsForTask: [toAgentSessionSummary(qaSession)],
         allSessionSummaries: [toAgentSessionSummary(qaSession)],
       }),
     );
 
     expect(context.workflow.selectedRoleAvailable).toBe(false);
-    expect(context.activeSession).toBe(qaSession);
+    expect(context.loadedSession).toBe(qaSession);
   });
 
   test("projects selected runtime data for chat adaptation", () => {
-    const activeSession = createSession();
+    const loadedSession = createSession();
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        activeSession,
-        activeSessionRuntimeData: {
+        loadedSession,
+        sessionRuntimeData: {
+          modelCatalog: null,
           todos: [],
           isLoadingModelCatalog: true,
+          error: null,
         },
       }),
     );
 
-    expect(context.activeSession).toBe(activeSession);
-    expect(context.runtime.isLoadingModelCatalog).toBe(true);
-    expect(context.runtime.sessionTodos).toEqual([]);
+    expect(context.loadedSession).toBe(loadedSession);
+    expect(context.runtime.runtimeData.isLoadingModelCatalog).toBe(true);
+    expect(context.runtime.runtimeData.todos).toEqual([]);
   });
 
   test("projects runtime readiness and runtime-data errors without masking", () => {
     const refreshChecks = mock(async () => {});
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        sessionRuntimeDataError: "session todos unavailable",
+        sessionRuntimeData: {
+          modelCatalog: null,
+          todos: [],
+          isLoadingModelCatalog: false,
+          error: "session todos unavailable",
+        },
         transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         runtimeReadiness: {
           readinessState: "blocked",
@@ -210,8 +249,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.sessionRuntimeDataError).toBe("session todos unavailable");
-    expect(context.runtime.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.runtime.runtimeData.error).toBe("session todos unavailable");
+    expect(context.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.runtime.runtimeReadiness).toMatchObject({
       readinessState: "blocked",
       isReady: false,
@@ -224,7 +263,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("marks no-session task view as waiting while runtime startup is in progress", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        activeSession: null,
+        loadedSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
         transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
@@ -239,13 +278,13 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.transcriptState).toEqual({ kind: "runtime_waiting" });
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        activeSession: null,
+        loadedSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
         transcriptState: createSelectedSessionTranscriptStateFixture(),
@@ -260,7 +299,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.transcriptState).toEqual({ kind: "visible" });
+    expect(context.transcriptState).toEqual({ kind: "visible" });
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {
@@ -300,7 +339,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        activeSession: session,
+        loadedSession: session,
         sessionsForTask: [toAgentSessionSummary(session)],
         allSessionSummaries: [
           toAgentSessionSummary(session),
@@ -345,7 +384,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
   test("disables pending input actions when the selected session has no pending items", () => {
     const noActiveSessionContext = buildAgentStudioSelectedSessionContext(
-      createInput({ activeSession: null }),
+      createInput({ loadedSession: null }),
     );
 
     expect(noActiveSessionContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
@@ -355,7 +394,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const idleSession = createSession({ pendingApprovals: [], pendingQuestions: [] });
     const idleContext = buildAgentStudioSelectedSessionContext(
       createInput({
-        activeSession: idleSession,
+        loadedSession: idleSession,
         sessionsForTask: [toAgentSessionSummary(idleSession)],
         allSessionSummaries: [toAgentSessionSummary(idleSession)],
       }),

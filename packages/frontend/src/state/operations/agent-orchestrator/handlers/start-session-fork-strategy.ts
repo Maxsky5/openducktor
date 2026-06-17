@@ -1,8 +1,10 @@
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
+import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState } from "../support/messages";
-import { historyToChatMessages } from "../support/persistence";
+import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
+import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -32,19 +34,12 @@ type ForkStrategyInput = {
   deps: StartSessionExecutionDependencies;
 };
 
-const requireForkSourceRuntime = (
+const readForkSourceRuntime = (
   sourceSession: AgentSessionState,
 ): {
-  runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
+  runtimeKind: AgentSessionState["runtimeKind"];
   workingDirectory: string;
 } => {
-  const sourceRuntimeKind = sourceSession.runtimeKind;
-  if (!sourceRuntimeKind) {
-    throw new Error(
-      `Session "${sourceSession.externalSessionId}" is missing runtime kind metadata required for forking.`,
-    );
-  }
-
   const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
   if (!sourceWorkingDirectory) {
     throw new Error(
@@ -52,7 +47,7 @@ const requireForkSourceRuntime = (
     );
   }
 
-  return { runtimeKind: sourceRuntimeKind, workingDirectory: sourceWorkingDirectory };
+  return { runtimeKind: sourceSession.runtimeKind, workingDirectory: sourceWorkingDirectory };
 };
 
 export const executeForkStart = async ({
@@ -65,8 +60,7 @@ export const executeForkStart = async ({
     deps,
     sourceSession: input.sourceSession,
   });
-  const { runtimeKind: sourceRuntimeKind, workingDirectory } =
-    requireForkSourceRuntime(sourceSession);
+  const { runtimeKind: sourceRuntimeKind, workingDirectory } = readForkSourceRuntime(sourceSession);
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
@@ -110,10 +104,7 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
-      repoPath: ctx.repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId: summary.externalSessionId,
+      ...toRuntimeSessionRef(ctx.repoPath, summary),
       limit: FORK_START_HISTORY_LIMIT,
     })
     .catch((error) =>
@@ -144,7 +135,6 @@ export const executeForkStart = async ({
       }),
       ...historyToChatMessages(forkHistory, {
         role: ctx.role,
-        selectedModel,
       }),
     ],
   );

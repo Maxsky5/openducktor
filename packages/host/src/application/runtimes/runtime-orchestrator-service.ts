@@ -4,7 +4,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
+import { runtimeWorkspaceKey } from "../../domain/runtime-workspace-key";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -19,7 +19,6 @@ import {
   buildReadyStartupStatus,
   buildWaitingStartupStatus,
   describeRuntimeRoute,
-  findWorkspaceRuntime,
   isoFromMillis,
   loadTargetSession,
   type RuntimeOrchestratorLogger,
@@ -51,8 +50,6 @@ export const createRuntimeOrchestratorService = ({
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
-  const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
-    `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
   const runtimeList: RuntimeOrchestratorService["runtimeList"] = (input) =>
     Effect.gen(function* () {
       const { runtimeKind, repoPath } = input;
@@ -75,14 +72,10 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      const runtime = findWorkspaceRuntime(
-        yield* runtimeRegistry.listRuntimesByRepo({
-          repoPath: canonicalRepoPath,
-          runtimeKind,
-        }),
+      const runtime = yield* runtimeRegistry.findWorkspaceRuntime({
+        repoPath: canonicalRepoPath,
         runtimeKind,
-        canonicalRepoPath,
-      );
+      });
       if (!runtime) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -99,21 +92,22 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      const runtime = findWorkspaceRuntime(
-        yield* runtimeRegistry.listRuntimesByRepo({
-          repoPath: canonicalRepoPath,
-          runtimeKind,
-        }),
+      const runtime = yield* runtimeRegistry.findWorkspaceRuntime({
+        repoPath: canonicalRepoPath,
         runtimeKind,
-        canonicalRepoPath,
-      );
+      });
       if (runtime) {
         const readyStatus = buildReadyStartupStatus(runtime);
-        runtimeStartupStatuses.set(startupStatusKey(runtimeKind, canonicalRepoPath), readyStatus);
+        runtimeStartupStatuses.set(
+          runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath }),
+          readyStatus,
+        );
         return readyStatus;
       }
       return (
-        runtimeStartupStatuses.get(startupStatusKey(runtimeKind, canonicalRepoPath)) ??
+        runtimeStartupStatuses.get(
+          runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath }),
+        ) ??
         buildIdleStartupStatus(
           runtimeKind,
           canonicalRepoPath,
@@ -126,7 +120,7 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
+      const statusKey = runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath });
       const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
       runtimeStartupStatuses.set(
         statusKey,
@@ -193,7 +187,9 @@ export const createRuntimeOrchestratorService = ({
         const runtime = yield* runtimeRegistry.findRuntimeById(runtimeId);
         const ok = yield* runtimeRegistry.stopRuntime(runtimeId);
         if (runtime) {
-          runtimeStartupStatuses.delete(startupStatusKey(runtime.kind, runtime.repoPath));
+          runtimeStartupStatuses.delete(
+            runtimeWorkspaceKey({ runtimeKind: runtime.kind, repoPath: runtime.repoPath }),
+          );
         }
         return { ok };
       });

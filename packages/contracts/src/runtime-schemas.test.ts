@@ -302,7 +302,7 @@ describe("runtime schemas", () => {
     expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
   });
 
-  test("build session bootstrap parses runtime id and working directory without route data", () => {
+  test("build session bootstrap exposes runtime kind and working directory only", () => {
     const parsed = buildSessionBootstrapSchema.parse({
       runtimeKind: "opencode",
       runtimeId: " runtime-1 ",
@@ -311,7 +311,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.runtimeKind).toBe("opencode");
-    expect(parsed.runtimeId).toBe("runtime-1");
+    expect("runtimeId" in parsed).toBe(false);
     expect("runtimeRoute" in parsed).toBe(false);
     expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });

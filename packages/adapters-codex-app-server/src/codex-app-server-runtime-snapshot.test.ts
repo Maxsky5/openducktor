@@ -63,7 +63,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
     ).toEqual({ type: "thread", thread: createThread("active") });
   });
 
-  test("keeps local idle when inventory still reports running", () => {
+  test("uses loaded inventory when no pending input or active turn needs local state", () => {
     expect(
       resolveCodexRuntimeSnapshotSource({
         session: createSession(codexThreadStatusSnapshot("idle")),
@@ -72,7 +72,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         hasPendingInput: false,
         hasActiveTurn: false,
       }),
-    ).toEqual({ type: "local" });
+    ).toEqual({ type: "thread", thread: createThread("active") });
   });
 
   test("keeps active local turns visible while inventory catches up", () => {

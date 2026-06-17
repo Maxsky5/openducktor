@@ -605,7 +605,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         ],
       }),
     ]);
-    const updateSessionOptions: unknown[] = [];
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
@@ -651,7 +651,8 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(0);
     expect(findSession(sessionsRef, "external-child-session")).toBeUndefined();
-    expect(updateSessionOptions).toContainEqual({ persist: false });
+    expect(updateSessionOptions).toContain(undefined);
+    expect(updateSessionOptions).not.toContainEqual({ persist: true });
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -704,7 +705,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-parent-session",
       sessionsRef,
       updateSession,
-      hasSessionObserver: listensToSessions("external-child-session"),
+      isSessionObserved: listensToSessions("external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -867,7 +868,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-parent-session",
       sessionsRef,
       updateSession,
-      hasSessionObserver: listensToSessions("external-child-session"),
+      isSessionObserved: listensToSessions("external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1096,7 +1097,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-parent-session",
       sessionsRef,
       updateSession,
-      hasSessionObserver: listensToSessions("external-parent-session"),
+      isSessionObserved: listensToSessions("external-parent-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1186,7 +1187,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-parent-session",
       sessionsRef,
       updateSession,
-      hasSessionObserver: listensToSessions("external-parent-session", "external-child-session"),
+      isSessionObserved: listensToSessions("external-parent-session", "external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1197,7 +1198,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-child-session",
       sessionsRef,
       updateSession,
-      hasSessionObserver: listensToSessions("external-parent-session", "external-child-session"),
+      isSessionObserved: listensToSessions("external-parent-session", "external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},

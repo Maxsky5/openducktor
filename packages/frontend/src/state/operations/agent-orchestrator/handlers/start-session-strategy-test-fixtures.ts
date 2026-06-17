@@ -26,6 +26,7 @@ export const createStartSessionContextFixture = (
   workspaceId: "workspace-1",
   taskId: "task-1",
   role: "build",
+  holdForPostStartMessage: false,
   isStaleRepoOperation: () => false,
   ...overrides,
 });

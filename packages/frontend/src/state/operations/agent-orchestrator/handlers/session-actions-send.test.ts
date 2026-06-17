@@ -12,7 +12,7 @@ import {
   buildSession,
   createSessionActions,
   createSessionsRef,
-  createSessionTransientStateFixture,
+  createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
 
@@ -317,12 +317,8 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
-    const sessionTransientState = createSessionTransientStateFixture();
-    sessionTransientState.draftBuffers.writeChannel(sessionKey, "reasoning", {
-      raw: "draft",
-      source: "delta",
-    });
-    sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
 
     const actions = createSessionActions({
       adapter,
@@ -333,7 +329,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
-      sessionTransientState,
+      sessionTurnState: sessionTurnState.sessionTurnState,
     });
 
     try {
@@ -349,17 +345,16 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         reason: "session_error",
         title: "Error",
       });
-      expect(sessionTransientState.draftBuffers.readChannel(sessionKey, "reasoning").raw).toBe("");
       expect(
-        sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
+        sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
       ).toBeUndefined();
-      expect(sessionTransientState.turnMetadata.readModel(sessionKey)).toBeUndefined();
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeUndefined();
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
-  test("preserves active turn drafts and timing for busy queued sends", async () => {
+  test("preserves active turn transcript and timing for busy queued sends", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     const sendCalls: Array<{
@@ -378,16 +373,13 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "running",
-        draftAssistantText: "Still working",
-        draftAssistantMessageId: "assistant-live-1",
-        draftReasoningText: "Thinking",
-        draftReasoningMessageId: "reasoning-live-1",
       }),
     ]);
+    const messagesBeforeSend = getSession(sessionsRef).messages;
     let recordUserAnchorCalls = 0;
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
-    const sessionTransientState = createSessionTransientStateFixture();
-    sessionTransientState.turnMetadata.recordModel(sessionKey, {
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.turnMetadata.recordModel(sessionKey, {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
@@ -398,12 +390,17 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       sessionsRef,
       taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
-      sessionTransientState,
-      recordTurnUserMessageTimestamp: () => {
-        recordUserAnchorCalls += 1;
-        return 1234;
+      sessionTurnState: {
+        ...sessionTurnState.sessionTurnState,
+        timing: {
+          ...sessionTurnState.sessionTurnState.timing,
+          recordTurnUserMessageTimestamp: () => {
+            recordUserAnchorCalls += 1;
+            return 1234;
+          },
+          readTurnUserMessageStartedAtMs: () => 1234,
+        },
       },
-      readTurnUserMessageStartedAtMs: () => 1234,
       ensureRuntime: async () => {
         throw new Error("running sessions must send without preparation");
       },
@@ -417,12 +414,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(sendCalls).toEqual([
         { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
       ]);
-      expect(getSession(sessionsRef)?.draftAssistantText).toBe("Still working");
-      expect(getSession(sessionsRef)?.draftAssistantMessageId).toBe("assistant-live-1");
-      expect(getSession(sessionsRef)?.draftReasoningText).toBe("Thinking");
-      expect(getSession(sessionsRef)?.draftReasoningMessageId).toBe("reasoning-live-1");
+      expect(getSession(sessionsRef)?.messages).toBe(messagesBeforeSend);
       expect(recordUserAnchorCalls).toBe(0);
-      expect(sessionTransientState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -438,16 +432,13 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "running",
-        draftAssistantText: "Still working",
-        draftAssistantMessageId: "assistant-live-1",
-        draftReasoningText: "Thinking",
-        draftReasoningMessageId: "reasoning-live-1",
       }),
     ]);
+    const messagesBeforeSend = getSession(sessionsRef).messages;
     let recordUserAnchorCalls = 0;
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
-    const sessionTransientState = createSessionTransientStateFixture();
-    sessionTransientState.turnMetadata.recordModel(sessionKey, {
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.turnMetadata.recordModel(sessionKey, {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
@@ -458,12 +449,17 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       sessionsRef,
       taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
-      sessionTransientState,
-      recordTurnUserMessageTimestamp: () => {
-        recordUserAnchorCalls += 1;
-        return 1234;
+      sessionTurnState: {
+        ...sessionTurnState.sessionTurnState,
+        timing: {
+          ...sessionTurnState.sessionTurnState.timing,
+          recordTurnUserMessageTimestamp: () => {
+            recordUserAnchorCalls += 1;
+            return 1234;
+          },
+          readTurnUserMessageStartedAtMs: () => 1234,
+        },
       },
-      readTurnUserMessageStartedAtMs: () => 1234,
       ensureRuntime: async () => {
         throw new Error("running sessions must send without preparation");
       },
@@ -475,8 +471,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       ]);
 
       expect(getSession(sessionsRef)?.status).toBe("running");
-      expect(getSession(sessionsRef)?.draftAssistantText).toBe("Still working");
-      expect(getSession(sessionsRef)?.draftReasoningText).toBe("Thinking");
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        ...sessionMessagesToArray({ externalSessionId: "session-1", messages: messagesBeforeSend }),
+        expect.objectContaining({
+          content: expect.stringContaining("Failed to send message:"),
+        }),
+      ]);
       const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
         message.content.includes("Failed to send message:"),
       );
@@ -488,7 +488,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         title: "Error",
       });
       expect(recordUserAnchorCalls).toBe(0);
-      expect(sessionTransientState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }

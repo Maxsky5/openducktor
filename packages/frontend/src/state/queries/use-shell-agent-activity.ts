@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentActivitySummary,
   type AgentActivityTaskTitleLookup,
@@ -16,7 +16,7 @@ const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
 
 const EMPTY_TASK_TITLES: AgentActivityTaskTitleLookup = {};
 
-const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string[] => {
+const collectActivityTaskIds = (sessions: WorkflowAgentSessionSummary[]): string[] => {
   const taskIds = new Set<string>();
   for (const session of sessions) {
     taskIds.add(session.taskId);
@@ -31,8 +31,8 @@ const selectVisibleActivitySessions = ({
 }: {
   activeWorkspaceRepoPath: string | null;
   workspaceRepoPath: string | null;
-  sessions: AgentActivitySessionSummary[];
-}): AgentActivitySessionSummary[] => {
+  sessions: WorkflowAgentSessionSummary[];
+}): WorkflowAgentSessionSummary[] => {
   if (activeWorkspaceRepoPath === null) {
     return [];
   }

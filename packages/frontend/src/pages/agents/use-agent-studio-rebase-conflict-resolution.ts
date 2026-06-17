@@ -20,7 +20,12 @@ import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-se
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   view: Pick<
     AgentStudioSelectionControllerResult["view"],
-    "taskId" | "selectedTask" | "activeSession" | "selectedSessionSummary" | "sessionsForTask"
+    | "taskId"
+    | "role"
+    | "selectedTask"
+    | "selectedSessionIdentity"
+    | "loadedSession"
+    | "sessionsForTask"
   >;
 };
 
@@ -88,7 +93,7 @@ export function useAgentStudioRebaseConflictResolution({
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
         taskId: view.taskId,
-        candidateSessions: [view.activeSession, ...view.sessionsForTask],
+        candidateSessions: [view.loadedSession, ...view.sessionsForTask],
       });
       const defaultBuilderSession = builderSessions[0] ?? null;
 
@@ -96,12 +101,7 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: view.taskId,
         task: view.selectedTask,
         builderSessions,
-        currentViewSession:
-          view.activeSession?.role === "build"
-            ? view.activeSession
-            : view.selectedSessionSummary?.role === "build"
-              ? view.selectedSessionSummary
-              : null,
+        currentViewSession: view.role === "build" ? view.selectedSessionIdentity : null,
         onOpenSession: (session) => {
           const builderSession =
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;

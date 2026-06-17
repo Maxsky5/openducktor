@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildSession,
   createRecordingSessionTodosUpdater,
-  createSessionDraftBuffers,
   createSessionsRef,
   createSessionUpdater,
   findSession,
@@ -459,7 +458,7 @@ describe("agent-orchestrator session transcript events", () => {
 
   test("appends session compaction notices without changing live session state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
@@ -475,10 +474,6 @@ describe("agent-orchestrator session transcript events", () => {
     };
     const protectedSessionState = {
       status: "running" as const,
-      draftAssistantText: "draft text",
-      draftAssistantMessageId: "draft-assistant-1",
-      draftReasoningText: "draft reasoning",
-      draftReasoningMessageId: "draft-reasoning-1",
       pendingUserMessageStartedAt: Date.parse("2026-05-18T21:00:00.000Z"),
       pendingApprovals: [
         {
@@ -523,19 +518,11 @@ describe("agent-orchestrator session transcript events", () => {
       updateSessionOptions.push(options);
       return applySessionUpdate(identity, updater);
     };
-    const draftBuffers = createSessionDraftBuffers();
-    draftBuffers.writeChannel("session-1", "reasoning", {
-      raw: "draft reasoning",
-      source: "delta",
-      messageId: "draft-reasoning-1",
-    });
-
     await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftBuffers,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -609,7 +596,7 @@ describe("agent-orchestrator session transcript events", () => {
     );
   });
 
-  test("reconciles queued user_message updates in place when the agent reads the turn", async () => {
+  test("merges queued user_message updates in place when the agent reads the turn", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -691,12 +678,14 @@ describe("agent-orchestrator session transcript events", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
-    const runtimeData = createRecordingSessionTodosUpdater();
+    const todosRecorder = createRecordingSessionTodosUpdater();
     let updateSessionCalls = 0;
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater) => {
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionCalls += 1;
+      updateSessionOptions.push(options);
       return applySessionUpdate(identity, updater);
     };
 
@@ -707,7 +696,7 @@ describe("agent-orchestrator session transcript events", () => {
       eventBatchWindowMs: 25,
       sessionsRef,
       updateSession,
-      updateSessionTodos: runtimeData.updateSessionTodos,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -743,9 +732,10 @@ describe("agent-orchestrator session transcript events", () => {
     unsubscribe();
 
     expect(updateSessionCalls).toBe(1);
+    expect(updateSessionOptions).toEqual([undefined]);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
     expect(getSessionMessages(sessionsRef)).toHaveLength(1);
-    expect(runtimeData.getTodos()).toEqual([
+    expect(todosRecorder.getTodos()).toEqual([
       {
         id: "todo-1",
         content: "Investigate live performance",

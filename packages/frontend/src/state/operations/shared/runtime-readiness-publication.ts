@@ -1,4 +1,4 @@
-import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
 import { checksQueryKeys } from "@/state/queries/checks";
@@ -18,6 +18,10 @@ export const invalidateRuntimeReadinessQueries = async ({
   });
 };
 
+export type RepoRuntimeReady = {
+  workingDirectory: string;
+};
+
 export const ensureRuntimeAndInvalidateReadinessQueries = async ({
   repoPath,
   runtimeKind,
@@ -26,9 +30,9 @@ export const ensureRuntimeAndInvalidateReadinessQueries = async ({
 }: {
   repoPath: string;
   runtimeKind: RuntimeKind;
-  ensureRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
+  ensureRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RepoRuntimeReady>;
   queryClient?: Pick<QueryClient, "invalidateQueries">;
-}): Promise<RuntimeInstanceSummary> => {
+}): Promise<RepoRuntimeReady> => {
   const runtime = await ensureRuntime(repoPath, runtimeKind);
   await invalidateRuntimeReadinessQueries({
     repoPath,

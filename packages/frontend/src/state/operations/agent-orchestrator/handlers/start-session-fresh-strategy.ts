@@ -1,4 +1,4 @@
-import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
+import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -25,7 +25,7 @@ export const executeFreshStart = async ({
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-  const selectedModelRuntimeKind = requireSelectedModelRuntimeKindForStart(ctx.role, selectedModel);
+  const selectedModelRuntimeKind = readFreshSessionRuntimeKind(ctx.role, selectedModel);
   const selectedModelWithRuntime = {
     ...selectedModel,
     runtimeKind: selectedModelRuntimeKind,

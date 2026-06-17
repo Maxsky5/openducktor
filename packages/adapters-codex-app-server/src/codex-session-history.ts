@@ -29,7 +29,7 @@ type CodexSessionHistoryInput = {
   runtime: CodexSessionHistoryRuntime;
   threadInventory: Pick<
     CodexThreadInventoryReader,
-    "ensureThreadReadable" | "loadThreadForHistory" | "readThreadWithTurns"
+    "ensureThreadReadable" | "readThreadHistory" | "readThreadWithTurns"
   >;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
@@ -166,16 +166,18 @@ export const loadCodexSessionHistory = async ({
   rememberTodos,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
-  const preResumeThread = session
-    ? null
-    : await threadInventory.loadThreadForHistory(client, runtimeId, input);
-  const isThreadReadable = session
-    ? await threadInventory.ensureThreadReadable(client, runtimeId, input)
-    : Boolean(preResumeThread);
-  if (!isThreadReadable) {
+  let response: unknown | null;
+  if (session) {
+    const isThreadReadable = await threadInventory.ensureThreadReadable(client, runtimeId, input);
+    response = isThreadReadable
+      ? await threadInventory.readThreadWithTurns(client, input.externalSessionId)
+      : null;
+  } else {
+    response = await threadInventory.readThreadHistory(client, input);
+  }
+  if (!response) {
     return [];
   }
-  const response = await threadInventory.readThreadWithTurns(client, input.externalSessionId);
   rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
   const tokenUsageByTurnId = await drainThreadReadTokenUsage(runtimeId, input.externalSessionId);
   return projectCodexThreadReadToHistory({

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
+  areAgentSessionCollectionsEquivalent,
   createAgentSessionCollection,
   getAgentSession,
+  hasAgentSessionStateChanges,
   listAgentSessions,
   removeAgentSession,
   replaceAgentSession,
@@ -31,6 +33,47 @@ describe("agent-session-collection", () => {
     expect(getAgentSession(nextCollection, original)?.status).toBe("stopped");
     expect(getAgentSession(nextCollection, sameExternalIdOtherWorktree)?.status).toBe("running");
     expect(listAgentSessions(nextCollection)).toHaveLength(2);
+  });
+
+  test("keeps the same collection when replacing with an equivalent session", () => {
+    const original = createAgentSessionFixture({
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      status: "idle",
+    });
+    const equivalent = { ...original };
+
+    const collection = createAgentSessionCollection([original]);
+    const nextCollection = replaceAgentSession(collection, equivalent);
+
+    expect(nextCollection).toBe(collection);
+    expect(getAgentSession(nextCollection, original)).toBe(original);
+  });
+
+  test("compares session state deletions as changes", () => {
+    const current = createAgentSessionFixture({
+      stopRequestedAt: "2026-03-01T09:00:00.000Z",
+    });
+    const next = { ...current };
+    delete next.stopRequestedAt;
+
+    expect(hasAgentSessionStateChanges(current, next)).toBe(true);
+  });
+
+  test("compares collections by session identity and state", () => {
+    const original = createAgentSessionFixture({
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      status: "idle",
+    });
+    const current = createAgentSessionCollection([original]);
+    const equivalent = createAgentSessionCollection([{ ...original }]);
+    const changed = createAgentSessionCollection([{ ...original, status: "running" }]);
+
+    expect(areAgentSessionCollectionsEquivalent(current, equivalent)).toBe(true);
+    expect(areAgentSessionCollectionsEquivalent(current, changed)).toBe(false);
   });
 
   test("moves a session when an update changes its identity fields", () => {

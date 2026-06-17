@@ -1,25 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import { summarizeAgentActivity } from "./agent-activity-read-model";
 
 const buildSession = (
   overrides: {
     externalSessionId?: string;
-    runtimeKind?: AgentActivitySessionSummary["runtimeKind"];
+    title?: string;
+    runtimeKind?: WorkflowAgentSessionSummary["runtimeKind"];
     workingDirectory?: string;
     taskId?: string;
-    role?: AgentActivitySessionSummary["role"];
+    role?: WorkflowAgentSessionSummary["role"];
     startedAt?: string;
-    activityState?: AgentActivitySessionSummary["activityState"];
+    activityState?: WorkflowAgentSessionSummary["activityState"];
   } = {},
-): AgentActivitySessionSummary => ({
+): WorkflowAgentSessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
+  ...(overrides.title ? { title: overrides.title } : {}),
   runtimeKind: overrides.runtimeKind ?? "opencode",
   workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
   taskId: overrides.taskId ?? "task-1",
   role: overrides.role ?? ("spec" as const),
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
   activityState: overrides.activityState ?? "idle",
+  pendingApprovalCount: 0,
+  pendingQuestionCount: 0,
+  selectedModel: null,
 });
 
 describe("summarizeAgentActivity", () => {

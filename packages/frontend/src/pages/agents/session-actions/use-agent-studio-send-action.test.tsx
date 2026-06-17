@@ -66,20 +66,30 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
   postStartActionError: null,
 });
 
+const createSelectedSessionIdentity = (externalSessionId: string | null) =>
+  externalSessionId ? sessionIdentity(externalSessionId) : null;
+
+const createSessionState = (
+  overrides: Partial<HookArgs["sessionState"]> = {},
+): HookArgs["sessionState"] => ({
+  isWaitingInput: false,
+  canQueueBusyFollowups: false,
+  busySendBlockedReason: null,
+  ...overrides,
+});
+
 const createBaseArgs = (): HookArgs => ({
   workspaceId: "workspace-1",
   taskId: "task-1",
   role: "spec",
-  activeSession: sessionIdentity("session-existing"),
-  activeSessionIsLoadingModelCatalog: false,
-  activeSessionSelectedModel: null,
+  selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
+  selectedSessionModel: null,
+  sessionState: createSessionState(),
+  isSessionModelCatalogLoading: false,
   agentStudioReady: true,
   canStartNewSession: true,
-  canQueueBusyFollowups: false,
   reusablePrompts: [],
   isStarting: false,
-  isWaitingInput: false,
-  busySendBlockedReason: null,
   selectedModelDescriptor,
   sendAgentMessage: async () => {},
   startSession: async () => sessionWorkflowResult("session-new"),
@@ -101,7 +111,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
-      activeSession: null,
+      selectedSessionIdentity: createSelectedSessionIdentity(null),
       agentStudioReady: false,
       startSession,
       sendAgentMessage,
@@ -123,7 +133,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(async () => {});
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
-      activeSession: null,
+      selectedSessionIdentity: createSelectedSessionIdentity(null),
       canStartNewSession: false,
       startSession,
       sendAgentMessage,
@@ -140,7 +150,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: sessionIdentity("session-existing"),
+      selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
       canStartNewSession: false,
       startSession,
       sendAgentMessage,
@@ -163,7 +173,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(() => sendDeferred.promise);
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
-      activeSession: null,
+      selectedSessionIdentity: createSelectedSessionIdentity(null),
       startSession,
       sendAgentMessage,
     };
@@ -178,7 +188,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.waitFor((state) => state.isSending);
     await harness.update({
       ...createBaseArgs(),
-      activeSession: sessionIdentity("session-new"),
+      selectedSessionIdentity: createSelectedSessionIdentity("session-new"),
       startSession,
       sendAgentMessage,
     });
@@ -204,7 +214,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
-      activeSession: null,
+      selectedSessionIdentity: createSelectedSessionIdentity(null),
       startSession,
       sendAgentMessage,
     });
@@ -292,7 +302,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: sessionIdentity("session-other"),
+      selectedSessionIdentity: createSelectedSessionIdentity("session-other"),
       startSession,
       sendAgentMessage,
     });

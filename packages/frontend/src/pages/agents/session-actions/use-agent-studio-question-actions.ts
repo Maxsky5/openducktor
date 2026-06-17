@@ -1,21 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
-
-type AgentStudioQuestionSession = Pick<
-  AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "pendingQuestions"
->;
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 
 type UseAgentStudioQuestionActionsArgs = {
-  activeSession: AgentStudioQuestionSession | null;
+  sessionIdentity: AgentSessionIdentity | null;
+  pendingQuestionRequestIds: readonly string[];
   agentStudioReady: boolean;
-  answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
 export function useAgentStudioQuestionActions({
-  activeSession,
+  sessionIdentity,
+  pendingQuestionRequestIds,
   agentStudioReady,
   answerAgentQuestion,
 }: UseAgentStudioQuestionActionsArgs): {
@@ -28,10 +25,9 @@ export function useAgentStudioQuestionActions({
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeSession || !agentStudioReady) {
+      if (!sessionIdentity || !agentStudioReady) {
         return;
       }
-      const sessionIdentity = toAgentSessionIdentity(activeSession);
       const sessionKey = agentSessionIdentityKey(sessionIdentity);
 
       setSubmittingQuestionBySessionKey((current) => ({
@@ -61,23 +57,21 @@ export function useAgentStudioQuestionActions({
         });
       }
     },
-    [activeSession, agentStudioReady, answerAgentQuestion],
+    [agentStudioReady, answerAgentQuestion, sessionIdentity],
   );
 
   const isSubmittingQuestionByRequestId = useMemo(() => {
-    if (!activeSession) {
+    if (!sessionIdentity) {
       return {};
     }
 
     const sessionRequests =
-      submittingQuestionBySessionKey[agentSessionIdentityKey(activeSession)] ?? {};
-    const activeRequestIds = new Set(
-      activeSession.pendingQuestions.map((entry) => entry.requestId),
-    );
+      submittingQuestionBySessionKey[agentSessionIdentityKey(sessionIdentity)] ?? {};
+    const activeRequestIds = new Set(pendingQuestionRequestIds);
     return Object.fromEntries(
       Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
     );
-  }, [activeSession, submittingQuestionBySessionKey]);
+  }, [pendingQuestionRequestIds, sessionIdentity, submittingQuestionBySessionKey]);
 
   return {
     isSubmittingQuestionByRequestId,

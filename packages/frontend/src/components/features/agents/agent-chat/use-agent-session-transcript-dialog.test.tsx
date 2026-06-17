@@ -1,7 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -9,7 +11,6 @@ import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
 
-let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 let latestDialogProps: {
@@ -24,60 +25,54 @@ const transcriptTarget: AgentSessionIdentity = {
   workingDirectory: "/repo-a",
 };
 
-const createThreadModel = (
-  overrides: Partial<AgentChatThreadModel> = {},
-): AgentChatThreadModel => ({
-  session: buildSession(),
-  isSessionWorking: false,
-  transcriptState: buildThreadTranscriptState(),
-  runtimeReadiness: {
-    readinessState: "ready",
-    isReady: true,
-    isRuntimeStarting: false,
-    blockedReason: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
-  isInteractionEnabled: true,
-  emptyState: null,
-  isStarting: false,
-  isSending: false,
-  sessionAgentColors: {},
-  canSubmitQuestionAnswers: true,
-  isSubmittingQuestionByRequestId: {},
-  onSubmitQuestionAnswers: async () => {},
-  canReplyToApprovals: true,
-  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
-  isSubmittingApprovalByRequestId: {},
-  approvalReplyErrorByRequestId: {},
-  onReplyApproval: async () => {},
-  sessionAuxiliaryError: null,
-  todoPanelCollapsed: false,
-  onToggleTodoPanel: () => {},
-  messagesContainerRef: createRef<HTMLDivElement>(),
-  scrollToBottomOnSendRef: { current: null },
-  syncBottomAfterComposerLayoutRef: { current: null },
-  ...overrides,
-});
+const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): AgentChatThreadModel => {
+  const session = buildSession();
+
+  return {
+    session,
+    displayedSessionKey: agentSessionIdentityKey(session),
+    isSessionWorking: false,
+    transcriptState: buildThreadTranscriptState(),
+    runtimeReadiness: {
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
+    isInteractionEnabled: true,
+    emptyState: null,
+    isStarting: false,
+    isSending: false,
+    sessionAgentColors: {},
+    canSubmitQuestionAnswers: true,
+    isSubmittingQuestionByRequestId: {},
+    onSubmitQuestionAnswers: async () => {},
+    canReplyToApprovals: true,
+    runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
+    sessionAuxiliaryError: null,
+    shouldResetTranscriptWindow: false,
+    transcriptNotice: null,
+    todoPanelCollapsed: false,
+    onToggleTodoPanel: () => {},
+    messagesContainerRef: createRef<HTMLDivElement>(),
+    scrollToBottomOnSendRef: { current: null },
+    syncBottomAfterComposerLayoutRef: { current: null },
+    ...overrides,
+  };
+};
 
 describe("AgentSessionTranscriptDialogHost", () => {
   beforeAll(async () => {
-    [actualAppStateProvider, actualTranscriptDialog] = await Promise.all([
-      import("@/state/app-state-provider"),
-      import("./agent-session-transcript-dialog"),
-    ]);
+    actualTranscriptDialog = await import("./agent-session-transcript-dialog");
   });
 
   beforeEach(() => {
     latestDialogProps = null;
-
-    mock.module("@/state/app-state-provider", () => ({
-      useActiveWorkspace: () => ({
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      }),
-    }));
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
@@ -93,10 +88,24 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["./agent-session-transcript-dialog", () => Promise.resolve(actualTranscriptDialog)],
     ]);
   });
+
+  const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
+    <ActiveWorkspaceContext.Provider
+      value={{
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        setActiveWorkspace: () => undefined,
+      }}
+    >
+      {children}
+    </ActiveWorkspaceContext.Provider>
+  );
 
   test("passes runtime transcript requests through without task context", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
@@ -125,9 +134,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
     }
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(<OpenDialogButton />, { wrapper });
@@ -172,9 +183,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
     }
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(<DialogControls />, { wrapper });
@@ -194,9 +207,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
     );
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(
@@ -251,13 +266,15 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const { AgentChatThread } = await import("./agent-chat-thread");
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>
-          <AgentChatSettingsProvider value={createChatSettingsFixture()}>
-            {children}
-          </AgentChatSettingsProvider>
-        </AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>
+            <AgentChatSettingsProvider value={createChatSettingsFixture()}>
+              {children}
+            </AgentChatSettingsProvider>
+          </AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(

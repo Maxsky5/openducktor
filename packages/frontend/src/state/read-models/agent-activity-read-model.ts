@@ -1,19 +1,17 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type VisibleAgentActivityState = Extract<
-  AgentActivitySessionSummary["activityState"],
+  WorkflowAgentSessionSummary["activityState"],
   "starting" | "running" | "waiting_input"
 >;
 
-export type AgentActivitySessionItem = {
-  externalSessionId: string;
-  runtimeKind: AgentActivitySessionSummary["runtimeKind"];
-  workingDirectory: string;
+export type AgentActivitySessionItem = AgentSessionIdentity & {
   taskId: string;
   taskTitle: string;
-  role: AgentActivitySessionSummary["role"];
+  role: WorkflowAgentSessionSummary["role"];
   activityState: VisibleAgentActivityState;
   startedAt: string;
 };
@@ -46,7 +44,7 @@ export const summarizeAgentActivity = ({
   sessions,
   taskTitleById,
 }: {
-  sessions: AgentActivitySessionSummary[];
+  sessions: WorkflowAgentSessionSummary[];
   taskTitleById?: AgentActivityTaskTitleLookup;
 }): AgentActivitySummary => {
   const activeSessions: AgentActivitySessionItem[] = [];
@@ -74,13 +72,11 @@ export const summarizeAgentActivity = ({
 };
 
 const toActivitySessionItem = (
-  session: AgentActivitySessionSummary,
+  session: WorkflowAgentSessionSummary,
   taskTitleById: AgentActivityTaskTitleLookup | undefined,
   activityState: VisibleAgentActivityState,
 ): AgentActivitySessionItem => ({
-  externalSessionId: session.externalSessionId,
-  runtimeKind: session.runtimeKind,
-  workingDirectory: session.workingDirectory,
+  ...toAgentSessionIdentity(session),
   taskId: session.taskId,
   taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
   role: session.role,

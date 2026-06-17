@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -748,13 +748,16 @@ describe("useSessionStartModalState", () => {
       variant: "high",
       profileId: "spec-agent",
     });
-    expect(loadCatalog).toHaveBeenCalledWith("/repo", "opencode");
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
 
     await harness.unmount();
   });
 
   test("loads the selected runtime catalog instead of reusing the initial catalog", async () => {
-    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
       return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
     });
     const harness = createHookHarness(
@@ -787,7 +790,10 @@ describe("useSessionStartModalState", () => {
       state.modelOptions.some((option) => option.label === "GPT-5.4 Mini"),
     );
     expect(harness.getLatest().modelOptions.map((option) => option.label)).not.toContain("GPT-5");
-    expect(loadCatalog).toHaveBeenCalledWith("/repo", "codex");
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
 
     await harness.unmount();
   });
@@ -1182,7 +1188,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
-    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => ({
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => ({
       ...CATALOG,
       runtime:
         runtimeKind === FORK_RUNTIME_KIND ? FORK_RUNTIME_DESCRIPTOR : REUSE_RUNTIME_DESCRIPTOR,

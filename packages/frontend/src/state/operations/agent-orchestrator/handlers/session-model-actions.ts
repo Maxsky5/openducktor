@@ -1,14 +1,12 @@
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
+import {
+  type ReadSessionSnapshot,
+  requireLoadedSession,
+  requireWorkspaceRepoPath,
+} from "../support/session-invariants";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
-import { requireWorkspaceRepoPath } from "./session-action-guards";
-
-type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
-type UpdateSession = (
-  identity: AgentSessionIdentity,
-  updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
-) => AgentSessionState | null;
 
 export type SessionModelActionDependencies = {
   workspaceRepoPath: string | null;
@@ -27,15 +25,11 @@ export const createSessionModelActions = ({
     identity: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ): void => {
-    const session = readSessionSnapshot(identity);
-    if (!session) {
-      return;
-    }
+    const session = requireLoadedSession(readSessionSnapshot, identity);
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
 
     adapter.updateSessionModel({
       ...toRuntimeSessionRef(repoPath, session),
-      externalSessionId: session.externalSessionId,
       model: selection,
     });
 

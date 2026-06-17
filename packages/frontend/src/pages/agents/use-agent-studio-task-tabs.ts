@@ -2,7 +2,8 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { buildTaskTabs, getAvailableTabTasks } from "./agents-page-session-tabs";
+import { getAvailableTabTasks } from "./agent-studio-task-tabs-list";
+import { buildTaskTabs } from "./agents-page-session-tabs";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,

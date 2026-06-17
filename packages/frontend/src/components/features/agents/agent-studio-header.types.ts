@@ -45,7 +45,6 @@ export type AgentStudioHeaderModel = {
   taskTitle: string | null;
   taskId: string | null;
   onOpenTaskDetails: (() => void) | null;
-  sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
   selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];
   onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;

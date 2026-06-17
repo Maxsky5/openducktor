@@ -35,6 +35,9 @@ const registry = ({
   findRuntimeById() {
     return Effect.succeed(null);
   },
+  findWorkspaceRuntime() {
+    return Effect.succeed(null);
+  },
   listRuntimesByRepo() {
     return Effect.succeed([]);
   },

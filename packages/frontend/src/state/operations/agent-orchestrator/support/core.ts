@@ -1,14 +1,3 @@
-export { normalizeWorkingDirectory } from "@/lib/working-directory";
-
-export const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
-
-export const runningStates = new Set([
-  "starting",
-  "running",
-  "blocked",
-  "awaiting_done_confirmation",
-]);
-
 export const now = (): string => new Date().toISOString();
 
 export const sanitizeStreamingText = (value: string): string => {

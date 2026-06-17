@@ -79,7 +79,7 @@ describe("agent-studio-selection-route", () => {
       sessionIdentity: null,
       hasExplicitRoleSelection: false,
       roleSelection: "qa",
-      fallbackRole: "spec",
+      sessionlessRole: "spec",
       keepExplicitRoleSessionless: false,
       selectionIntent: null,
     });
@@ -107,7 +107,7 @@ describe("agent-studio-selection-route", () => {
       sessionIdentity: null,
       hasExplicitRoleSelection: true,
       roleSelection: "planner",
-      fallbackRole: "planner",
+      sessionlessRole: "planner",
       keepExplicitRoleSessionless: true,
     });
   });

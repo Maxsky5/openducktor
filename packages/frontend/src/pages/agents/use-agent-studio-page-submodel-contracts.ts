@@ -4,7 +4,6 @@ import type { WorkflowModelContext } from "./use-agent-studio-page-model-builder
 export type WorkflowHeaderContext = Pick<
   WorkflowModelContext,
   | "workflowStateByRole"
-  | "selectedInteractionRole"
   | "workflowSessionByRole"
   | "sessionSelectorAutofocusByValue"
   | "sessionSelectorValue"

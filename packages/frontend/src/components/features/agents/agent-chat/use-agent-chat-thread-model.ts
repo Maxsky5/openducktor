@@ -3,11 +3,8 @@ import { type MutableRefObject, type RefObject, useCallback, useMemo, useState }
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type {
-  AgentChatEmptyStateModel,
-  AgentChatThreadModel,
-  AgentChatThreadSession,
-} from "./agent-chat.types";
+import type { AgentChatEmptyStateModel, AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatThreadState } from "./agent-chat-thread-state";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -31,8 +28,7 @@ type AgentChatThreadComposerActivity = {
 } | null;
 
 type UseAgentChatThreadModelArgs = {
-  threadSession: AgentChatThreadSession | null;
-  activeSessionKey: string | null;
+  threadState: AgentChatThreadState;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
@@ -52,8 +48,7 @@ type UseAgentChatThreadModelArgs = {
 };
 
 export function useAgentChatThreadModel({
-  threadSession,
-  activeSessionKey,
+  threadState,
   transcriptState,
   runtimeReadiness,
   isSessionWorking,
@@ -71,22 +66,24 @@ export function useAgentChatThreadModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatThreadModelArgs): AgentChatThreadModel {
+  const { threadSession, displayedSessionKey, shouldResetTranscriptWindow, transcriptNotice } =
+    threadState;
   const [todoPanelCollapsedBySessionKey, setTodoPanelCollapsedBySessionKey] = useState<
     Record<string, boolean>
   >({});
-  const activeTodoPanelCollapsed = activeSessionKey
-    ? (todoPanelCollapsedBySessionKey[activeSessionKey] ?? true)
+  const activeTodoPanelCollapsed = displayedSessionKey
+    ? (todoPanelCollapsedBySessionKey[displayedSessionKey] ?? true)
     : true;
 
   const handleToggleTodoPanel = useCallback((): void => {
-    if (!activeSessionKey) {
+    if (!displayedSessionKey) {
       return;
     }
     setTodoPanelCollapsedBySessionKey((current) => ({
       ...current,
-      [activeSessionKey]: !(current[activeSessionKey] ?? true),
+      [displayedSessionKey]: !(current[displayedSessionKey] ?? true),
     }));
-  }, [activeSessionKey]);
+  }, [displayedSessionKey]);
 
   const canSubmitQuestionAnswers = runtimeReadiness.isReady && pendingQuestions.canSubmit;
   const canReplyToApprovalRequests = runtimeReadiness.isReady && approvals.canReply;
@@ -104,6 +101,7 @@ export function useAgentChatThreadModel({
   return useMemo(
     () => ({
       session: threadSession,
+      displayedSessionKey,
       transcriptState,
       runtimeReadiness,
       isSessionWorking,
@@ -125,6 +123,8 @@ export function useAgentChatThreadModel({
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
       sessionAuxiliaryError,
+      shouldResetTranscriptWindow,
+      transcriptNotice,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
@@ -133,6 +133,7 @@ export function useAgentChatThreadModel({
     }),
     [
       activeTodoPanelCollapsed,
+      displayedSessionKey,
       approvals,
       canReplyToApprovalRequests,
       canSubmitQuestionAnswers,
@@ -149,10 +150,12 @@ export function useAgentChatThreadModel({
       sessionAgentColors,
       transcriptState,
       sessionAuxiliaryError,
+      shouldResetTranscriptWindow,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
       syncBottomAfterComposerLayoutRef,
       threadSession,
+      transcriptNotice,
     ],
   );
 }

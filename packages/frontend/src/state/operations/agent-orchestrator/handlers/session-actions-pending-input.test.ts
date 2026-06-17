@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import type { UpdateSession } from "../events/session-event-types";
 import {
   createAgentSessionRuntimeSnapshotFixture,
   createSessionObserversRefFixture,
@@ -43,7 +44,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
         ],
       }),
     ]);
-    const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
+    const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
 
     const actions = createSessionActions({
       adapter,
@@ -64,7 +65,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       await actions.replyAgentApproval(getSession(sessionsRef), "perm-1", "approve_once");
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
-      expect(updateSessionOptions).toEqual([{ persist: false }]);
+      expect(updateSessionOptions).toEqual([undefined]);
     } finally {
       adapter.replyApproval = originalReplyApproval;
     }
@@ -241,7 +242,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
         ],
       }),
     ]);
-    const updateSessionOptions: unknown[] = [];
+    const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
 
     const actions = createSessionActions({
       adapter,
@@ -262,7 +263,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       await actions.answerAgentQuestion(getSession(sessionsRef), "question-1", [["yes"]]);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
-      expect(updateSessionOptions).toEqual([{ persist: false }]);
+      expect(updateSessionOptions).toEqual([undefined]);
       const message = sessionMessageAt(getSession(sessionsRef), 0);
       if (message?.meta?.kind !== "tool") {
         throw new Error("Expected tool message metadata");

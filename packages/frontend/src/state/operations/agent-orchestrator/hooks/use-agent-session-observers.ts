@@ -8,41 +8,24 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { updateSessionTodosQueryData } from "@/state/queries/agent-session-runtime";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { listenToAgentSessionEvents } from "../events/session-events";
-import {
-  removeLocalAgentSessions,
-  selectSessionsForTaskRemoval,
-} from "../support/local-session-removal";
+import { cleanupLocalAgentSessions } from "../support/local-session-cleanup";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
-import type { SessionTransientState } from "../support/session-transient-state";
+import type { SessionTurnState } from "../support/session-turn-state";
 
 type UseAgentSessionObserversArgs = {
   agentEngine: AgentEnginePort;
   workspaceId: string | null;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   sessionObserversRef: { current: SessionObservers };
-  sessionTransientState: SessionTransientState;
-  readSessions: AgentSessionsStore["getSessionsSnapshot"];
+  sessionTurnState: SessionTurnState;
   readSession: AgentSessionsStore["getSessionSnapshot"];
-  setSessionCollection: AgentSessionsStore["setSessionCollection"];
   updateSession: UpdateSession;
   queryClient: QueryClient;
-  recordTurnActivityTimestamp: (sessionKey: string, timestamp: string | number) => void;
-  recordTurnUserMessageTimestamp: (
-    sessionKey: string,
-    timestamp: string | number,
-  ) => number | undefined;
-  resolveTurnDurationMs: (
-    sessionKey: string,
-    externalSessionId: string,
-    timestamp: string,
-    messages?: AgentSessionState["messages"],
-  ) => number | undefined;
-  clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -55,16 +38,10 @@ export const useAgentSessionObservers = ({
   workspaceId,
   loadRepoPromptOverrides,
   sessionObserversRef,
-  sessionTransientState,
-  readSessions,
+  sessionTurnState,
   readSession,
-  setSessionCollection,
   updateSession,
   queryClient,
-  recordTurnActivityTimestamp,
-  recordTurnUserMessageTimestamp,
-  resolveTurnDurationMs,
-  clearTurnDuration,
   refreshTaskData,
 }: UseAgentSessionObserversArgs) => {
   const buildReadOnlyApprovalRejectionMessage = useCallback(
@@ -81,34 +58,15 @@ export const useAgentSessionObservers = ({
     [loadRepoPromptOverrides, workspaceId],
   );
 
-  const removeSessions = useCallback(
+  const cleanupSessions = useCallback(
     (sessions: readonly AgentSessionIdentity[]): void => {
-      removeLocalAgentSessions({
+      cleanupLocalAgentSessions({
         sessions,
-        commitSessionCollection: setSessionCollection,
         sessionObservers: sessionObserversRef.current,
-        sessionTransientState,
+        clearSessionTurnState: sessionTurnState.clearSession,
       });
     },
-    [setSessionCollection, sessionObserversRef, sessionTransientState],
-  );
-
-  const removeAgentSession = useCallback(
-    async (session: AgentSessionIdentity): Promise<void> => {
-      removeSessions([session]);
-    },
-    [removeSessions],
-  );
-
-  const removeAgentSessions = useCallback(
-    async ({ taskId, roles }: { taskId: string; roles?: AgentRole[] }): Promise<void> => {
-      const matchingSessions = selectSessionsForTaskRemoval(readSessions(), {
-        taskId,
-        roles,
-      });
-      removeSessions(matchingSessions);
-    },
-    [readSessions, removeSessions],
+    [sessionObserversRef, sessionTurnState],
   );
 
   const observeAgentSession = useCallback<ObserveAgentSession>(
@@ -120,18 +78,17 @@ export const useAgentSessionObservers = ({
         listenToAgentSessionEvents({
           adapter: agentEngine,
           sessionRef: target,
-          draftBuffers: sessionTransientState.draftBuffers,
-          turnMetadata: sessionTransientState.turnMetadata,
+          turnMetadata: sessionTurnState.metadata,
           readSession,
           updateSession,
           updateSessionTodos: (updater) =>
             updateSessionTodosQueryData(queryClient, target, updater),
-          hasSessionObserver: (candidateSession) =>
+          isSessionObserved: (candidateSession) =>
             sessionObserversRef.current.has(candidateSession),
-          recordTurnActivityTimestamp,
-          recordTurnUserMessageTimestamp,
-          resolveTurnDurationMs,
-          clearTurnDuration,
+          recordTurnActivityTimestamp: sessionTurnState.timing.recordTurnActivityTimestamp,
+          recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
+          resolveTurnDurationMs: sessionTurnState.timing.resolveTurnDurationMs,
+          clearTurnDuration: sessionTurnState.timing.clearTurnDuration,
           buildReadOnlyApprovalRejectionMessage,
           refreshTaskData,
           canAutoRejectReadOnlyApproval: (runtimeKind) => {
@@ -148,18 +105,17 @@ export const useAgentSessionObservers = ({
     [
       agentEngine,
       buildReadOnlyApprovalRejectionMessage,
-      clearTurnDuration,
       refreshTaskData,
-      recordTurnActivityTimestamp,
-      recordTurnUserMessageTimestamp,
       readSession,
-      resolveTurnDurationMs,
       queryClient,
       sessionObserversRef,
-      sessionTransientState,
+      sessionTurnState,
       updateSession,
     ],
   );
 
-  return { observeAgentSession, removeAgentSession, removeAgentSessions };
+  return {
+    observeAgentSession,
+    cleanupLocalSessions: cleanupSessions,
+  };
 };

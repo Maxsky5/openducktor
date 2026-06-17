@@ -1,4 +1,9 @@
-import type { GitBranch, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  RepoRuntimeRef,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -33,18 +38,15 @@ import { roleDefaultSelectionFor } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import { useSessionStartModalSelectionState } from "./use-session-start-modal-selection-state";
 
-export type {
-  SessionStartModalIntent,
-  SessionStartModalSource,
-  SessionStartPostAction,
-} from "./session-start-modal-types";
+export type { SessionStartModalIntent, SessionStartModalSource } from "./session-start-modal-types";
+export type { SessionStartPostAction } from "./session-start-workflow";
 
 type UseSessionStartModalStateArgs = {
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   runtimeDefinitions: RuntimeDescriptor[];
   initialCatalog?: AgentModelCatalog | null;
-  loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
+  loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   workspaceRepoPath: string | null;
 };
 

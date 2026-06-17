@@ -121,7 +121,7 @@ export const codexLoadedThreadIds = (response: unknown): Set<string> =>
       )
     : new Set();
 
-const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
+export const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
   isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
 
 export const requireThreadSnapshotFromReadResponse = (

@@ -1,22 +1,12 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentSessionHistoryMessage,
-  AgentSessionHistorySystemPromptContext,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import { createRepoStaleGuard } from "../support/core";
-import { mergeHistoryMessages } from "../support/history-message-merge";
-import { createSessionMessagesState } from "../support/messages";
-import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
+import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
 import { loadSessionPromptContext } from "../support/session-prompt";
-
-type UpdateSession = (
-  identity: AgentSessionIdentity,
-  updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
-) => void;
+import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 
 type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
 
@@ -51,9 +41,6 @@ type CreateLoadAgentSessionHistoryArgs = {
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
-export const isSessionHistoryLoaded = (session: AgentSessionState): boolean =>
-  session.historyLoadState === "loaded";
-
 const canStartSessionHistoryLoad = (session: AgentSessionState): boolean =>
   session.historyLoadState === "not_requested" || session.historyLoadState === "failed";
 
@@ -71,11 +58,8 @@ const claimSessionHistoryLoad = ({
     return null;
   }
 
-  updateSession(
-    currentSession,
-    (current) =>
-      canStartSessionHistoryLoad(current) ? { ...current, historyLoadState: "loading" } : current,
-    { persist: false },
+  updateSession(currentSession, (current) =>
+    canStartSessionHistoryLoad(current) ? { ...current, historyLoadState: "loading" } : current,
   );
 
   const claimedSession = readSessionSnapshot(currentSession);
@@ -89,13 +73,10 @@ const releaseSessionHistoryLoad = ({
   session: AgentSessionState;
   updateSession: UpdateSession;
 }): void => {
-  updateSession(
-    session,
-    (current) =>
-      current.historyLoadState === "loading"
-        ? { ...current, historyLoadState: "not_requested" }
-        : current,
-    { persist: false },
+  updateSession(session, (current) =>
+    current.historyLoadState === "loading"
+      ? { ...current, historyLoadState: "not_requested" }
+      : current,
   );
 };
 
@@ -106,40 +87,8 @@ const failSessionHistoryLoad = ({
   session: AgentSessionState;
   updateSession: UpdateSession;
 }): void => {
-  updateSession(
-    session,
-    (current) =>
-      current.historyLoadState === "loading" ? { ...current, historyLoadState: "failed" } : current,
-    { persist: false },
-  );
-};
-
-const applySessionHistoryLoad = ({
-  session,
-  history,
-  updateSession,
-}: {
-  session: AgentSessionState;
-  history: AgentSessionHistoryMessage[];
-  updateSession: UpdateSession;
-}): void => {
-  const historyMessages = historyToChatMessages(history, {
-    role: session.role,
-    selectedModel: session.selectedModel,
-  });
-  const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const historyContextUsage = historyToSessionContextUsage(history);
-  updateSession(
-    session,
-    (current) => ({
-      ...current,
-      runtimeKind: session.runtimeKind,
-      workingDirectory: session.workingDirectory,
-      historyLoadState: "loaded",
-      contextUsage: current.contextUsage ?? historyContextUsage,
-      messages: mergeHistoryMessages(current.externalSessionId, loadedMessages, current.messages),
-    }),
-    { persist: false },
+  updateSession(session, (current) =>
+    current.historyLoadState === "loading" ? { ...current, historyLoadState: "failed" } : current,
   );
 };
 
@@ -195,8 +144,9 @@ export const loadSessionHistoryIntoStore = async ({
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult> => {
+  const externalSessionId = identity.externalSessionId;
   if (isStaleRepoOperation()) {
-    return { externalSessionId: identity.externalSessionId, status: "stale" };
+    return { externalSessionId, status: "stale" };
   }
 
   const claimedSession = claimSessionHistoryLoad({
@@ -205,37 +155,36 @@ export const loadSessionHistoryIntoStore = async ({
     updateSession,
   });
   if (!claimedSession) {
-    return { externalSessionId: identity.externalSessionId, status: "skipped" };
+    return { externalSessionId, status: "skipped" };
   }
+
+  const finishStaleHistoryLoad = (): SessionHistoryLoadResult => {
+    releaseSessionHistoryLoad({ session: claimedSession, updateSession });
+    return { externalSessionId, status: "stale" };
+  };
 
   try {
     const systemPromptContext = await loadSystemPromptContext?.(claimedSession);
 
     if (isStaleRepoOperation()) {
-      releaseSessionHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: identity.externalSessionId, status: "stale" };
+      return finishStaleHistoryLoad();
     }
 
     const history = await adapter.loadSessionHistory({
-      repoPath,
-      runtimeKind: claimedSession.runtimeKind,
-      workingDirectory: claimedSession.workingDirectory,
-      externalSessionId: claimedSession.externalSessionId,
+      ...toRuntimeSessionRef(repoPath, claimedSession),
       ...(systemPromptContext ? { systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
 
     if (isStaleRepoOperation()) {
-      releaseSessionHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: identity.externalSessionId, status: "stale" };
+      return finishStaleHistoryLoad();
     }
 
-    applySessionHistoryLoad({ session: claimedSession, history, updateSession });
+    updateSession(claimedSession, (current) => applyLoadedSessionHistory(current, history));
     return { externalSessionId: claimedSession.externalSessionId, status: "applied" };
   } catch (error) {
     if (isStaleRepoOperation()) {
-      releaseSessionHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: identity.externalSessionId, status: "stale" };
+      return finishStaleHistoryLoad();
     }
     failSessionHistoryLoad({ session: claimedSession, updateSession });
     return { externalSessionId: identity.externalSessionId, status: "failed", error };

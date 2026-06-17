@@ -4,7 +4,7 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
   makeRepoHealth,
   makeRuntimeDefinitions,
-  makeRuntimeSummary,
+  makeRuntimeDiagnosticInstance,
   makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
@@ -156,7 +156,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({ runtime: { instance: makeRuntimeSummary() } }),
+        opencode: makeRepoHealth({ runtime: { instance: makeRuntimeDiagnosticInstance() } }),
       },
       isLoadingChecks: false,
     });
@@ -207,7 +207,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -256,7 +256,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -305,7 +305,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -358,7 +358,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"] },
         }),
       },
@@ -482,7 +482,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: {
             supported: true,
             status: "error",
@@ -605,7 +605,7 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "ready",
             stage: "runtime_ready",
             observation: "started_by_diagnostics",
-            instance: makeRuntimeSummary(),
+            instance: makeRuntimeDiagnosticInstance(),
             startedAt: "2026-02-20T12:00:59.000Z",
             updatedAt: "2026-02-20T12:01:00.000Z",
             elapsedMs: 886,
@@ -679,7 +679,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: {
             supported: true,
             status: "checking",
@@ -732,7 +732,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -776,8 +776,8 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "error",
             stage: "startup_failed",
             observation: null,
-            instance: makeRuntimeSummary(),
-            startedAt: makeRuntimeSummary().startedAt,
+            instance: makeRuntimeDiagnosticInstance(),
+            startedAt: makeRuntimeDiagnosticInstance().startedAt,
             updatedAt: "2026-02-22T08:00:00.000Z",
             elapsedMs: 20_000,
             attempts: 4,
@@ -827,7 +827,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },

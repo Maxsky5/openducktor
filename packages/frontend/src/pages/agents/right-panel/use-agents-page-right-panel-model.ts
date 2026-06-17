@@ -4,10 +4,6 @@ import { toBranchSelectorOptions } from "@/components/features/repository/branch
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict } from "@/features/agent-studio-git";
-import {
-  getAgentSessionActivityStateFromSession,
-  isAgentSessionActivityWorking,
-} from "@/lib/agent-session-activity-state";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
@@ -32,7 +28,6 @@ export type UseAgentsPageRightPanelModelArgs = {
   isPanelOpen: boolean;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  worktreeRecoveryKey: string;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -163,7 +158,6 @@ export function useAgentsPageRightPanelModel({
   isPanelOpen,
   documentsModel,
   repoSettings,
-  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -171,12 +165,6 @@ export function useAgentsPageRightPanelModel({
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const activeSession = selectedView.activeSession;
-  const activeSessionRole = activeSession?.role ?? null;
-  const sessionActivityState = activeSession
-    ? getAgentSessionActivityStateFromSession(activeSession)
-    : null;
-
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
@@ -184,12 +172,9 @@ export function useAgentsPageRightPanelModel({
     panelKind,
     isPanelOpen,
     repoSettings,
-    worktreeRecoveryKey,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
 
-  const isActiveBuilderWorking =
-    activeSessionRole === "build" && isAgentSessionActivityWorking(sessionActivityState);
   const detectedConflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
@@ -208,7 +193,7 @@ export function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
-    isBuilderSessionWorking: isActiveBuilderWorking,
+    isBuilderSessionWorking: buildToolsSnapshot.context.isSelectedBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(

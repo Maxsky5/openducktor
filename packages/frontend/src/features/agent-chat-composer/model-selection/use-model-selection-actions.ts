@@ -5,14 +5,14 @@ import { catalogModelOptionValue } from "@/components/features/agents";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export const useModelSelectionActions = ({
-  activeSession,
+  loadedSessionIdentity,
   updateAgentSessionModel,
   applyDraftSelection,
   selectedModelSelection,
   selectionCatalog,
   selectedRuntimeKind,
 }: {
-  activeSession: AgentSessionIdentity | null;
+  loadedSessionIdentity: AgentSessionIdentity | null;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
@@ -28,13 +28,13 @@ export const useModelSelectionActions = ({
 } => {
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
-      if (activeSession) {
-        updateAgentSessionModel(activeSession, selection);
+      if (loadedSessionIdentity) {
+        updateAgentSessionModel(loadedSessionIdentity, selection);
         return;
       }
       applyDraftSelection(selection);
     },
-    [activeSession, applyDraftSelection, updateAgentSessionModel],
+    [applyDraftSelection, loadedSessionIdentity, updateAgentSessionModel],
   );
 
   const handleSelectAgentProfile = useCallback(

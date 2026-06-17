@@ -23,7 +23,7 @@ const createPanelState = (
 const createSelectionView = (
   overrides: Partial<HookArgs["selection"]["view"]> = {},
 ): HookArgs["selection"]["view"] => {
-  const activeSession = createAgentSessionFixture({
+  const loadedSession = createAgentSessionFixture({
     externalSessionId: "session-1",
     taskId: "task-1",
     role: "build",
@@ -35,16 +35,16 @@ const createSelectionView = (
     taskId: "task-1",
     selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
     sessionsForTask: [],
-    selectedSessionSummary: null,
-    selectedSessionIdentity: toAgentSessionIdentity(activeSession),
-    activeSession,
-    selectedSessionModel: activeSession.selectedModel,
+    selectedSessionIdentity: toAgentSessionIdentity(loadedSession),
+    selectedSessionActivityState: "running",
+    selectedSessionModel: loadedSession.selectedModel,
+    loadedSession,
     sessionRuntimeData: {
       modelCatalog: null,
       todos: [],
       isLoadingModelCatalog: false,
+      error: null,
     },
-    sessionRuntimeDataError: null,
     runtimeReadiness: {
       readinessState: "ready",
       isReady: true,
@@ -76,7 +76,6 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     activeDocument: null,
   },
   repoSettings: null,
-  worktreeRecoveryKey: "recovery-key",
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
   onDetectPullRequest: mock((_taskId: string) => {}),
@@ -103,14 +102,8 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.activeSession).toBe(
-        args.selection.view.activeSession,
-      );
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.transcriptState).toBe(
-        args.selection.view.transcriptState,
-      );
-      expect(state.rightPanelBridge?.rightPanel.selectedView.transcriptState).toBe(
-        args.selection.view.transcriptState,
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.loadedSession).toBe(
+        args.selection.view.loadedSession,
       );
     } finally {
       await harness.unmount();

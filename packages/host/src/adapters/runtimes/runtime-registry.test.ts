@@ -74,6 +74,50 @@ describe("createRuntimeRegistry", () => {
       ),
     ).resolves.toEqual(runtime);
   });
+  test("does not reuse a task runtime during workspace runtime ensure", async () => {
+    const taskRuntime = createRuntime({
+      runtimeId: "task-runtime",
+      taskId: "task-1",
+      workingDirectory: "/repo/task-1",
+    });
+    const workspaceRuntime = createRuntime({ runtimeId: "workspace-runtime" });
+    const starts: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      runtimes: [taskRuntime],
+      workspaceStarter: {
+        startWorkspaceRuntime(input) {
+          starts.push(input);
+          return Effect.succeed({
+            runtime: workspaceRuntime,
+            stop: () => Effect.succeed(undefined),
+          });
+        },
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(workspaceRuntime);
+    await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([
+      taskRuntime,
+      workspaceRuntime,
+    ]);
+    expect(starts).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      },
+    ]);
+  });
   test("finds runtimes by id from initial registrations", async () => {
     const runtime = createRuntime();
     const registry = createRuntimeRegistry({ runtimes: [runtime] });

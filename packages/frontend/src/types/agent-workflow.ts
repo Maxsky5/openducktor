@@ -1,3 +1,5 @@
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+
 export type AgentWorkflowStepTone =
   | "done"
   | "in_progress"
@@ -12,14 +14,7 @@ export type AgentWorkflowStepAvailability = "available" | "optional" | "blocked"
 
 export type AgentWorkflowStepCompletion = "not_started" | "in_progress" | "done" | "rejected";
 
-export type AgentWorkflowStepLiveSession =
-  | "none"
-  | "idle"
-  | "starting"
-  | "running"
-  | "waiting_input"
-  | "stopped"
-  | "error";
+export type AgentWorkflowStepLiveSession = AgentSessionActivityState | "none";
 
 export type AgentWorkflowStepState = {
   tone: AgentWorkflowStepTone;

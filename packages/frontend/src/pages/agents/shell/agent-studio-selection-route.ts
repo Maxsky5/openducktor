@@ -27,7 +27,7 @@ export type AgentStudioViewSelectionParams = {
   sessionIdentity: AgentSessionIdentity | null;
   hasExplicitRoleSelection: boolean;
   roleSelection: AgentRole;
-  fallbackRole: AgentRole;
+  sessionlessRole: AgentRole;
   keepExplicitRoleSessionless: boolean;
   selectionIntent: AgentStudioSelectionIntent | null;
 };
@@ -111,7 +111,7 @@ export const resolveAgentStudioViewSelectionParams = ({
     hasExplicitRoleSelection:
       selectionIntent !== null ? true : baseParams.hasExplicitRoleParam && !isDetachedFromRoute,
     roleSelection: selectionIntent?.role ?? baseParams.roleFromQuery,
-    fallbackRole: isDetachedFromRoute
+    sessionlessRole: isDetachedFromRoute
       ? "spec"
       : (selectionIntent?.role ?? baseParams.roleFromQuery),
     keepExplicitRoleSessionless:

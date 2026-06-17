@@ -20,6 +20,18 @@ describe("toAgentSessionSummary", () => {
       workingDirectory: "/repo",
     });
   });
+
+  test("publishes product activity instead of raw session status", () => {
+    const session = createAgentSessionFixture({
+      status: "running",
+      pendingQuestions: [{ requestId: "question-1", questions: [] }],
+    });
+
+    const summary = toAgentSessionSummary(session);
+
+    expect(summary.activityState).toBe("waiting_input");
+    expect(summary).not.toHaveProperty("status");
+  });
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
@@ -133,6 +145,28 @@ describe("createAgentSessionsStore session snapshots", () => {
 
     expect(observedStates).toEqual(["loading:0", "loaded:1"]);
   });
+
+  test("does not notify subscribers for an equivalent rebuilt collection", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      status: "running",
+    });
+    store.setSessionCollection(createAgentSessionCollection([session]));
+
+    let notifyCount = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifyCount += 1;
+    });
+
+    store.setSessionCollection(createAgentSessionCollection([{ ...session }]));
+    unsubscribe();
+
+    expect(notifyCount).toBe(0);
+    expect(store.getSessionSnapshot(session)).toBe(session);
+  });
 });
 
 describe("createAgentSessionsStore activity snapshots", () => {
@@ -146,13 +180,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([baseSession]));
 
-    const initialSnapshot = store.getActivitySessionsSnapshot();
+    const initialSnapshot = store.getActivitySnapshot().sessions;
     const updatedSession = {
       ...baseSession,
       messages: createSessionMessagesState(baseSession.externalSessionId, [
         { id: "m-1", role: "assistant" as const, content: "Working", timestamp: "now" },
       ]),
-      draftAssistantText: "draft update",
       todos: [
         {
           id: "todo-1",
@@ -165,7 +198,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([updatedSession]));
 
-    expect(store.getActivitySessionsSnapshot()).toBe(initialSnapshot);
+    expect(store.getActivitySnapshot().sessions).toBe(initialSnapshot);
   });
 
   test("publishes a new activity snapshot when pending input visibility changes", () => {
@@ -179,7 +212,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([session]));
 
-    const initialSnapshot = store.getActivitySessionsSnapshot();
+    const initialSnapshot = store.getActivitySnapshot().sessions;
     const updatedSession = {
       ...session,
       pendingApprovals: [
@@ -202,7 +235,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([updatedSession]));
 
-    const nextSnapshot = store.getActivitySessionsSnapshot();
+    const nextSnapshot = store.getActivitySnapshot().sessions;
     expect(nextSnapshot).not.toBe(initialSnapshot);
     expect(nextSnapshot[0]).toMatchObject({
       externalSessionId: "session-1",
@@ -224,7 +257,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([session]));
 
-    const initialSnapshot = store.getActivitySessionsSnapshot();
+    const initialSnapshot = store.getActivitySnapshot().sessions;
     const movedSession = {
       ...session,
       runtimeKind: "codex" as const,
@@ -233,7 +266,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([movedSession]));
 
-    const nextSnapshot = store.getActivitySessionsSnapshot();
+    const nextSnapshot = store.getActivitySnapshot().sessions;
     expect(nextSnapshot).not.toBe(initialSnapshot);
     expect(nextSnapshot[0]).toMatchObject({
       externalSessionId: "session-1",
@@ -243,7 +276,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     });
   });
 
-  test("keeps activity summaries distinct by runtime identity", () => {
+  test("keeps activity snapshot sessions distinct by runtime identity", () => {
     const store = createAgentSessionsStore();
     const opencodeSession = createAgentSessionFixture({
       externalSessionId: "shared-session",
@@ -262,7 +295,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([opencodeSession, codexSession]));
 
-    expect(store.getActivitySessionsSnapshot()).toEqual(
+    expect(store.getActivitySnapshot().sessions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           externalSessionId: "shared-session",
@@ -291,7 +324,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.setSessionCollection(createAgentSessionCollection([session]));
 
-    expect(store.getActivitySessionsSnapshot()).toEqual([]);
+    expect(store.getActivitySnapshot().sessions).toEqual([]);
   });
 
   test("resets workspace-scoped activity atomically", () => {

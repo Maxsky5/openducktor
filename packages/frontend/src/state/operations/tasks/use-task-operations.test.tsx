@@ -25,10 +25,7 @@ import {
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
-import {
-  createSessionDraftBuffers,
-  createSessionTurnMetadata,
-} from "../agent-orchestrator/support/session-transient-state";
+import { createSessionTurnMetadata } from "../agent-orchestrator/support/session-turn-metadata";
 import {
   createAgentSessionCollectionRefFixture,
   updateAgentSessionFixture,
@@ -118,10 +115,6 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/repo",
   messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
   contextUsage: null,
   pendingApprovals: [],
   pendingQuestions: [],
@@ -1884,11 +1877,11 @@ describe("use-task-operations", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        draftBuffers: createSessionDraftBuffers(),
         turnMetadata: createSessionTurnMetadata(),
         readSession: (identity) => getAgentSession(sessionsRef.current, identity),
         updateSession,
         updateSessionTodos: () => {},
+        isSessionObserved: (identity) => identity.externalSessionId === "session-1",
         buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
         recordTurnActivityTimestamp: () => {},
         recordTurnUserMessageTimestamp: () => {},

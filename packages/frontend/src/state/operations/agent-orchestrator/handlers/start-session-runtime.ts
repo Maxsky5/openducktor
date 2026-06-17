@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type {
   FreshStartRuntimeContext,

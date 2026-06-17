@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback } from "react";
+import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
 import type { NavigateToTaskIntent } from "./agent-studio-types";
-import { closeTaskTab, reorderTaskTabs } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 

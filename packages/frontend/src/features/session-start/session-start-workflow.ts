@@ -1,14 +1,24 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type {
+  AgentModelSelection,
+  AgentRole,
+  AgentSessionStartMode,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { StartAgentSession } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import { kickoffPromptForTemplate } from "./session-start-prompts";
+
+export type SendAgentMessage = (
+  session: AgentSessionIdentity,
+  parts: AgentUserMessagePart[],
+) => Promise<void>;
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
@@ -41,12 +51,9 @@ type StartSessionWorkflowArgs = {
   task: TaskCard | null;
   workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
+  startAgentSession: StartAgentSession;
+  sendAgentMessage?: SendAgentMessage;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
-  postStartExecution?: "await" | "detached";
-  onDetachedPostStartError?: ((error: Error) => void) | undefined;
 };
 
 const requirePostStartMessage = async ({
@@ -79,10 +86,10 @@ const startSessionFromIntent = ({
   intent,
   selection,
   startAgentSession,
-}: Pick<
-  StartSessionWorkflowArgs,
-  "intent" | "selection" | "startAgentSession"
->): Promise<AgentSessionIdentity> => {
+  holdForPostStartMessage,
+}: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
+  holdForPostStartMessage: boolean;
+}): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return startAgentSession({
       taskId: intent.taskId,
@@ -99,6 +106,7 @@ const startSessionFromIntent = ({
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
       sourceSession: requireSourceSession(intent.sourceSession, "fork"),
+      holdForPostStartMessage,
     });
   }
 
@@ -107,6 +115,7 @@ const startSessionFromIntent = ({
     role: intent.role,
     startMode: "fresh" as const,
     selectedModel: requireSelectedModel(selection, "fresh"),
+    holdForPostStartMessage,
   };
 
   if (intent.targetWorkingDirectory !== undefined) {
@@ -254,11 +263,8 @@ export const startSessionWorkflow = async ({
   workspaceId,
   persistTaskTargetBranch,
   startAgentSession,
-  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
-  postStartExecution = "await",
-  onDetachedPostStartError,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
   await runBeforeStartAction({
     intent,
@@ -268,15 +274,24 @@ export const startSessionWorkflow = async ({
 
   const postStartMessageSender =
     intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
+  const postStartMessage =
+    intent.postStartAction === "none"
+      ? null
+      : await requirePostStartMessage({
+          queryClient,
+          intent,
+          task,
+          workspaceId,
+        });
 
   const session = await startSessionFromIntent({
     intent,
     selection,
     startAgentSession,
+    holdForPostStartMessage: postStartMessage !== null,
   });
 
   if (intent.postStartAction === "none") {
-    settleStartedAgentSession(session);
     return {
       ...session,
       postStartActionError: null,
@@ -286,27 +301,18 @@ export const startSessionWorkflow = async ({
   if (!postStartMessageSender) {
     throw new Error("Post-start messaging is unavailable.");
   }
+  if (postStartMessage === null) {
+    throw new Error("Post-start message is unavailable.");
+  }
 
   const confirmedPostStartMessageSender = postStartMessageSender;
+  const confirmedPostStartMessage = postStartMessage;
   const runPostStartAction = async (): Promise<Error | null> => {
-    let postStartMessage: string;
-    try {
-      postStartMessage = await requirePostStartMessage({
-        queryClient,
-        intent,
-        task,
-        workspaceId,
-      });
-    } catch (error) {
-      settleStartedAgentSession(session);
-      return toError(error);
-    }
-
     try {
       await confirmedPostStartMessageSender(session, [
         {
           kind: "text",
-          text: postStartMessage,
+          text: confirmedPostStartMessage,
         },
       ]);
       return null;
@@ -314,18 +320,6 @@ export const startSessionWorkflow = async ({
       return toError(error);
     }
   };
-
-  if (postStartExecution === "detached") {
-    void runPostStartAction().then((error) => {
-      if (error) {
-        onDetachedPostStartError?.(error);
-      }
-    });
-    return {
-      ...session,
-      postStartActionError: null,
-    };
-  }
 
   return {
     ...session,

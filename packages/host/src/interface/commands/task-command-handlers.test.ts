@@ -42,20 +42,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsListBulk(input: unknown) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "agent_sessions_list_bulk", input });
-            return {};
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getApprovalContext(input: unknown) {
         return Effect.tryPromise({
           try: async () => {
@@ -613,17 +599,6 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBe(true);
     await expect(
       runHandler(
-        handlers.agent_sessions_list_bulk?.(
-          { repoPath: "/repo", taskIds: ["task-1"] },
-          {
-            command: "agent_sessions_list_bulk",
-            args: { repoPath: "/repo", taskIds: ["task-1"] },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
         handlers.agent_sessions_list?.(
           { repoPath: "/repo", taskId: "task-1" },
           {
@@ -969,10 +944,6 @@ describe("createTaskCommandHandlers", () => {
             selectedModel: null,
           },
         },
-      },
-      {
-        command: "agent_sessions_list_bulk",
-        input: { repoPath: "/repo", taskIds: ["task-1"] },
       },
       {
         command: "agent_sessions_list",

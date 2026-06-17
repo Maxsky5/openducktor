@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
-  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
 
 enableReactActEnvironment();
@@ -20,8 +21,8 @@ const createSelectedView = (
   role: "build",
   taskId: "task-1",
   selectedTask: null,
-  activeSession: null,
-  transcriptState: createSelectedSessionTranscriptStateFixture(),
+  selectedSessionIdentity: null,
+  selectedSessionActivityState: null,
   ...overrides,
 });
 
@@ -34,47 +35,19 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioBuildToolsBootstrap", () => {
-  test("blocks build-tools bootstrap while the selected build session history is hydrating", async () => {
-    const harness = createHookHarness(
-      createBaseArgs({
-        selectedView: createSelectedView({
-          activeSession: createAgentSessionFixture({
-            role: "build",
-            workingDirectory: "/repo/worktree",
-          }),
-          transcriptState: createSelectedSessionTranscriptStateFixture({
-            kind: "session_loading",
-            reason: "history",
-          }),
-        }),
+  test("keeps build-tools context available while the selected transcript is loading", async () => {
+    const selectedSessionSummary = toAgentSessionSummary(
+      createAgentSessionFixture({
+        role: "build",
+        status: "running",
+        workingDirectory: "/repo/worktree",
       }),
     );
-
-    try {
-      await harness.mount();
-
-      expect(harness.getLatest()).toEqual({
-        isEnabled: false,
-        repoPath: null,
-        sessionWorkingDirectory: null,
-        taskId: null,
-        shouldEnableEventPolling: false,
-        hasSelectedTask: false,
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("enables build-tools bootstrap once the selected build session context is stable", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
-          activeSession: createAgentSessionFixture({
-            role: "build",
-            workingDirectory: "/repo/worktree",
-          }),
+          selectedSessionIdentity: selectedSessionSummary,
+          selectedSessionActivityState: selectedSessionSummary.activityState,
         }),
       }),
     );
@@ -86,9 +59,66 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
-        taskId: "task-1",
         shouldEnableEventPolling: true,
-        hasSelectedTask: true,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("enables build-tools bootstrap once the selected build session context is stable", async () => {
+    const loadedSession = createAgentSessionFixture({
+      role: "build",
+      workingDirectory: "/repo/worktree",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
+          selectedSessionIdentity: toAgentSessionIdentity(loadedSession),
+          selectedSessionActivityState: "running",
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest()).toEqual({
+        isEnabled: true,
+        repoPath: "/repo",
+        sessionWorkingDirectory: "/repo/worktree",
+        shouldEnableEventPolling: true,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps build-tools context from the selected session identity before summaries load", async () => {
+    const selectedSessionIdentity = toAgentSessionIdentity(
+      createAgentSessionFixture({
+        role: "build",
+        workingDirectory: "/repo/worktree",
+      }),
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedSessionIdentity,
+          selectedSessionActivityState: null,
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest()).toEqual({
+        isEnabled: true,
+        repoPath: "/repo",
+        sessionWorkingDirectory: "/repo/worktree",
+        shouldEnableEventPolling: true,
       });
     } finally {
       await harness.unmount();

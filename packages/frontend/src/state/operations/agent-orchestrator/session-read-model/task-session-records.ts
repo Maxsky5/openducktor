@@ -42,11 +42,18 @@ export const loadTaskSessionRecordsForTask = async ({
   queryClient,
   repoPath,
   taskId,
+  forceFresh,
 }: {
   queryClient: QueryClient;
   repoPath: string;
   taskId: string;
+  forceFresh?: boolean;
 }): Promise<TaskSessionRecords> => ({
   id: taskId,
-  agentSessions: await loadAgentSessionListFromQuery(queryClient, repoPath, taskId),
+  agentSessions: await loadAgentSessionListFromQuery(
+    queryClient,
+    repoPath,
+    taskId,
+    forceFresh === undefined ? undefined : { forceFresh },
+  ),
 });

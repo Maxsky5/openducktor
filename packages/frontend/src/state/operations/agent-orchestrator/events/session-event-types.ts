@@ -8,18 +8,14 @@ import type {
 } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { SessionDraftBuffers, SessionTurnMetadata } from "../support/session-transient-state";
+import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
-export type {
-  DraftChannel,
-  DraftChannelValueMap,
-  DraftSource,
-} from "../support/session-transient-state";
+export type PersistSessionUpdateOptions = { persist: true };
 
 export type UpdateSession = (
   identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
-  options?: { persist?: boolean },
+  options?: PersistSessionUpdateOptions,
 ) => AgentSessionState | null;
 
 export type ReadSession = (identity: AgentSessionIdentity) => AgentSessionState | null;
@@ -50,12 +46,11 @@ export type ObserveAgentSessionParams = {
   adapter: SessionEventAdapter;
   sessionRef: AgentSessionRef;
   eventBatchWindowMs?: number;
-  draftBuffers: SessionDraftBuffers;
   turnMetadata: SessionTurnMetadata;
   readSession: ReadSession;
   updateSession: UpdateSession;
   updateSessionTodos: UpdateSessionTodos;
-  hasSessionObserver?: (sessionIdentity: AgentSessionIdentity) => boolean;
+  isSessionObserved: (sessionIdentity: AgentSessionIdentity) => boolean;
   recordTurnActivityTimestamp: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
@@ -72,33 +67,28 @@ export type ObserveAgentSessionParams = {
   ) => WorkflowToolAliasesByCanonical | undefined;
 };
 
-type SessionEventTargetContext = {
-  sessionIdentity: AgentSessionIdentity;
-  sessionKey: string;
-  externalSessionId: string;
+export type SessionEventSessionContext = {
+  identity: AgentSessionIdentity;
+  key: string;
 };
 
-export type SessionStoreContext = SessionEventTargetContext &
-  Pick<ObserveAgentSessionParams, "updateSession" | "hasSessionObserver"> & {
-    readSession: ReadSession;
-    hasSession: (identity: AgentSessionIdentity) => boolean;
-  };
-
-export type SessionRuntimeDataContext = Pick<ObserveAgentSessionParams, "updateSessionTodos">;
-
-export type SessionDraftContext = SessionEventTargetContext & {
-  buffers: SessionDraftBuffers;
+export type SessionStoreContext = Pick<
+  ObserveAgentSessionParams,
+  "updateSession" | "isSessionObserved"
+> & {
+  readSession: ReadSession;
 };
 
-export type SessionTurnContext = SessionEventTargetContext &
-  Pick<
-    ObserveAgentSessionParams,
-    | "turnMetadata"
-    | "recordTurnActivityTimestamp"
-    | "recordTurnUserMessageTimestamp"
-    | "resolveTurnDurationMs"
-    | "clearTurnDuration"
-  >;
+export type SessionTodosContext = Pick<ObserveAgentSessionParams, "updateSessionTodos">;
+
+export type SessionTurnContext = Pick<
+  ObserveAgentSessionParams,
+  | "turnMetadata"
+  | "recordTurnActivityTimestamp"
+  | "recordTurnUserMessageTimestamp"
+  | "resolveTurnDurationMs"
+  | "clearTurnDuration"
+>;
 
 export type SessionApprovalContext = {
   repoPath: string;
@@ -113,59 +103,41 @@ export type SessionRefreshContext = { repoPath: string } & Pick<
 >;
 
 export type SessionEventContext = {
+  session: SessionEventSessionContext;
   store: SessionStoreContext;
-  drafts: SessionDraftContext;
   turn: SessionTurnContext;
   approvals: SessionApprovalContext;
   refresh: SessionRefreshContext;
-  runtimeData: SessionRuntimeDataContext;
+  todos: SessionTodosContext;
 };
 
 export type SessionLifecycleEventContext = Pick<
   SessionEventContext,
-  "store" | "drafts" | "turn" | "approvals" | "runtimeData"
+  "session" | "store" | "turn" | "approvals" | "todos"
 >;
 
 export type SessionPartEventContext = Pick<
   SessionEventContext,
-  "store" | "drafts" | "turn" | "refresh" | "runtimeData"
+  "session" | "store" | "turn" | "refresh" | "todos"
 >;
 
 export type SessionToolPartEventContext = Pick<
   SessionPartEventContext,
-  "store" | "refresh" | "runtimeData"
+  "session" | "store" | "refresh" | "todos"
 >;
 
-const createTargetContext = (context: ObserveAgentSessionParams): SessionEventTargetContext => ({
-  sessionIdentity: context.sessionRef,
-  sessionKey: agentSessionIdentityKey(context.sessionRef),
-  externalSessionId: context.sessionRef.externalSessionId,
+const createSessionContext = (context: ObserveAgentSessionParams): SessionEventSessionContext => ({
+  identity: context.sessionRef,
+  key: agentSessionIdentityKey(context.sessionRef),
 });
 
-const createStoreContext = (
-  context: ObserveAgentSessionParams,
-  target: SessionEventTargetContext,
-): SessionStoreContext => ({
-  ...target,
+const createStoreContext = (context: ObserveAgentSessionParams): SessionStoreContext => ({
   updateSession: context.updateSession,
   readSession: context.readSession,
-  hasSession: (identity) => context.readSession(identity) !== null,
-  ...(context.hasSessionObserver ? { hasSessionObserver: context.hasSessionObserver } : {}),
+  isSessionObserved: context.isSessionObserved,
 });
 
-const createDraftContext = (
-  context: ObserveAgentSessionParams,
-  target: SessionEventTargetContext,
-): SessionDraftContext => ({
-  ...target,
-  buffers: context.draftBuffers,
-});
-
-const createTurnContext = (
-  context: ObserveAgentSessionParams,
-  target: SessionEventTargetContext,
-): SessionTurnContext => ({
-  ...target,
+const createTurnContext = (context: ObserveAgentSessionParams): SessionTurnContext => ({
   turnMetadata: context.turnMetadata,
   recordTurnActivityTimestamp: context.recordTurnActivityTimestamp,
   recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp,
@@ -176,14 +148,13 @@ const createTurnContext = (
 export const createSessionEventContext = (
   context: ObserveAgentSessionParams,
 ): SessionEventContext => {
-  const target = createTargetContext(context);
-  const store = createStoreContext(context, target);
-  const drafts = createDraftContext(context, target);
-  const turn = createTurnContext(context, target);
+  const session = createSessionContext(context);
+  const store = createStoreContext(context);
+  const turn = createTurnContext(context);
 
   return {
+    session,
     store,
-    drafts,
     turn,
     approvals: {
       repoPath: context.sessionRef.repoPath,
@@ -196,7 +167,7 @@ export const createSessionEventContext = (
       refreshTaskData: context.refreshTaskData,
       resolveWorkflowToolAliasesByCanonical: context.resolveWorkflowToolAliasesByCanonical,
     },
-    runtimeData: {
+    todos: {
       updateSessionTodos: context.updateSessionTodos,
     },
   };

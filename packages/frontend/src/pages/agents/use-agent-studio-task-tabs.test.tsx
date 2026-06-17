@@ -5,6 +5,7 @@ import {
   type TestStorageLike,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
+import { parsePersistedTaskTabs, toPersistedTaskTabs } from "./agent-studio-task-tabs-storage";
 import {
   createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
@@ -12,7 +13,6 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
-import { parsePersistedTaskTabs, toPersistedTaskTabs } from "./agents-page-session-tabs";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();

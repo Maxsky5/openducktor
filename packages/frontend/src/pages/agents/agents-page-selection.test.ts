@@ -18,7 +18,7 @@ import {
   toTabsStorageKey,
 } from "./agents-page-selection";
 
-const resolveAgentStudioActiveSession = (args: {
+const resolveAgentStudioSelectedSessionSummary = (args: {
   sessionsForTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionsForTask"];
   sessionKey: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionKey"];
   hasExplicitRoleParam: boolean;
@@ -27,8 +27,8 @@ const resolveAgentStudioActiveSession = (args: {
 }) => {
   return resolveAgentStudioSessionSelection({
     ...args,
-    fallbackRole: args.roleFromQuery,
-  }).activeSession;
+    sessionlessRole: args.roleFromQuery,
+  }).sessionSummary;
 };
 
 const catalogFixture: AgentModelCatalog = {
@@ -214,7 +214,7 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [plannerSession, buildSession],
       sessionKey: "session-from-other-task",
       hasExplicitRoleParam: true,
@@ -239,7 +239,7 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [plannerSession, buildSession],
       sessionKey: null,
       hasExplicitRoleParam: true,
@@ -264,11 +264,11 @@ describe("agents-page-selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
       keepExplicitRoleSessionless: true,
     });
 
-    expect(resolved).toEqual({ activeSession: null, role: "build" });
+    expect(resolved).toEqual({ sessionSummary: null, role: "build" });
   });
 
   test("prioritizes active running session over status defaults", () => {
@@ -289,7 +289,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T09:00:00.000Z",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [olderBuildSession, runningSpecSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -330,7 +330,7 @@ describe("agents-page-selection", () => {
       ],
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [olderBuildSession, waitingSpecSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -359,7 +359,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T12:00:00.000Z",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [olderRunningSession, newerStartingSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -386,7 +386,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T10:00:00.000Z",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [buildSession, specSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -414,7 +414,7 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [buildSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -450,7 +450,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T11:00:00.000Z",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [olderSpecSession, latestSpecSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -477,7 +477,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T12:00:00.000Z",
     });
 
-    const resolvedWithPlanner = resolveAgentStudioActiveSession({
+    const resolvedWithPlanner = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [latestSpecSession, latestPlannerSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -485,7 +485,7 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
     });
 
-    const resolvedWithFallback = resolveAgentStudioActiveSession({
+    const resolvedWithFallback = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [latestSpecSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -520,7 +520,7 @@ describe("agents-page-selection", () => {
     ];
 
     for (const status of statuses) {
-      const resolved = resolveAgentStudioActiveSession({
+      const resolved = resolveAgentStudioSelectedSessionSummary({
         sessionsForTask: [olderBuildSession, latestBuildSession],
         sessionKey: null,
         hasExplicitRoleParam: false,
@@ -551,7 +551,7 @@ describe("agents-page-selection", () => {
     const statuses: Array<"blocked" | "closed"> = ["blocked", "closed"];
 
     for (const status of statuses) {
-      const resolvedWithBuild = resolveAgentStudioActiveSession({
+      const resolvedWithBuild = resolveAgentStudioSelectedSessionSummary({
         sessionsForTask: [latestSpecSession, latestBuildSession],
         sessionKey: null,
         hasExplicitRoleParam: false,
@@ -559,7 +559,7 @@ describe("agents-page-selection", () => {
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
       });
 
-      const resolvedFallback = resolveAgentStudioActiveSession({
+      const resolvedFallback = resolveAgentStudioSelectedSessionSummary({
         sessionsForTask: [latestSpecSession],
         sessionKey: null,
         hasExplicitRoleParam: false,
@@ -580,7 +580,7 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioActiveSession({
+    const resolved = resolveAgentStudioSelectedSessionSummary({
       sessionsForTask: [buildSession],
       sessionKey: null,
       hasExplicitRoleParam: false,
@@ -598,10 +598,10 @@ describe("agents-page-selection", () => {
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
-      fallbackRole: "spec",
+      sessionlessRole: "spec",
     });
 
-    expect(selection.activeSession).toBeNull();
+    expect(selection.sessionSummary).toBeNull();
     expect(selection.role).toBe("build");
   });
 
@@ -620,10 +620,10 @@ describe("agents-page-selection", () => {
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
     });
 
-    expect(selection.activeSession?.externalSessionId).toBe("qa-1");
+    expect(selection.sessionSummary?.externalSessionId).toBe("qa-1");
     expect(selection.role).toBe("qa");
   });
 
@@ -642,10 +642,10 @@ describe("agents-page-selection", () => {
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
-      fallbackRole: "build",
+      sessionlessRole: "build",
     });
 
-    expect(selection.activeSession?.externalSessionId).toBe("build-1");
+    expect(selection.sessionSummary?.externalSessionId).toBe("build-1");
     expect(selection.role).toBe("build");
   });
 
@@ -671,10 +671,10 @@ describe("agents-page-selection", () => {
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "blocked" }),
-      fallbackRole: "spec",
+      sessionlessRole: "spec",
     });
 
-    expect(selection.activeSession?.externalSessionId).toBe("qa-newer");
+    expect(selection.sessionSummary?.externalSessionId).toBe("qa-newer");
     expect(selection.role).toBe("qa");
   });
 

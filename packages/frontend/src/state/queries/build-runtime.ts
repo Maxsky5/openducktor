@@ -3,6 +3,14 @@ import { queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
 export type TaskWorktreeQueryHost = Pick<typeof host, "taskWorktreeGet">;
+type TaskWorktreeQueryInput = {
+  repoPath: string;
+  taskId: string;
+  taskVersion?: string | null;
+};
+type TaskWorktreeQueryOptionsInput = TaskWorktreeQueryInput & {
+  hostClient?: TaskWorktreeQueryHost;
+};
 
 const TASK_WORKTREE_STALE_TIME_MS = 30_000;
 export const TASK_WORKTREE_TIMEOUT_MS = 5_000;
@@ -30,20 +38,20 @@ const withTimeout = async <T>(
 
 export const taskWorktreeQueryKeys = {
   all: ["task-worktree"] as const,
-  taskWorktree: (repoPath: string, taskId: string, recoveryKey?: string | null) =>
-    recoveryKey == null
+  taskWorktree: ({ repoPath, taskId, taskVersion = null }: TaskWorktreeQueryInput) =>
+    taskVersion == null
       ? ([...taskWorktreeQueryKeys.all, repoPath, taskId] as const)
-      : ([...taskWorktreeQueryKeys.all, repoPath, taskId, recoveryKey] as const),
+      : ([...taskWorktreeQueryKeys.all, repoPath, taskId, taskVersion] as const),
 };
 
-export const taskWorktreeQueryOptions = (
-  repoPath: string,
-  taskId: string,
-  hostClient: TaskWorktreeQueryHost = host,
-  recoveryKey?: string | null,
-) =>
+export const taskWorktreeQueryOptions = ({
+  repoPath,
+  taskId,
+  hostClient = host,
+  taskVersion = null,
+}: TaskWorktreeQueryOptionsInput) =>
   queryOptions({
-    queryKey: taskWorktreeQueryKeys.taskWorktree(repoPath, taskId, recoveryKey),
+    queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId, taskVersion }),
     queryFn: (): Promise<TaskWorktreeSummary | null> =>
       withTimeout(
         hostClient.taskWorktreeGet(repoPath, taskId),

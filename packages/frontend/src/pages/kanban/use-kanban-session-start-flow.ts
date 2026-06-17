@@ -1,13 +1,12 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import {
   isKanbanActiveTaskSession,
-  toKanbanSessionPresentationState,
+  toKanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
@@ -22,6 +21,7 @@ import {
   buildReusableSessionOptions,
   buildSessionStartModalRequest,
   firstLaunchAction,
+  type RunSessionStartWorkflow,
   resolveBuildContinuationLaunchAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
@@ -37,7 +37,7 @@ import {
 } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
@@ -54,9 +54,7 @@ type UseKanbanSessionStartFlowArgs = {
   workspaceRepoPath: string | null;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  runSessionStartWorkflow: RunSessionStartWorkflow;
 };
 
 type UseKanbanSessionStartFlowResult = {
@@ -96,14 +94,7 @@ const findPreferredSessionByRoleForTask = (
   }
 
   const preferredSession = resolvePreferredActiveSession(
-    matchingSessions.map((session) => ({
-      externalSessionId: session.externalSessionId,
-      runtimeKind: session.runtimeKind,
-      workingDirectory: session.workingDirectory,
-      role: session.role,
-      startedAt: session.startedAt,
-      presentationState: toKanbanSessionPresentationState(session),
-    })),
+    matchingSessions.map(toKanbanTaskSession),
     role,
   );
 
@@ -155,11 +146,8 @@ export function useKanbanSessionStartFlow({
   workspaceRepoPath,
   humanRequestChangesTask,
   setTaskTargetBranch,
-  startAgentSession,
-  settleStartedAgentSession,
-  sendAgentMessage,
+  runSessionStartWorkflow,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
-  const queryClient = useQueryClient();
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
@@ -225,13 +213,10 @@ export function useKanbanSessionStartFlow({
             openAgentStudioTabOnBackgroundSessionStart,
             tasks,
             roleLabels: ROLE_LABELS,
-            queryClient,
-            startAgentSession,
-            settleStartedAgentSession,
+            runSessionStartWorkflow,
             humanRequestChangesTask,
             ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
             openSessionInAgentStudio,
-            sendAgentMessage,
           });
           return session;
         },
@@ -241,13 +226,10 @@ export function useKanbanSessionStartFlow({
       humanRequestChangesTask,
       openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
-      queryClient,
+      runSessionStartWorkflow,
       runSessionStartRequest,
-      sendAgentMessage,
-      settleStartedAgentSession,
       setTaskTargetBranch,
       sessions,
-      startAgentSession,
       tasks,
       activeWorkspaceId,
     ],

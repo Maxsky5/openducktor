@@ -58,7 +58,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     stableItemIds: false,
     stableItemOrder: true,
     exposesCompletionState: false,
-    limitations: ["OpenCode session history is hydrated at message-level fidelity."],
+    limitations: ["OpenCode session history is loaded at message-level fidelity."],
   },
   approvals: {
     supportedRequestTypes: ["permission_grant", "runtime_tool"],

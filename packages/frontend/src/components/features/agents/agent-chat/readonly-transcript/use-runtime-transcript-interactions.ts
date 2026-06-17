@@ -142,7 +142,7 @@ export function useRuntimeTranscriptInteractions({
     session?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeSession: matchedSessionIdentity,
+      sessionIdentity: matchedSessionIdentity,
       pendingApprovals: pendingApprovalRequests,
       agentStudioReady: isRuntimeReady,
       replyAgentApproval,

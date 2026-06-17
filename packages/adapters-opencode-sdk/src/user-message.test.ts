@@ -9,6 +9,8 @@ import {
   startDefaultSession,
 } from "./test-support";
 
+const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
+
 describe("OpencodeSdkAdapter user message", () => {
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({});
@@ -99,28 +101,8 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
 
-  test("sendUserMessage publishes runtime-owned user messages from history", async () => {
-    const mock = makeMockClient({
-      messagesResponse: [
-        {
-          info: {
-            id: "runtime-user-1",
-            role: "user",
-            time: { created: Date.parse("2026-02-17T12:00:01Z") },
-          },
-          parts: [
-            {
-              id: "runtime-user-part-1",
-              sessionID: "session-opencode-1",
-              messageID: "runtime-user-1",
-              type: "text",
-              text: "Kick off the builder",
-              time: { start: Date.parse("2026-02-17T12:00:01Z") },
-            } as Part,
-          ],
-        },
-      ],
-    });
+  test("sendUserMessage emits the admitted user message without reloading history", async () => {
+    const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
@@ -143,23 +125,20 @@ describe("OpencodeSdkAdapter user message", () => {
       (event): event is Extract<AgentEvent, { type: "user_message" }> =>
         event.type === "user_message",
     );
+    const promptRequest = mock.session.promptAsyncCalls[0] as { messageID?: string } | undefined;
     expect(userEvents).toEqual([
       expect.objectContaining({
-        messageId: "runtime-user-1",
+        messageId: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
         message: "Kick off the builder",
         state: "read",
         parts: [{ kind: "text", text: "Kick off the builder" }],
       }),
     ]);
-    expect(mock.session.messagesCalls).toEqual([
-      {
-        sessionID: "session-opencode-1",
-        directory: "/repo",
-      },
-    ]);
+    expect(userEvents[0]?.messageId).toBe(promptRequest?.messageID);
+    expect(mock.session.messagesCalls).toEqual([]);
   });
 
-  test("sendUserMessage does not replay history-seeded user messages", async () => {
+  test("sendUserMessage keeps history loading out of the send path", async () => {
     const oldUserMessage = {
       info: {
         id: "runtime-user-old",
@@ -174,23 +153,6 @@ describe("OpencodeSdkAdapter user message", () => {
           type: "text",
           text: "Already visible",
           time: { start: Date.parse("2026-02-17T12:00:01Z") },
-        } as Part,
-      ],
-    };
-    const newUserMessage = {
-      info: {
-        id: "runtime-user-new",
-        role: "user" as const,
-        time: { created: Date.parse("2026-02-17T12:00:02Z") },
-      },
-      parts: [
-        {
-          id: "runtime-user-new-part",
-          sessionID: "session-opencode-1",
-          messageID: "runtime-user-new",
-          type: "text",
-          text: "Kick off the builder",
-          time: { start: Date.parse("2026-02-17T12:00:02Z") },
         } as Part,
       ],
     };
@@ -211,7 +173,6 @@ describe("OpencodeSdkAdapter user message", () => {
     );
 
     await adapter.loadSessionHistory(sessionRuntimeRef("session-opencode-1", { role: "build" }));
-    mock.session.messagesResponse = [oldUserMessage, newUserMessage];
 
     await adapter.sendUserMessage({
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
@@ -224,11 +185,11 @@ describe("OpencodeSdkAdapter user message", () => {
     );
     expect(userEvents).toEqual([
       expect.objectContaining({
-        messageId: "runtime-user-new",
+        messageId: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
         message: "Kick off the builder",
       }),
     ]);
-    expect(mock.session.messagesCalls).toHaveLength(2);
+    expect(mock.session.messagesCalls).toHaveLength(1);
   });
 
   test("sendUserMessage uses the native session command endpoint for slash commands", async () => {
@@ -266,6 +227,7 @@ describe("OpencodeSdkAdapter user message", () => {
       {
         sessionID: "session-opencode-1",
         directory: "/repo",
+        messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
         command: "compact",
         arguments: "summarize the latest session",
         model: "openai/gpt-5",
