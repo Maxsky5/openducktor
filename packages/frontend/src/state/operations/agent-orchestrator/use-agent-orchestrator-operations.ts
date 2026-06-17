@@ -143,10 +143,6 @@ export function useAgentOrchestratorOperations({
     queryClient,
     refreshTaskData,
   });
-  const getObservedSessionKeys = useCallback(
-    () => sessionObserversRef.current.observedSessionKeys(),
-    [sessionObserversRef],
-  );
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
@@ -156,7 +152,6 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef,
         commitSessionCollection: sessionStore.commitSessionCollection,
         observeAgentSession,
-        getObservedSessionKeys,
         cleanupLocalSessions,
         queryClient,
       }),
@@ -165,7 +160,6 @@ export function useAgentOrchestratorOperations({
       currentWorkspaceRepoPathRef,
       observeAgentSession,
       cleanupLocalSessions,
-      getObservedSessionKeys,
       queryClient,
       repoEpochRef,
       sessionStore,
@@ -206,7 +200,6 @@ export function useAgentOrchestratorOperations({
     commitSessionCollection: sessionStore.commitSessionCollection,
     agentEngine,
     observeAgentSession,
-    getObservedSessionKeys,
     cleanupLocalSessions,
     commitSessionReadModelLoadState: setSessionReadModelLoadState,
     queryClient,

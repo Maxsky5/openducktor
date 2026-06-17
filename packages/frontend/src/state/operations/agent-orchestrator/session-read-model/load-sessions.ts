@@ -22,7 +22,6 @@ type CreateLoadAgentSessionsArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
-  getObservedSessionKeys: () => ReadonlySet<string>;
   cleanupLocalSessions: CleanupLocalSessions;
   queryClient: QueryClient;
 };
@@ -33,7 +32,6 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter,
   commitSessionCollection,
   observeAgentSession,
-  getObservedSessionKeys,
   cleanupLocalSessions,
   queryClient,
   isStaleRepoOperation,
@@ -44,7 +42,6 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter: SessionLoaderAdapter;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
-  getObservedSessionKeys: () => ReadonlySet<string>;
   cleanupLocalSessions: CleanupLocalSessions;
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
@@ -79,7 +76,6 @@ export const loadRepoAgentSessionsForTasks = async ({
       tasks: taskSessionRecords,
       currentSessionCollection,
       runtimeSnapshots,
-      observedSessionKeys: getObservedSessionKeys(),
     });
     return {
       collection: readModel.sessionCollection,
@@ -108,7 +104,6 @@ export const createLoadAgentSessions = ({
   currentWorkspaceRepoPathRef,
   commitSessionCollection,
   observeAgentSession,
-  getObservedSessionKeys,
   cleanupLocalSessions,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
@@ -134,7 +129,6 @@ export const createLoadAgentSessions = ({
       adapter,
       commitSessionCollection,
       observeAgentSession,
-      getObservedSessionKeys,
       cleanupLocalSessions,
       queryClient,
       isStaleRepoOperation,

@@ -5,7 +5,6 @@ import {
   type AgentPendingQuestionRequest,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -15,23 +14,12 @@ import { sessionMessagesToArray } from "@/test-utils/session-message-test-helper
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import {
-  buildRepoSessionReadModel as buildRepoSessionReadModelImpl,
+  buildRepoSessionReadModel,
   readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
-type BuildRepoSessionReadModelInput = Parameters<typeof buildRepoSessionReadModelImpl>[0];
-type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModelImpl>;
-
-const buildRepoSessionReadModel = ({
-  observedSessionKeys = new Set<string>(),
-  ...input
-}: Omit<BuildRepoSessionReadModelInput, "observedSessionKeys"> &
-  Partial<Pick<BuildRepoSessionReadModelInput, "observedSessionKeys">>): RepoSessionReadModel =>
-  buildRepoSessionReadModelImpl({
-    ...input,
-    observedSessionKeys,
-  });
+type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
   listAgentSessions(readModel.sessionCollection).find(
@@ -350,7 +338,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("preserves an observed mounted active session when runtime snapshot is missing", async () => {
+  test("settles a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
@@ -380,10 +368,9 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: busyRead.sessionCollection,
       runtimeSnapshots: runtimeSnapshots,
-      observedSessionKeys: new Set([agentSessionIdentityKey(record)]),
     });
 
-    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
@@ -436,7 +423,7 @@ describe("repo session read model", () => {
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps observed mounted transcript and live turn state when runtime snapshot is missing", async () => {
+  test("settles mounted live turn state without clearing transcript when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -471,16 +458,15 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      observedSessionKeys: new Set([agentSessionIdentityKey(currentSession)]),
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("running");
+    expect(session?.status).toBe("idle");
     expect(session?.historyLoadState).toBe("loaded");
-    expect(session?.pendingUserMessageStartedAt).toBe(123);
+    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);

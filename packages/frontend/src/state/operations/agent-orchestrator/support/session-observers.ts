@@ -12,7 +12,6 @@ type PendingSessionObserver = {
 
 export type SessionObservers = {
   has: (session: AgentSessionIdentityLike) => boolean;
-  observedSessionKeys: () => ReadonlySet<string>;
   ensureObserver: (
     session: AgentSessionIdentityLike,
     createObserver: SessionObserverFactory,
@@ -50,8 +49,6 @@ export const createSessionObservers = (): SessionObservers => {
       const sessionKey = agentSessionIdentityKey(session);
       return unsubscribeBySessionKey.has(sessionKey) || pendingBySessionKey.has(sessionKey);
     },
-    observedSessionKeys: () =>
-      new Set([...unsubscribeBySessionKey.keys(), ...pendingBySessionKey.keys()]),
     ensureObserver: (session, createObserver) => {
       const sessionKey = agentSessionIdentityKey(session);
       if (unsubscribeBySessionKey.has(sessionKey)) {

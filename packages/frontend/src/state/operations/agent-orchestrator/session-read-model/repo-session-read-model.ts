@@ -74,18 +74,6 @@ const toPersistedSessionView = ({
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
 
-const isTerminalLocalSessionStatus = (status: AgentSessionState["status"]): boolean =>
-  status === "stopped" || status === "error";
-
-const shouldTrustLocalRuntimeStateWithoutSnapshot = (
-  current: AgentSessionState | undefined,
-  observedSessionKeys: ReadonlySet<string>,
-): boolean =>
-  current !== undefined &&
-  (current.status === "starting" ||
-    isTerminalLocalSessionStatus(current.status) ||
-    observedSessionKeys.has(agentSessionIdentityKey(current)));
-
 export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
   tasks,
@@ -131,13 +119,11 @@ export const buildRepoSessionReadModel = ({
   tasks,
   currentSessionCollection,
   runtimeSnapshots,
-  observedSessionKeys,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionCollection?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
-  observedSessionKeys: ReadonlySet<string>;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const loadedTaskIds = new Set(tasks.map((task) => task.id));
@@ -173,17 +159,7 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const missingSnapshotPolicy = shouldTrustLocalRuntimeStateWithoutSnapshot(
-      current,
-      observedSessionKeys,
-    )
-      ? "preserve_local_runtime_state"
-      : "settle_runtime_state";
-    const session = applyRuntimeSnapshotToSession(
-      persistedSessionView,
-      snapshot,
-      missingSnapshotPolicy,
-    );
+    const session = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (shouldObserveAgentSessionRuntimeSnapshot(snapshot)) {

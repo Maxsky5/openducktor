@@ -1215,6 +1215,50 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
+  test("listSessionRuntimeSnapshots includes observed existing sessions before runtime list catches up", async () => {
+    const mock = makeMockClient();
+    const emptyListClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return { data: [], error: undefined };
+        },
+        messages: async () => ({ data: [], error: undefined }),
+        children: async () => ({ data: [], error: undefined }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => emptyListClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+    const unsubscribe = await adapter.subscribeEvents(sessionRef("external-session-1"), () => {});
+
+    try {
+      const snapshots = await adapter.listSessionRuntimeSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+        directories: [defaultWorkingDirectory],
+      });
+
+      expect(snapshots).toMatchObject([
+        {
+          availability: "runtime",
+          classification: "idle",
+          ref: {
+            externalSessionId: "external-session-1",
+            workingDirectory: defaultWorkingDirectory,
+          },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("listSessionRuntimeSnapshots rejects malformed pending approval payloads", async () => {
     const mock = makeMockClient();
     const malformedClient = {

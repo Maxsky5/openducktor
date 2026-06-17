@@ -23,7 +23,6 @@ type UseRepoSessionReadModelEffectsArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
-  getObservedSessionKeys: () => ReadonlySet<string>;
   cleanupLocalSessions: (sessions: readonly AgentSessionRef[]) => void;
   commitSessionReadModelLoadState: (state: AgentSessionReadModelLoadState) => void;
   queryClient: QueryClient;
@@ -43,7 +42,6 @@ export const useRepoSessionReadModelEffects = ({
   commitSessionCollection,
   agentEngine,
   observeAgentSession,
-  getObservedSessionKeys,
   cleanupLocalSessions,
   commitSessionReadModelLoadState,
   queryClient,
@@ -82,7 +80,6 @@ export const useRepoSessionReadModelEffects = ({
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
-          getObservedSessionKeys,
           cleanupLocalSessions,
           queryClient,
           isStaleRepoOperation,
@@ -113,7 +110,6 @@ export const useRepoSessionReadModelEffects = ({
     agentEngine,
     queryClient,
     observeAgentSession,
-    getObservedSessionKeys,
     cleanupLocalSessions,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,

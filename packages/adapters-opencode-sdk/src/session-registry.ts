@@ -325,6 +325,7 @@ export const registerSession = (
     logEvent?: OpencodeEventLogger;
   } & RegisterSessionStartEvent,
 ): AgentSessionSummary => {
+  const startsActive = input.emitStartedEvent !== false;
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
@@ -339,7 +340,7 @@ export const registerSession = (
       : {}),
     role: input.sessionInput.role,
     startedAt: input.startedAt,
-    status: "running",
+    status: startsActive ? "running" : "idle",
   };
 
   input.sessions.set(input.externalSessionId, {
@@ -348,7 +349,7 @@ export const registerSession = (
     client: input.client,
     externalSessionId: input.externalSessionId,
     runtimeId: input.runtimeId,
-    streamTurnStatus: "active",
+    streamTurnStatus: startsActive ? "active" : "idle",
     isSendingUserMessage: false,
     activeAssistantMessageId: null,
     completedAssistantMessageIds: new Set<string>(),

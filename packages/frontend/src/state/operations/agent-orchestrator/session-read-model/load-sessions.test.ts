@@ -3,7 +3,6 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -57,7 +56,6 @@ const createLoaderHarness = ({
   listSessionRuntimeSnapshots,
   tasks = [taskFixture],
   sessionRecordsByTaskId = { [taskFixture.id]: [record] },
-  observedSessionKeys = new Set<string>(),
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: Parameters<
@@ -65,7 +63,6 @@ const createLoaderHarness = ({
   >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
-  observedSessionKeys?: ReadonlySet<string>;
 }) => {
   let sessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
@@ -94,7 +91,6 @@ const createLoaderHarness = ({
       listenedSessions.push(session);
       return true;
     },
-    getObservedSessionKeys: () => observedSessionKeys,
     cleanupLocalSessions: (sessions) => {
       cleanedSessions.push(...sessions);
     },
@@ -146,7 +142,6 @@ describe("createLoadAgentSessions", () => {
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
-      getObservedSessionKeys: () => new Set(),
       cleanupLocalSessions: () => undefined,
       queryClient,
       isStaleRepoOperation: () => false,
@@ -259,7 +254,7 @@ describe("createLoadAgentSessions", () => {
     expect(runtimeSnapshotReads).toBe(0);
   });
 
-  test("keeps observed mounted transcript and live state when runtime snapshot is missing during repo reloads", async () => {
+  test("settles mounted live state without clearing transcript when runtime snapshot is missing during repo reloads", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -284,7 +279,6 @@ describe("createLoadAgentSessions", () => {
     const harness = createLoaderHarness({
       initialSessionCollection: createAgentSessionCollection([mountedSession]),
       listSessionRuntimeSnapshots: async () => [],
-      observedSessionKeys: new Set([agentSessionIdentityKey(mountedSession)]),
     });
 
     await harness.loadAgentSessions("task-1");
@@ -293,9 +287,9 @@ describe("createLoadAgentSessions", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to stay mounted.`);
     }
-    expect(session.status).toBe("running");
+    expect(session.status).toBe("idle");
     expect(session.historyLoadState).toBe("loaded");
-    expect(session.pendingUserMessageStartedAt).toBe(123);
+    expect(session.pendingUserMessageStartedAt).toBeUndefined();
     expect(session.messages).toBe(mountedSession.messages);
     expect(harness.listenedSessions).toEqual([]);
   });
