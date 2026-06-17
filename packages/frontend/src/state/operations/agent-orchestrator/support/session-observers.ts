@@ -5,10 +5,6 @@ import {
 
 type SessionObserverUnsubscribe = () => void;
 type SessionObserverFactory = () => Promise<SessionObserverUnsubscribe>;
-type SessionObserverSeed = {
-  session: AgentSessionIdentityLike;
-  unsubscribe: SessionObserverUnsubscribe;
-};
 type PendingSessionObserver = {
   cancelled: boolean;
   promise: Promise<void>;
@@ -24,19 +20,9 @@ export type SessionObservers = {
   clear: () => void;
 };
 
-export const createSessionObservers = (
-  initialObservers: readonly SessionObserverSeed[] = [],
-): SessionObservers => {
+export const createSessionObservers = (): SessionObservers => {
   const unsubscribeBySessionKey = new Map<string, SessionObserverUnsubscribe>();
   const pendingBySessionKey = new Map<string, PendingSessionObserver>();
-
-  for (const { session, unsubscribe } of initialObservers) {
-    const sessionKey = agentSessionIdentityKey(session);
-    if (unsubscribeBySessionKey.has(sessionKey)) {
-      throw new Error(`Session observer already exists for '${session.externalSessionId}'.`);
-    }
-    unsubscribeBySessionKey.set(sessionKey, unsubscribe);
-  }
 
   const cancelPending = (sessionKey: string): void => {
     const pending = pendingBySessionKey.get(sessionKey);

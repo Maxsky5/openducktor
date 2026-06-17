@@ -109,9 +109,15 @@ describe("prepare session send", () => {
   });
 
   test("keeps existing observers instead of subscribing twice", async () => {
-    const sessionObserversRef = createSessionObserversRefFixture([
-      { externalSessionId: "session-1" },
-    ]);
+    const sessionObserversRef = createSessionObserversRefFixture();
+    await sessionObserversRef.current.ensureObserver(
+      {
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+      async () => () => {},
+    );
     const { observedRefs, prepareSend } = createPrepareSend({ sessionObserversRef });
 
     await prepareSend(buildWorkflowSession({ status: "idle" }));

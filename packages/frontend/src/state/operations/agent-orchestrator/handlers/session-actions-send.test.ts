@@ -7,7 +7,7 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createSessionObserversRefFixture, createTaskCardFixture } from "../test-utils";
+import { createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
@@ -45,7 +45,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -77,7 +76,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       updateSession: (identity, updater) => {
         const current = getAgentSession(sessionsRef.current, identity);
         if (!current) {
@@ -132,7 +130,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => {
         throw new Error("runtime unavailable");
       },
@@ -161,7 +158,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => {
         throw new Error("runtime unavailable");
       },
@@ -198,7 +194,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -243,7 +238,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -290,7 +284,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           }),
         ],
       },
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -323,7 +316,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -389,7 +381,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       sessionTurnState: {
         ...sessionTurnState.sessionTurnState,
         timing: {
@@ -448,7 +439,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       sessionTurnState: {
         ...sessionTurnState.sessionTurnState,
         timing: {

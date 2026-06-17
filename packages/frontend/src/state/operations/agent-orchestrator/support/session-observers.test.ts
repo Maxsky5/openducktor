@@ -10,24 +10,15 @@ const createSessionRef = (workingDirectory: string) =>
   }) as const;
 
 describe("session observers", () => {
-  test("keys observers by full session identity", () => {
+  test("keys observers by full session identity", async () => {
     const firstSession = createSessionRef("/tmp/repo/first");
     const secondSession = createSessionRef("/tmp/repo/second");
-    const observers = createSessionObservers([{ session: firstSession, unsubscribe: () => {} }]);
+    const observers = createSessionObservers();
+
+    await observers.ensureObserver(firstSession, async () => () => {});
 
     expect(observers.has(firstSession)).toBe(true);
     expect(observers.has(secondSession)).toBe(false);
-  });
-
-  test("rejects duplicate observers for the same session identity", () => {
-    const session = createSessionRef("/tmp/repo/first");
-
-    expect(() =>
-      createSessionObservers([
-        { session, unsubscribe: () => {} },
-        { session, unsubscribe: () => {} },
-      ]),
-    ).toThrow("Session observer already exists for 'external-1'.");
   });
 
   test("ensures one observer while a subscription is pending", async () => {

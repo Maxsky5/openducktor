@@ -33,7 +33,6 @@ type SessionObserversFixture = {
   repoPath?: string;
   runtimeKind?: AgentSessionRef["runtimeKind"];
   workingDirectory?: string;
-  unsubscribe?: () => void;
 };
 
 const toSessionObserverFixtureRef = ({
@@ -48,21 +47,8 @@ const toSessionObserverFixtureRef = ({
   workingDirectory,
 });
 
-export const createSessionObserversFixture = (
-  observers: SessionObserversFixture[] = [],
-): SessionObservers => {
-  return createSessionObservers(
-    observers.map((observer) => ({
-      session: toSessionObserverFixtureRef(observer),
-      unsubscribe: observer.unsubscribe ?? (() => {}),
-    })),
-  );
-};
-
-export const createSessionObserversRefFixture = (
-  observers: SessionObserversFixture[] = [],
-): { current: SessionObservers } => ({
-  current: createSessionObserversFixture(observers),
+export const createSessionObserversRefFixture = (): { current: SessionObservers } => ({
+  current: createSessionObservers(),
 });
 
 export const hasSessionObserverFixture = (

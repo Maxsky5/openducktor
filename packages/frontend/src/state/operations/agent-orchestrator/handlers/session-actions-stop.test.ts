@@ -137,19 +137,23 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const stopAuthoritativeSession = async () => {
       throw new Error("build stop failed");
     };
+    const sessionObserversRef = createSessionObserversRefFixture();
+    await sessionObserversRef.current.ensureObserver(
+      {
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+      async () => () => {
+        unsubscribeCalls += 1;
+      },
+    );
 
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef: createSessionObserversRefFixture([
-        {
-          externalSessionId: "session-1",
-          unsubscribe: () => {
-            unsubscribeCalls += 1;
-          },
-        },
-      ]),
+      sessionObserversRef,
       sessionTurnState: sessionTurnState.sessionTurnState,
       stopAuthoritativeSession,
     });
@@ -296,13 +300,21 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       });
     };
 
+    const sessionObserversRef = createSessionObserversRefFixture();
+    await sessionObserversRef.current.ensureObserver(
+      {
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+      async () => unsubscribe,
+    );
+
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef: createSessionObserversRefFixture([
-        { externalSessionId: "session-1", unsubscribe },
-      ]),
+      sessionObserversRef,
       updateSession,
       observeAgentSession: async () => true,
     });
@@ -414,14 +426,17 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     let unsubscribeCalls = 0;
 
-    const sessionObserversRef = createSessionObserversRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture();
+    await sessionObserversRef.current.ensureObserver(
       {
         externalSessionId: "session-1",
-        unsubscribe: () => {
-          unsubscribeCalls += 1;
-        },
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
       },
-    ]);
+      async () => () => {
+        unsubscribeCalls += 1;
+      },
+    );
 
     const sessionsRef = createSessionsRef([buildSession()]);
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
@@ -699,7 +714,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
           }),
         ],
       },
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",

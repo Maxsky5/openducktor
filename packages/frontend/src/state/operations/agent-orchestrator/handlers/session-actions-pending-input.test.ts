@@ -3,10 +3,7 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { UpdateSession } from "../events/session-event-types";
-import {
-  createAgentSessionRuntimeSnapshotFixture,
-  createSessionObserversRefFixture,
-} from "../test-utils";
+import { createAgentSessionRuntimeSnapshotFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
@@ -150,7 +147,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
     });
 
     try {

@@ -21,7 +21,6 @@ Files:
 
 - `packages/frontend/src/state/agent-sessions-store.ts`
 - `hooks/use-orchestrator-session-state.ts`
-- `support/local-session-cleanup.ts`
 
 Owns:
 
@@ -40,8 +39,8 @@ generic mutable-state bridge that hides which concept owns which value.
 `AgentSessionsStore` and optionally persists durable workflow records. Do not
 split this into a single-use mutation hook.
 Observer cleanup and runtime event handlers must read from `AgentSessionsStore`.
-Session removal updates the store collection once; `support/local-session-cleanup.ts`
-only clears the matching observers and turn state for the removed identities.
+Session removal updates the store collection once; the session observer owner
+clears matching observers and turn state for the removed identities.
 Repo session read-model refreshes should read the current collection through
 the session store snapshot reader, never through the mutable event-stream bridge.
 Session history loading, session preparation, and start/reuse policies should read
