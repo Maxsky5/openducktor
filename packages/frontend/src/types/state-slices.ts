@@ -160,15 +160,12 @@ export type AgentSessionReadModelStateContextValue = {
   refreshTaskSessions: (taskId: string) => Promise<void>;
 };
 
-export type AgentSessionHistoryLoadContextValue = {
-  loadSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
-};
-
 export type AgentOperationsContextValue = {
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;

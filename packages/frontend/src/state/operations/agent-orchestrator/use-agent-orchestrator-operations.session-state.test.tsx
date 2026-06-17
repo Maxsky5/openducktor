@@ -875,7 +875,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         ),
       );
       await harness.run(async () => {
-        await harness.getLatest().historyLoad.loadSessionHistory({
+        await harness.getLatest().loadAgentSessionHistory({
           externalSessionId: codexRecord.externalSessionId,
           runtimeKind: codexRecord.runtimeKind,
           workingDirectory: codexRecord.workingDirectory,

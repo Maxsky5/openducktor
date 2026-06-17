@@ -198,6 +198,7 @@ const sessionIdentity = (externalSessionId: string) => ({
 let agentOperations: AgentOperationsContextValue = {
   readSessionTodos: mock(async () => []),
   readSessionHistory: mock(async () => []),
+  loadAgentSessionHistory: mock(async () => undefined),
   startAgentSession: mock(async () => sessionIdentity("session-1")),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
@@ -559,6 +560,7 @@ beforeEach(async () => {
   agentOperations = {
     readSessionTodos: mock(async () => []),
     readSessionHistory: mock(async () => []),
+    loadAgentSessionHistory: mock(async () => undefined),
     startAgentSession: mock(async () => sessionIdentity("session-1")),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),

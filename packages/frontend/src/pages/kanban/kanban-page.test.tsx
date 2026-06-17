@@ -272,6 +272,7 @@ const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
 const createAgentOperationsValue = (): AgentOperationsContextValue => ({
   readSessionTodos: async () => [],
   readSessionHistory: async () => [],
+  loadAgentSessionHistory: async () => undefined,
   startAgentSession: startAgentSessionMock,
   sendAgentMessage: sendAgentMessageMock,
   stopAgentSession: async () => {},

@@ -10,7 +10,6 @@ import {
 } from "@/state/agent-sessions-store";
 import {
   AgentOperationsContext,
-  AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
 } from "@/state/app-state-contexts";
@@ -140,6 +139,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   const agentOperationsValue = (): AgentOperationsContextValue => ({
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
+    loadAgentSessionHistory: loadSessionHistoryRef.current,
     startAgentSession: async () => ({
       externalSessionId: "session-started",
       runtimeKind: "opencode",
@@ -160,11 +160,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
             refreshTaskSessions: async () => undefined,
           }}
         >
-          <AgentSessionHistoryLoadContext.Provider
-            value={{ loadSessionHistory: loadSessionHistoryRef.current }}
-          >
-            {children}
-          </AgentSessionHistoryLoadContext.Provider>
+          {children}
         </AgentSessionReadModelStateContext.Provider>
       </AgentSessionsContext.Provider>
     </AgentOperationsContext.Provider>

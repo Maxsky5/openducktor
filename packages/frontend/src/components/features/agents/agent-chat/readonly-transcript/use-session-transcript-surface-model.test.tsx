@@ -129,6 +129,7 @@ function agentOperationsValue(): AgentOperationsContextValue {
   return {
     readSessionHistory,
     readSessionTodos: async () => [],
+    loadAgentSessionHistory: async () => undefined,
     startAgentSession: async () => ({
       externalSessionId: "session-started",
       runtimeKind: "opencode",

@@ -41,13 +41,23 @@ const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAg
   ...overrides,
 });
 
+const createPublicOperations = (
+  overrides: Partial<Parameters<typeof createOrchestratorPublicOperations>[0]> = {},
+) =>
+  createOrchestratorPublicOperations({
+    agentEngine: createAgentEngine(),
+    sessionActions: createSessionActions(),
+    loadAgentSessionHistory: async () => undefined,
+    ...overrides,
+  });
+
 describe("agent-orchestrator-public-operations", () => {
   test("rethrows start errors without adding a toast", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
+    const operations = createPublicOperations({
       agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         startAgentSession: async () => {
@@ -76,7 +86,7 @@ describe("agent-orchestrator-public-operations", () => {
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
+    const operations = createPublicOperations({
       agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
@@ -102,7 +112,7 @@ describe("agent-orchestrator-public-operations", () => {
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
+    const operations = createPublicOperations({
       agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         stopAgentSession: async () => {
@@ -123,7 +133,7 @@ describe("agent-orchestrator-public-operations", () => {
 
   test("delegates session reads directly to the agent engine", async () => {
     const loadSessionTodos = mock(async () => []);
-    const operations = createOrchestratorPublicOperations({
+    const operations = createPublicOperations({
       agentEngine: createAgentEngine({
         loadSessionTodos,
       }),
@@ -143,7 +153,7 @@ describe("agent-orchestrator-public-operations", () => {
 
   test("forwards full session history inputs without stripping transient context", async () => {
     const readSessionHistory = mock(async () => []);
-    const operations = createOrchestratorPublicOperations({
+    const operations = createPublicOperations({
       agentEngine: createAgentEngine({
         loadSessionHistory: readSessionHistory,
       }),
@@ -173,5 +183,20 @@ describe("agent-orchestrator-public-operations", () => {
       },
       limit: 50,
     });
+  });
+
+  test("exposes store-backed session history loading without leaking loader result", async () => {
+    const loadAgentSessionHistory = mock(async () => ({
+      externalSessionId: SESSION_IDENTITY.externalSessionId,
+      status: "applied" as const,
+    }));
+    const operations = createPublicOperations({
+      loadAgentSessionHistory,
+    });
+
+    const result = await operations.loadAgentSessionHistory(SESSION_IDENTITY);
+
+    expect(loadAgentSessionHistory).toHaveBeenCalledWith(SESSION_IDENTITY);
+    expect(result).toBeUndefined();
   });
 });

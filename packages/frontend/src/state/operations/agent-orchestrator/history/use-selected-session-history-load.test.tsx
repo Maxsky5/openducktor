@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
-import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
+import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { createSessionMessagesState } from "../support/messages";
 import {
   resolveSelectedSessionHistoryLoadTarget,
@@ -45,13 +46,28 @@ const createProps = ({
 });
 
 const createHistoryLoadWrapper = (
-  loadSessionHistory: (session: AgentSessionIdentity) => Promise<void>,
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>,
 ) => {
+  const operations: AgentOperationsContextValue = {
+    readSessionTodos: async () => [],
+    readSessionHistory: async () => [],
+    loadAgentSessionHistory,
+    startAgentSession: async () => ({
+      externalSessionId: "session-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+    }),
+    sendAgentMessage: async () => undefined,
+    stopAgentSession: async () => undefined,
+    updateAgentSessionModel: () => undefined,
+    replyAgentApproval: async () => undefined,
+    answerAgentQuestion: async () => undefined,
+  };
   return function HistoryLoadWrapper({ children }: PropsWithChildren): ReactElement {
     return (
-      <AgentSessionHistoryLoadContext.Provider value={{ loadSessionHistory }}>
+      <AgentOperationsContext.Provider value={operations}>
         {children}
-      </AgentSessionHistoryLoadContext.Provider>
+      </AgentOperationsContext.Provider>
     );
   };
 };

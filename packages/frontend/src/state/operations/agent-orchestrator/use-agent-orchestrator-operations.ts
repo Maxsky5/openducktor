@@ -2,7 +2,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -11,7 +10,6 @@ import {
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
-  AgentSessionHistoryLoadContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
 import type { UpdateSession } from "./events/session-event-types";
@@ -52,7 +50,6 @@ type UseAgentOrchestratorOperationsResult = {
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
-  historyLoad: AgentSessionHistoryLoadContextValue;
 };
 
 export function useAgentOrchestratorOperations({
@@ -170,7 +167,7 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
-  const loadAgentSessionHistory = useMemo(
+  const loadAgentSessionHistoryIntoStore = useMemo(
     () =>
       createLoadAgentSessionHistory({
         workspaceRepoPath,
@@ -242,7 +239,7 @@ export function useAgentOrchestratorOperations({
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadAgentSessions,
-        loadAgentSessionHistory,
+        loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
         refreshTaskData,
         persistSessionRecord,
         stopAuthoritativeSession: hostPort.agentSessionStop,
@@ -254,7 +251,7 @@ export function useAgentOrchestratorOperations({
       ensureRuntime,
       hostPort,
       invalidateSessionStopQueries,
-      loadAgentSessionHistory,
+      loadAgentSessionHistoryIntoStore,
       loadAgentSessions,
       observeAgentSession,
       persistSessionRecord,
@@ -276,27 +273,22 @@ export function useAgentOrchestratorOperations({
       sessionReadModelLoadState: currentSessionReadModelLoadState,
       refreshTaskSessions: loadAgentSessions,
     };
-    const historyLoad = {
-      loadSessionHistory: async (session: AgentSessionIdentity) => {
-        await loadAgentSessionHistory(session);
-      },
-    };
     const operations = createOrchestratorPublicOperations({
       agentEngine,
       sessionActions,
+      loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
     });
 
     return {
       sessionStore,
       operations,
       readModelState,
-      historyLoad,
     };
   }, [
     currentSessionReadModelLoadState,
     sessionStore,
     agentEngine,
-    loadAgentSessionHistory,
+    loadAgentSessionHistoryIntoStore,
     loadAgentSessions,
     sessionActions,
   ]);
