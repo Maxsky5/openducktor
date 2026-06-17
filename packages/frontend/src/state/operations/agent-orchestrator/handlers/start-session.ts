@@ -1,7 +1,6 @@
 import type { AgentSessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import type {
   RuntimeDependencies,
@@ -61,14 +60,10 @@ const observeAgentSessionAndGuard = async ({
   runtime: RuntimeDependencies;
 }): Promise<void> => {
   const { ctx: startedCtx, runtimeInfo } = startResult;
-  const runtimeKind = requireConfiguredRuntimeKind(
-    runtimeInfo.runtimeKind,
-    `Runtime kind is required to observe ${startedCtx.role} session '${startedCtx.summary.externalSessionId}'.`,
-  );
   const observerTarget: AgentSessionRef = {
     externalSessionId: startedCtx.summary.externalSessionId,
     repoPath: startedCtx.repoPath,
-    runtimeKind,
+    runtimeKind: runtimeInfo.runtimeKind,
     workingDirectory: runtimeInfo.workingDirectory,
   };
 
@@ -173,10 +168,7 @@ export const createStartAgentSession = ({
 
       return {
         externalSessionId: startResult.ctx.summary.externalSessionId,
-        runtimeKind: requireConfiguredRuntimeKind(
-          startResult.runtimeInfo.runtimeKind,
-          `Runtime kind is required for started ${role} session '${startResult.ctx.summary.externalSessionId}'.`,
-        ),
+        runtimeKind: startResult.runtimeInfo.runtimeKind,
         workingDirectory: startResult.runtimeInfo.workingDirectory,
       };
     });

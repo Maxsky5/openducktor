@@ -155,14 +155,6 @@ const ensureRuntimeWithKind = async (
   };
 };
 
-const withRuntimeKind = async (
-  ensureRuntime: StartSessionDependencies["runtime"]["ensureRuntime"],
-  ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
-): Promise<RuntimeInfo> => {
-  const runtime = await ensureRuntime(...args);
-  return runtime;
-};
-
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
   "workspaceRepoPath" | "workspaceId"
@@ -215,8 +207,7 @@ export const toStartSessionDependencies = (
           workingDirectory: "/tmp/repo/worktree",
           source: "active_build_run",
         })),
-      ensureRuntime: (...args) =>
-        withRuntimeKind(deps.ensureRuntime ?? ensureRuntimeWithKind, ...args),
+      ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
     },
     task: {
       taskRef: deps.taskRef,

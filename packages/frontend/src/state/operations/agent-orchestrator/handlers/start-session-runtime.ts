@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { throwIfRepoStale } from "../support/core";
@@ -40,7 +40,7 @@ export const resolveFreshStartRuntimeContext = async ({
 }: {
   ctx: StartSessionContext;
   targetWorkingDirectory?: string | null;
-  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
+  requestedRuntimeKind: RuntimeKind;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "model">;
 }): Promise<FreshStartRuntimeContext> => {
@@ -52,7 +52,7 @@ export const resolveFreshStartRuntimeContext = async ({
   const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
     workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
+    runtimeKind: requestedRuntimeKind,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
