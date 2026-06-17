@@ -2,7 +2,9 @@ import type { AgentChatMessage, AgentChatMessageMeta } from "@/types/agent-orche
 import {
   findLastSessionMessageByRole,
   getSessionMessagesSlice,
+  removeSessionMessageById,
   type SessionMessageOwner,
+  upsertSessionMessage,
 } from "./messages";
 
 export type SubagentMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
@@ -121,7 +123,7 @@ const findLastSubagentMessage = (
   return isSubagentMessage(message) ? message : undefined;
 };
 
-export const resolveSubagentMessageUpdateTarget = (
+const resolveSubagentMessageUpdateTarget = (
   owner: SessionMessageOwner,
   incoming: Pick<SubagentMeta, "correlationKey" | "externalSessionId" | "agent" | "prompt">,
 ): { message: SubagentMessage | undefined; duplicateMessageId: string | null } => {
@@ -157,7 +159,7 @@ export const resolveSubagentMessageUpdateTarget = (
   return { message, duplicateMessageId };
 };
 
-export const mergeSubagentMeta = (
+const mergeSubagentMeta = (
   existingMeta: SubagentMeta | null | undefined,
   incomingMeta: SubagentMeta,
   options?: {
@@ -201,6 +203,41 @@ export const mergeSubagentMeta = (
     ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
     ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
   };
+};
+
+export const upsertSubagentMessage = ({
+  owner,
+  incomingMeta,
+  timestamp,
+  startedAtMsFallback,
+}: {
+  owner: SessionMessageOwner;
+  incomingMeta: SubagentMeta;
+  timestamp: string;
+  startedAtMsFallback?: number;
+}): SessionMessageOwner["messages"] => {
+  const { message: existingMessage, duplicateMessageId } = resolveSubagentMessageUpdateTarget(
+    owner,
+    incomingMeta,
+  );
+  const nextMeta = mergeSubagentMeta(
+    existingMessage?.meta ?? null,
+    incomingMeta,
+    typeof startedAtMsFallback === "number" ? { startedAtMsFallback } : undefined,
+  );
+  const ownerWithoutDuplicate =
+    duplicateMessageId === null
+      ? owner
+      : { ...owner, messages: removeSessionMessageById(owner, duplicateMessageId) };
+
+  return upsertSessionMessage(
+    ownerWithoutDuplicate,
+    createSubagentMessage({
+      id: existingMessage?.id ?? toSubagentMessageId(incomingMeta.correlationKey),
+      timestamp: existingMessage?.timestamp ?? timestamp,
+      meta: nextMeta,
+    }),
+  );
 };
 
 const chooseSubagentDescription = (

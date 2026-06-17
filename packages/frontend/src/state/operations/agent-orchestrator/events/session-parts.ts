@@ -2,17 +2,8 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { toReasoningMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
-import {
-  findSessionMessageById,
-  removeSessionMessageById,
-  upsertSessionMessage,
-} from "../support/messages";
-import {
-  createSubagentMessage,
-  mergeSubagentMeta,
-  resolveSubagentMessageUpdateTarget,
-  type SubagentMeta,
-} from "../support/subagent-messages";
+import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import { type SubagentMeta, upsertSubagentMessage } from "../support/subagent-messages";
 import type {
   SessionEvent,
   SessionPart,
@@ -219,31 +210,15 @@ const handleSubagentPart = (
       ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
-    const { message: existingMessage, duplicateMessageId } = resolveSubagentMessageUpdateTarget(
-      prepared,
-      incomingMeta,
-    );
-    const existingMeta = existingMessage?.meta ?? null;
-    const nextMeta = mergeSubagentMeta(existingMeta, incomingMeta, {
-      startedAtMsFallback: eventTimestamp,
-    });
-    const nextPrepared =
-      duplicateMessageId === null
-        ? prepared
-        : { ...prepared, messages: removeSessionMessageById(prepared, duplicateMessageId) };
-    const nextMessageId = existingMessage?.id ?? `subagent:${part.correlationKey}`;
-
     return {
-      ...nextPrepared,
+      ...prepared,
       status: "running",
-      messages: upsertSessionMessage(
-        nextPrepared,
-        createSubagentMessage({
-          id: nextMessageId,
-          timestamp: existingMessage?.timestamp ?? event.timestamp,
-          meta: nextMeta,
-        }),
-      ),
+      messages: upsertSubagentMessage({
+        owner: prepared,
+        incomingMeta,
+        timestamp: event.timestamp,
+        startedAtMsFallback: eventTimestamp,
+      }),
     };
   });
 };
