@@ -41,14 +41,17 @@ describe("session observers", () => {
       return subscriptionCount === 1 ? () => calls.push("first") : () => calls.push("second");
     };
 
-    await Promise.all([
-      observers.ensureObserver(session, createObserver),
-      observers.ensureObserver(session, createObserver),
-    ]);
+    await expect(
+      Promise.all([
+        observers.ensureObserver(session, createObserver),
+        observers.ensureObserver(session, createObserver),
+      ]),
+    ).resolves.toEqual([true, false]);
 
     expect(subscriptionCount).toBe(1);
     expect(calls).toEqual([]);
     expect(observers.has(session)).toBe(true);
+    await expect(observers.ensureObserver(session, createObserver)).resolves.toBe(false);
 
     observers.remove(session);
 
@@ -69,7 +72,7 @@ describe("session observers", () => {
     observers.remove(session);
     expect(observers.has(session)).toBe(false);
     resolveObserver(() => calls.push("pending"));
-    await registration;
+    await expect(registration).resolves.toBe(false);
 
     expect(calls).toEqual(["pending"]);
     expect(observers.has(session)).toBe(false);

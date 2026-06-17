@@ -8,7 +8,7 @@ import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openduck
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { readPersistedSessionRuntimeKind } from "./session-runtime-kind";
 
-export type ObserveAgentSession = (session: AgentSessionRef) => Promise<void>;
+export type ObserveAgentSession = (session: AgentSessionRef) => Promise<boolean>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"

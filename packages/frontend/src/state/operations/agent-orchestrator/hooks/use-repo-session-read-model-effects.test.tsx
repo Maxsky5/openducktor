@@ -38,6 +38,7 @@ const createHarnessState = () => {
   };
   const observeAgentSession = async (session: AgentSessionRef) => {
     observedSessions.push(session);
+    return true;
   };
   const cleanupLocalSessions = mock(() => undefined);
   const commitSessionReadModelLoadState = (state: AgentSessionReadModelLoadState) => {

@@ -70,11 +70,11 @@ export const useAgentSessionObservers = ({
   );
 
   const observeAgentSession = useCallback<ObserveAgentSession>(
-    async (target): Promise<void> => {
+    async (target): Promise<boolean> => {
       const findRuntimeDefinitionForKind = (runtimeKind: RuntimeKind) =>
         findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind);
 
-      await sessionObserversRef.current.ensureObserver(target, () =>
+      return sessionObserversRef.current.ensureObserver(target, () =>
         listenToAgentSessionEvents({
           adapter: agentEngine,
           sessionRef: target,

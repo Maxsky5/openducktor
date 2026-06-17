@@ -50,8 +50,14 @@ const createPrepareSend = (
       },
       sessionObserversRef,
       observeAgentSession: async (sessionRef) => {
-        observedRefs.push(sessionRef);
-        await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
+        const openedObserver = await sessionObserversRef.current.ensureObserver(
+          sessionRef,
+          async () => () => {},
+        );
+        if (openedObserver) {
+          observedRefs.push(sessionRef);
+        }
+        return openedObserver;
       },
       ensureRuntime: async (...args) => {
         ensureRuntimeCalls.push(args);
@@ -120,8 +126,12 @@ describe("prepare session send", () => {
       currentWorkspaceRepoPathRef,
       sessionObserversRef,
       observeAgentSession: async (sessionRef) => {
-        await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
+        const openedObserver = await sessionObserversRef.current.ensureObserver(
+          sessionRef,
+          async () => () => {},
+        );
         currentWorkspaceRepoPathRef.current = "/tmp/other";
+        return openedObserver;
       },
     });
 

@@ -94,8 +94,8 @@ export const createPrepareSessionSend = ({
     ]);
     assertNotStale();
 
-    if (!sessionObserversRef.current.has(sessionRef)) {
-      await observeAgentSession(sessionRef);
+    const openedObserver = await observeAgentSession(sessionRef);
+    if (openedObserver) {
       removeObserverIfStale({
         sessionRef,
         sessionObservers: sessionObserversRef.current,

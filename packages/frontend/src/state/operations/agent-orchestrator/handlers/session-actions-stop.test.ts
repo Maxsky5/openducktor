@@ -304,7 +304,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         { externalSessionId: "session-1", unsubscribe },
       ]),
       updateSession,
-      observeAgentSession: async () => undefined,
+      observeAgentSession: async () => true,
     });
 
     try {

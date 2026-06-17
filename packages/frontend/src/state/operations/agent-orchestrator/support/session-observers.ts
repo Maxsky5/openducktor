@@ -19,7 +19,7 @@ export type SessionObservers = {
   ensureObserver: (
     session: AgentSessionIdentityLike,
     createObserver: SessionObserverFactory,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   remove: (session: AgentSessionIdentityLike) => void;
   removeMany: (sessions: readonly AgentSessionIdentityLike[]) => void;
   clear: () => void;
@@ -73,11 +73,11 @@ export const createSessionObservers = (
     ensureObserver: (session, createObserver) => {
       const sessionKey = agentSessionIdentityKey(session);
       if (unsubscribeBySessionKey.has(sessionKey)) {
-        return Promise.resolve();
+        return Promise.resolve(false);
       }
       const pending = pendingBySessionKey.get(sessionKey);
       if (pending) {
-        return pending.promise;
+        return pending.promise.then(() => false);
       }
 
       const nextPending: PendingSessionObserver = {
@@ -85,19 +85,21 @@ export const createSessionObservers = (
         promise: Promise.resolve(),
       };
       pendingBySessionKey.set(sessionKey, nextPending);
-      nextPending.promise = (async () => {
+      const registration = (async (): Promise<boolean> => {
         const unsubscribe = await createObserver();
         if (nextPending.cancelled || unsubscribeBySessionKey.has(sessionKey)) {
           unsubscribe();
-          return;
+          return false;
         }
         unsubscribeBySessionKey.set(sessionKey, unsubscribe);
+        return true;
       })().finally(() => {
         if (pendingBySessionKey.get(sessionKey) === nextPending) {
           pendingBySessionKey.delete(sessionKey);
         }
       });
-      return nextPending.promise;
+      nextPending.promise = registration.then(() => undefined);
+      return registration;
     },
     remove: (session) => {
       const unsubscribe = take(session);
