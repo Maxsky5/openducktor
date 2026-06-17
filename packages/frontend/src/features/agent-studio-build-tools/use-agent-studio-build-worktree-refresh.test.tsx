@@ -148,7 +148,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     }
   });
 
-  test("does not refresh for historical tool completions that arrive with session history hydration", async () => {
+  test("does not refresh for historical tool completions that arrive with session history load", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         loadedSession: createAgentSessionFixture({
