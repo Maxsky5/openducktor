@@ -456,8 +456,8 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps the selected session model while the full session object is still loading", async () => {
-    const catalogLoad = createDeferred<AgentModelCatalog>();
+  test("keeps the selected session model while selected-session runtime data loads", async () => {
+    const loadCatalog = mock(async () => CATALOG);
     const harness = createHookHarness(
       createBaseProps({
         loadedSession: null,
@@ -475,7 +475,8 @@ describe("useAgentStudioChatComposer", () => {
             profileId: "build-agent",
           },
         }),
-        loadCatalog: async () => catalogLoad.promise,
+        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
+        loadCatalog,
       }),
     );
 
@@ -483,6 +484,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
+      expect(loadCatalog).toHaveBeenCalledTimes(0);
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(harness.getLatest().selectedModelSelection).toEqual({
         runtimeKind: "opencode",
@@ -490,14 +492,7 @@ describe("useAgentStudioChatComposer", () => {
         modelId: "claude-sonnet",
         profileId: "build-agent",
       });
-
-      await harness.run(async () => {
-        catalogLoad.resolve(CATALOG);
-        await catalogLoad.promise;
-      });
-      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
     } finally {
-      catalogLoad.resolve(CATALOG);
       await harness.unmount();
     }
   });

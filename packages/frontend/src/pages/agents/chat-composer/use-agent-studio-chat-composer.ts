@@ -133,7 +133,6 @@ export function useAgentStudioChatComposer({
   const isSessionModelCatalogLoading = sessionRuntimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
   const hasSessionTarget = selectedSessionIdentity !== null;
-  const hasLoadedSessionTarget = loadedSessionIdentity !== null;
   const roleDefaultSelection = useMemo(
     () =>
       resolveAvailableRoleDefaultModelSelection({
@@ -221,13 +220,14 @@ export function useAgentStudioChatComposer({
   ]);
 
   const composerCatalogQuery = useQuery(
-    selectedRepoRuntimeRef && !hasLoadedSessionTarget
+    selectedRepoRuntimeRef && !hasSessionTarget
       ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalogForRepo)
       : skippedComposerCatalogQueryOptions(selectedRepoRuntimeRef),
   );
-  const composerCatalog = composerCatalogQuery.data ?? null;
-  const isLoadingComposerCatalog =
-    composerCatalogQuery.isLoading || (hasLoadedSessionTarget && isSessionModelCatalogLoading);
+  const composerCatalog = hasSessionTarget ? null : (composerCatalogQuery.data ?? null);
+  const isLoadingComposerCatalog = hasSessionTarget
+    ? isSessionModelCatalogLoading
+    : composerCatalogQuery.isLoading;
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -285,9 +285,7 @@ export function useAgentStudioChatComposer({
     [loadFileSearchForRepo, promptInputRuntime, queryClient, supportsFileSearch],
   );
   const isSelectionCatalogLoading = hasSessionTarget
-    ? !sessionModelCatalog &&
-      !composerCatalog &&
-      (isSessionModelCatalogLoading || isLoadingComposerCatalog)
+    ? !sessionModelCatalog && isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
 
   const {
