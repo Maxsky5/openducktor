@@ -58,37 +58,25 @@ const claimSessionHistoryLoad = ({
     return null;
   }
 
-  updateSession(currentSession, (current) =>
+  const claimedSession = updateSession(currentSession, (current) =>
     canStartSessionHistoryLoad(current) ? { ...current, historyLoadState: "loading" } : current,
   );
 
-  const claimedSession = readSessionSnapshot(currentSession);
   return claimedSession?.historyLoadState === "loading" ? claimedSession : null;
 };
 
-const releaseSessionHistoryLoad = ({
-  session,
-  updateSession,
-}: {
-  session: AgentSessionState;
-  updateSession: UpdateSession;
-}): void => {
+const settleClaimedSessionHistoryLoad = (
+  session: AgentSessionState,
+  updateSession: UpdateSession,
+  historyLoadState: Extract<AgentSessionState["historyLoadState"], "not_requested" | "failed">,
+): void => {
   updateSession(session, (current) =>
     current.historyLoadState === "loading"
-      ? { ...current, historyLoadState: "not_requested" }
+      ? {
+          ...current,
+          historyLoadState,
+        }
       : current,
-  );
-};
-
-const failSessionHistoryLoad = ({
-  session,
-  updateSession,
-}: {
-  session: AgentSessionState;
-  updateSession: UpdateSession;
-}): void => {
-  updateSession(session, (current) =>
-    current.historyLoadState === "loading" ? { ...current, historyLoadState: "failed" } : current,
   );
 };
 
@@ -159,7 +147,7 @@ export const loadSessionHistoryIntoStore = async ({
   }
 
   const finishStaleHistoryLoad = (): SessionHistoryLoadResult => {
-    releaseSessionHistoryLoad({ session: claimedSession, updateSession });
+    settleClaimedSessionHistoryLoad(claimedSession, updateSession, "not_requested");
     return { externalSessionId, status: "stale" };
   };
 
@@ -186,7 +174,7 @@ export const loadSessionHistoryIntoStore = async ({
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
-    failSessionHistoryLoad({ session: claimedSession, updateSession });
+    settleClaimedSessionHistoryLoad(claimedSession, updateSession, "failed");
     return { externalSessionId: identity.externalSessionId, status: "failed", error };
   }
 };
