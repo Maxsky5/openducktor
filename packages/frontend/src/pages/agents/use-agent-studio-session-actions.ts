@@ -194,17 +194,18 @@ export function useAgentStudioSessionActions({
     startSession,
   });
 
-  const isSessionWorking = sessionState.isSessionWorking || isSending;
+  const isSessionWorking = sessionState.isSessionWorking;
+  const isSessionInteractionBusy = isSessionWorking || isSending;
   const busySendBlockedReason = sessionState.busySendBlockedReason;
 
   const canPrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): boolean => {
-      if (option.disabled || (selectedSessionIdentity !== null && isSessionWorking)) {
+      if (option.disabled || (selectedSessionIdentity !== null && isSessionInteractionBusy)) {
         return false;
       }
       return canStartRole(option.role);
     },
-    [canStartRole, isSessionWorking, selectedSessionIdentity],
+    [canStartRole, isSessionInteractionBusy, selectedSessionIdentity],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =

@@ -1329,7 +1329,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor((state) => state.isSending);
-    expect(harness.getLatest().isSessionWorking).toBe(true);
+    expect(harness.getLatest().isSessionWorking).toBe(false);
 
     await harness.update({
       ...createBaseArgs(),
@@ -1502,6 +1502,8 @@ describe("useAgentStudioSessionActions", () => {
       sendPromise = state.onSend(createComposerDraft("hello world"));
     });
     await harness.waitFor((state) => state.isSending);
+    expect(harness.getLatest().isSessionWorking).toBe(false);
+    expect(harness.getLatest().canStopSession).toBe(false);
 
     await harness.run((state) => {
       state.handleCreateSession({
