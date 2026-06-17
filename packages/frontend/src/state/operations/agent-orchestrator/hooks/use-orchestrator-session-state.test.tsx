@@ -106,14 +106,13 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
+    const session = createSessionFixture();
     const unsubscribeCalls: string[] = [];
 
     try {
       await harness.mount();
       await harness.run(async (hook) => {
-        hook.sessionStore.setSessionCollection(
-          createAgentSessionCollection([createSessionFixture()]),
-        );
+        hook.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
 
         const observers = hook.sessionObserversRef.current;
         await observers.ensureObserver(
@@ -149,9 +148,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
-      expect(
-        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
-      ).toEqual([]);
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
       expect(
         harness.getLatest().sessionObserversRef.current.has({
           externalSessionId: "first",
@@ -212,9 +209,6 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
         hook.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
       });
 
-      expect(
-        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
-      ).toEqual([session]);
       expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toEqual(session);
 
       await harness.run((hook) => {
@@ -224,9 +218,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
         });
       });
 
-      expect(
-        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
-      ).toEqual([]);
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
     } finally {
       await harness.unmount();
     }

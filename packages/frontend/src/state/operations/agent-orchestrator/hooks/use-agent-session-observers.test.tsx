@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createNoopEngine,
@@ -166,11 +166,7 @@ describe("useAgentSessionObservers", () => {
       state.sessionTurnState.timing.readTurnUserMessageStartedAtMs(removedSessionKey),
     ).toBeUndefined();
     expect(state.sessionTurnState.metadata.readModel(removedSessionKey)).toBeUndefined();
-    expect(
-      listAgentSessions(state.sessionStore.getSessionCollectionSnapshot()).some(
-        (session) => session.externalSessionId === "external-1",
-      ),
-    ).toBe(true);
+    expect(state.sessionStore.getSessionSnapshot(removedSession)).not.toBeNull();
     await harness.unmount();
   });
 });

@@ -4,7 +4,6 @@ export {
   useAgentSession,
   useAgentSessionReadModelState,
   useAgentSessionSummaries,
-  useAgentSessions,
   useChecksState,
   useSpecState,
   useTasksState,

@@ -27,10 +27,8 @@ type Listener = () => void;
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
-  getSessionsSnapshot: () => AgentSessionState[];
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
-  getSessionCollectionSnapshot: () => AgentSessionCollection;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: (
@@ -76,10 +74,8 @@ export const createAgentSessionsStore = (
         listeners.delete(listener);
       };
     },
-    getSessionsSnapshot: () => snapshots.sessions,
     getSessionSummariesSnapshot: () => snapshots.sessionSummaries,
     getActivitySnapshot: () => snapshots.activitySnapshot,
-    getSessionCollectionSnapshot: () => sessionCollection,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     setSessionCollection,
     updateSession: (identity, updater) => {

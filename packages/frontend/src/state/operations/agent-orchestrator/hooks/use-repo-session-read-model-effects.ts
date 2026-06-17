@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useEffect, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionCollection } from "@/state/agent-session-collection";
+import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import {
   type AgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
@@ -20,8 +20,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   isLoadingTasks: boolean;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  readSessionCollection: () => AgentSessionCollection;
-  setSessionCollection: (sessionCollection: AgentSessionCollection) => void;
+  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   cleanupLocalSessions: (sessions: readonly AgentSessionRef[]) => void;
@@ -40,7 +39,6 @@ export const useRepoSessionReadModelEffects = ({
   isLoadingTasks,
   currentWorkspaceRepoPathRef,
   repoEpochRef,
-  readSessionCollection,
   setSessionCollection,
   agentEngine,
   observeAgentSession,
@@ -85,7 +83,6 @@ export const useRepoSessionReadModelEffects = ({
           cleanupLocalSessions,
           queryClient,
           isStaleRepoOperation,
-          readSessionCollection,
         });
         if (!isStaleRepoOperation()) {
           commitSessionReadModelLoadState(readyAgentSessionReadModelLoadState(workspaceRepoPath));
@@ -118,7 +115,6 @@ export const useRepoSessionReadModelEffects = ({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionReadModelLoadState,
-    readSessionCollection,
     isLoadingTasks,
     taskSessionTargets,
     workspaceRepoPath,

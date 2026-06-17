@@ -7,10 +7,6 @@ import {
   createAgentSessionFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import {
-  type AgentSessionCollection,
-  emptyAgentSessionCollection,
-} from "@/state/agent-session-collection";
 import type {
   AgentActivitySessionsSnapshot,
   AgentSessionSummary,
@@ -69,8 +65,6 @@ const createActivityStore = (
     workspaceRepoPath: activityWorkspaceRepoPath,
     sessions: activitySessions,
   };
-  const emptySessionCollection = emptyAgentSessionCollection();
-  const emptySessions: AgentSessionState[] = [];
   const emptySummaries: AgentSessionSummary[] = [];
   const listeners = new Set<() => void>();
 
@@ -94,10 +88,8 @@ const createActivityStore = (
         listeners.delete(listener);
       };
     },
-    getSessionsSnapshot: (): AgentSessionState[] => emptySessions,
     getSessionSummariesSnapshot: (): AgentSessionSummary[] => emptySummaries,
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
-    getSessionCollectionSnapshot: (): AgentSessionCollection => emptySessionCollection,
     getSessionSnapshot: (): AgentSessionState | null => null,
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");

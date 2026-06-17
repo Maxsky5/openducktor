@@ -4,6 +4,7 @@ import type { AgentSessionRef } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
@@ -20,6 +21,11 @@ const record: AgentSessionRecord = {
   selectedModel: null,
 };
 
+const applySessionCollectionUpdater = (
+  current: AgentSessionCollection,
+  updater: AgentSessionCollectionUpdater,
+): AgentSessionCollection => (typeof updater === "function" ? updater(current) : updater);
+
 const createHarnessState = () => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
@@ -32,9 +38,8 @@ const createHarnessState = () => {
   const agentEngine = { listSessionRuntimeSnapshots };
   const currentWorkspaceRepoPathRef = { current: "/repo" };
   const repoEpochRef = { current: 0 };
-  const readSessionCollection = () => sessionCollection;
-  const setSessionCollection = (nextCollection: AgentSessionCollection) => {
-    sessionCollection = nextCollection;
+  const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
+    sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
   };
   const observeAgentSession = async (session: AgentSessionRef) => {
     observedSessions.push(session);
@@ -51,7 +56,6 @@ const createHarnessState = () => {
     isLoadingTasks: false,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
-    readSessionCollection,
     setSessionCollection,
     agentEngine,
     observeAgentSession,

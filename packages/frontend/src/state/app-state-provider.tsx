@@ -108,15 +108,6 @@ export const useAgentOperations = (): AgentOperationsContextValue => useAgentOpe
 export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
   useAgentSessionReadModelStateContext();
 
-export const useAgentSessions = (): AgentSessionState[] => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getSessionsSnapshot,
-    sessionStore.getSessionsSnapshot,
-  );
-};
-
 export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(

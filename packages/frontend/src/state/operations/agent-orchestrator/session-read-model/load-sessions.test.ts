@@ -5,6 +5,7 @@ import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
   createAgentSessionCollection,
   emptyAgentSessionCollection,
   listAgentSessions,
@@ -50,6 +51,11 @@ const taskFixture: TaskCard = {
   createdAt: "2026-06-12T08:00:00.000Z",
 };
 
+const applySessionCollectionUpdater = (
+  current: AgentSessionCollection,
+  updater: AgentSessionCollectionUpdater,
+): AgentSessionCollection => (typeof updater === "function" ? updater(current) : updater);
+
 const createLoaderHarness = ({
   initialSessionCollection = emptyAgentSessionCollection(),
   listSessionRuntimeSnapshots,
@@ -81,9 +87,8 @@ const createLoaderHarness = ({
     },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },
-    readSessionCollection: () => sessionCollection,
-    setSessionCollection: (nextCollection) => {
-      sessionCollection = nextCollection;
+    setSessionCollection: (updater) => {
+      sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
     },
     observeAgentSession: async (session) => {
       listenedSessions.push(session);
@@ -132,8 +137,8 @@ describe("createLoadAgentSessions", () => {
           return [];
         },
       },
-      setSessionCollection: (nextCollection) => {
-        sessionCollection = nextCollection;
+      setSessionCollection: (updater) => {
+        sessionCollection = applySessionCollectionUpdater(sessionCollection, updater);
       },
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
@@ -141,7 +146,6 @@ describe("createLoadAgentSessions", () => {
       cleanupLocalSessions: () => undefined,
       queryClient,
       isStaleRepoOperation: () => false,
-      readSessionCollection: () => sessionCollection,
     });
 
     expect(runtimeSnapshotReads).toBe(1);
