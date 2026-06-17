@@ -56,20 +56,35 @@ type RuntimeSnapshot = Parameters<typeof shouldObserveAgentSessionRuntimeSnapsho
 const applyAvailableSnapshotToSession = (
   session: AgentSessionState,
   snapshot: RuntimeSnapshot,
-): AgentSessionState => applyRuntimeSnapshotToSession(session, snapshot);
+): AgentSessionState => applyRuntimeSnapshotToSession(session, snapshot, "settle_runtime_state");
 
-const settlePersistedMissingSnapshot = (session: AgentSessionState): AgentSessionState =>
-  applyRuntimeSnapshotToSession(session, toMissingAgentSessionRuntimeSnapshot(sessionRefFixture));
+const preserveTrustedMissingSnapshot = (session: AgentSessionState): AgentSessionState =>
+  applyRuntimeSnapshotToSession(
+    session,
+    toMissingAgentSessionRuntimeSnapshot(sessionRefFixture),
+    "preserve_local_runtime_state",
+  );
+
+const settleUntrustedMissingSnapshot = (session: AgentSessionState): AgentSessionState =>
+  applyRuntimeSnapshotToSession(
+    session,
+    toMissingAgentSessionRuntimeSnapshot(sessionRefFixture),
+    "settle_runtime_state",
+  );
 
 describe("session-runtime-snapshot", () => {
-  test("leaves mounted session state unchanged when runtime snapshot is missing", () => {
+  test("preserves trusted mounted session state when runtime snapshot is missing", () => {
     const snapshot = toAgentSessionRuntimeSnapshot({
       ref: sessionRefFixture,
       snapshot: null,
     });
 
     const session = createSessionState();
-    const applied = applyRuntimeSnapshotToSession(session, snapshot);
+    const applied = applyRuntimeSnapshotToSession(
+      session,
+      snapshot,
+      "preserve_local_runtime_state",
+    );
 
     expect(snapshot.classification).toBe("missing");
     expect(applied.status).toBe(session.status);
@@ -78,12 +93,36 @@ describe("session-runtime-snapshot", () => {
     expect(applied.messages).toBe(session.messages);
   });
 
-  test("keeps pending outbound sends when runtime snapshot is missing", () => {
+  test("keeps trusted pending outbound sends when runtime snapshot is missing", () => {
     const session = createSessionState({ pendingUserMessageStartedAt: 123 });
-    const applied = settlePersistedMissingSnapshot(session);
+    const applied = preserveTrustedMissingSnapshot(session);
 
     expect(applied.status).toBe("running");
     expect(applied.pendingUserMessageStartedAt).toBe(123);
+  });
+
+  test("settles untrusted runtime-owned state when runtime snapshot is missing", () => {
+    const session = createSessionState({
+      historyLoadState: "loaded",
+      messages: [
+        {
+          id: "message-1",
+          role: "assistant",
+          content: "already visible",
+          timestamp: "2026-03-01T09:00:01.000Z",
+        },
+      ],
+      pendingUserMessageStartedAt: 123,
+    });
+
+    const applied = settleUntrustedMissingSnapshot(session);
+
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingApprovals).toEqual([]);
+    expect(applied.pendingQuestions).toEqual([]);
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.historyLoadState).toBe("loaded");
+    expect(applied.messages).toBe(session.messages);
   });
 
   test("trusts idle runtime snapshot and settles locally pending outbound sends", () => {
@@ -255,10 +294,10 @@ describe("session-runtime-snapshot", () => {
     expect(applied.pendingApprovals).toEqual([liveApproval]);
   });
 
-  test("preserves mounted running state when no runtime snapshot exists", () => {
+  test("preserves trusted mounted running state when no runtime snapshot exists", () => {
     const snapshot = toMissingAgentSessionRuntimeSnapshot(sessionRefFixture);
 
-    const applied = settlePersistedMissingSnapshot(
+    const applied = preserveTrustedMissingSnapshot(
       createSessionState({ pendingUserMessageStartedAt: 123 }),
     );
 
@@ -270,7 +309,7 @@ describe("session-runtime-snapshot", () => {
   });
 
   test("settles fresh records without mounted live state", () => {
-    const applied = settlePersistedMissingSnapshot(
+    const applied = settleUntrustedMissingSnapshot(
       createSessionState({
         status: "stopped",
         pendingApprovals: [],
@@ -284,16 +323,16 @@ describe("session-runtime-snapshot", () => {
   });
 
   test("preserves terminal status without runtime snapshot", () => {
-    expect(settlePersistedMissingSnapshot(createSessionState({ status: "stopped" })).status).toBe(
+    expect(settleUntrustedMissingSnapshot(createSessionState({ status: "stopped" })).status).toBe(
       "stopped",
     );
-    expect(settlePersistedMissingSnapshot(createSessionState({ status: "error" })).status).toBe(
+    expect(settleUntrustedMissingSnapshot(createSessionState({ status: "error" })).status).toBe(
       "error",
     );
   });
 
   test("preserves session identity when runtime snapshot is missing", () => {
-    const applied = settlePersistedMissingSnapshot(
+    const applied = preserveTrustedMissingSnapshot(
       createSessionState({
         runtimeKind: "codex",
         workingDirectory: "/tmp/repo/codex-worktree",
@@ -408,7 +447,7 @@ describe("session-runtime-snapshot", () => {
     expect(shouldObserveAgentSessionRuntimeSnapshot(questionRuntimeSnapshot)).toBe(true);
   });
 
-  test("preserves runtime-owned state when runtime snapshot is missing", () => {
+  test("preserves trusted runtime-owned state when runtime snapshot is missing", () => {
     const session = createSessionState({
       status: "running",
       pendingApprovals: [],
@@ -417,7 +456,7 @@ describe("session-runtime-snapshot", () => {
     });
     const snapshot = toMissingAgentSessionRuntimeSnapshot(sessionRefFixture);
 
-    const applied = settlePersistedMissingSnapshot(session);
+    const applied = preserveTrustedMissingSnapshot(session);
 
     expect(applied.status).toBe("running");
     expect(applied.pendingUserMessageStartedAt).toBe(123);
@@ -432,7 +471,7 @@ describe("session-runtime-snapshot", () => {
     });
     const snapshot = toMissingAgentSessionRuntimeSnapshot(sessionRefFixture);
 
-    const applied = settlePersistedMissingSnapshot(session);
+    const applied = settleUntrustedMissingSnapshot(session);
 
     expect(applied.status).toBe("idle");
     expect(applied.pendingApprovals).toEqual([]);

@@ -41,6 +41,25 @@ const nextPendingQuestions = (
     ? current.pendingQuestions
     : snapshot.pendingQuestions;
 
+type MissingRuntimeSnapshotPolicy = "preserve_local_runtime_state" | "settle_runtime_state";
+
+const isTerminalLocalSessionStatus = (status: AgentSessionState["status"]): boolean =>
+  status === "stopped" || status === "error";
+
+const settleMissingRuntimeSnapshot = (current: AgentSessionState): AgentSessionState => {
+  const status =
+    current.status === "starting" || isTerminalLocalSessionStatus(current.status)
+      ? current.status
+      : "idle";
+  return {
+    ...current,
+    status,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    pendingUserMessageStartedAt: undefined,
+  };
+};
+
 export const shouldObserveAgentSessionRuntimeSnapshot = (
   snapshot: CoreAgentSessionRuntimeSnapshot,
 ): boolean => {
@@ -67,7 +86,13 @@ const applyAvailableRuntimeSnapshotToSession = (
 export const applyRuntimeSnapshotToSession = (
   current: AgentSessionState,
   snapshot: CoreAgentSessionRuntimeSnapshot,
-): AgentSessionState =>
-  snapshot.availability === "runtime"
-    ? applyAvailableRuntimeSnapshotToSession(current, snapshot)
-    : current;
+  missingSnapshotPolicy: MissingRuntimeSnapshotPolicy,
+): AgentSessionState => {
+  if (snapshot.availability === "runtime") {
+    return applyAvailableRuntimeSnapshotToSession(current, snapshot);
+  }
+
+  return missingSnapshotPolicy === "preserve_local_runtime_state"
+    ? current
+    : settleMissingRuntimeSnapshot(current);
+};

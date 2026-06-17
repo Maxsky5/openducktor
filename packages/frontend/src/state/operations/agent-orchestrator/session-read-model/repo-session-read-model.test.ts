@@ -14,12 +14,23 @@ import { sessionMessagesToArray } from "@/test-utils/session-message-test-helper
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import {
-  buildRepoSessionReadModel,
+  buildRepoSessionReadModel as buildRepoSessionReadModelImpl,
   readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
-type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
+type BuildRepoSessionReadModelInput = Parameters<typeof buildRepoSessionReadModelImpl>[0];
+type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModelImpl>;
+
+const buildRepoSessionReadModel = ({
+  isSessionObserved = () => false,
+  ...input
+}: Omit<BuildRepoSessionReadModelInput, "isSessionObserved"> &
+  Partial<Pick<BuildRepoSessionReadModelInput, "isSessionObserved">>): RepoSessionReadModel =>
+  buildRepoSessionReadModelImpl({
+    ...input,
+    isSessionObserved,
+  });
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
   listAgentSessions(readModel.sessionCollection).find(
@@ -338,7 +349,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("preserves a mounted active session when runtime snapshot is missing", async () => {
+  test("preserves an observed mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
@@ -368,13 +379,63 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: busyRead.sessionCollection,
       runtimeSnapshots: runtimeSnapshots,
+      isSessionObserved: () => true,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps mounted transcript and live turn state when runtime snapshot is missing", async () => {
+  test("settles unobserved mounted active state when runtime snapshot is missing", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "build",
+        status: "running",
+        startedAt: record.startedAt,
+        workingDirectory: record.workingDirectory,
+        historyLoadState: "loaded",
+      }),
+      pendingUserMessageStartedAt: 123,
+      messages: createSessionMessagesState(record.externalSessionId, [
+        {
+          id: "existing-message",
+          role: "assistant",
+          content: "Already visible",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
+      repoPath: "/repo",
+      tasks,
+      listSessionRuntimeSnapshots: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
+      runtimeSnapshots,
+    });
+
+    const session = getReadModelSession(readModel, record.externalSessionId);
+    if (!session) {
+      throw new Error(`Expected ${record.externalSessionId} to be present.`);
+    }
+    expect(session.status).toBe("idle");
+    expect(session.pendingUserMessageStartedAt).toBeUndefined();
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      "Already visible",
+    ]);
+    expect(readModel.liveSessionRefs).toEqual([]);
+  });
+
+  test("keeps observed mounted transcript and live turn state when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -409,6 +470,7 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
+      isSessionObserved: () => true,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -481,7 +543,7 @@ describe("repo session read model", () => {
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("preserves mounted transcript and status for an equivalent normalized working directory", async () => {
+  test("preserves mounted transcript and settles status for an equivalent normalized working directory", async () => {
     const record = createRecord({ workingDirectory: "/repo/worktree" });
     const tasks = [createTask([record])];
     const currentSession = {
@@ -521,7 +583,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("running");
+    expect(session.status).toBe("idle");
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Mounted transcript",

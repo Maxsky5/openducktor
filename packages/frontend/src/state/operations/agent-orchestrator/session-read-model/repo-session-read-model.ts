@@ -37,6 +37,8 @@ export type RepoSessionReadModel = {
   removedSessionRefs: AgentSessionRef[];
 };
 
+type IsSessionObserved = (session: AgentSessionState) => boolean;
+
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): PersistedTaskSessionRecord[] => {
   const records: PersistedTaskSessionRecord[] = [];
   for (const task of tasks) {
@@ -73,6 +75,18 @@ const toPersistedSessionView = ({
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
+
+const isTerminalLocalSessionStatus = (status: AgentSessionState["status"]): boolean =>
+  status === "stopped" || status === "error";
+
+const shouldTrustLocalRuntimeStateWithoutSnapshot = (
+  current: AgentSessionState | undefined,
+  isSessionObserved: IsSessionObserved,
+): boolean =>
+  current !== undefined &&
+  (current.status === "starting" ||
+    isTerminalLocalSessionStatus(current.status) ||
+    isSessionObserved(current));
 
 export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
@@ -119,11 +133,13 @@ export const buildRepoSessionReadModel = ({
   tasks,
   currentSessionCollection,
   runtimeSnapshots,
+  isSessionObserved,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionCollection?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
+  isSessionObserved: IsSessionObserved;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const loadedTaskIds = new Set(tasks.map((task) => task.id));
@@ -159,7 +175,17 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const session = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
+    const missingSnapshotPolicy = shouldTrustLocalRuntimeStateWithoutSnapshot(
+      current,
+      isSessionObserved,
+    )
+      ? "preserve_local_runtime_state"
+      : "settle_runtime_state";
+    const session = applyRuntimeSnapshotToSession(
+      persistedSessionView,
+      snapshot,
+      missingSnapshotPolicy,
+    );
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (shouldObserveAgentSessionRuntimeSnapshot(snapshot)) {

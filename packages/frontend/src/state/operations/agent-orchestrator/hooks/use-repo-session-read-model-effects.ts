@@ -4,6 +4,7 @@ import type { MutableRefObject } from "react";
 import { useEffect, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
@@ -23,6 +24,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
+  isSessionObserved: (session: AgentSessionState) => boolean;
   cleanupLocalSessions: (sessions: readonly AgentSessionRef[]) => void;
   commitSessionReadModelLoadState: (state: AgentSessionReadModelLoadState) => void;
   queryClient: QueryClient;
@@ -42,6 +44,7 @@ export const useRepoSessionReadModelEffects = ({
   commitSessionCollection,
   agentEngine,
   observeAgentSession,
+  isSessionObserved,
   cleanupLocalSessions,
   commitSessionReadModelLoadState,
   queryClient,
@@ -80,6 +83,7 @@ export const useRepoSessionReadModelEffects = ({
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
+          isSessionObserved,
           cleanupLocalSessions,
           queryClient,
           isStaleRepoOperation,
@@ -110,6 +114,7 @@ export const useRepoSessionReadModelEffects = ({
     agentEngine,
     queryClient,
     observeAgentSession,
+    isSessionObserved,
     cleanupLocalSessions,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,

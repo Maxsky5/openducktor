@@ -56,6 +56,7 @@ const createLoaderHarness = ({
   listSessionRuntimeSnapshots,
   tasks = [taskFixture],
   sessionRecordsByTaskId = { [taskFixture.id]: [record] },
+  isSessionObserved = () => false,
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: Parameters<
@@ -63,6 +64,7 @@ const createLoaderHarness = ({
   >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
+  isSessionObserved?: Parameters<typeof createLoadAgentSessions>[0]["isSessionObserved"];
 }) => {
   let sessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
@@ -91,6 +93,7 @@ const createLoaderHarness = ({
       listenedSessions.push(session);
       return true;
     },
+    isSessionObserved,
     cleanupLocalSessions: (sessions) => {
       cleanedSessions.push(...sessions);
     },
@@ -142,6 +145,7 @@ describe("createLoadAgentSessions", () => {
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
+      isSessionObserved: () => false,
       cleanupLocalSessions: () => undefined,
       queryClient,
       isStaleRepoOperation: () => false,
@@ -254,7 +258,7 @@ describe("createLoadAgentSessions", () => {
     expect(runtimeSnapshotReads).toBe(0);
   });
 
-  test("keeps mounted transcript and live state when runtime snapshot is missing during repo reloads", async () => {
+  test("keeps observed mounted transcript and live state when runtime snapshot is missing during repo reloads", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -279,6 +283,7 @@ describe("createLoadAgentSessions", () => {
     const harness = createLoaderHarness({
       initialSessionCollection: createAgentSessionCollection([mountedSession]),
       listSessionRuntimeSnapshots: async () => [],
+      isSessionObserved: () => true,
     });
 
     await harness.loadAgentSessions("task-1");

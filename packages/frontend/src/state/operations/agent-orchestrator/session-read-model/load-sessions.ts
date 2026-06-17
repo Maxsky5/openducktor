@@ -3,6 +3,7 @@ import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
@@ -14,6 +15,7 @@ import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 type CleanupLocalSessions = (sessions: readonly AgentSessionRef[]) => void;
+type IsSessionObserved = (session: AgentSessionState) => boolean;
 
 type CreateLoadAgentSessionsArgs = {
   workspaceRepoPath: string | null;
@@ -22,6 +24,7 @@ type CreateLoadAgentSessionsArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
+  isSessionObserved: IsSessionObserved;
   cleanupLocalSessions: CleanupLocalSessions;
   queryClient: QueryClient;
 };
@@ -32,6 +35,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter,
   commitSessionCollection,
   observeAgentSession,
+  isSessionObserved,
   cleanupLocalSessions,
   queryClient,
   isStaleRepoOperation,
@@ -42,6 +46,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter: SessionLoaderAdapter;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
+  isSessionObserved: IsSessionObserved;
   cleanupLocalSessions: CleanupLocalSessions;
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
@@ -76,6 +81,7 @@ export const loadRepoAgentSessionsForTasks = async ({
       tasks: taskSessionRecords,
       currentSessionCollection,
       runtimeSnapshots,
+      isSessionObserved,
     });
     return {
       collection: readModel.sessionCollection,
@@ -104,6 +110,7 @@ export const createLoadAgentSessions = ({
   currentWorkspaceRepoPathRef,
   commitSessionCollection,
   observeAgentSession,
+  isSessionObserved,
   cleanupLocalSessions,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
@@ -129,6 +136,7 @@ export const createLoadAgentSessions = ({
       adapter,
       commitSessionCollection,
       observeAgentSession,
+      isSessionObserved,
       cleanupLocalSessions,
       queryClient,
       isStaleRepoOperation,

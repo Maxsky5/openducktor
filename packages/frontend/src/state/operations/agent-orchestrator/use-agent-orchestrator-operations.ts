@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -143,6 +144,10 @@ export function useAgentOrchestratorOperations({
     queryClient,
     refreshTaskData,
   });
+  const isSessionObserved = useCallback(
+    (session: AgentSessionState) => sessionObserversRef.current.has(session),
+    [sessionObserversRef],
+  );
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
@@ -152,6 +157,7 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef,
         commitSessionCollection: sessionStore.commitSessionCollection,
         observeAgentSession,
+        isSessionObserved,
         cleanupLocalSessions,
         queryClient,
       }),
@@ -160,6 +166,7 @@ export function useAgentOrchestratorOperations({
       currentWorkspaceRepoPathRef,
       observeAgentSession,
       cleanupLocalSessions,
+      isSessionObserved,
       queryClient,
       repoEpochRef,
       sessionStore,
@@ -200,6 +207,7 @@ export function useAgentOrchestratorOperations({
     commitSessionCollection: sessionStore.commitSessionCollection,
     agentEngine,
     observeAgentSession,
+    isSessionObserved,
     cleanupLocalSessions,
     commitSessionReadModelLoadState: setSessionReadModelLoadState,
     queryClient,
