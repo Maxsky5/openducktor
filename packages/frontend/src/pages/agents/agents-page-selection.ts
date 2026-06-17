@@ -237,8 +237,7 @@ export const findAgentStudioSessionSummaryByKey = (
     return null;
   }
 
-  const matches = sessions.filter((entry) => agentSessionIdentityKey(entry) === sessionKey);
-  return matches.length === 1 ? (matches[0] ?? null) : null;
+  return sessions.find((entry) => agentSessionIdentityKey(entry) === sessionKey) ?? null;
 };
 
 export const groupSessionsByTaskId = (

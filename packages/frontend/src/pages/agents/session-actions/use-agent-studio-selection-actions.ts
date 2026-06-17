@@ -1,10 +1,11 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
+import { findAgentStudioSessionSummaryByKey } from "../agents-page-selection";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   buildAgentStudioSelectionQueryUpdate,
@@ -65,7 +66,7 @@ export function useAgentStudioSelectionActions({
 } {
   const findSessionByValue = useCallback(
     (sessionValue: string): AgentSessionSummary | null =>
-      sessionsForTask.find((entry) => agentSessionIdentityKey(entry) === sessionValue) ?? null,
+      findAgentStudioSessionSummaryByKey(sessionsForTask, sessionValue),
     [sessionsForTask],
   );
 
