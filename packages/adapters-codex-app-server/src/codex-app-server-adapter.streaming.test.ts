@@ -712,7 +712,11 @@ describe("CodexAppServerAdapter streaming", () => {
           model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      type: "user_message",
+      externalSessionId: "thread/start-runtime-ensure",
+      message: "Hello Codex",
+    });
 
     await expect(
       adapter.readSessionRuntimeSnapshot({

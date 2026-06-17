@@ -171,7 +171,11 @@ describe("CodexAppServerAdapter approvals", () => {
           model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      type: "user_message",
+      externalSessionId: "thread/start-runtime-ensure",
+      message: "Read the task",
+    });
 
     expect(respondServerRequest).not.toHaveBeenCalled();
     expect(events).toContainEqual(

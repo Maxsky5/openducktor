@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentUserMessage,
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
@@ -144,6 +145,19 @@ const consumeSyntheticUserMessage = (
 const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
+let lastAcceptedUserMessageTimestamp = 0;
+let acceptedUserMessageCounter = 0;
+
+const createCodexAcceptedUserMessageId = (timestamp = Date.now()): string => {
+  if (timestamp !== lastAcceptedUserMessageTimestamp) {
+    lastAcceptedUserMessageTimestamp = timestamp;
+    acceptedUserMessageCounter = 0;
+  }
+
+  acceptedUserMessageCounter += 1;
+  return `codex-user-${timestamp}-${acceptedUserMessageCounter}`;
+};
+
 const emitFinalAgentMessage = (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -172,32 +186,42 @@ const emitFinalAgentMessage = (
   }
 };
 
+export const createCodexAcceptedUserMessage = ({
+  session,
+  parts,
+  model,
+}: {
+  session: CodexSessionState;
+  parts: AgentUserMessagePart[];
+  model: AgentModelSelection | undefined;
+}): AcceptedAgentUserMessage => ({
+  type: "user_message",
+  externalSessionId: session.threadId,
+  timestamp: new Date().toISOString(),
+  messageId: createCodexAcceptedUserMessageId(),
+  message: serializeAgentUserMessagePartsToText(parts),
+  parts: toDisplayParts(parts),
+  state: "read",
+  ...(model ? { model } : {}),
+});
+
 export const emitCodexUserMessage = (
   context: CodexStreamingContext,
-  session: CodexSessionState,
-  parts: AgentUserMessagePart[],
-  model: AgentModelSelection | undefined,
-): void => {
-  const message = serializeAgentUserMessagePartsToText(parts);
+  event: AcceptedAgentUserMessage,
+  sourceParts: AgentUserMessagePart[],
+): AcceptedAgentUserMessage => {
   if (context.subscribeEvents) {
-    const codexEchoText = codexUserInputListToText(toCodexUserInputList(parts));
-    const pendingTexts = context.syntheticUserMessageTextsByThreadId.get(session.threadId) ?? [];
+    const codexEchoText = codexUserInputListToText(toCodexUserInputList(sourceParts));
+    const pendingTexts =
+      context.syntheticUserMessageTextsByThreadId.get(event.externalSessionId) ?? [];
     pendingTexts.push(codexEchoText);
     if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
       pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
     }
-    context.syntheticUserMessageTextsByThreadId.set(session.threadId, pendingTexts);
+    context.syntheticUserMessageTextsByThreadId.set(event.externalSessionId, pendingTexts);
   }
-  emitCodexSessionEvent(context, session.threadId, {
-    type: "user_message",
-    externalSessionId: session.threadId,
-    timestamp: new Date().toISOString(),
-    messageId: `codex-user-${Date.now()}`,
-    message,
-    parts: toDisplayParts(parts),
-    state: "read",
-    ...(model ? { model } : {}),
-  });
+  emitCodexSessionEvent(context, event.externalSessionId, event);
+  return event;
 };
 
 const emitStartedItem = (

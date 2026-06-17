@@ -1,5 +1,6 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
 import type {
+  AcceptedAgentUserMessage,
   AgentCatalogPort,
   AgentEvent,
   AgentModelCatalog,
@@ -566,7 +567,7 @@ export class OpencodeSdkAdapter
     return /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
   }
 
-  async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
+  async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -586,10 +587,18 @@ export class OpencodeSdkAdapter
         request: input,
         tools,
       });
+      const timestamp = this.now();
+      const event: AcceptedAgentUserMessage = {
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp,
+        ...admittedUserMessage,
+      };
       emitAdmittedUserMessage(this.createRuntimeEventView(session), {
         ...admittedUserMessage,
-        timestamp: this.now(),
+        timestamp,
       });
+      return event;
     } catch (error) {
       markStreamTurnIdle(session);
       this.emit(input.externalSessionId, {

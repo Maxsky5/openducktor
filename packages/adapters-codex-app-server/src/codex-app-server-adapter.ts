@@ -1,5 +1,6 @@
 import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
 import type {
+  AcceptedAgentUserMessage,
   AgentCatalogPort,
   AgentEvent,
   AgentFileSearchResult,
@@ -39,6 +40,7 @@ import {
   CODEX_USER_INPUT_REQUEST_METHOD,
   unsupported,
 } from "./codex-app-server-shared";
+import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
@@ -216,18 +218,25 @@ export class CodexAppServerAdapter
     return summary;
   }
 
-  async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
+  async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
-    if (session) {
-      applyRuntimeContextToSession(session, input);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
-    await startCodexTurnForSession(
+    applyRuntimeContextToSession(session, input);
+    const acceptedUserMessage = createCodexAcceptedUserMessage({
+      session,
+      parts: input.parts,
+      model: input.model ?? session.model ?? undefined,
+    });
+    return startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
+      acceptedUserMessage,
       input.model,
     );
   }
@@ -535,8 +544,8 @@ export class CodexAppServerAdapter
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
       handlePendingServerRequests: (session, handledRequestKeys) =>
         this.runtimeEvents.handlePendingServerRequests(session, handledRequestKeys),
-      emitUserMessage: (session, parts, model) =>
-        this.runtimeEvents.emitUserMessage(session, parts, model),
+      emitUserMessage: (event, sourceParts) =>
+        this.runtimeEvents.emitUserMessage(event, sourceParts),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
     };

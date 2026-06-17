@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentUserMessage,
   AgentModelSelection,
   AgentSessionTodoItem,
   AgentUserMessagePart,
@@ -179,11 +180,10 @@ export class CodexRuntimeSessionEvents {
   }
 
   emitUserMessage(
-    session: CodexSessionState,
-    parts: AgentUserMessagePart[],
-    model: AgentModelSelection | undefined,
-  ): void {
-    emitCodexUserMessage(this.streamingContext(), session, parts, model);
+    event: AcceptedAgentUserMessage,
+    sourceParts: AgentUserMessagePart[],
+  ): AcceptedAgentUserMessage {
+    return emitCodexUserMessage(this.streamingContext(), event, sourceParts);
   }
 
   async drainBufferedStreamEvents(externalSessionId: string): Promise<void> {

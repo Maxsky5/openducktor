@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
+import type {
+  AcceptedAgentUserMessage,
+  AgentEvent,
+  AgentModelSelection,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { extractTurnId, isTerminalTurnStatus } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
 import {
@@ -30,10 +35,9 @@ export type CodexTurnLifecycleContext = {
     handledRequestKeys: Set<string>,
   ): Promise<boolean>;
   emitUserMessage(
-    session: CodexSessionState,
-    parts: AgentUserMessagePart[],
-    model: AgentModelSelection | undefined,
-  ): void;
+    event: AcceptedAgentUserMessage,
+    sourceParts: AgentUserMessagePart[],
+  ): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
 };
 
@@ -59,13 +63,13 @@ const flushQueuedUserMessages = async (
 
 const emitAcceptedUserMessage = (
   context: CodexTurnLifecycleContext,
-  activeTurn: ActiveCodexTurn,
+  acceptedUserMessage: AcceptedAgentUserMessage,
   parts: AgentUserMessagePart[],
-): void => {
+): AcceptedAgentUserMessage => {
   if (!context.subscribeEvents && context.shouldDrainNotifications) {
-    return;
+    return acceptedUserMessage;
   }
-  context.emitUserMessage(activeTurn.session, parts, activeTurn.model);
+  return context.emitUserMessage(acceptedUserMessage, parts);
 };
 
 export const flushQueuedUserMessagesLater = (
@@ -86,26 +90,25 @@ const steerActiveTurn = async (
   context: CodexTurnLifecycleContext,
   activeTurn: ActiveCodexTurn,
   parts: AgentUserMessagePart[],
-): Promise<boolean> => {
+  acceptedUserMessage: AcceptedAgentUserMessage,
+): Promise<AcceptedAgentUserMessage | null> => {
   const input = toCodexTurnInputList(parts);
   if (!activeTurn.turnId && !context.subscribeEvents) {
     await context.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
   }
   if (activeTurn.isTurnSettled()) {
-    return false;
+    return null;
   }
   if (!activeTurn.turnId) {
     activeTurn.queuedUserMessages.push(input);
-    emitAcceptedUserMessage(context, activeTurn, parts);
-    return true;
+    return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
   }
   await context.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
     threadId: activeTurn.session.threadId,
     input,
     expectedTurnId: activeTurn.turnId,
   });
-  emitAcceptedUserMessage(context, activeTurn, parts);
-  return true;
+  return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
 };
 
 const emitTurnStartErrorLater = (
@@ -127,8 +130,9 @@ export const startCodexTurnForSession = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   parts: AgentUserMessagePart[],
+  acceptedUserMessage: AcceptedAgentUserMessage,
   requestedModel?: AgentModelSelection,
-): Promise<void> => {
+): Promise<AcceptedAgentUserMessage> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
@@ -138,9 +142,9 @@ export const startCodexTurnForSession = async (
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
-    const didSteer = await steerActiveTurn(context, existingActiveTurn, parts);
-    if (didSteer) {
-      return;
+    const accepted = await steerActiveTurn(context, existingActiveTurn, parts, acceptedUserMessage);
+    if (accepted) {
+      return accepted;
     }
 
     const latestActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -199,7 +203,7 @@ export const startCodexTurnForSession = async (
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
       if (!context.subscribeEvents && !context.shouldDrainNotifications) {
-        context.emitUserMessage(session, parts, model);
+        context.emitUserMessage(acceptedUserMessage, parts);
         activeTurnState.markTurnSettled();
       } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
         context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
@@ -214,17 +218,18 @@ export const startCodexTurnForSession = async (
   activeTurnState.turnStartPromise = turnStartPromise;
 
   if (context.subscribeEvents) {
-    context.emitUserMessage(session, parts, model);
+    context.emitUserMessage(acceptedUserMessage, parts);
     emitTurnStartErrorLater(context, session, turnStartPromise);
-    return;
+    return acceptedUserMessage;
   }
 
   const hasPendingInput = await context.handlePendingServerRequests(session, handledRequestKeys);
   if (hasPendingInput && !turnSettled) {
     context.bindPendingInputToActiveTurn(session.threadId, activeTurnState);
     emitTurnStartErrorLater(context, session, turnStartPromise);
-    return;
+    return acceptedUserMessage;
   }
 
   await turnStartPromise;
+  return acceptedUserMessage;
 };

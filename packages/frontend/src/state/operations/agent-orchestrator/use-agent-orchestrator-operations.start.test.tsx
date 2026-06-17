@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  acceptedUserMessageForInput,
   BUILD_SELECTION,
   buildBootstrapFixture,
   createAgentSessionRuntimeSnapshotFixture,
@@ -78,8 +79,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       subscribeCalls += 1;
       return () => {};
     };
-    OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessageForInput(input);
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
@@ -211,8 +213,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       source: "active_build_run",
     });
     OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
-    OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessageForInput(input);
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],

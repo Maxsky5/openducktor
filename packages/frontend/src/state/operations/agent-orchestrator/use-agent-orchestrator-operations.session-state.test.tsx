@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import {
+  acceptedUserMessageForInput,
   BUILD_SELECTION,
   buildBootstrapFixture,
   createAgentSessionRuntimeSnapshotFixture,
@@ -155,8 +156,9 @@ describe("use-agent-orchestrator-operations session state", () => {
         status: "idle",
       };
     };
-    OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessageForInput(input);
     };
     opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
       createAgentSessionRuntimeSnapshotFixture({
@@ -429,8 +431,9 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
     OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
-    OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessageForInput(input);
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],

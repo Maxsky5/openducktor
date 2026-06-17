@@ -15,6 +15,7 @@ import {
   normalizeRetryStatusMessage,
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
+import { toUserChatMessage } from "../support/user-message-event";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
@@ -32,20 +33,6 @@ const nextContextUsageWasEstablishedForMessage = (
 };
 
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
-
-const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
-  const model = event.model;
-  const parts = Array.isArray(event.parts) ? event.parts : [];
-  return {
-    kind: "user" as const,
-    state: event.state,
-    ...(model?.providerId ? { providerId: model.providerId } : {}),
-    ...(model?.modelId ? { modelId: model.modelId } : {}),
-    ...(model?.variant ? { variant: model.variant } : {}),
-    ...(model?.profileId ? { profileId: model.profileId } : {}),
-    ...(parts.length > 0 ? { parts } : {}),
-  };
-};
 
 const resolveFinalAssistantSnapshot = ({
   current,
@@ -160,13 +147,7 @@ export const handleUserMessage = (
   context.store.updateSession(context.session.identity, (current) => {
     return {
       ...current,
-      messages: upsertSessionMessage(current, {
-        id: event.messageId,
-        role: "user",
-        content: event.message,
-        timestamp: event.timestamp,
-        meta: toUserMessageMeta(event),
-      }),
+      messages: upsertSessionMessage(current, toUserChatMessage(event)),
     };
   });
 };

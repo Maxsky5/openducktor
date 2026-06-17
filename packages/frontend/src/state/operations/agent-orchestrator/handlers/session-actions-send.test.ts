@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
+import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -16,8 +18,22 @@ import {
   getSession,
 } from "./session-actions.test-helpers";
 
+const acceptedUserMessage = (
+  input: SendAgentUserMessageInput,
+  messageId = "accepted-user-message",
+): AcceptedAgentUserMessage => ({
+  type: "user_message",
+  externalSessionId: input.externalSessionId,
+  timestamp: "2026-02-22T08:00:01.000Z",
+  messageId,
+  message: serializeAgentUserMessagePartsToText(input.parts),
+  parts: [],
+  state: "read",
+  ...(input.model ? { model: input.model } : {}),
+});
+
 describe("agent-orchestrator/handlers/session-actions send", () => {
-  test("delegates sent user messages to the runtime transcript stream", async () => {
+  test("stores accepted user messages from the runtime send result", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
@@ -27,6 +43,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
       expect(input.systemPrompt).toContain("Implement the task");
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -56,7 +73,13 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
       expect(sendCalls).toBe(1);
       expect(getSession(sessionsRef)?.status).toBe("running");
-      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        expect.objectContaining({
+          id: "accepted-user-message",
+          role: "user",
+          content: "hello",
+        }),
+      ]);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -67,8 +90,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     const committedStatuses: AgentSessionState["status"][] = [];
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
@@ -111,8 +135,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -149,8 +174,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
@@ -179,8 +205,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       callOrder.push("send");
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -208,7 +235,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(callOrder).toEqual(["send"]);
-      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "hello",
+        }),
+      ]);
       expect(getSession(sessionsRef)?.historyLoadState).toBe("not_requested");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
@@ -219,8 +251,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -259,8 +292,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.sendUserMessage = async () => {
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -360,6 +394,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           part.kind === "text" ? { kind: part.kind, text: part.text } : { kind: part.kind },
         ),
       });
+      return acceptedUserMessage(input);
     };
 
     const sessionsRef = createSessionsRef([
@@ -405,7 +440,13 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(sendCalls).toEqual([
         { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
       ]);
-      expect(getSession(sessionsRef)?.messages).toBe(messagesBeforeSend);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        ...sessionMessagesToArray({ externalSessionId: "session-1", messages: messagesBeforeSend }),
+        expect.objectContaining({
+          role: "user",
+          content: "queued follow-up",
+        }),
+      ]);
       expect(recordUserAnchorCalls).toBe(0);
       expect(sessionTurnState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
     } finally {

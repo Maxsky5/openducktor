@@ -16,7 +16,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
-import { appendSessionMessage } from "../support/messages";
+import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
 import {
   type ReadSessionSnapshot,
   requireLoadedSession,
@@ -24,6 +24,7 @@ import {
 } from "../support/session-invariants";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import { toUserChatMessage } from "../support/user-message-event";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
@@ -132,6 +133,17 @@ const appendSendFailureNotice = (
   }));
 };
 
+const upsertAcceptedUserMessage = (
+  session: AgentSessionState,
+  acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
+  updateSession: UpdateSession,
+): void => {
+  updateSession(session, (current) => ({
+    ...current,
+    messages: upsertSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
+  }));
+};
+
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {
   return async (identity: AgentSessionIdentity, parts: AgentUserMessagePart[]): Promise<void> => {
     const normalizedParts = normalizeAgentUserMessageParts(parts);
@@ -188,13 +200,14 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     }
 
     try {
-      await dependencies.adapter.sendUserMessage({
+      const acceptedUserMessage = await dependencies.adapter.sendUserMessage({
         ...toRuntimeSessionContextRef(preparedSend.repoPath, readySession),
         parts: normalizedParts,
         ...(preparedSend.systemPrompt !== undefined
           ? { systemPrompt: preparedSend.systemPrompt }
           : {}),
       });
+      upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
     } catch (error) {
       dependencies.updateSession(readySession, (current) => ({
         ...current,

@@ -56,6 +56,8 @@ export type SendAgentUserMessageInput = AgentSessionRuntimeRef & {
   model?: AgentModelSelection;
 };
 
+export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
+
 export type UpdateAgentSessionModelInput = AgentSessionRef & {
   model: AgentModelSelection | null;
 };
@@ -216,7 +218,7 @@ export interface AgentSessionPort {
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
-  sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
+  sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage>;
   replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(
