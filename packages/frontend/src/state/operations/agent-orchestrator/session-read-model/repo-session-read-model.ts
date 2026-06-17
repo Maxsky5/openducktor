@@ -37,8 +37,6 @@ export type RepoSessionReadModel = {
   removedSessionRefs: AgentSessionRef[];
 };
 
-type IsSessionObserved = (session: AgentSessionState) => boolean;
-
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): PersistedTaskSessionRecord[] => {
   const records: PersistedTaskSessionRecord[] = [];
   for (const task of tasks) {
@@ -81,12 +79,12 @@ const isTerminalLocalSessionStatus = (status: AgentSessionState["status"]): bool
 
 const shouldTrustLocalRuntimeStateWithoutSnapshot = (
   current: AgentSessionState | undefined,
-  isSessionObserved: IsSessionObserved,
+  observedSessionKeys: ReadonlySet<string>,
 ): boolean =>
   current !== undefined &&
   (current.status === "starting" ||
     isTerminalLocalSessionStatus(current.status) ||
-    isSessionObserved(current));
+    observedSessionKeys.has(agentSessionIdentityKey(current)));
 
 export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
@@ -133,13 +131,13 @@ export const buildRepoSessionReadModel = ({
   tasks,
   currentSessionCollection,
   runtimeSnapshots,
-  isSessionObserved,
+  observedSessionKeys,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionCollection?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
-  isSessionObserved: IsSessionObserved;
+  observedSessionKeys: ReadonlySet<string>;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const loadedTaskIds = new Set(tasks.map((task) => task.id));
@@ -177,7 +175,7 @@ export const buildRepoSessionReadModel = ({
     });
     const missingSnapshotPolicy = shouldTrustLocalRuntimeStateWithoutSnapshot(
       current,
-      isSessionObserved,
+      observedSessionKeys,
     )
       ? "preserve_local_runtime_state"
       : "settle_runtime_state";

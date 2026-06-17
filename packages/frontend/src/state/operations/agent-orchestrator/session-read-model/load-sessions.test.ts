@@ -3,6 +3,7 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -56,7 +57,7 @@ const createLoaderHarness = ({
   listSessionRuntimeSnapshots,
   tasks = [taskFixture],
   sessionRecordsByTaskId = { [taskFixture.id]: [record] },
-  isSessionObserved = () => false,
+  observedSessionKeys = new Set<string>(),
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: Parameters<
@@ -64,7 +65,7 @@ const createLoaderHarness = ({
   >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
-  isSessionObserved?: Parameters<typeof createLoadAgentSessions>[0]["isSessionObserved"];
+  observedSessionKeys?: ReadonlySet<string>;
 }) => {
   let sessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
@@ -93,7 +94,7 @@ const createLoaderHarness = ({
       listenedSessions.push(session);
       return true;
     },
-    isSessionObserved,
+    getObservedSessionKeys: () => observedSessionKeys,
     cleanupLocalSessions: (sessions) => {
       cleanedSessions.push(...sessions);
     },
@@ -145,7 +146,7 @@ describe("createLoadAgentSessions", () => {
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
-      isSessionObserved: () => false,
+      getObservedSessionKeys: () => new Set(),
       cleanupLocalSessions: () => undefined,
       queryClient,
       isStaleRepoOperation: () => false,
@@ -283,7 +284,7 @@ describe("createLoadAgentSessions", () => {
     const harness = createLoaderHarness({
       initialSessionCollection: createAgentSessionCollection([mountedSession]),
       listSessionRuntimeSnapshots: async () => [],
-      isSessionObserved: () => true,
+      observedSessionKeys: new Set([agentSessionIdentityKey(mountedSession)]),
     });
 
     await harness.loadAgentSessions("task-1");

@@ -107,10 +107,12 @@ Owns:
 
 Invariant: a missing runtime snapshot means the runtime did not report the session
 as live. For a cold persisted record, that means the local shell starts idle with
-no runtime-owned pending input or in-flight turn state. For a mounted session, a
-missing snapshot is only absence of evidence; it must preserve the current
-status, pending input, pending send state, transcript, and history until an
-actual runtime snapshot or runtime event changes them.
+no runtime-owned pending input or in-flight turn state. For a mounted session, the
+observer registry decides whether local runtime-owned state is still trusted: an
+observed, starting, stopped, or errored session preserves its local runtime-owned
+state, while unobserved active state settles to idle and clears pending input.
+Transcript messages and history load state are not runtime-owned snapshot fields
+and stay mounted.
 Runtime events own subsequent live state only after the runtime snapshot proves
 the session is live and an observer is running.
 The repo read model overlays persisted session records and runtime snapshots onto
@@ -802,7 +804,7 @@ be exposed through public app operation contexts.
    task IDs through `loadRepoAgentSessionsForTasks`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle but does not demote mounted sessions or clear their live transcript state.
+5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle, preserves observed live state, and settles unobserved active state without clearing mounted transcript history.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.
@@ -857,9 +859,11 @@ Use these compact tests as the first-line safety net:
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
 - Do not treat a missing runtime snapshot as an idle runtime event. A cold
-  persisted session starts idle from its durable record, but a mounted session
-  keeps its current status, pending input, drafts, transcript, and history state
-  until an actual runtime snapshot or runtime event changes them.
+  persisted session starts idle from its durable record. A mounted session keeps
+  runtime-owned state only when the observer registry still reports it as
+  observed, or when it is starting, stopped, or errored. Otherwise, unobserved
+  active runtime-owned state settles to idle while transcript/history stays
+  mounted.
 - Keep runtime ids and runtime routes in low-level adapters/registry code. UI and
   page modules should carry runtime kind plus working directory, not live routes.
 - Keep frontend runtime dispatch direct: `agent-runtime-services.ts` owns adapter

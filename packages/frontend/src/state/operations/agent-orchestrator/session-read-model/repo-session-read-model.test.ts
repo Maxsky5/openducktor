@@ -5,6 +5,7 @@ import {
   type AgentPendingQuestionRequest,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -23,13 +24,13 @@ type BuildRepoSessionReadModelInput = Parameters<typeof buildRepoSessionReadMode
 type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModelImpl>;
 
 const buildRepoSessionReadModel = ({
-  isSessionObserved = () => false,
+  observedSessionKeys = new Set<string>(),
   ...input
-}: Omit<BuildRepoSessionReadModelInput, "isSessionObserved"> &
-  Partial<Pick<BuildRepoSessionReadModelInput, "isSessionObserved">>): RepoSessionReadModel =>
+}: Omit<BuildRepoSessionReadModelInput, "observedSessionKeys"> &
+  Partial<Pick<BuildRepoSessionReadModelInput, "observedSessionKeys">>): RepoSessionReadModel =>
   buildRepoSessionReadModelImpl({
     ...input,
-    isSessionObserved,
+    observedSessionKeys,
   });
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
@@ -379,7 +380,7 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: busyRead.sessionCollection,
       runtimeSnapshots: runtimeSnapshots,
-      isSessionObserved: () => true,
+      observedSessionKeys: new Set([agentSessionIdentityKey(record)]),
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
@@ -470,7 +471,7 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      isSessionObserved: () => true,
+      observedSessionKeys: new Set([agentSessionIdentityKey(currentSession)]),
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);

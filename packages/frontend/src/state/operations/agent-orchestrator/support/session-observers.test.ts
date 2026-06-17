@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionObservers } from "./session-observers";
 
 const createSessionRef = (workingDirectory: string) =>
@@ -19,6 +20,9 @@ describe("session observers", () => {
 
     expect(observers.has(firstSession)).toBe(true);
     expect(observers.has(secondSession)).toBe(false);
+    expect(observers.observedSessionKeys()).toEqual(
+      new Set([agentSessionIdentityKey(firstSession)]),
+    );
   });
 
   test("ensures one observer while a subscription is pending", async () => {
@@ -60,8 +64,10 @@ describe("session observers", () => {
 
     const registration = observers.ensureObserver(session, () => observerPromise);
     expect(observers.has(session)).toBe(true);
+    expect(observers.observedSessionKeys()).toEqual(new Set([agentSessionIdentityKey(session)]));
     observers.remove(session);
     expect(observers.has(session)).toBe(false);
+    expect(observers.observedSessionKeys()).toEqual(new Set());
     resolveObserver(() => calls.push("pending"));
     await expect(registration).resolves.toBe(false);
 
