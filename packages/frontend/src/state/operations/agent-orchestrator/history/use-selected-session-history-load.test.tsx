@@ -17,22 +17,26 @@ const selectedSessionIdentity: AgentSessionIdentity = {
   workingDirectory: "/repo/worktree",
 };
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  externalSessionId: selectedSessionIdentity.externalSessionId,
-  taskId: "task-1",
-  role: "build",
-  status: "idle",
-  startedAt: "2026-06-12T08:00:00.000Z",
-  runtimeKind: selectedSessionIdentity.runtimeKind,
-  workingDirectory: selectedSessionIdentity.workingDirectory,
-  historyLoadState: "not_requested",
-  messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-});
+const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
+  const externalSessionId =
+    overrides.externalSessionId ?? selectedSessionIdentity.externalSessionId;
+  return {
+    externalSessionId,
+    taskId: "task-1",
+    role: "build",
+    status: "idle",
+    startedAt: "2026-06-12T08:00:00.000Z",
+    runtimeKind: selectedSessionIdentity.runtimeKind,
+    workingDirectory: selectedSessionIdentity.workingDirectory,
+    historyLoadState: "not_requested",
+    messages: createSessionMessagesState(externalSessionId),
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...overrides,
+  };
+};
 
 const createProps = ({
   session = createSession(),
@@ -108,6 +112,24 @@ describe("resolveSelectedSessionHistoryLoadTarget", () => {
     ).toBeNull();
   });
 
+  test("does not request history when the selected session already has visible messages", () => {
+    expect(
+      resolveSelectedSessionHistoryLoadTarget({
+        session: createSession({
+          messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId, [
+            {
+              id: "live-user-message",
+              role: "user",
+              content: "Continue after QA rejection",
+              timestamp: "2026-06-12T08:00:01.000Z",
+            },
+          ]),
+        }),
+        repoReadinessState: "ready",
+      }),
+    ).toBeNull();
+  });
+
   test("uses the selected session state as the history load identity", () => {
     expect(
       resolveSelectedSessionHistoryLoadTarget({
@@ -165,6 +187,33 @@ describe("useSelectedSessionHistoryLoad", () => {
     const harness = createHistoryLoadHarness(
       createProps({
         session: createSession({ historyLoadState: "loading" }),
+      }),
+      loadSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not load when the selected session transcript is already visible", async () => {
+    const loadSessionHistory = mock(async () => undefined);
+    const harness = createHistoryLoadHarness(
+      createProps({
+        session: createSession({
+          messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId, [
+            {
+              id: "live-kickoff",
+              role: "user",
+              content: "Implement the requested changes",
+              timestamp: "2026-06-12T08:00:01.000Z",
+            },
+          ]),
+        }),
       }),
       loadSessionHistory,
     );

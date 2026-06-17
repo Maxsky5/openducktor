@@ -603,7 +603,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("loads selected session history even when live messages are already visible", async () => {
+  test("does not load selected session history when live messages are already visible", async () => {
     const loadSessionHistory = mock(async () => undefined);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
@@ -631,11 +631,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       expect(harness.getLatest().view.transcriptState).toEqual({ kind: "visible" });
-      expect(loadSessionHistory).toHaveBeenCalledWith({
-        externalSessionId: session.externalSessionId,
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
-      });
+      expect(loadSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

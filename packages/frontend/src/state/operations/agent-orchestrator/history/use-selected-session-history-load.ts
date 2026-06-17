@@ -4,6 +4,7 @@ import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import { useAgentOperationsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
+import { getSessionMessageCount } from "../support/messages";
 
 export type SelectedSessionHistoryLoadTarget = {
   session: AgentSessionState | null;
@@ -17,6 +18,7 @@ export const resolveSelectedSessionHistoryLoadTarget = ({
   if (
     session === null ||
     session.historyLoadState !== "not_requested" ||
+    getSessionMessageCount(session) > 0 ||
     repoReadinessState !== "ready"
   ) {
     return null;
