@@ -66,7 +66,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   input: makeSessionInput(),
   client,
   externalSessionId: "external-session-1",
-  eventTransportKey: "http://127.0.0.1:12345",
+  runtimeId: "runtime-opencode-1",
   streamTurnStatus: "active",
   isSendingUserMessage: false,
   activeAssistantMessageId: null,
@@ -108,7 +108,8 @@ export const runEventStreamWithSession = async (
     sessions,
     runtimeEventTransports,
     createClient: () => client,
-    runtimeEndpoint: sessionRecord.eventTransportKey,
+    runtimeId: sessionRecord.runtimeId,
+    runtimeEndpoint: "http://127.0.0.1:12345",
     externalSessionId: sessionRecord.externalSessionId,
     sessionInput: sessionRecord.input,
     now: () => "2026-02-22T12:00:00.000Z",
@@ -117,7 +118,7 @@ export const runEventStreamWithSession = async (
     },
     ...(options.logEvent ? { logEvent: options.logEvent } : {}),
   });
-  const streamDone = runtimeEventTransports.get(sessionRecord.eventTransportKey)?.streamDone;
+  const streamDone = runtimeEventTransports.get(sessionRecord.runtimeId)?.streamDone;
   if (!streamDone) {
     throw new Error("Expected OpenCode event transport to start.");
   }

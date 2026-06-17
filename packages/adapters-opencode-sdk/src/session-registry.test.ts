@@ -219,6 +219,7 @@ const runRuntimeEventTransport = async (
     sessions,
     runtimeEventTransports,
     createClient: () => client,
+    runtimeId: "runtime-opencode-1",
     runtimeEndpoint: "http://127.0.0.1:12345",
     externalSessionId: "external-session-1",
     sessionInput: makeSessionInput(),
@@ -232,7 +233,7 @@ const runRuntimeEventTransport = async (
     },
   });
 
-  await runtimeEventTransports.get("http://127.0.0.1:12345")?.streamDone;
+  await runtimeEventTransports.get("runtime-opencode-1")?.streamDone;
   return emitted;
 };
 

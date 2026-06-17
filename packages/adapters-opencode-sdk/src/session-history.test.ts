@@ -1353,7 +1353,7 @@ describe("OpencodeSdkAdapter session history", () => {
     );
   });
 
-  test("loadSessionHistory only reuses preserved attachment parts from the matching runtime endpoint", async () => {
+  test("loadSessionHistory only reuses preserved attachment parts from the matching runtime", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1405,7 +1405,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
     sessions.set("session-runtime-b", {
       ...matchingSession,
-      eventTransportKey: "http://127.0.0.1:12000",
+      runtimeId: "runtime-opencode-2",
       messageMetadataById: new Map([
         [
           "msg-user-attachment-1",

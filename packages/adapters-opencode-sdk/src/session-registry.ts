@@ -39,10 +39,10 @@ const resolveSubagentSessionLink = (
   sessions: Map<string, SessionRecord>,
   childExternalSessionId: string,
 ): SubagentSessionLink | undefined => {
-  const childTransportKeys = new Set<string>();
+  const childRuntimeIds = new Set<string>();
   for (const session of sessions.values()) {
     if (session.externalSessionId === childExternalSessionId) {
-      childTransportKeys.add(session.eventTransportKey);
+      childRuntimeIds.add(session.runtimeId);
     }
   }
   const matches: SubagentSessionLink[] = [];
@@ -53,7 +53,7 @@ const resolveSubagentSessionLink = (
     if (!subagentCorrelationKey) {
       continue;
     }
-    if (childTransportKeys.size > 0 && !childTransportKeys.has(session.eventTransportKey)) {
+    if (childRuntimeIds.size > 0 && !childRuntimeIds.has(session.runtimeId)) {
       continue;
     }
 
@@ -177,14 +177,14 @@ const resolveParentlessChildEvent = async (input: {
 const ensureRuntimeEventTransport = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
+  runtimeId: string;
   runtimeEndpoint: string;
   sessions: Map<string, SessionRecord>;
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): RuntimeEventTransportRecord => {
-  const eventTransportKey = input.runtimeEndpoint;
-  const existingTransport = input.runtimeEventTransports.get(eventTransportKey);
+  const existingTransport = input.runtimeEventTransports.get(input.runtimeId);
   if (existingTransport) {
     return existingTransport;
   }
@@ -195,7 +195,7 @@ const ensureRuntimeEventTransport = (input: {
   assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
   const streamRecord: RuntimeEventTransportRecord = {
-    key: eventTransportKey,
+    runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     streamDone: Promise.resolve(),
@@ -264,9 +264,9 @@ const ensureRuntimeEventTransport = (input: {
       }
     })
     .finally(() => {
-      input.runtimeEventTransports.delete(eventTransportKey);
+      input.runtimeEventTransports.delete(input.runtimeId);
     });
-  input.runtimeEventTransports.set(eventTransportKey, streamRecord);
+  input.runtimeEventTransports.set(input.runtimeId, streamRecord);
   return streamRecord;
 };
 
@@ -274,6 +274,7 @@ export const subscribeSessionToRuntimeEvents = (input: {
   sessions: Map<string, SessionRecord>;
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
+  runtimeId: string;
   runtimeEndpoint: string;
   externalSessionId: string;
   sessionInput: SessionInput;
@@ -284,6 +285,7 @@ export const subscribeSessionToRuntimeEvents = (input: {
   const eventTransport = ensureRuntimeEventTransport({
     runtimeEventTransports: input.runtimeEventTransports,
     createClient: input.createClient,
+    runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     sessions: input.sessions,
     now: input.now,
@@ -300,6 +302,7 @@ export const registerSession = (input: {
   sessions: Map<string, SessionRecord>;
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
+  runtimeId: string;
   runtimeEndpoint: string;
   externalSessionId: string;
   sessionInput: SessionInput;
@@ -329,14 +332,12 @@ export const registerSession = (input: {
     status: "running",
   };
 
-  const eventTransportKey = input.runtimeEndpoint;
-
   input.sessions.set(input.externalSessionId, {
     summary,
     input: input.sessionInput,
     client: input.client,
     externalSessionId: input.externalSessionId,
-    eventTransportKey,
+    runtimeId: input.runtimeId,
     streamTurnStatus: "active",
     isSendingUserMessage: false,
     activeAssistantMessageId: null,
@@ -366,6 +367,7 @@ export const registerSession = (input: {
         sessions: input.sessions,
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
+        runtimeId: input.runtimeId,
         runtimeEndpoint: input.runtimeEndpoint,
         externalSessionId: input.externalSessionId,
         sessionInput: input.sessionInput,
@@ -397,7 +399,7 @@ export const releaseSessionRuntime = async (
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
   sessions.delete(session.summary.externalSessionId);
-  const eventTransport = runtimeEventTransports.get(session.eventTransportKey);
+  const eventTransport = runtimeEventTransports.get(session.runtimeId);
   if (!eventTransport) {
     return;
   }

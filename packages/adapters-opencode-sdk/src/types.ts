@@ -47,7 +47,7 @@ export type SessionRecord = {
   input: SessionInput;
   client: OpencodeClient;
   externalSessionId: string;
-  eventTransportKey: string;
+  runtimeId: string;
   streamTurnStatus: SessionStreamTurnStatus;
   isSendingUserMessage: boolean;
   activeAssistantMessageId: string | null;
@@ -81,7 +81,7 @@ export type EventStreamSubscriber = {
 };
 
 export type RuntimeEventTransportRecord = {
-  key: string;
+  runtimeId: string;
   runtimeEndpoint: string;
   controller: AbortController;
   streamDone: Promise<void>;

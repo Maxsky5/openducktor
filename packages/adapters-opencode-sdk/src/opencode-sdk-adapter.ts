@@ -214,6 +214,7 @@ export class OpencodeSdkAdapter
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
+      runtimeId: runtimeClientInput.runtimeId,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       externalSessionId,
       sessionInput,
@@ -243,14 +244,14 @@ export class OpencodeSdkAdapter
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
     );
-    const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
     const sessionInput = toSessionInput(input);
 
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
-      runtimeEndpoint,
+      runtimeId: runtimeClientInput.runtimeId,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       externalSessionId: input.externalSessionId,
       sessionInput,
       client,
@@ -283,7 +284,6 @@ export class OpencodeSdkAdapter
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
     );
-    const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
     const sessionInput = toRestoredSessionInput(input);
     const startedMessage = sessionInput.role
       ? `Restored ${sessionInput.role} session`
@@ -293,7 +293,8 @@ export class OpencodeSdkAdapter
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
-      runtimeEndpoint,
+      runtimeId: runtimeClientInput.runtimeId,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       externalSessionId: input.externalSessionId,
       sessionInput,
       client,
@@ -312,7 +313,8 @@ export class OpencodeSdkAdapter
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
         createClient: this.createClient,
-        runtimeEndpoint,
+        runtimeId: runtimeClientInput.runtimeId,
+        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
         externalSessionId: input.externalSessionId,
         sessionInput,
         now: this.now,
@@ -320,7 +322,7 @@ export class OpencodeSdkAdapter
         ...(this.logEvent ? { logEvent: this.logEvent } : {}),
       });
       const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
-        runtimeEndpoint,
+        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         session,
@@ -364,6 +366,7 @@ export class OpencodeSdkAdapter
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
+      runtimeId: runtimeClientInput.runtimeId,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       externalSessionId,
       sessionInput,
@@ -395,7 +398,7 @@ export class OpencodeSdkAdapter
     );
     const localSnapshots = listOpencodeLocalRuntimeSnapshots({
       sessions: this.sessions,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+      runtimeId: runtimeClientInput.runtimeId,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
       ...(input.directories ? { directories: input.directories } : {}),
@@ -411,7 +414,7 @@ export class OpencodeSdkAdapter
         },
         snapshot: applyOpencodeInFlightSendToRuntimeSnapshot({
           sessions: this.sessions,
-          runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+          runtimeId: runtimeClientInput.runtimeId,
           snapshot,
         }),
       }),
@@ -437,7 +440,7 @@ export class OpencodeSdkAdapter
       null;
     const localSnapshot = findOpencodeLocalRuntimeSnapshot({
       sessions: this.sessions,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+      runtimeId: runtimeClientInput.runtimeId,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
       workingDirectory: input.workingDirectory,
@@ -462,7 +465,7 @@ export class OpencodeSdkAdapter
       },
       snapshot: applyOpencodeInFlightSendToRuntimeSnapshot({
         sessions: this.sessions,
-        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+        runtimeId: runtimeClientInput.runtimeId,
         snapshot,
       }),
     });
@@ -477,7 +480,7 @@ export class OpencodeSdkAdapter
     const matchingSessions = [...this.sessions.values()].filter(
       (session) =>
         session.externalSessionId === input.externalSessionId &&
-        session.eventTransportKey === runtimeClientInput.runtimeEndpoint,
+        session.runtimeId === runtimeClientInput.runtimeId,
     );
     const preservedDisplayPartsByMessageId = new Map(
       matchingSessions.flatMap((session) =>

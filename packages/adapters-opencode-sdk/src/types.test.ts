@@ -34,7 +34,7 @@ describe("types", () => {
         workingDirectory: "/repo",
       }),
       externalSessionId: "external-session-1",
-      eventTransportKey: "http://127.0.0.1:12345",
+      runtimeId: "runtime-opencode-1",
       streamTurnStatus: "active",
       isSendingUserMessage: false,
       activeAssistantMessageId: null,

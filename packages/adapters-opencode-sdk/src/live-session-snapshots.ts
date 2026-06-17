@@ -20,7 +20,7 @@ export type ListOpencodeRuntimeSnapshotSourcesInput = {
 
 export type OpencodeLocalRuntimeSnapshotInput = {
   sessions: ReadonlyMap<string, SessionRecord>;
-  runtimeEndpoint: string;
+  runtimeId: string;
   repoPath: string;
   runtimeKind: string;
 };
@@ -37,7 +37,7 @@ export type ReadOpencodeLocalRuntimeSnapshotInput = OpencodeLocalRuntimeSnapshot
 
 export type ApplyOpencodeInFlightSendToRuntimeSnapshotInput = {
   sessions: ReadonlyMap<string, SessionRecord>;
-  runtimeEndpoint: string;
+  runtimeId: string;
   snapshot: OpencodeRuntimeSnapshotSource;
 };
 
@@ -119,13 +119,13 @@ export const toOpencodeLocalRuntimeSnapshot = (
 
 export const applyOpencodeInFlightSendToRuntimeSnapshot = ({
   sessions,
-  runtimeEndpoint,
+  runtimeId,
   snapshot,
 }: ApplyOpencodeInFlightSendToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
   const localSession = sessions.get(snapshot.externalSessionId);
   if (
     !localSession ||
-    localSession.eventTransportKey !== runtimeEndpoint ||
+    localSession.runtimeId !== runtimeId ||
     !isUserMessageSendInFlight(localSession) ||
     snapshot.runtimeActivity !== "idle"
   ) {
@@ -140,7 +140,7 @@ export const applyOpencodeInFlightSendToRuntimeSnapshot = ({
 
 export const listOpencodeLocalRuntimeSnapshots = ({
   sessions,
-  runtimeEndpoint,
+  runtimeId,
   repoPath,
   runtimeKind,
   directories,
@@ -159,7 +159,7 @@ export const listOpencodeLocalRuntimeSnapshots = ({
   for (const session of sessions.values()) {
     if (
       existingExternalSessionIds.has(session.externalSessionId) ||
-      session.eventTransportKey !== runtimeEndpoint ||
+      session.runtimeId !== runtimeId ||
       session.input.repoPath !== repoPath ||
       session.input.runtimeKind !== runtimeKind
     ) {
@@ -184,7 +184,7 @@ export const listOpencodeLocalRuntimeSnapshots = ({
 
 export const findOpencodeLocalRuntimeSnapshot = ({
   sessions,
-  runtimeEndpoint,
+  runtimeId,
   repoPath,
   runtimeKind,
   workingDirectory,
@@ -197,7 +197,7 @@ export const findOpencodeLocalRuntimeSnapshot = ({
   const requestedWorkingDirectory = normalizeSessionDirectory(workingDirectory);
   if (
     !localSession ||
-    localSession.eventTransportKey !== runtimeEndpoint ||
+    localSession.runtimeId !== runtimeId ||
     localSession.input.repoPath !== repoPath ||
     localSession.input.runtimeKind !== runtimeKind ||
     localSessionWorkingDirectory === undefined ||
