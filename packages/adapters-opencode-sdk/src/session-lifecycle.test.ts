@@ -74,7 +74,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     expect(localSessions(adapter).has("session-opencode-1")).toBe(false);
   });
 
-  test("restored session state does not keep session-bound running subagents in pending correlation queues", async () => {
+  test("prepared existing session state does not keep session-bound running subagents in pending correlation queues", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {

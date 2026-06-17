@@ -334,7 +334,7 @@ Owns:
 - computing transient system prompt context for the next runtime send
 
 It does not read runtime session snapshots, resume runtime sessions, or classify
-pending input. Runtime adapters own local session restoration and event streams.
+pending input. Runtime adapters own local state preparation and event streams.
 Visible pending input comes from startup snapshots or runtime events.
 
 ### Selected Session View

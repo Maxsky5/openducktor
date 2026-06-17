@@ -62,7 +62,7 @@ class MutableThreadListTransport extends RecordingTransport {
   }
 }
 
-class RestoreIdleThreadListActiveTransport extends MutableThreadListTransport {
+class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
       this.calls.push(request);
@@ -453,7 +453,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
   });
 
-  test("restores a missing live Codex session without starting a turn", async () => {
+  test("prepares a missing live Codex session without starting a turn", async () => {
     const { adapter, transports } = createHarness();
 
     await observeSessionState(adapter, "thread-saved");
@@ -467,8 +467,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
   });
 
-  test("trusts active inventory over an idle restore response during reload", async () => {
-    const transport = new RestoreIdleThreadListActiveTransport("runtime-live", false);
+  test("trusts active inventory over an idle thread/resume response during reload", async () => {
+    const transport = new IdleThreadResumeActiveListTransport("runtime-live", false);
     const { adapter } = createHarness({
       transportFactory: mock(() => transport),
     });
@@ -487,7 +487,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
   });
 
-  test("restores an idle Codex thread without marking it running", async () => {
+  test("prepares an idle Codex thread without marking it running", async () => {
     const { adapter } = createHarness();
 
     await observeSessionState(adapter, "thread-idle");
@@ -555,7 +555,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     expect(localSessions(adapter).has("thread-idle")).toBe(false);
   });
 
-  test("streams messages and completion after refresh restore", async () => {
+  test("streams messages and completion after refresh session preparation", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];

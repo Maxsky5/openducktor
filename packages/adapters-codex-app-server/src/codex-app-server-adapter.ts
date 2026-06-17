@@ -49,9 +49,9 @@ import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
   applyRuntimeContextToSession,
-  preserveRuntimeContextOnRestore,
+  preserveRuntimeContextForExistingThread,
+  sessionStateFromExistingThread,
   sessionStateFromThreadFork,
-  sessionStateFromThreadRestore,
   sessionStateFromThreadResume,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
@@ -345,13 +345,13 @@ export class CodexAppServerAdapter
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
-    const session = sessionStateFromThreadRestore(input, runtimeId, model, response);
+    const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     const { summary } = session;
-    const restoredSession = preserveRuntimeContextOnRestore(
+    const existingThreadSession = preserveRuntimeContextForExistingThread(
       session,
       this.localSessions.get(summary.externalSessionId),
     );
-    this.localSessions.remember(restoredSession);
+    this.localSessions.remember(existingThreadSession);
     return summary;
   }
 

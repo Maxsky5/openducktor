@@ -298,23 +298,33 @@ export const subscribeSessionToRuntimeEvents = (input: {
   });
 };
 
-export const registerSession = (input: {
-  sessions: Map<string, SessionRecord>;
-  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
-  createClient: ClientFactory;
-  runtimeId: string;
-  runtimeEndpoint: string;
-  externalSessionId: string;
-  sessionInput: SessionInput;
-  client: OpencodeClient;
-  startedAt: string;
-  startedMessage: string;
-  emitStartedEvent?: boolean;
-  subscribeToEvents?: boolean;
-  now: () => string;
-  emit: (externalSessionId: string, event: AgentEvent) => void;
-  logEvent?: OpencodeEventLogger;
-}): AgentSessionSummary => {
+type RegisterSessionStartEvent =
+  | {
+      emitStartedEvent?: true;
+      startedMessage: string;
+    }
+  | {
+      emitStartedEvent: false;
+      startedMessage?: never;
+    };
+
+export const registerSession = (
+  input: {
+    sessions: Map<string, SessionRecord>;
+    runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+    createClient: ClientFactory;
+    runtimeId: string;
+    runtimeEndpoint: string;
+    externalSessionId: string;
+    sessionInput: SessionInput;
+    client: OpencodeClient;
+    startedAt: string;
+    subscribeToEvents?: boolean;
+    now: () => string;
+    emit: (externalSessionId: string, event: AgentEvent) => void;
+    logEvent?: OpencodeEventLogger;
+  } & RegisterSessionStartEvent,
+): AgentSessionSummary => {
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,

@@ -1175,8 +1175,8 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    const unsubscribeRestoredListener = await observeSessionState(adapter, "thread-saved");
-    unsubscribeRestoredListener();
+    const unsubscribeExistingSessionListener = await observeSessionState(adapter, "thread-saved");
+    unsubscribeExistingSessionListener();
 
     streamListeners[0]?.({
       runtimeId: "runtime-live",

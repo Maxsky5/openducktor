@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRuntimeRef, ResumeAgentSessionInput } from "@openducktor/core";
 import {
-  sessionStateFromThreadRestore,
+  sessionStateFromExistingThread,
   sessionStateFromThreadResume,
 } from "./codex-session-lifecycle";
 import type { CodexThreadResumeResult } from "./types";
@@ -17,7 +17,7 @@ const threadResumeResponse: CodexThreadResumeResult = {
 };
 
 describe("codex session lifecycle", () => {
-  test("keeps restore state free of local live status", () => {
+  test("keeps existing-thread state free of local live status", () => {
     const sharedInput = {
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -35,7 +35,7 @@ describe("codex session lifecycle", () => {
       model,
       threadResumeResponse,
     );
-    const restored = sessionStateFromThreadRestore(
+    const existingThreadSession = sessionStateFromExistingThread(
       sharedInput satisfies AgentSessionRuntimeRef,
       "runtime-1",
       model,
@@ -61,7 +61,7 @@ describe("codex session lifecycle", () => {
         classification: "running",
       },
     });
-    expect(restored).toMatchObject({
+    expect(existingThreadSession).toMatchObject({
       role: "planner",
       runtimeId: "runtime-1",
       repoPath: "/repo",
@@ -77,10 +77,10 @@ describe("codex session lifecycle", () => {
         status: "running",
       },
     });
-    expect(restored.liveStatus).toBeUndefined();
+    expect(existingThreadSession.liveStatus).toBeUndefined();
   });
 
-  test("preserves restore-specific optional model absence", () => {
+  test("preserves optional model absence for existing-thread state", () => {
     const input = {
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -91,13 +91,13 @@ describe("codex session lifecycle", () => {
       externalSessionId: "thread-1",
     } satisfies AgentSessionRuntimeRef;
 
-    const restored = sessionStateFromThreadRestore(input, "runtime-1", undefined, {
+    const existingThreadSession = sessionStateFromExistingThread(input, "runtime-1", undefined, {
       ...threadResumeResponse,
       startedAt: "2026-05-07T00:00:00.000Z",
     });
 
-    expect(restored.model).toBeUndefined();
-    expect(restored.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
-    expect(restored.liveStatus).toBeUndefined();
+    expect(existingThreadSession.model).toBeUndefined();
+    expect(existingThreadSession.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
+    expect(existingThreadSession.liveStatus).toBeUndefined();
   });
 });

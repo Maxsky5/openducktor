@@ -113,7 +113,7 @@ export const sessionStateFromThreadFork = (
   return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
-export const sessionStateFromThreadRestore = (
+export const sessionStateFromExistingThread = (
   input: AgentSessionRef | AgentSessionRuntimeRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
@@ -124,20 +124,20 @@ export const sessionStateFromThreadRestore = (
   return session;
 };
 
-export const preserveRuntimeContextOnRestore = (
-  restored: CodexSessionState,
+export const preserveRuntimeContextForExistingThread = (
+  existingThreadSession: CodexSessionState,
   current: CodexSessionState | undefined,
 ): CodexSessionState => {
   if (!current) {
-    return restored;
+    return existingThreadSession;
   }
 
   return {
-    ...restored,
-    ...(restored.model || !current.model ? {} : { model: current.model }),
-    role: restored.role ?? current.role,
-    taskId: restored.taskId || current.taskId,
-    systemPrompt: restored.systemPrompt || current.systemPrompt,
+    ...existingThreadSession,
+    ...(existingThreadSession.model || !current.model ? {} : { model: current.model }),
+    role: existingThreadSession.role ?? current.role,
+    taskId: existingThreadSession.taskId || current.taskId,
+    systemPrompt: existingThreadSession.systemPrompt || current.systemPrompt,
   };
 };
 

@@ -51,7 +51,7 @@ describe("toRuntimeSnapshot", () => {
 });
 
 describe("resolveCodexRuntimeSnapshotSource", () => {
-  test("uses thread inventory when restore has no local live status", () => {
+  test("uses thread inventory when local state has no live status", () => {
     expect(
       resolveCodexRuntimeSnapshotSource({
         session: createSession(),

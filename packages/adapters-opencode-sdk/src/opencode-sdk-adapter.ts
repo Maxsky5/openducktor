@@ -99,7 +99,7 @@ const requireWorkflowRole = (session: SessionRecord): AgentRole => {
   );
 };
 
-const toRestoredSessionInput = (input: AgentSessionRef | AgentSessionRuntimeRef): SessionInput =>
+const toExistingSessionInput = (input: AgentSessionRef | AgentSessionRuntimeRef): SessionInput =>
   toSessionInput({
     ...input,
     taskId: "taskId" in input ? input.taskId : "",
@@ -284,10 +284,7 @@ export class OpencodeSdkAdapter
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
     );
-    const sessionInput = toRestoredSessionInput(input);
-    const startedMessage = sessionInput.role
-      ? `Restored ${sessionInput.role} session`
-      : "Restored session";
+    const sessionInput = toExistingSessionInput(input);
 
     const summary = registerSession({
       sessions: this.sessions,
@@ -299,7 +296,6 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage,
       emitStartedEvent: false,
       subscribeToEvents: false,
       now: this.now,
