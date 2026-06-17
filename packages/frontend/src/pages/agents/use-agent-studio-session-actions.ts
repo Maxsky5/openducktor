@@ -166,7 +166,7 @@ export function useAgentStudioSessionActions({
     sessionsForTask,
     selectedTask,
     canStartRole,
-    isSessionWorking: sessionState.isSessionBusy,
+    isSessionWorking: sessionState.isSessionWorking,
     selectionForNewSession,
     repoSettings,
     workspaceId: activeWorkspaceId,
@@ -194,7 +194,7 @@ export function useAgentStudioSessionActions({
     startSession,
   });
 
-  const isSessionWorking = sessionState.isSessionBusy || isSending;
+  const isSessionWorking = sessionState.isSessionWorking || isSending;
   const busySendBlockedReason = sessionState.busySendBlockedReason;
 
   const canPrepareMessageFirstSession = useCallback(

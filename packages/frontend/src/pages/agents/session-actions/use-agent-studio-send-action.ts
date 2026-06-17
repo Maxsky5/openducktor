@@ -66,12 +66,11 @@ export function useAgentStudioSendAction({
     hasInFlight: hasSendingActivityInFlight,
     isActive: isSendingActivityActive,
   } = useAgentStudioAsyncActivityTracker();
-  const targetSessionIdentity = selectedSessionIdentity;
   const activeComposerContextKey = buildAgentStudioSessionActivityKey({
     workspaceId,
     taskId,
     role,
-    session: targetSessionIdentity,
+    session: selectedSessionIdentity,
   });
   const isSending = isSendingActivityActive(activeComposerContextKey);
 
@@ -87,7 +86,7 @@ export function useAgentStudioSendAction({
       ) {
         return false;
       }
-      if (!targetSessionIdentity && !canStartNewSession) {
+      if (!selectedSessionIdentity && !canStartNewSession) {
         return false;
       }
       if (isSessionModelCatalogLoading && selectedSessionModel === null) {
@@ -124,7 +123,7 @@ export function useAgentStudioSendAction({
       const activity = beginSendingActivity(activeComposerContextKey);
 
       try {
-        let targetSession: AgentSessionIdentity | null | undefined = targetSessionIdentity;
+        let targetSession: AgentSessionIdentity | null | undefined = selectedSessionIdentity;
         if (!targetSession) {
           const startedSession = await startSession();
           targetSession = startedSession ? toAgentSessionIdentity(startedSession) : null;
@@ -177,7 +176,7 @@ export function useAgentStudioSendAction({
       sessionState.busySendBlockedReason,
       sessionState.canQueueBusyFollowups,
       sessionState.isWaitingInput,
-      targetSessionIdentity,
+      selectedSessionIdentity,
       taskId,
       workspaceId,
     ],

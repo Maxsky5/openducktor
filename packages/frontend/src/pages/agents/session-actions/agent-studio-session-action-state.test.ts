@@ -34,14 +34,14 @@ describe("deriveAgentStudioSessionActionState", () => {
     });
 
     expect(state).toMatchObject({
-      isSessionBusy: true,
+      isSessionWorking: true,
       isWaitingInput: false,
       canQueueBusyFollowups: true,
       busySendBlockedReason: null,
     });
   });
 
-  test("treats a selected session without activity evidence as not busy", () => {
+  test("treats a selected session without activity evidence as not working", () => {
     const state = deriveAgentStudioSessionActionState({
       selectedSessionIdentity: selectedSession,
       selectedSessionActivityState: null,
@@ -50,7 +50,7 @@ describe("deriveAgentStudioSessionActionState", () => {
     });
 
     expect(state).toMatchObject({
-      isSessionBusy: false,
+      isSessionWorking: false,
       isWaitingInput: false,
     });
   });

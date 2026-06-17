@@ -13,7 +13,7 @@ type AgentStudioSessionActionStateArgs = {
 };
 
 export type AgentStudioSessionActionState = {
-  isSessionBusy: boolean;
+  isSessionWorking: boolean;
   isWaitingInput: boolean;
   canQueueBusyFollowups: boolean;
   busySendBlockedReason: string | null;
@@ -50,7 +50,7 @@ export function deriveAgentStudioSessionActionState({
       : null;
 
   return {
-    isSessionBusy: isSessionWorking,
+    isSessionWorking,
     isWaitingInput,
     canQueueBusyFollowups,
     busySendBlockedReason,
