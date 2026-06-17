@@ -156,16 +156,23 @@ export type AgentChatThreadModelInput = Omit<
 > &
   Partial<Pick<AgentChatThreadModel, AgentChatThreadProjectionFields>>;
 
-export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => ({
-  ...model,
-  ...projectAgentChatThreadState({
+export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
+  const threadState = projectAgentChatThreadState({
     sessionKey:
       model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
     session: model.session,
     transcriptState: model.transcriptState,
     runtimeReadiness: model.runtimeReadiness,
-  }),
-});
+  });
+
+  return {
+    ...model,
+    session: threadState.threadSession,
+    displayedSessionKey: threadState.displayedSessionKey,
+    shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
+    transcriptNotice: threadState.transcriptNotice,
+  };
+};
 
 export const buildMessage = (
   role: AgentChatMessage["role"],

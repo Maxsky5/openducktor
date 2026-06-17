@@ -2,7 +2,6 @@ import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
-  isAgentSessionTranscriptVisible,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentChatThreadSession, AgentChatTranscriptNotice } from "./agent-chat.types";
 
@@ -73,14 +72,18 @@ const deriveAgentChatTranscriptNotice = ({
   return null;
 };
 
+const hidesExistingSessionTranscript = (transcriptState: AgentSessionTranscriptState): boolean =>
+  transcriptState.kind === "empty" || transcriptState.kind === "failed";
+
 export const projectAgentChatThreadState = ({
   sessionKey,
   session,
   transcriptState,
   runtimeReadiness,
 }: ProjectAgentChatThreadStateArgs): AgentChatThreadState => {
-  const threadSession = isAgentSessionTranscriptVisible(transcriptState) ? session : null;
-  const shouldResetTranscriptWindow = isAgentSessionTranscriptLoading(transcriptState);
+  const threadSession = hidesExistingSessionTranscript(transcriptState) ? null : session;
+  const shouldResetTranscriptWindow =
+    isAgentSessionTranscriptLoading(transcriptState) && threadSession === null;
   const transcriptNotice = deriveAgentChatTranscriptNotice({
     transcriptState,
     runtimeReadiness,

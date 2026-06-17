@@ -33,7 +33,7 @@ describe("projectAgentChatThreadState", () => {
     expect(projection.displayedSessionKey).toBe(sessionKey);
   });
 
-  test("hides the session and marks the transcript pending while transcript state is loading", () => {
+  test("keeps an existing session renderable while transcript state is loading", () => {
     const session = buildSession();
     const sessionKey = agentSessionIdentityKey(session);
     const projection = projectAgentChatThreadState({
@@ -43,11 +43,12 @@ describe("projectAgentChatThreadState", () => {
       runtimeReadiness: readyRuntimeReadiness,
     });
 
-    expect(projection.threadSession).toBeNull();
+    expect(projection.threadSession).toEqual(session);
     expect(projection.displayedSessionKey).toBe(sessionKey);
+    expect(projection.shouldResetTranscriptWindow).toBe(false);
   });
 
-  test("keeps the selected key while a selected session is loading before session state exists", () => {
+  test("resets the transcript window only when a selected session is loading before session state exists", () => {
     const sessionKey = "session-1|opencode|%2Frepo%2Fworktree";
     const projection = projectAgentChatThreadState({
       sessionKey,
@@ -58,6 +59,7 @@ describe("projectAgentChatThreadState", () => {
 
     expect(projection.threadSession).toBeNull();
     expect(projection.displayedSessionKey).toBe(sessionKey);
+    expect(projection.shouldResetTranscriptWindow).toBe(true);
   });
 
   test("hides the session without pending state when transcript state failed", () => {
@@ -75,15 +77,18 @@ describe("projectAgentChatThreadState", () => {
   });
 
   test("keeps runtime waiting separate from conversation hiding", () => {
+    const session = buildSession();
     const state = projectAgentChatThreadState({
-      sessionKey: null,
-      session: null,
+      sessionKey: agentSessionIdentityKey(session),
+      session,
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
       },
     });
 
+    expect(state.threadSession).toEqual(session);
+    expect(state.shouldResetTranscriptWindow).toBe(false);
     expect(state.transcriptNotice?.kind).toBe("runtime_waiting");
     expect(state.transcriptNotice?.severity).toBe("loading");
     expect(state.transcriptNotice?.title).toBe("Runtime is starting");
