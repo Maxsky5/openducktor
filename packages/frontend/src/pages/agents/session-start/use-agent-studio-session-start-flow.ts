@@ -1,6 +1,6 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -9,12 +9,14 @@ import type {
   RunSessionStartWorkflow,
   SessionLaunchActionId,
   SessionStartFlowRequest,
+  SessionStartGate,
   SessionStartLaunchRequest,
   SessionStartPostAction,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
+  createSessionStartGate,
   sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
 } from "@/features/session-start";
@@ -33,10 +35,6 @@ import {
   useAgentStudioAsyncActivityTracker,
 } from "../use-agent-studio-async-activity";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
-import {
-  buildAgentStudioSessionStartKey,
-  useAgentStudioSessionStartGate,
-} from "./use-agent-studio-session-start-gate";
 
 type CanStartRole = (role: AgentRole) => boolean;
 
@@ -61,6 +59,15 @@ type UseAgentStudioSessionStartFlowArgs = {
 };
 
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
+type AgentStudioSessionStartGateResult = SessionStartWorkflowResult | undefined;
+
+const buildSessionStartKey = (params: {
+  taskId: string;
+  role: AgentRole;
+  launchActionId: SessionLaunchActionId;
+}): string => {
+  return `${params.taskId}:${params.role}:${params.launchActionId}`;
+};
 
 const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
   toast.error(sessionStartPostActionErrorTitle(action), {
@@ -98,7 +105,19 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
-  const sessionStartGate = useAgentStudioSessionStartGate(workspaceId);
+  const sessionStartGateScopeRef = useRef(workspaceId);
+  const sessionStartGateRef = useRef<SessionStartGate<AgentStudioSessionStartGateResult> | null>(
+    null,
+  );
+  if (sessionStartGateRef.current === null) {
+    sessionStartGateRef.current = createSessionStartGate<AgentStudioSessionStartGateResult>();
+  }
+  const sessionStartGate = sessionStartGateRef.current;
+  if (sessionStartGateScopeRef.current !== workspaceId) {
+    sessionStartGateScopeRef.current = workspaceId;
+    sessionStartGate.clear();
+  }
+
   const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
     useAgentStudioAsyncActivityTracker();
   const isStarting = isStartingActivityActive(
@@ -213,7 +232,7 @@ export function useAgentStudioSessionStartFlow({
         return undefined;
       }
 
-      const startKey = buildAgentStudioSessionStartKey({
+      const startKey = buildSessionStartKey({
         taskId,
         role,
         launchActionId,
@@ -292,7 +311,7 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      const startKey = buildAgentStudioSessionStartKey({
+      const startKey = buildSessionStartKey({
         taskId,
         role: nextRole,
         launchActionId: nextLaunchActionId,
@@ -346,7 +365,7 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      const startKey = buildAgentStudioSessionStartKey({
+      const startKey = buildSessionStartKey({
         taskId,
         role: option.role,
         launchActionId: option.launchActionId,
