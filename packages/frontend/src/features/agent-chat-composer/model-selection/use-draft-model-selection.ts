@@ -46,7 +46,6 @@ type DraftModelSelectionAction =
       type: "draftSelectionSynced";
       composerCatalog: AgentModelCatalog | null;
       context: DraftModelSelectionContext;
-      hasSessionTarget: boolean;
       repoSettingsReady: boolean;
       role: AgentRole;
       roleDefaultSelection: AgentModelSelection | null;
@@ -106,7 +105,7 @@ const draftModelSelectionReducer = (
         },
       };
     case "draftSelectionSynced": {
-      if (action.hasSessionTarget || !action.composerCatalog) {
+      if (!action.composerCatalog) {
         return currentState;
       }
 
@@ -142,7 +141,6 @@ export const useAgentStudioDraftModelSelectionState = ({
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
   syncDraftSelection: (input: {
-    hasSessionTarget: boolean;
     composerCatalog: AgentModelCatalog | null;
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
@@ -178,11 +176,9 @@ export const useAgentStudioDraftModelSelectionState = ({
 
   const syncDraftSelection = useCallback(
     ({
-      hasSessionTarget,
       composerCatalog,
       roleDefaultSelection,
     }: {
-      hasSessionTarget: boolean;
       composerCatalog: AgentModelCatalog | null;
       roleDefaultSelection: AgentModelSelection | null;
     }): void => {
@@ -190,7 +186,6 @@ export const useAgentStudioDraftModelSelectionState = ({
         type: "draftSelectionSynced",
         composerCatalog,
         context: draftContext,
-        hasSessionTarget,
         repoSettingsReady,
         role,
         roleDefaultSelection,

@@ -247,11 +247,10 @@ export function useAgentStudioChatComposer({
   });
   useEffect(() => {
     syncDraftSelection({
-      hasSessionTarget,
       composerCatalog,
       roleDefaultSelection,
     });
-  }, [composerCatalog, hasSessionTarget, roleDefaultSelection, syncDraftSelection]);
+  }, [composerCatalog, roleDefaultSelection, syncDraftSelection]);
 
   const { selectionCatalog, selectedModelSelection, selectionForNewSession } = useMemo(
     () =>
