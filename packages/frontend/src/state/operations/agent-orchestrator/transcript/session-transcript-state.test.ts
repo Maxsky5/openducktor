@@ -44,14 +44,6 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
 
 const repoPath = "/tmp/repo";
 
-const sessionIdentityFor = (session: AgentSessionState) => ({
-  externalSessionId: session.externalSessionId,
-  runtimeKind: session.runtimeKind,
-  workingDirectory: session.workingDirectory,
-});
-
-const selectedSessionIdentity = sessionIdentityFor(createSession());
-
 const deriveSelectedSessionTranscriptStateForSession = ({
   session,
   repoReadinessState,
@@ -60,11 +52,8 @@ const deriveSelectedSessionTranscriptStateForSession = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }) =>
   deriveSelectedAgentSessionTranscriptState({
-    selectedSessionIdentity: sessionIdentityFor(session),
-    session,
-    hasSelectedTask: true,
+    source: { kind: "loaded_session", session },
     repoReadinessState,
-    sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
   });
 
 describe("deriveSelectedAgentSessionTranscriptState for loaded sessions", () => {
@@ -295,13 +284,22 @@ describe("deriveRuntimeTranscriptState", () => {
 });
 
 describe("deriveSelectedAgentSessionTranscriptState", () => {
+  test("keeps inactive selections empty", () => {
+    const transcriptState = deriveSelectedAgentSessionTranscriptState({
+      source: { kind: "inactive" },
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "empty", reason: "inactive" });
+  });
+
   test("keeps a missing selected session loading while runtime readiness is checking", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_session",
+        readModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
+      },
       repoReadinessState: "checking",
-      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -311,14 +309,14 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
 
   test("surfaces selected session load failures without a second local state machine", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_session",
+        readModelLoadState: failedAgentSessionReadModelLoadState(
+          repoPath,
+          "Session history failed",
+        ),
+      },
       repoReadinessState: "ready",
-      sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
-        repoPath,
-        "Session history failed",
-      ),
     });
 
     expect(transcriptState).toEqual({
@@ -328,12 +326,10 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
   });
 
   test("delegates selected active session readiness to the session transcript state", () => {
+    const session = createSession({ historyLoadState: "not_requested", messages: [] });
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity,
-      session: createSession({ historyLoadState: "not_requested", messages: [] }),
-      hasSelectedTask: true,
+      source: { kind: "loaded_session", session },
       repoReadinessState: "ready",
-      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -344,11 +340,11 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
 
   test("keeps a selected task in runtime loading instead of inactive while repo runtime is checking", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity: null,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_task",
+        readModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
+      },
       repoReadinessState: "checking",
-      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -358,11 +354,11 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
 
   test("waits for runtime readiness before resolving the loading session read model", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity: null,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_task",
+        readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      },
       repoReadinessState: "checking",
-      sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -372,11 +368,11 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
 
   test("resolves selected sessions through the transcript-state owner once runtime is ready", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity: null,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_task",
+        readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      },
       repoReadinessState: "ready",
-      sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({
@@ -387,11 +383,11 @@ describe("deriveSelectedAgentSessionTranscriptState", () => {
 
   test("keeps sessionless selection explicit once runtime is ready", () => {
     const transcriptState = deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity: null,
-      session: null,
-      hasSelectedTask: true,
+      source: {
+        kind: "selected_task",
+        readModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
+      },
       repoReadinessState: "ready",
-      sessionReadModelLoadState: readyAgentSessionReadModelLoadState(repoPath),
     });
 
     expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });

@@ -406,11 +406,13 @@ Selected-session model choice belongs to the selected session summary until the
 full session is loaded, then to `AgentSessionState.selectedModel`. The selected
 view may expose that display fallback only as `selectedSessionModel`; do not wrap
 it in a session-shaped selected-view projection.
-Selected-session existence is the selected-session identity itself. Do not pass
-`hasSelectedSession` booleans through transcript, kickoff, or send policies; pass
-`selectedSessionIdentity` and derive the boolean locally when a branch truly
-needs it. Likewise, pass `selectedSessionModel` instead of a mirrored
-`hasSelectedSessionModel` flag.
+Selected-session transcript state receives exactly one selected source: inactive,
+selected task, selected session, or loaded session. Do not pass parallel task,
+identity, and session facts through the transcript boundary and make it infer the
+source again. Outside that boundary, selected-session existence is the selected
+session identity itself; pass `selectedSessionIdentity` and derive booleans
+locally only when a branch truly needs them. Likewise, pass `selectedSessionModel`
+instead of a mirrored `hasSelectedSessionModel` flag.
 `use-agent-studio-selected-session-view.ts` owns the selected-session view shape.
 Selection controllers may add task/tab context, but must not rename the selected
 session, runtime-data, readiness, role, launch-action, or transcript fields into

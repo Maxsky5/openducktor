@@ -19,6 +19,7 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import {
   type AgentSessionTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
+  type SelectedAgentSessionTranscriptSource,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -147,12 +148,23 @@ export function useAgentStudioSelectedSessionView({
       : firstLaunchAction(selection.role);
 
   const transcriptState = useMemo(() => {
+    let transcriptSource: SelectedAgentSessionTranscriptSource;
+    if (session) {
+      transcriptSource = { kind: "loaded_session", session };
+    } else if (selectedSessionIdentity) {
+      transcriptSource = {
+        kind: "selected_session",
+        readModelLoadState: sessionReadModelLoadState,
+      };
+    } else if (selectedTask) {
+      transcriptSource = { kind: "selected_task", readModelLoadState: sessionReadModelLoadState };
+    } else {
+      transcriptSource = { kind: "inactive" };
+    }
+
     return deriveSelectedAgentSessionTranscriptState({
-      selectedSessionIdentity,
-      session,
-      hasSelectedTask: selectedTask !== null,
+      source: transcriptSource,
       repoReadinessState,
-      sessionReadModelLoadState,
     });
   }, [
     repoReadinessState,
