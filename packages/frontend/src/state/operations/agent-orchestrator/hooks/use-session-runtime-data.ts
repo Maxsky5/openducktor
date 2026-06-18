@@ -52,40 +52,35 @@ export const useSessionRuntimeData = ({
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
-  const hasSelectedSessionIdentity = selectedSessionIdentity !== null;
-  const selectedSessionExternalSessionId = selectedSessionIdentity?.externalSessionId ?? "";
+  const selectedSessionExternalSessionId = selectedSessionIdentity?.externalSessionId ?? null;
   const selectedSessionRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
-  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? "";
-  const runtimeDataRefs = useMemo(() => {
-    if (!hasSelectedSessionIdentity) {
-      return resolveSessionRuntimeDataRefs({
-        repoPath,
-        selectedSessionIdentity: null,
-        runtimeDefinitions,
-      });
+  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
+  const stableSelectedSessionIdentity = useMemo(() => {
+    if (
+      selectedSessionExternalSessionId === null ||
+      selectedSessionRuntimeKind === null ||
+      selectedSessionWorkingDirectory === null
+    ) {
+      return null;
     }
 
-    if (selectedSessionRuntimeKind === null) {
-      throw new Error("Selected session runtime kind is required.");
-    }
-
-    return resolveSessionRuntimeDataRefs({
-      repoPath,
-      selectedSessionIdentity: {
-        externalSessionId: selectedSessionExternalSessionId,
-        runtimeKind: selectedSessionRuntimeKind,
-        workingDirectory: selectedSessionWorkingDirectory,
-      },
-      runtimeDefinitions,
-    });
+    return {
+      externalSessionId: selectedSessionExternalSessionId,
+      runtimeKind: selectedSessionRuntimeKind,
+      workingDirectory: selectedSessionWorkingDirectory,
+    };
   }, [
-    hasSelectedSessionIdentity,
-    repoPath,
-    runtimeDefinitions,
     selectedSessionExternalSessionId,
     selectedSessionRuntimeKind,
     selectedSessionWorkingDirectory,
   ]);
+  const runtimeDataRefs = useMemo(() => {
+    return resolveSessionRuntimeDataRefs({
+      repoPath,
+      selectedSessionIdentity: stableSelectedSessionIdentity,
+      runtimeDefinitions,
+    });
+  }, [repoPath, runtimeDefinitions, stableSelectedSessionIdentity]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
