@@ -38,14 +38,11 @@ export function deriveAgentStudioSessionActionState({
     : false;
   const isSessionWorking = isAgentSessionActivityWorking(selectedSessionActivityState);
   const isWaitingInput = selectedSessionActivityState === "waiting_input";
-  const canQueueBusyFollowups = isSessionWorking && !isWaitingInput && supportsQueuedUserMessages;
+  const canQueueBusyFollowups = isSessionWorking && supportsQueuedUserMessages;
   const selectedRuntimeLabel =
     selectedRuntimeDescriptor?.label ?? selectedRuntimeKind ?? "Current runtime";
   const busySendBlockedReason =
-    selectedSessionIdentity !== null &&
-    isSessionWorking &&
-    !isWaitingInput &&
-    !supportsQueuedUserMessages
+    selectedSessionIdentity !== null && isSessionWorking && !supportsQueuedUserMessages
       ? `${selectedRuntimeLabel} does not support queued messages while the session is working.`
       : null;
 

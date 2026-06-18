@@ -54,4 +54,20 @@ describe("deriveAgentStudioSessionActionState", () => {
       isWaitingInput: false,
     });
   });
+
+  test("keeps waiting-input sessions out of busy follow-up policy", () => {
+    const state = deriveAgentStudioSessionActionState({
+      selectedSessionIdentity: selectedSession,
+      selectedSessionActivityState: "waiting_input",
+      sessionRuntimeData: EMPTY_SELECTED_SESSION_RUNTIME_DATA,
+      runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
+    });
+
+    expect(state).toMatchObject({
+      isSessionWorking: false,
+      isWaitingInput: true,
+      canQueueBusyFollowups: false,
+      busySendBlockedReason: null,
+    });
+  });
 });
