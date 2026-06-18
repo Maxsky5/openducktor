@@ -801,11 +801,13 @@ Files:
 
 - `state/queries/agent-sessions.ts`
 - `state/operations/agent-orchestrator/session-read-model/task-session-records.ts`
+- `state/operations/agent-orchestrator/session-read-model/repo-session-local-state.ts`
 
 Owns:
 
 - reading durable task session records through per-task session-list queries
 - keeping per-task session-list query keys as the only frontend cache for persisted session records
+- partitioning current local sessions into carried state and cleanup refs during repo reads
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
 Must not own:
@@ -823,6 +825,11 @@ model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces; orchestrator internals may reload the repo
 session read model after start/stop/reuse paths, but `loadAgentSessions` must not
 be exposed through public app operation contexts.
+Local session cleanup during repo reads is owned by
+`repo-session-local-state.ts`. It carries sessions outside the loaded task set
+and local starting sessions whose persisted record is not visible yet; every
+other local session for the loaded task set must have a durable record or become
+a cleanup ref.
 
 ## Startup Flow
 

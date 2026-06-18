@@ -7,13 +7,13 @@ import {
   createAgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
-  listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { fromPersistedSessionRecord, toPersistedSessionIdentity } from "../support/persistence";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
+import { partitionRepoSessionLocalState } from "./repo-session-local-state";
 import {
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
@@ -50,9 +50,6 @@ const toPersistedSessionView = ({
   };
 };
 
-const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
-  session.status === "starting";
-
 export const buildRepoSessionReadModel = ({
   repoPath,
   tasks,
@@ -72,19 +69,13 @@ export const buildRepoSessionReadModel = ({
     ),
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
-  const currentSessionsOutsideLoadedTasks = listAgentSessions(currentSessions).filter(
-    (session) =>
-      !loadedTaskIds.has(session.taskId) || shouldKeepLocalSessionWithoutPersistedRecord(session),
-  );
-  const removedSessionRefs = listAgentSessions(currentSessions)
-    .filter(
-      (session) =>
-        loadedTaskIds.has(session.taskId) &&
-        !persistedSessionKeys.has(agentSessionIdentityKey(session)) &&
-        !shouldKeepLocalSessionWithoutPersistedRecord(session),
-    )
-    .map((session) => toRuntimeSessionRef(repoPath, session));
-  let sessionCollection = createAgentSessionCollection(currentSessionsOutsideLoadedTasks);
+  const localState = partitionRepoSessionLocalState({
+    repoPath,
+    currentSessions,
+    loadedTaskIds,
+    persistedSessionKeys,
+  });
+  let sessionCollection = createAgentSessionCollection(localState.carriedSessions);
   const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
@@ -106,5 +97,9 @@ export const buildRepoSessionReadModel = ({
     }
   }
 
-  return { sessionCollection, liveSessionRefs, removedSessionRefs };
+  return {
+    sessionCollection,
+    liveSessionRefs,
+    removedSessionRefs: localState.removedSessionRefs,
+  };
 };
