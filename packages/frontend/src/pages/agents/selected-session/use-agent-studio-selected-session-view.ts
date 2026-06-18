@@ -75,7 +75,7 @@ export function useAgentStudioSelectedSessionView({
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
   const { readSessionTodos } = useAgentOperations();
   const {
-    availableRuntimeDefinitions: runtimeDefinitions,
+    allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
     loadRepoRuntimeCatalog,

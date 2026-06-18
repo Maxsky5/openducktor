@@ -47,7 +47,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { availableRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
+  const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
     activeWorkspaceId,
   });

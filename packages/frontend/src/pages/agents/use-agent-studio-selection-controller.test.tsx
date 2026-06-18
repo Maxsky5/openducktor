@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import {
   type AgentSessionSummary,
@@ -423,6 +424,60 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
       expect(latest.view.runtimeReadiness.state).toBe("checking");
+      expect(latest.view.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps selected-session runtime descriptors separate from new-session availability", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const codexSession = createSession("task-1", "codex-session", {
+      runtimeKind: "codex",
+      role: "build",
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("codex-session"),
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [task],
+        sessions: [codexSession],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(codexSession),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        },
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture(),
+            codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
+          },
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
+      expect(latest.view.runtimeReadiness.state).toBe("blocked");
+      expect(latest.view.runtimeReadiness.message).toBe(
+        "Codex runtime is disabled in Agent Runtime settings.",
+      );
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
       });

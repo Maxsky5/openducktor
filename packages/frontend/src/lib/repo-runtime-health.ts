@@ -1,4 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type {
   RepoRuntimeHealthCheck,
   RepoRuntimeHealthMap,
@@ -39,6 +40,43 @@ export const formatRepoRuntimeObservation = (
     case null:
       return null;
   }
+};
+
+export const buildDisabledRuntimeHealth = (
+  definition: RuntimeDescriptor,
+): RepoRuntimeHealthCheck => {
+  const checkedAt = new Date().toISOString();
+  const detail = `${definition.label} runtime is disabled in Agent Runtime settings.`;
+  const supportsMcpStatus = definition.capabilities.optionalSurfaces.supportsMcpStatus;
+
+  return {
+    status: "disabled",
+    checkedAt,
+    runtime: {
+      status: "disabled",
+      stage: "idle",
+      observation: null,
+      instance: null,
+      startedAt: null,
+      updatedAt: checkedAt,
+      elapsedMs: null,
+      attempts: null,
+      detail,
+      failureKind: null,
+      failureReason: null,
+    },
+    mcp: supportsMcpStatus
+      ? {
+          supported: true,
+          status: "unsupported",
+          serverName: ODT_MCP_SERVER_NAME,
+          serverStatus: null,
+          toolIds: [],
+          detail: "Runtime is disabled, so MCP is not checked.",
+          failureKind: null,
+        }
+      : null,
+  };
 };
 
 export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {

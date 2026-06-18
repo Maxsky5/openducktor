@@ -18,7 +18,7 @@ export function DiagnosticsPanel(): ReactElement {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
-    availableRuntimeDefinitions: runtimeDefinitions,
+    allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
