@@ -333,13 +333,13 @@ describe("model-selection-preferences", () => {
 
     expect(
       resolveChatComposerModelSelections({
-        hasSessionTarget: true,
-        sessionModelCatalog: CATALOG,
-        composerCatalog: null,
-        selectedSessionModel: unknownSessionModel,
-        draftSelection,
+        source: {
+          kind: "session",
+          modelCatalog: CATALOG,
+          selectedSessionModel: unknownSessionModel,
+          draftSelection,
+        },
         roleDefaultSelection,
-        isAwaitingRepoSettingsForWorkspaceRepoPath: false,
       }),
     ).toEqual({
       selectionCatalog: CATALOG,
@@ -357,13 +357,13 @@ describe("model-selection-preferences", () => {
 
     expect(
       resolveChatComposerModelSelections({
-        hasSessionTarget: false,
-        sessionModelCatalog: null,
-        composerCatalog: CATALOG,
-        selectedSessionModel: null,
-        draftSelection: null,
+        source: {
+          kind: "new_session",
+          composerCatalog: CATALOG,
+          draftSelection: null,
+          isAwaitingRepoSettingsForWorkspaceRepoPath: false,
+        },
         roleDefaultSelection,
-        isAwaitingRepoSettingsForWorkspaceRepoPath: false,
       }),
     ).toEqual({
       selectionCatalog: CATALOG,
@@ -373,13 +373,13 @@ describe("model-selection-preferences", () => {
 
     expect(
       resolveChatComposerModelSelections({
-        hasSessionTarget: false,
-        sessionModelCatalog: null,
-        composerCatalog: null,
-        selectedSessionModel: null,
-        draftSelection: null,
+        source: {
+          kind: "new_session",
+          composerCatalog: null,
+          draftSelection: null,
+          isAwaitingRepoSettingsForWorkspaceRepoPath: true,
+        },
         roleDefaultSelection,
-        isAwaitingRepoSettingsForWorkspaceRepoPath: true,
       }),
     ).toEqual({
       selectionCatalog: null,

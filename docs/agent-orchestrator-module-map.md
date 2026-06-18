@@ -575,6 +575,8 @@ Files:
 Owns:
 
 - composing model-selection choices for a new message or new session
+- resolving composer model selections from one explicit model-selection source:
+  selected session or new session
 - resolving selected composer runtime kind from selected-session model, draft
   selection, role default, and repo default
 - deriving Agent Studio chat empty-state/kickoff visibility and composer

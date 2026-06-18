@@ -15,6 +15,7 @@ import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/con
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import {
+  type ChatComposerModelSelectionSource,
   resolveAvailableRoleDefaultModelSelection,
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
@@ -260,27 +261,34 @@ export function useAgentStudioChatComposer({
     });
   }, [composerCatalog, roleDefaultSelection, syncDraftSelection]);
 
-  const { selectionCatalog, selectedModelSelection, selectionForNewSession } = useMemo(
-    () =>
-      resolveChatComposerModelSelections({
-        hasSessionTarget,
-        sessionModelCatalog,
-        composerCatalog,
-        selectedSessionModel,
-        draftSelection,
-        roleDefaultSelection,
-        isAwaitingRepoSettingsForWorkspaceRepoPath,
-      }),
-    [
-      composerCatalog,
-      draftSelection,
-      hasSessionTarget,
-      isAwaitingRepoSettingsForWorkspaceRepoPath,
+  const { selectionCatalog, selectedModelSelection, selectionForNewSession } = useMemo(() => {
+    const source: ChatComposerModelSelectionSource = hasSessionTarget
+      ? {
+          kind: "session",
+          modelCatalog: sessionModelCatalog,
+          selectedSessionModel,
+          draftSelection,
+        }
+      : {
+          kind: "new_session",
+          composerCatalog,
+          draftSelection,
+          isAwaitingRepoSettingsForWorkspaceRepoPath,
+        };
+
+    return resolveChatComposerModelSelections({
+      source,
       roleDefaultSelection,
-      selectedSessionModel,
-      sessionModelCatalog,
-    ],
-  );
+    });
+  }, [
+    composerCatalog,
+    draftSelection,
+    hasSessionTarget,
+    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    roleDefaultSelection,
+    selectedSessionModel,
+    sessionModelCatalog,
+  ]);
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({

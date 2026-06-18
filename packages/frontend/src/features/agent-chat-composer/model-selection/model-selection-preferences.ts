@@ -99,67 +99,68 @@ export type ChatComposerModelSelections = {
   selectionForNewSession: AgentModelSelection | null;
 };
 
-export const resolveChatComposerModelSelections = ({
-  hasSessionTarget,
-  sessionModelCatalog,
-  composerCatalog,
-  selectedSessionModel,
-  draftSelection,
-  roleDefaultSelection,
-  isAwaitingRepoSettingsForWorkspaceRepoPath,
-}: {
-  hasSessionTarget: boolean;
-  sessionModelCatalog: AgentModelCatalog | null;
-  composerCatalog: AgentModelCatalog | null;
-  selectedSessionModel: AgentModelSelection | null;
-  draftSelection: AgentModelSelection | null;
-  roleDefaultSelection: AgentModelSelection | null;
-  isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
-}): ChatComposerModelSelections => {
-  const roleDefaultSelectionForComposer = resolveChatComposerRoleDefaultSelection({
-    hasSessionTarget,
-    composerCatalog,
-    roleDefaultSelection,
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
-  });
-  const selectionCatalog = sessionModelCatalog ?? composerCatalog;
-  const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+export type ChatComposerModelSelectionSource =
+  | {
+      kind: "new_session";
+      composerCatalog: AgentModelCatalog | null;
+      draftSelection: AgentModelSelection | null;
+      isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
+    }
+  | {
+      kind: "session";
+      modelCatalog: AgentModelCatalog | null;
+      selectedSessionModel: AgentModelSelection | null;
+      draftSelection: AgentModelSelection | null;
+    };
 
-  if (hasSessionTarget) {
+export const resolveChatComposerModelSelections = ({
+  source,
+  roleDefaultSelection,
+}: {
+  source: ChatComposerModelSelectionSource;
+  roleDefaultSelection: AgentModelSelection | null;
+}): ChatComposerModelSelections => {
+  if (source.kind === "session") {
+    const selectionCatalog = source.modelCatalog;
+    const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+
     return {
       selectionCatalog,
       selectedModelSelection:
-        resolveLoadedSessionVisibleSelection(selectionCatalog, selectedSessionModel) ??
-        roleDefaultSelectionForComposer ??
+        resolveLoadedSessionVisibleSelection(selectionCatalog, source.selectedSessionModel) ??
+        roleDefaultSelection ??
         fallbackCatalogSelection,
       selectionForNewSession:
-        draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
+        source.draftSelection ?? roleDefaultSelection ?? fallbackCatalogSelection,
     };
   }
+
+  const roleDefaultSelectionForComposer = resolveNewSessionRoleDefaultSelection({
+    composerCatalog: source.composerCatalog,
+    roleDefaultSelection,
+    isAwaitingRepoSettingsForWorkspaceRepoPath: source.isAwaitingRepoSettingsForWorkspaceRepoPath,
+  });
+  const selectionCatalog = source.composerCatalog;
+  const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
 
   return {
     selectionCatalog,
     selectedModelSelection:
-      draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
+      source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
     selectionForNewSession:
-      draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
+      source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
   };
 };
 
-const resolveChatComposerRoleDefaultSelection = ({
-  hasSessionTarget,
+const resolveNewSessionRoleDefaultSelection = ({
   composerCatalog,
   roleDefaultSelection,
   isAwaitingRepoSettingsForWorkspaceRepoPath,
 }: {
-  hasSessionTarget: boolean;
   composerCatalog: AgentModelCatalog | null;
   roleDefaultSelection: AgentModelSelection | null;
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
 }): AgentModelSelection | null => {
-  if (hasSessionTarget) {
-    return roleDefaultSelection;
-  }
   if (!composerCatalog) {
     return isAwaitingRepoSettingsForWorkspaceRepoPath ? null : roleDefaultSelection;
   }
