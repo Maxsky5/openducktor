@@ -8,6 +8,7 @@ import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
   type ActiveTaskSessionContext,
+  type ActiveWorkflowAgentSessionSummary,
   isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
@@ -18,15 +19,12 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
-import type {
-  AgentSessionSummary,
-  WorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const comparePrimaryTaskSession = (
-  left: WorkflowAgentSessionSummary,
-  right: WorkflowAgentSessionSummary,
+  left: ActiveWorkflowAgentSessionSummary,
+  right: ActiveWorkflowAgentSessionSummary,
 ): number => {
   return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
@@ -34,7 +32,7 @@ const comparePrimaryTaskSession = (
 export const buildActiveTaskSessionContextByTaskId = (
   sessions: AgentSessionSummary[],
 ): Map<string, ActiveTaskSessionContext> => {
-  const activeTaskSessionContextByTaskId = new Map<string, WorkflowAgentSessionSummary>();
+  const activeTaskSessionContextByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary>();
 
   for (const session of sessions) {
     if (!isKanbanActiveTaskSession(session)) {
@@ -52,7 +50,7 @@ export const buildActiveTaskSessionContextByTaskId = (
       taskId,
       {
         role: session.role,
-        presentationState: toKanbanTaskSession(session).presentationState,
+        activityState: session.activityState,
       },
     ]),
   );
@@ -111,7 +109,7 @@ export const sortTasksByActivityState = (
 export const buildTaskSessionsByTaskId = (
   sessions: AgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
-  const sessionsByTaskId = new Map<string, WorkflowAgentSessionSummary[]>();
+  const sessionsByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary[]>();
   for (const session of sessions) {
     if (!isKanbanActiveTaskSession(session)) {
       continue;

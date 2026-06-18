@@ -113,19 +113,19 @@ describe("use-kanban-board-model helpers", () => {
     expect(taskSessionsByTaskId.get("task-1")).toEqual([
       expect.objectContaining({
         externalSessionId: "session-running-newer",
-        presentationState: "waiting_input",
+        activityState: "waiting_input",
       }),
       expect.objectContaining({
         externalSessionId: "session-idle",
-        presentationState: "waiting_input",
+        activityState: "waiting_input",
       }),
       expect.objectContaining({
         externalSessionId: "session-running-older",
-        presentationState: "running",
+        activityState: "running",
       }),
       expect.objectContaining({
         externalSessionId: "session-starting",
-        presentationState: "starting",
+        activityState: "starting",
       }),
     ]);
   });
@@ -327,7 +327,7 @@ describe("use-kanban-board-model helpers", () => {
 
     expect(activeTaskSessionContextByTaskId.get("task-1")).toEqual({
       role: "qa",
-      presentationState: "waiting_input",
+      activityState: "waiting_input",
     });
   });
 });

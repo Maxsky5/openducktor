@@ -147,7 +147,7 @@ const areTaskSessionsEqual = (
     if (
       agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
-      leftSession.presentationState !== rightSession.presentationState
+      leftSession.activityState !== rightSession.activityState
     ) {
       return false;
     }
@@ -195,7 +195,7 @@ const getSessionStatusLabel = ({
     return "Waiting input";
   }
 
-  if (session.presentationState === "starting") {
+  if (session.activityState === "starting") {
     return "Starting";
   }
 
@@ -364,7 +364,7 @@ function TaskActions({
       ? resolvePreferredActiveSession(taskSessions, activeSessionRole)
       : null;
   const primarySessionIsWaitingInput =
-    primaryActiveSession?.presentationState === "waiting_input" ||
+    primaryActiveSession?.activityState === "waiting_input" ||
     (taskActivityState === "waiting_input" && hasActiveSession);
 
   const openRoleSession = (role: AgentRole): void => {

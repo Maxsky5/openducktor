@@ -39,7 +39,7 @@ describe("session-target-resolution", () => {
     expect(resolveHistoricalSessionRoles(historicalSessions)).toEqual(["build", "spec"]);
   });
 
-  test("prefers newest active session when presentation states are equally ranked", () => {
+  test("prefers newest active session when activity states are equally ranked", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
@@ -47,7 +47,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-older",
         role: "build",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
       {
         runtimeKind: "opencode",
@@ -55,7 +55,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-newer",
         role: "build",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
     ];
 
@@ -70,7 +70,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-shared",
         role: "build",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
       {
         runtimeKind: "opencode",
@@ -78,7 +78,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-shared",
         role: "build",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
     ];
 
@@ -96,7 +96,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-running",
         role: "build",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
       {
         runtimeKind: "opencode",
@@ -104,7 +104,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-starting",
         role: "build",
         startedAt: "2026-03-22T10:00:00.000Z",
-        presentationState: "starting",
+        activityState: "starting",
       },
       {
         runtimeKind: "opencode",
@@ -112,7 +112,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "build-waiting",
         role: "build",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "waiting_input",
+        activityState: "waiting_input",
       },
     ];
 
@@ -139,7 +139,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "spec-active",
         role: "spec",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
     ];
 
@@ -160,7 +160,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "spec-shared",
         role: "spec",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
       {
         runtimeKind: "opencode",
@@ -168,7 +168,7 @@ describe("session-target-resolution", () => {
         externalSessionId: "spec-shared",
         role: "spec",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "running",
+        activityState: "running",
       },
     ];
 

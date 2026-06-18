@@ -97,9 +97,6 @@ export function TaskDetailsSheetController({
       {...(selectedActiveSessionContext?.role
         ? { activeSessionRole: selectedActiveSessionContext.role }
         : {})}
-      {...(selectedActiveSessionContext?.presentationState
-        ? { activeSessionPresentationState: selectedActiveSessionContext.presentationState }
-        : {})}
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {

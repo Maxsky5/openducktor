@@ -13,13 +13,15 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
 
-export type KanbanSessionPresentationState = ActiveAgentSessionActivityState;
-
 export type KanbanTaskActivityState = "idle" | "active" | "waiting_input";
+
+export type ActiveWorkflowAgentSessionSummary = WorkflowAgentSessionSummary & {
+  activityState: ActiveAgentSessionActivityState;
+};
 
 export type ActiveTaskSessionContext = {
   role: AgentRole;
-  presentationState: KanbanTaskSession["presentationState"];
+  activityState: KanbanTaskSession["activityState"];
 };
 
 export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionContext>;
@@ -27,30 +29,21 @@ export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionCont
 export type KanbanTaskSession = AgentSessionIdentity &
   Pick<WorkflowAgentSessionState, "role"> & {
     startedAt?: AgentSessionState["startedAt"];
-    presentationState: KanbanSessionPresentationState;
+    activityState: ActiveAgentSessionActivityState;
   };
 
-export const toKanbanSessionPresentationState = (
-  session: Pick<AgentSessionSummary, "activityState">,
-): KanbanSessionPresentationState => {
-  if (!isAgentSessionActivityActive(session.activityState)) {
-    throw new Error(
-      `Inactive session '${session.activityState}' cannot be shown as active Kanban work.`,
-    );
-  }
-  return session.activityState;
-};
-
-export const toKanbanTaskSession = (session: WorkflowAgentSessionSummary): KanbanTaskSession => ({
+export const toKanbanTaskSession = (
+  session: ActiveWorkflowAgentSessionSummary,
+): KanbanTaskSession => ({
   ...toAgentSessionIdentity(session),
   role: session.role,
   startedAt: session.startedAt,
-  presentationState: toKanbanSessionPresentationState(session),
+  activityState: session.activityState,
 });
 
 export const isKanbanActiveTaskSession = (
   session: AgentSessionSummary,
-): session is WorkflowAgentSessionSummary => {
+): session is ActiveWorkflowAgentSessionSummary => {
   if (!isWorkflowAgentSessionSummary(session)) {
     return false;
   }
@@ -59,13 +52,13 @@ export const isKanbanActiveTaskSession = (
 };
 
 export const toKanbanTaskActivityState = (
-  taskSessions: Array<Pick<KanbanTaskSession, "presentationState">> | undefined,
+  taskSessions: Array<Pick<KanbanTaskSession, "activityState">> | undefined,
 ): KanbanTaskActivityState => {
   if (!taskSessions || taskSessions.length === 0) {
     return "idle";
   }
 
-  return taskSessions.some((session) => session.presentationState === "waiting_input")
+  return taskSessions.some((session) => session.activityState === "waiting_input")
     ? "waiting_input"
     : "active";
 };

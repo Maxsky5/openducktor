@@ -78,7 +78,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   historicalSessions,
   hasActiveSession,
   activeSessionRole,
-  activeSessionPresentationState,
+  activeSessionActivityState,
   taskActivityState,
   measurementVersion,
   onMeasuredHeight,
@@ -98,7 +98,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   historicalSessions: HistoricalSessions | undefined;
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
-  activeSessionPresentationState: KanbanTaskSession["presentationState"] | undefined;
+  activeSessionActivityState: KanbanTaskSession["activityState"] | undefined;
   taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
@@ -118,9 +118,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   ].join("|");
   const taskSessionsMeasurementKey =
     taskSessions
-      ?.map(
-        (session) => `${session.externalSessionId}:${session.role}:${session.presentationState}`,
-      )
+      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.activityState}`)
       .join("|") ?? "";
   const historicalSessionsMeasurementKey =
     historicalSessions
@@ -134,7 +132,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     historicalSessionsMeasurementKey,
     hasActiveSession ? "active" : "idle",
     activeSessionRole ?? "",
-    activeSessionPresentationState ?? "",
+    activeSessionActivityState ?? "",
   ].join("::");
 
   useEffect(() => {
@@ -302,7 +300,7 @@ export function KanbanColumn({
                     }
                     hasActiveSession={Boolean(activeSessionContext)}
                     activeSessionRole={activeSessionContext?.role}
-                    activeSessionPresentationState={activeSessionContext?.presentationState}
+                    activeSessionActivityState={activeSessionContext?.activityState}
                     taskActivityState={getRequiredTaskActivityState(
                       taskActivityStateByTaskId,
                       task.id,
