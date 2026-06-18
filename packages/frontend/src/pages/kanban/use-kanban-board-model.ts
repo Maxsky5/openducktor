@@ -7,8 +7,8 @@ import type { AgentRole } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
+  type ActiveAgentSessionSummary,
   type ActiveTaskSessionContext,
-  type ActiveWorkflowAgentSessionSummary,
   isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
@@ -19,20 +19,20 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const comparePrimaryTaskSession = (
-  left: ActiveWorkflowAgentSessionSummary,
-  right: ActiveWorkflowAgentSessionSummary,
+  left: ActiveAgentSessionSummary,
+  right: ActiveAgentSessionSummary,
 ): number => {
   return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
 
 export const buildActiveTaskSessionContextByTaskId = (
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
 ): Map<string, ActiveTaskSessionContext> => {
-  const activeTaskSessionContextByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary>();
+  const activeTaskSessionContextByTaskId = new Map<string, ActiveAgentSessionSummary>();
 
   for (const session of sessions) {
     if (!isKanbanActiveTaskSession(session)) {
@@ -107,9 +107,9 @@ export const sortTasksByActivityState = (
 };
 
 export const buildTaskSessionsByTaskId = (
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
-  const sessionsByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary[]>();
+  const sessionsByTaskId = new Map<string, ActiveAgentSessionSummary[]>();
   for (const session of sessions) {
     if (!isKanbanActiveTaskSession(session)) {
       continue;
@@ -141,7 +141,7 @@ type UseKanbanBoardModelArgs = {
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;

@@ -8,7 +8,7 @@ import {
 } from "@/features/session-start";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   useAgentOperations,
   useAgentSession,
@@ -36,7 +36,7 @@ import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
   selectedTask: TaskCard | null;
-  sessionSummaries: WorkflowAgentSessionSummary[];
+  sessionSummaries: AgentSessionSummary[];
   sessionKey: string | null;
   hasExplicitRoleSelection: boolean;
   roleSelection: AgentRole;

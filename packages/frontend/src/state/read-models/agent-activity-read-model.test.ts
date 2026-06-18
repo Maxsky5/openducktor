@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { summarizeAgentActivity } from "./agent-activity-read-model";
 
 const buildSession = (
   overrides: {
     externalSessionId?: string;
     title?: string;
-    runtimeKind?: WorkflowAgentSessionSummary["runtimeKind"];
+    runtimeKind?: AgentSessionSummary["runtimeKind"];
     workingDirectory?: string;
     taskId?: string;
-    role?: WorkflowAgentSessionSummary["role"];
+    role?: AgentSessionSummary["role"];
     startedAt?: string;
-    activityState?: WorkflowAgentSessionSummary["activityState"];
+    activityState?: AgentSessionSummary["activityState"];
   } = {},
-): WorkflowAgentSessionSummary => ({
+): AgentSessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
   ...(overrides.title ? { title: overrides.title } : {}),
   runtimeKind: overrides.runtimeKind ?? "opencode",

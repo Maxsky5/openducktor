@@ -1,7 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -11,7 +11,7 @@ import type { ActiveAgentSessionActivityState } from "@/types/agent-session-acti
 
 export type KanbanTaskActivityState = "idle" | "active" | "waiting_input";
 
-export type ActiveWorkflowAgentSessionSummary = WorkflowAgentSessionSummary & {
+export type ActiveAgentSessionSummary = AgentSessionSummary & {
   activityState: ActiveAgentSessionActivityState;
 };
 
@@ -28,9 +28,7 @@ export type KanbanTaskSession = AgentSessionIdentity &
     activityState: ActiveAgentSessionActivityState;
   };
 
-export const toKanbanTaskSession = (
-  session: ActiveWorkflowAgentSessionSummary,
-): KanbanTaskSession => ({
+export const toKanbanTaskSession = (session: ActiveAgentSessionSummary): KanbanTaskSession => ({
   ...toAgentSessionIdentity(session),
   role: session.role,
   startedAt: session.startedAt,
@@ -38,8 +36,8 @@ export const toKanbanTaskSession = (
 });
 
 export const isKanbanActiveTaskSession = (
-  session: WorkflowAgentSessionSummary,
-): session is ActiveWorkflowAgentSessionSummary => {
+  session: AgentSessionSummary,
+): session is ActiveAgentSessionSummary => {
   return isAgentSessionActivityActive(session.activityState);
 };
 

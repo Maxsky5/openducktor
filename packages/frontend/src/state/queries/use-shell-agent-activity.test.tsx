@@ -9,8 +9,8 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import type {
   AgentActivitySessionsSnapshot,
+  AgentSessionSummary,
   AgentSessionsStore,
-  WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
 import { AgentSessionsContext, TasksStateContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -24,9 +24,7 @@ type HookArgs = {
   activeWorkspaceRepoPath: string | null;
 };
 
-const createActivitySession = (
-  overrides: Partial<AgentSessionState> = {},
-): WorkflowAgentSessionSummary => {
+const createActivitySession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     status: "running",
     ...overrides,
@@ -51,11 +49,11 @@ const createActivitySession = (
 
 const createActivityStore = (
   workspaceRepoPath: string | null,
-  initialSessions: WorkflowAgentSessionSummary[],
+  initialSessions: AgentSessionSummary[],
 ): AgentSessionsStore & {
   setActivitySnapshot: (
     nextWorkspaceRepoPath: string | null,
-    nextSessions: WorkflowAgentSessionSummary[],
+    nextSessions: AgentSessionSummary[],
   ) => void;
 } => {
   let activitySessions = initialSessions;
@@ -145,7 +143,7 @@ const createTasksStateValue = (): TasksStateContextValue => ({
   humanRequestChangesTask: async () => undefined,
 });
 
-const createHarness = (initialProps: HookArgs, initialSessions: WorkflowAgentSessionSummary[]) => {
+const createHarness = (initialProps: HookArgs, initialSessions: AgentSessionSummary[]) => {
   const queryClient = createQueryClient();
   const sessionStore = createActivityStore(initialProps.activeWorkspaceRepoPath, initialSessions);
 

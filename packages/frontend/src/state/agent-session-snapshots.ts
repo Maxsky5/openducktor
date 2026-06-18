@@ -18,19 +18,15 @@ export type AgentSessionSummary = AgentSessionIdentity &
     selectedModel: AgentSessionState["selectedModel"];
   };
 
-export type WorkflowAgentSessionSummary = AgentSessionSummary;
-
 export type AgentActivitySessionsSnapshot = {
   workspaceRepoPath: string | null;
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
 };
 
 const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
-export function toAgentSessionSummary(
-  session: WorkflowAgentSessionState,
-): WorkflowAgentSessionSummary;
+export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
   if (session.role === null) {
@@ -81,7 +77,7 @@ const reuseArrayWhenItemsMatch = <T>(previous: T[], next: T[]): T[] => {
 
 const createActivitySnapshot = (
   workspaceRepoPath: string | null,
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
 ): AgentActivitySessionsSnapshot => ({
   workspaceRepoPath,
   sessions,
@@ -104,7 +100,7 @@ export const createAgentActivitySnapshot = ({
     previous.sessions.map((summary) => [agentSessionIdentityKey(summary), summary]),
   );
   const sessions = listAgentSessions(collection).sort(sortByStartedAtDesc);
-  const nextActivitySessions = sessions.flatMap((session): WorkflowAgentSessionSummary[] => {
+  const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
     if (!shouldIncludeAgentSessionInActivity(session)) {
       return [];
     }

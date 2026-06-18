@@ -20,7 +20,6 @@ export {
   type AgentActivitySessionsSnapshot,
   type AgentSessionSummary,
   toAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
 } from "@/state/agent-session-snapshots";
 
 type Listener = () => void;

@@ -3,7 +3,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import type { useChecksState } from "@/state";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../query-sync/use-agent-studio-query-session-sync";
@@ -23,7 +23,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   refreshChecks: () => Promise<void>;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;

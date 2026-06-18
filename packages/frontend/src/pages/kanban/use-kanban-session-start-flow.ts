@@ -30,7 +30,7 @@ import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@/lib/agent-session-identity";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -45,7 +45,7 @@ type UseKanbanSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
   workspaceRepoPath: string | null;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -70,18 +70,18 @@ type UseKanbanSessionStartFlowResult = {
 };
 
 const findLatestSessionByRoleForTask = (
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): WorkflowAgentSessionSummary | null => {
+): AgentSessionSummary | null => {
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
 };
 
 const findPreferredSessionByRoleForTask = (
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): WorkflowAgentSessionSummary | null => {
+): AgentSessionSummary | null => {
   const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role).filter(
     isKanbanActiveTaskSession,
   );
@@ -105,10 +105,10 @@ const findPreferredSessionByRoleForTask = (
 };
 
 const findSessionsByRoleForTask = (
-  sessions: WorkflowAgentSessionSummary[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): WorkflowAgentSessionSummary[] => {
+): AgentSessionSummary[] => {
   return sessions
     .filter((session) => session.taskId === taskId && session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));

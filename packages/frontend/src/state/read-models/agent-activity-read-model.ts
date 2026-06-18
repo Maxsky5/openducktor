@@ -1,17 +1,17 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type VisibleAgentActivityState = Extract<
-  WorkflowAgentSessionSummary["activityState"],
+  AgentSessionSummary["activityState"],
   "starting" | "running" | "waiting_input"
 >;
 
 export type AgentActivitySessionItem = AgentSessionIdentity & {
   taskId: string;
   taskTitle: string;
-  role: WorkflowAgentSessionSummary["role"];
+  role: AgentSessionSummary["role"];
   activityState: VisibleAgentActivityState;
   startedAt: string;
 };
@@ -44,7 +44,7 @@ export const summarizeAgentActivity = ({
   sessions,
   taskTitleById,
 }: {
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
   taskTitleById?: AgentActivityTaskTitleLookup;
 }): AgentActivitySummary => {
   const activeSessions: AgentActivitySessionItem[] = [];
@@ -72,7 +72,7 @@ export const summarizeAgentActivity = ({
 };
 
 const toActivitySessionItem = (
-  session: WorkflowAgentSessionSummary,
+  session: AgentSessionSummary,
   taskTitleById: AgentActivityTaskTitleLookup | undefined,
   activityState: VisibleAgentActivityState,
 ): AgentActivitySessionItem => ({

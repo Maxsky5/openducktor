@@ -1,7 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { findAgentStudioSessionSummaryByKey } from "../agents-page-selection";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
@@ -15,7 +15,7 @@ type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
-  sessionsForTask: WorkflowAgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
   canPrepareMessageFirstSession: CanPrepareMessageFirstSession;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -23,7 +23,7 @@ type UseAgentStudioSelectionActionsArgs = {
 
 type ApplySelectionIntentParams = {
   nextTaskId: string;
-  nextSessionIdentity: WorkflowAgentSessionSummary | null;
+  nextSessionIdentity: AgentSessionSummary | null;
   nextRole: AgentRole;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -62,7 +62,7 @@ export function useAgentStudioSelectionActions({
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
 } {
   const findSessionByValue = useCallback(
-    (sessionValue: string): WorkflowAgentSessionSummary | null =>
+    (sessionValue: string): AgentSessionSummary | null =>
       findAgentStudioSessionSummaryByKey(sessionsForTask, sessionValue),
     [sessionsForTask],
   );

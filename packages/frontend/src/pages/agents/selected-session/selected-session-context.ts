@@ -12,7 +12,7 @@ import {
   hasAgentSessionPendingQuestions,
 } from "@/lib/agent-session-waiting-input";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
@@ -61,7 +61,7 @@ export type AgentStudioSelectedSessionContext = {
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
-  sessionsForTask: WorkflowAgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
   transcriptState: SelectedAgentSessionTranscriptState;
@@ -75,8 +75,8 @@ export type AgentStudioSelectedSessionContextInput = {
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
-  sessionsForTask: WorkflowAgentSessionSummary[];
-  allSessionSummaries: WorkflowAgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
+  allSessionSummaries: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
   sessionRuntimeData: SelectedSessionRuntimeData;
@@ -99,8 +99,8 @@ export type AgentStudioSelectedSessionContextInput = {
 };
 
 const buildSubagentPendingInputCountBySessionKey = (
-  sessions: WorkflowAgentSessionSummary[],
-  readPendingInputCount: (session: WorkflowAgentSessionSummary) => number,
+  sessions: AgentSessionSummary[],
+  readPendingInputCount: (session: AgentSessionSummary) => number,
   emptyCounts: Record<string, number>,
 ): Record<string, number> => {
   const next: Record<string, number> = {};

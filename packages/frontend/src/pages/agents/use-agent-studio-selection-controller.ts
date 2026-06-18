@@ -3,7 +3,7 @@ import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { useChecksState } from "@/state";
-import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -32,7 +32,7 @@ type UseAgentStudioSelectionControllerArgs = {
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  sessions: WorkflowAgentSessionSummary[];
+  sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -57,17 +57,17 @@ type UseAgentStudioSelectionControllerArgs = {
 export type AgentStudioSelectedView = {
   taskId: string;
   selectedTask: TaskCard | null;
-  sessionsForTask: WorkflowAgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
   isTaskReady: boolean;
 } & AgentStudioSelectedSessionView;
 
 export type AgentStudioSelectionControllerResult = {
-  selectedSessionFromRoute: WorkflowAgentSessionSummary | null;
+  selectedSessionFromRoute: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
-  allSessionSummaries: WorkflowAgentSessionSummary[];
-  sessionsForTask: WorkflowAgentSessionSummary[];
-  resolvedRouteSession: WorkflowAgentSessionSummary | null;
+  allSessionSummaries: AgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
+  resolvedRouteSession: AgentSessionSummary | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -164,7 +164,7 @@ export function useAgentStudioSelectionController({
   ]);
 
   const latestSessionByTaskId = useMemo(() => {
-    const latestByTask = new Map<string, WorkflowAgentSessionSummary>();
+    const latestByTask = new Map<string, AgentSessionSummary>();
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       const latestSession = taskSessions[0];
       if (latestSession) {
@@ -175,9 +175,9 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId]);
 
   const activeSessionByTaskId = useMemo(() => {
-    const activeByTask = new Map<string, WorkflowAgentSessionSummary>();
+    const activeByTask = new Map<string, AgentSessionSummary>();
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
-      let activeSession: WorkflowAgentSessionSummary | null = null;
+      let activeSession: AgentSessionSummary | null = null;
       for (const session of taskSessions) {
         if (isAgentSessionActivityActive(session.activityState)) {
           activeSession = session;
