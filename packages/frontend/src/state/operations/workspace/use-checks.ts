@@ -68,9 +68,7 @@ type UseChecksResult = {
   refreshChecks: () => Promise<void>;
   hasRuntimeCheck: () => boolean;
   hasCachedTaskStoreCheck: (repoPath: string) => boolean;
-  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
   clearActiveTaskStoreCheck: () => void;
-  clearActiveRepoRuntimeHealth: () => void;
 };
 
 export function useChecks({
@@ -213,16 +211,6 @@ export function useChecks({
     [taskStoreCheck, queryClient],
   );
 
-  const hasCachedRepoRuntimeHealth = useCallback(
-    (repoPath: string, runtimeKinds: RuntimeKind[]): boolean => {
-      return (
-        queryClient.getQueryData(checksQueryKeys.runtimeHealth(repoPath, runtimeKinds)) !==
-        undefined
-      );
-    },
-    [queryClient],
-  );
-
   const hasRuntimeCheck = useCallback((): boolean => {
     return (
       queryClient.getQueryData(runtimeCheckQueryOptions(false, runtimeCheck).queryKey) !== undefined
@@ -239,20 +227,6 @@ export function useChecks({
       exact: true,
     });
   }, [activeRepoPath, queryClient]);
-
-  const clearActiveRepoRuntimeHealth = useCallback(() => {
-    setIsManualLoadingChecks(false);
-    if (activeRepoPath === null || runtimeDefinitions.length === 0) {
-      return;
-    }
-    queryClient.removeQueries({
-      queryKey: checksQueryKeys.runtimeHealth(
-        activeRepoPath,
-        runtimeDefinitions.map((definition) => definition.kind),
-      ),
-      exact: true,
-    });
-  }, [activeRepoPath, queryClient, runtimeDefinitions]);
 
   const activeRepoRuntimeHealthByRuntime = useMemo((): RepoRuntimeHealthMap => {
     if (activeRepoPath === null) {
@@ -396,8 +370,6 @@ export function useChecks({
     refreshChecks,
     hasRuntimeCheck,
     hasCachedTaskStoreCheck,
-    hasCachedRepoRuntimeHealth,
     clearActiveTaskStoreCheck,
-    clearActiveRepoRuntimeHealth,
   };
 }

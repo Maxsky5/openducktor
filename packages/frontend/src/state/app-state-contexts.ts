@@ -3,7 +3,6 @@ import type {
   RepoRuntimeRef,
   RuntimeCheck,
   RuntimeDescriptor,
-  RuntimeKind,
   TaskCard,
   TaskStoreCheck,
 } from "@openducktor/contracts";
@@ -22,7 +21,6 @@ import {
   use,
   useMemo,
 } from "react";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -75,16 +73,10 @@ export type RuntimeDefinitionsContextValue = {
 export type ChecksOperationsContextValue = {
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  refreshRepoRuntimeHealthForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<RepoRuntimeHealthMap>;
   clearActiveTaskStoreCheck: () => void;
-  clearActiveRepoRuntimeHealth: () => void;
   setIsLoadingChecks: (value: boolean) => void;
   hasRuntimeCheck: () => boolean;
   hasCachedTaskStoreCheck: (repoPath: string) => boolean;
-  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
 };
 
 export type TaskSnapshotContextValue = {

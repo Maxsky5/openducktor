@@ -90,13 +90,10 @@ const createHookHarness = (initialProps: HookArgs) => {
             errors: [],
           }),
           refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
-          refreshRepoRuntimeHealthForRepo: async () => ({}),
           clearActiveTaskStoreCheck: () => {},
-          clearActiveRepoRuntimeHealth: () => {},
           setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
           hasCachedTaskStoreCheck: () => false,
-          hasCachedRepoRuntimeHealth: () => false,
         },
       },
       createElement(

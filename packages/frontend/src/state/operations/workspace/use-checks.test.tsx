@@ -366,7 +366,6 @@ describe("use-checks", () => {
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
       await harness.waitFor((value) => value.hasCachedTaskStoreCheck("/repo-b"));
-      await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
         "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
@@ -375,7 +374,6 @@ describe("use-checks", () => {
         "/repo-a",
       ]);
       expect(harness.getLatest().hasCachedTaskStoreCheck("/repo-b")).toBe(true);
-      expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
       expect(taskStoreCheck).toHaveBeenCalledTimes(1);
       expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 

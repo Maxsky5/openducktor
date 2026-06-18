@@ -204,13 +204,10 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
       {},
       { taskStorePath: "/repo/task-stores/workspace/database.sqlite" },
     ),
-  refreshRepoRuntimeHealthForRepo: async () => ({}),
   clearActiveTaskStoreCheck: () => {},
-  clearActiveRepoRuntimeHealth: () => {},
   setIsLoadingChecks: () => {},
   hasRuntimeCheck: () => false,
   hasCachedTaskStoreCheck: () => false,
-  hasCachedRepoRuntimeHealth: () => false,
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
 
 export const createDeferred = createSharedDeferred;

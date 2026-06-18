@@ -1,5 +1,5 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -10,10 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
-import {
-  useChecksOperationsContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
@@ -25,8 +22,6 @@ export function DiagnosticsPanel(): ReactElement {
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
-  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
-    useChecksOperationsContext();
   const {
     runtimeCheck,
     taskStoreCheck,
@@ -73,33 +68,6 @@ export function DiagnosticsPanel(): ReactElement {
     ],
   );
 
-  const refreshRuntimeHealthIfNeeded = useCallback((): void => {
-    if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
-      return;
-    }
-    const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
-    if (hasCachedRepoRuntimeHealth(workspaceRepoPath, runtimeKinds)) {
-      return;
-    }
-    void refreshRepoRuntimeHealthForRepo(workspaceRepoPath, false);
-  }, [
-    workspaceRepoPath,
-    hasCachedRepoRuntimeHealth,
-    isLoadingChecks,
-    refreshRepoRuntimeHealthForRepo,
-    runtimeDefinitions,
-  ]);
-
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean): void => {
-      setOpen(nextOpen);
-      if (nextOpen) {
-        refreshRuntimeHealthIfNeeded();
-      }
-    },
-    [refreshRuntimeHealthIfNeeded],
-  );
-
   useEffect(() => {
     if (!workspaceRepoPath || model.criticalReasons.length === 0) {
       return;
@@ -108,8 +76,8 @@ export function DiagnosticsPanel(): ReactElement {
       return;
     }
     autoOpenedByRepo.add(workspaceRepoPath);
-    handleOpenChange(true);
-  }, [autoOpenedByRepo, handleOpenChange, workspaceRepoPath, model.criticalReasons.length]);
+    setOpen(true);
+  }, [autoOpenedByRepo, workspaceRepoPath, model.criticalReasons.length]);
 
   return (
     <>
@@ -133,7 +101,7 @@ export function DiagnosticsPanel(): ReactElement {
             size="icon"
             variant="outline"
             className="size-8 border-input bg-card text-foreground shadow-sm hover:border-input hover:bg-muted"
-            onClick={() => handleOpenChange(true)}
+            onClick={() => setOpen(true)}
             aria-label="Open diagnostics"
             title="Open diagnostics"
           >
@@ -150,7 +118,7 @@ export function DiagnosticsPanel(): ReactElement {
         ) : null}
       </div>
 
-      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
+      <Sheet open={isOpen} onOpenChange={setOpen}>
         <SheetContent side="right" className="overflow-y-auto">
           <SheetHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">
