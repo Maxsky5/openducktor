@@ -93,6 +93,8 @@ const baseArgs: BuildArgs = {
     sessionsForTask: [sessionSummary],
     allSessionSummaries: [sessionSummary],
     selectedSessionIdentity: toAgentSessionIdentity(session),
+    selectedSessionActivityState: sessionSummary.activityState,
+    selectedSessionModel: session.selectedModel,
     loadedSession: session,
     sessionRuntimeData: baseActiveSessionRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],

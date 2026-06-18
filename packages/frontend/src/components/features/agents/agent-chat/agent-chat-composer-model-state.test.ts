@@ -3,10 +3,10 @@ import { CODEX_SESSION_ACCENT_COLOR } from "../agent-accent-color";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
 
 describe("agent-chat-composer-model-state", () => {
-  test("derives selected-session accent and pending model state from the loaded session", () => {
+  test("derives selected-session accent and pending model state from the selected session", () => {
     expect(
       deriveAgentChatComposerModelState({
-        loadedSession: {
+        selectedSession: {
           runtimeKind: "opencode",
           selectedModel: null,
         },
@@ -30,7 +30,7 @@ describe("agent-chat-composer-model-state", () => {
   test("uses selected model accent before a session exists", () => {
     expect(
       deriveAgentChatComposerModelState({
-        loadedSession: null,
+        selectedSession: null,
         selectedModelSelection: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -53,7 +53,7 @@ describe("agent-chat-composer-model-state", () => {
   test("uses Codex runtime accent when there is no agent profile", () => {
     expect(
       deriveAgentChatComposerModelState({
-        loadedSession: null,
+        selectedSession: null,
         selectedModelSelection: {
           runtimeKind: "codex",
           providerId: "openai",

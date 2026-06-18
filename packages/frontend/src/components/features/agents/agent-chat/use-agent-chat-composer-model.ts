@@ -14,7 +14,7 @@ import {
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
@@ -24,6 +24,9 @@ import {
 } from "./agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
+type AgentChatComposerSelectedSession = AgentSessionIdentity & {
+  selectedModel: AgentModelSelection | null;
+};
 
 export const invokeStopAgentSession = (
   session: AgentSessionIdentity | null,
@@ -38,7 +41,7 @@ export const invokeStopAgentSession = (
 export type AgentChatComposerConfig = {
   taskId: string;
   displayedSessionKey: string | null;
-  loadedSession: (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel">) | null;
+  selectedSession: AgentChatComposerSelectedSession | null;
   isSessionModelCatalogLoading: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
@@ -177,7 +180,7 @@ export function useAgentChatComposerModel({
     () =>
       composer
         ? deriveAgentChatComposerModelState({
-            loadedSession: composer.loadedSession,
+            selectedSession: composer.selectedSession,
             selectedModelSelection: composer.selectedModelSelection,
             isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
             isRuntimeReady: runtimeReadiness.isReady,
@@ -239,7 +242,7 @@ export function useAgentChatComposerModel({
       contextUsage: composer.contextUsage,
       canStopSession: composer.canStopSession,
       onStopSession: () =>
-        invokeStopAgentSession(composer.loadedSession, composer.stopAgentSession),
+        invokeStopAgentSession(composer.selectedSession, composer.stopAgentSession),
       composerFormRef,
       composerEditorRef,
       onComposerEditorInput: resizeComposerEditor,

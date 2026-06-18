@@ -1,13 +1,13 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 
-type AgentChatComposerModelStateSession = {
+type AgentChatComposerModelStateSelectedSession = {
   runtimeKind: AgentModelSelection["runtimeKind"];
   selectedModel: AgentModelSelection | null;
 };
 
 export type AgentChatComposerModelStateInput = {
-  loadedSession: AgentChatComposerModelStateSession | null;
+  selectedSession: AgentChatComposerModelStateSelectedSession | null;
   selectedModelSelection: AgentModelSelection | null;
   isSessionModelCatalogLoading: boolean;
   isRuntimeReady: boolean;
@@ -21,15 +21,15 @@ export type AgentChatComposerModelState = {
 };
 
 export const deriveAgentChatComposerModelState = ({
-  loadedSession,
+  selectedSession,
   selectedModelSelection,
   isSessionModelCatalogLoading,
   isRuntimeReady,
   sessionAgentColors,
 }: AgentChatComposerModelStateInput): AgentChatComposerModelState => {
-  const runtimeKind = loadedSession?.runtimeKind ?? selectedModelSelection?.runtimeKind ?? null;
-  const agentName = loadedSession
-    ? loadedSession.selectedModel?.profileId
+  const runtimeKind = selectedSession?.runtimeKind ?? selectedModelSelection?.runtimeKind ?? null;
+  const agentName = selectedSession
+    ? selectedSession.selectedModel?.profileId
     : selectedModelSelection?.profileId;
 
   return {
@@ -40,7 +40,7 @@ export const deriveAgentChatComposerModelState = ({
     }),
     isInteractionEnabled: isRuntimeReady,
     isModelSelectionPending: Boolean(
-      loadedSession && isSessionModelCatalogLoading && !loadedSession.selectedModel,
+      selectedSession && isSessionModelCatalogLoading && !selectedSession.selectedModel,
     ),
   };
 };

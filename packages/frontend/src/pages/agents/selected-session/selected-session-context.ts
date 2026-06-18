@@ -20,6 +20,7 @@ import type {
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import {
   type AgentStudioDocumentsContext,
@@ -72,6 +73,8 @@ export type AgentStudioSelectedSessionContext = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionActivityState: AgentSessionActivityState | null;
+  selectedSessionModel: AgentSessionState["selectedModel"];
   loadedSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
   workflow: WorkflowModelContext;
@@ -87,6 +90,8 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionActivityState: AgentSessionActivityState | null;
+  selectedSessionModel: AgentSessionState["selectedModel"];
   loadedSession: AgentSessionState | null;
   sessionRuntimeData: SelectedSessionRuntimeData;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -128,6 +133,8 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionsForTask,
   allSessionSummaries,
   selectedSessionIdentity,
+  selectedSessionActivityState,
+  selectedSessionModel,
   loadedSession,
   sessionRuntimeData,
   runtimeDefinitions,
@@ -176,6 +183,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedTask,
     sessionsForTask,
     selectedSessionIdentity,
+    selectedSessionActivityState,
+    selectedSessionModel,
     loadedSession,
     transcriptState,
     workflow,

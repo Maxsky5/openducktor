@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -46,6 +47,16 @@ const createInput = (
       : loadedSession
         ? toAgentSessionIdentity(loadedSession)
         : null;
+  const selectedSessionActivityState =
+    overrides.selectedSessionActivityState !== undefined
+      ? overrides.selectedSessionActivityState
+      : loadedSession
+        ? getAgentSessionActivityStateFromSession(loadedSession)
+        : null;
+  const selectedSessionModel =
+    overrides.selectedSessionModel !== undefined
+      ? overrides.selectedSessionModel
+      : (loadedSession?.selectedModel ?? null);
 
   return {
     taskId: "task-1",
@@ -54,6 +65,8 @@ const createInput = (
     sessionsForTask,
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
     selectedSessionIdentity,
+    selectedSessionActivityState,
+    selectedSessionModel,
     loadedSession,
     sessionRuntimeData: {
       modelCatalog: null,

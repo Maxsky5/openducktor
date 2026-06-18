@@ -12,6 +12,7 @@ import { AgentChatSettingsProvider } from "@/components/features/agents/agent-ch
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
@@ -163,6 +164,16 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       : loadedSession
         ? toAgentSessionIdentity(loadedSession)
         : null;
+  const selectedSessionActivityState =
+    overrides.selectedSessionCore?.selectedSessionActivityState !== undefined
+      ? overrides.selectedSessionCore.selectedSessionActivityState
+      : loadedSession
+        ? getAgentSessionActivityStateFromSession(loadedSession)
+        : null;
+  const selectedSessionModel =
+    overrides.selectedSessionCore?.selectedSessionModel !== undefined
+      ? overrides.selectedSessionCore.selectedSessionModel
+      : (loadedSession?.selectedModel ?? null);
 
   const selectedSessionCore: SelectedSessionTestCore = {
     activeTabValue: "task-1",
@@ -177,6 +188,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     allSessionSummaries,
     sessionsForTask,
     selectedSessionIdentity,
+    selectedSessionActivityState,
+    selectedSessionModel,
     loadedSession,
   };
 
@@ -279,6 +292,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       sessionsForTask: selectedSessionCore.sessionsForTask,
       allSessionSummaries: selectedSessionCore.allSessionSummaries,
       selectedSessionIdentity: selectedSessionCore.selectedSessionIdentity,
+      selectedSessionActivityState: selectedSessionCore.selectedSessionActivityState,
+      selectedSessionModel: selectedSessionCore.selectedSessionModel,
       loadedSession: selectedSessionCore.loadedSession,
       sessionRuntimeData: selectedSessionCore.sessionRuntimeData,
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
@@ -383,25 +398,72 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("derives thread working state from the loaded session activity", async () => {
-    const idleSession = createSession("session-idle", {
+  test("keeps selected-session facts authoritative for the chat thread", async () => {
+    const selectedSession = createSession("session-shared", {
+      runtimeKind: "codex",
+      workingDirectory: "/repo/selected-worktree",
+      status: "running",
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5-codex",
+        profileId: "selected-builder",
+      },
+    });
+    const staleLoadedSession = createSession("session-shared", {
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/stale-worktree",
       status: "stopped",
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "stale-builder",
+      },
+      messages: [
+        {
+          id: "message-1",
+          role: "assistant",
+          content: "Loaded messages still belong to the live transcript.",
+          timestamp: "2026-02-22T10:00:00.000Z",
+        },
+      ],
     });
     const harness = createHookHarness(
       createHookArgs({
         selectedSessionCore: {
-          loadedSession: idleSession,
-          sessionsForTask: summarizeSessions([idleSession]),
+          selectedSessionIdentity: toAgentSessionIdentity(selectedSession),
+          selectedSessionActivityState: "running",
+          selectedSessionModel: selectedSession.selectedModel,
+          loadedSession: staleLoadedSession,
+          sessionsForTask: summarizeSessions([selectedSession]),
+          allSessionSummaries: summarizeSessions([selectedSession]),
+          runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         },
-        sessionActions: {
-          isSessionWorking: true,
+        modelSelection: {
+          agentAccentColorsByProfileId: {
+            "selected-builder": "#0ea5e9",
+            "stale-builder": "#ef4444",
+          },
         },
       }),
     );
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.isSessionWorking).toBe(false);
+    const chatModel = harness.getLatest().agentChatModel;
+    expect(chatModel.thread.session).toMatchObject({
+      externalSessionId: "session-shared",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/selected-worktree",
+      activityState: "running",
+    });
+    expect(chatModel.thread.session?.messages.items[0]?.content).toContain(
+      "Loaded messages still belong to the live transcript.",
+    );
+    expect(chatModel.thread.isSessionWorking).toBe(true);
+    expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
+    expect(chatModel.composer.accentColor).toBe("#0ea5e9");
 
     await harness.unmount();
   });

@@ -334,6 +334,8 @@ export function useAgentStudioOrchestrationController({
         sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
         selectedSessionIdentity: view.selectedSessionIdentity,
+        selectedSessionActivityState: view.selectedSessionActivityState,
+        selectedSessionModel: view.selectedSessionModel,
         loadedSession: view.loadedSession,
         sessionRuntimeData: view.sessionRuntimeData,
         runtimeDefinitions,

@@ -2,17 +2,20 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type {
+  AgentChatModel,
+  AgentChatThreadSession,
+} from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type AgentChatDraftScope,
   agentChatDraftScopeKey,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
-import { toAgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat-thread-session";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -87,6 +90,26 @@ const toChatContextUsage = (
   };
 };
 
+const toSelectedSessionThreadSession = ({
+  selectedSessionIdentity,
+  selectedSessionActivityState,
+  loadedSession,
+}: Pick<
+  AgentStudioSelectedSessionContext,
+  "selectedSessionIdentity" | "selectedSessionActivityState" | "loadedSession"
+>): AgentChatThreadSession | null => {
+  if (!selectedSessionIdentity || !loadedSession) {
+    return null;
+  }
+
+  return {
+    ...selectedSessionIdentity,
+    ...(loadedSession.title ? { title: loadedSession.title } : {}),
+    activityState: selectedSessionActivityState,
+    messages: toSessionMessagesState(loadedSession),
+  };
+};
+
 export function useAgentStudioChatModel({
   selectedSession,
   sessionActions,
@@ -98,26 +121,32 @@ export function useAgentStudioChatModel({
     selectedSession.pendingInput.subagentPendingApprovalCountBySessionKey;
   const subagentPendingQuestionCountBySessionKey =
     selectedSession.pendingInput.subagentPendingQuestionCountBySessionKey;
+  const selectedSessionIdentity = selectedSession.selectedSessionIdentity;
+  const selectedSessionActivityState = selectedSession.selectedSessionActivityState;
+  const selectedSessionModel = selectedSession.selectedSessionModel;
+  const loadedSession = selectedSession.loadedSession;
   const activeThreadSession = useMemo(
     () =>
-      selectedSession.loadedSession
-        ? toAgentChatThreadSession(selectedSession.loadedSession)
-        : null,
-    [selectedSession.loadedSession],
+      toSelectedSessionThreadSession({
+        selectedSessionIdentity,
+        selectedSessionActivityState,
+        loadedSession,
+      }),
+    [loadedSession, selectedSessionActivityState, selectedSessionIdentity],
   );
   const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
   const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
   const sessionAccentColor = useMemo(
     () =>
       resolveAgentSessionAccentColor({
-        agentName: selectedSession.loadedSession?.selectedModel?.profileId,
+        agentName: selectedSessionModel?.profileId,
         agentColors: modelSelection.agentAccentColorsByProfileId,
-        runtimeKind: activeThreadSession?.runtimeKind ?? null,
+        runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
       }),
     [
-      activeThreadSession?.runtimeKind,
       modelSelection.agentAccentColorsByProfileId,
-      selectedSession.loadedSession?.selectedModel?.profileId,
+      selectedSessionIdentity?.runtimeKind,
+      selectedSessionModel?.profileId,
     ],
   );
   const chatContextUsage = useMemo(
@@ -128,8 +157,8 @@ export function useAgentStudioChatModel({
   const runtimeReadiness = selectedSession.runtime.runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
-  const selectedSessionKey = selectedSession.selectedSessionIdentity
-    ? agentSessionIdentityKey(selectedSession.selectedSessionIdentity)
+  const selectedSessionKey = selectedSessionIdentity
+    ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
   const surfaceState = useMemo(
     () =>
@@ -163,7 +192,12 @@ export function useAgentStudioChatModel({
     () => ({
       taskId: selectedSession.taskId,
       displayedSessionKey: selectedSessionKey,
-      loadedSession: selectedSession.loadedSession,
+      selectedSession: selectedSessionIdentity
+        ? {
+            ...selectedSessionIdentity,
+            selectedModel: selectedSessionModel,
+          }
+        : null,
       isSessionModelCatalogLoading: selectedSession.runtime.runtimeData.isLoadingModelCatalog,
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
@@ -230,7 +264,8 @@ export function useAgentStudioChatModel({
       modelSelection.supportsSlashCommands,
       modelSelection.variantOptions,
       selectedSession.pendingInput.waitingInputPlaceholder,
-      selectedSession.loadedSession,
+      selectedSessionIdentity,
+      selectedSessionModel,
       selectedSessionKey,
       selectedSession.runtime.runtimeData.isLoadingModelCatalog,
       selectedSession.taskId,
