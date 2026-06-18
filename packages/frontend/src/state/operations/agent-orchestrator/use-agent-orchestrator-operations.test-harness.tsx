@@ -3,7 +3,9 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contrac
 import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
@@ -92,6 +94,7 @@ export const createHookHarness = (args: {
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
   isLoadingTasks?: boolean;
+  runtimeHealthByRuntime?: RepoRuntimeHealthMap;
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: AgentEnginePort;
   dependencies?: OrchestratorDependencies;
@@ -101,6 +104,9 @@ export const createHookHarness = (args: {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
     isLoadingTasks: args.isLoadingTasks ?? false,
+    runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
+      opencode: createRepoRuntimeHealthFixture(),
+    },
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
   };
 
@@ -129,6 +135,7 @@ export const createHookHarness = (args: {
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
       isLoadingTasks: boolean;
+      runtimeHealthByRuntime: RepoRuntimeHealthMap;
       refreshTaskData: (repoPath: string) => Promise<void>;
       agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;

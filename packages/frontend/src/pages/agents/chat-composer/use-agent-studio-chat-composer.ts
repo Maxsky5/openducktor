@@ -131,6 +131,7 @@ export function useAgentStudioChatComposer({
   const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
   const repoReadinessState = selectedSession.runtimeReadiness.state;
+  const isRepoRuntimeReady = repoReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
   const roleDefaultSelection = useMemo(
     () =>
@@ -216,14 +217,14 @@ export function useAgentStudioChatComposer({
   }, [selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
 
   const composerCatalogQuery = useQuery(
-    selectedRepoRuntimeRef && !hasSessionTarget
+    selectedRepoRuntimeRef && !hasSessionTarget && isRepoRuntimeReady
       ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalogForRepo)
       : skippedComposerCatalogQueryOptions(selectedRepoRuntimeRef),
   );
   const composerCatalog = hasSessionTarget ? null : (composerCatalogQuery.data ?? null);
   const isLoadingComposerCatalog = hasSessionTarget
     ? isSessionModelCatalogLoading
-    : composerCatalogQuery.isLoading;
+    : isRepoRuntimeReady && composerCatalogQuery.isLoading;
   const {
     supportsSlashCommands,
     slashCommandCatalog,

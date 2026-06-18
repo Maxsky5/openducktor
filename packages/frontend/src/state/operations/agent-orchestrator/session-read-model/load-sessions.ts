@@ -3,10 +3,12 @@ import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
+import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
 import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
@@ -21,6 +23,7 @@ type CreateLoadAgentSessionsArgs = {
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   queryClient: QueryClient;
 };
 
@@ -31,6 +34,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   commitSessionCollection,
   observeAgentSession,
   clearSessionObservationState,
+  runtimeHealthByRuntime,
   queryClient,
   isStaleRepoOperation,
   forceFresh,
@@ -41,12 +45,13 @@ export const loadRepoAgentSessionsForTasks = async ({
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
   forceFresh?: boolean;
-}): Promise<void> => {
+}): Promise<boolean> => {
   if (isStaleRepoOperation()) {
-    return;
+    return false;
   }
 
   const taskSessionRecords = await loadTaskSessionRecordsForTasks({
@@ -56,7 +61,18 @@ export const loadRepoAgentSessionsForTasks = async ({
     ...(forceFresh === undefined ? {} : { forceFresh }),
   });
   if (isStaleRepoOperation()) {
-    return;
+    return false;
+  }
+
+  const runtimeReadiness = deriveSessionRuntimeReadiness({
+    tasks: taskSessionRecords,
+    runtimeHealthByRuntime,
+  });
+  if (runtimeReadiness.kind === "waiting_for_runtime") {
+    return false;
+  }
+  if (runtimeReadiness.kind === "blocked") {
+    throw new Error(runtimeReadiness.message);
   }
 
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
@@ -65,7 +81,7 @@ export const loadRepoAgentSessionsForTasks = async ({
     listSessionRuntimeSnapshots: (input) => adapter.listSessionRuntimeSnapshots(input),
   });
   if (isStaleRepoOperation()) {
-    return;
+    return false;
   }
 
   const readModel = commitSessionCollection((currentSessionCollection) => {
@@ -83,7 +99,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   clearSessionObservationState(readModel.unlistedSessionRefs);
 
   if (isStaleRepoOperation()) {
-    return;
+    return false;
   }
 
   await Promise.all(
@@ -93,6 +109,7 @@ export const loadRepoAgentSessionsForTasks = async ({
       }
     }),
   );
+  return true;
 };
 
 export const createLoadAgentSessions = ({
@@ -103,6 +120,7 @@ export const createLoadAgentSessions = ({
   commitSessionCollection,
   observeAgentSession,
   clearSessionObservationState,
+  runtimeHealthByRuntime,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
   return async (taskId: string): Promise<void> => {
@@ -128,6 +146,7 @@ export const createLoadAgentSessions = ({
       commitSessionCollection,
       observeAgentSession,
       clearSessionObservationState,
+      runtimeHealthByRuntime,
       queryClient,
       isStaleRepoOperation,
       forceFresh: true,

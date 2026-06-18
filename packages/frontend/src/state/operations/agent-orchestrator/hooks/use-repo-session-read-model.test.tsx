@@ -9,6 +9,8 @@ import {
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
 
 const record: AgentSessionRecord = {
@@ -40,7 +42,13 @@ const createHarnessState = () => {
     observedSessions.push(session);
   };
   const clearSessionObservationState = mock(() => undefined);
-  const props = (taskIds: string[]) => ({
+  const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
+    opencode: createRepoRuntimeHealthFixture(),
+  };
+  const props = (
+    taskIds: string[],
+    runtimeHealthByRuntime: RepoRuntimeHealthMap = readyRuntimeHealthByRuntime,
+  ) => ({
     workspaceRepoPath: "/repo",
     taskIds,
     isLoadingTasks: false,
@@ -50,6 +58,7 @@ const createHarnessState = () => {
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
+    runtimeHealthByRuntime,
     queryClient,
   });
 
@@ -108,6 +117,43 @@ describe("useRepoSessionReadModel", () => {
       await harness.waitFor(() => state.listSessionRuntimeSnapshots.mock.calls.length === 2);
 
       expect(harness.getLatest().kind).toBe("ready");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the repo session read model loading until the persisted session runtime is ready", async () => {
+    const state = createHarnessState();
+    const loadingRuntimeHealthByRuntime = {
+      opencode: createRepoRuntimeHealthFixture(
+        {},
+        {
+          status: "checking",
+          runtime: {
+            status: "checking",
+            stage: "waiting_for_runtime",
+          },
+          mcp: {
+            status: "waiting_for_runtime",
+          },
+        },
+      ),
+    };
+    const harness = createHookHarness(
+      useRepoSessionReadModel,
+      state.props(["task-1"], loadingRuntimeHealthByRuntime),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((loadState) => loadState.kind === "loading");
+
+      expect(state.listSessionRuntimeSnapshots).not.toHaveBeenCalled();
+
+      await harness.update(state.props(["task-1"]));
+      await harness.waitFor((loadState) => loadState.kind === "ready");
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

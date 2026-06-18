@@ -428,6 +428,34 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("does not load the new-session catalog until the selected runtime is ready", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const expectedSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "build-agent",
+    } satisfies AgentModelSelection;
+    const harness = createHookHarness(
+      createBaseProps({
+        repoReadinessState: "checking",
+        repoSettings: createRepoSettings(expectedSelection),
+        loadCatalog,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+
+      expect(loadCatalog).not.toHaveBeenCalled();
+      expect(harness.getLatest().selectionForNewSession).toEqual(expectedSelection);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("preserves selected agent profile when catalog does not expose profile metadata", async () => {
     const harness = createHookHarness(
       createBaseProps({

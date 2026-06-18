@@ -12,6 +12,7 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { loadRepoAgentSessionsForTasks } from "../session-read-model/load-sessions";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -26,6 +27,7 @@ type UseRepoSessionReadModelArgs = {
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   queryClient: QueryClient;
 };
 
@@ -44,6 +46,7 @@ export const useRepoSessionReadModel = ({
   agentEngine,
   observeAgentSession,
   clearSessionObservationState,
+  runtimeHealthByRuntime,
   queryClient,
 }: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
@@ -84,17 +87,18 @@ export const useRepoSessionReadModel = ({
       }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
-        await loadRepoAgentSessionsForTasks({
+        const didLoadSessionReadModel = await loadRepoAgentSessionsForTasks({
           repoPath: workspaceRepoPath,
           tasks: taskSessionTargets,
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
+          runtimeHealthByRuntime,
           queryClient,
           isStaleRepoOperation,
         });
-        if (!isStaleRepoOperation()) {
+        if (!isStaleRepoOperation() && didLoadSessionReadModel) {
           setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(workspaceRepoPath));
         }
       } catch (error) {
@@ -122,6 +126,7 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
+    runtimeHealthByRuntime,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,

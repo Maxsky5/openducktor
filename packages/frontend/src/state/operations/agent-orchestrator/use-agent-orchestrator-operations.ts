@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -32,6 +33,7 @@ type UseAgentOrchestratorOperationsArgs = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   agentEngine: AgentEnginePort;
   /**
    * Optional dependency seam for tests and specialized callers.
@@ -52,6 +54,7 @@ export function useAgentOrchestratorOperations({
   tasks,
   isLoadingTasks,
   refreshTaskData,
+  runtimeHealthByRuntime,
   agentEngine,
   dependencies,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
@@ -138,6 +141,7 @@ export function useAgentOrchestratorOperations({
         commitSessionCollection: sessionStore.commitSessionCollection,
         observeAgentSession,
         clearSessionObservationState,
+        runtimeHealthByRuntime,
         queryClient,
       }),
     [
@@ -147,6 +151,7 @@ export function useAgentOrchestratorOperations({
       clearSessionObservationState,
       queryClient,
       repoEpochRef,
+      runtimeHealthByRuntime,
       sessionStore,
       workspaceRepoPath,
     ],
@@ -186,6 +191,7 @@ export function useAgentOrchestratorOperations({
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
+    runtimeHealthByRuntime,
     queryClient,
   });
   const ensureRuntime = useMemo(

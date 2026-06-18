@@ -4,6 +4,7 @@ import {
   AgentOperationsContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
+  ChecksStateContext,
   useRequiredContext,
   useTaskControlContext,
   useTaskSnapshotContext,
@@ -20,6 +21,10 @@ export function AgentStudioStateProvider({
   children,
 }: AgentStudioStateProviderProps): ReactElement {
   const { activeWorkspace } = useRequiredContext(WorkspaceStateContext, "AgentStudioStateProvider");
+  const { runtimeHealthByRuntime } = useRequiredContext(
+    ChecksStateContext,
+    "AgentStudioStateProvider",
+  );
   const { tasks, isLoadingTasks } = useTaskSnapshotContext();
   const { refreshTaskData } = useTaskControlContext();
   const { sessionStore, operations, readModelState } = useAgentOrchestratorOperations({
@@ -27,6 +32,7 @@ export function AgentStudioStateProvider({
     tasks,
     isLoadingTasks,
     refreshTaskData,
+    runtimeHealthByRuntime,
     agentEngine,
   });
 

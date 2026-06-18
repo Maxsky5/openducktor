@@ -11,7 +11,12 @@ import {
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
+import {
+  createAgentSessionFixture,
+  createDeferred,
+  createRepoRuntimeHealthFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { host } from "../../host";
 import { createSessionMessagesState } from "../support/messages";
 import { createLoadAgentSessions, loadRepoAgentSessionsForTasks } from "./load-sessions";
@@ -23,6 +28,10 @@ const record: AgentSessionRecord = {
   workingDirectory: "/repo/worktree",
   startedAt: "2026-06-12T08:00:00.000Z",
   selectedModel: null,
+};
+
+const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
+  opencode: createRepoRuntimeHealthFixture(),
 };
 
 const taskFixture: TaskCard = {
@@ -56,6 +65,7 @@ const createLoaderHarness = ({
   listSessionRuntimeSnapshots,
   tasks = [taskFixture],
   sessionRecordsByTaskId = { [taskFixture.id]: [record] },
+  runtimeHealthByRuntime = readyRuntimeHealthByRuntime,
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: Parameters<
@@ -63,6 +73,7 @@ const createLoaderHarness = ({
   >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
+  runtimeHealthByRuntime?: RepoRuntimeHealthMap;
 }) => {
   let sessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
@@ -93,6 +104,7 @@ const createLoaderHarness = ({
     clearSessionObservationState: (sessions) => {
       cleanedSessions.push(...sessions);
     },
+    runtimeHealthByRuntime,
     queryClient,
   });
 
@@ -142,6 +154,7 @@ describe("createLoadAgentSessions", () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
       clearSessionObservationState: () => undefined,
+      runtimeHealthByRuntime: readyRuntimeHealthByRuntime,
       queryClient,
       isStaleRepoOperation: () => false,
     });
@@ -251,6 +264,52 @@ describe("createLoadAgentSessions", () => {
       },
     ]);
     expect(runtimeSnapshotReads).toBe(0);
+  });
+
+  test("waits for the persisted session runtime before scanning snapshots", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+    let sessionCollection = emptyAgentSessionCollection();
+    let runtimeSnapshotReads = 0;
+
+    const didLoadSessionReadModel = await loadRepoAgentSessionsForTasks({
+      repoPath: "/repo",
+      tasks: [taskFixture],
+      adapter: {
+        listSessionRuntimeSnapshots: async () => {
+          runtimeSnapshotReads += 1;
+          return [];
+        },
+      },
+      commitSessionCollection: ((commit) => {
+        const { collection, result } = commit(sessionCollection);
+        sessionCollection = collection;
+        return result;
+      }) satisfies AgentSessionsStore["commitSessionCollection"],
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture(
+          {},
+          {
+            status: "checking",
+            runtime: {
+              status: "checking",
+              stage: "waiting_for_runtime",
+            },
+            mcp: {
+              status: "waiting_for_runtime",
+            },
+          },
+        ),
+      },
+      queryClient,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(didLoadSessionReadModel).toBe(false);
+    expect(runtimeSnapshotReads).toBe(0);
+    expect(listAgentSessions(sessionCollection)).toEqual([]);
   });
 
   test("settles mounted live state without clearing transcript when runtime snapshot is missing during repo reloads", async () => {
