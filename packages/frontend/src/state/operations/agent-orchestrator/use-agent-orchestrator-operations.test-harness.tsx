@@ -4,7 +4,6 @@ import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
@@ -81,21 +80,12 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
 
 type ActiveWorkspace = ReturnType<typeof createDefaultActiveWorkspace>;
 type OrchestratorHookState = ReturnType<typeof useAgentOrchestratorOperations>;
-type OrchestratorHarnessState = OrchestratorHookState &
-  AgentOperationsContextValue & {
-    sessions: AgentSessionState[];
-  };
 
-const toHarnessState = (state: OrchestratorHookState): OrchestratorHarnessState => ({
-  get sessions() {
-    return state.sessionStore.getActivitySnapshot().sessions.flatMap((summary) => {
-      const session = state.sessionStore.getSessionSnapshot(summary);
-      return session ? [session] : [];
-    });
-  },
-  ...state.operations,
-  ...state,
-});
+export const listHarnessSessions = (state: OrchestratorHookState): AgentSessionState[] =>
+  state.sessionStore.getActivitySnapshot().sessions.flatMap((summary) => {
+    const session = state.sessionStore.getSessionSnapshot(summary);
+    return session ? [session] : [];
+  });
 
 export const createHookHarness = (args: {
   activeRepo: string | null;
@@ -165,8 +155,8 @@ export const createHookHarness = (args: {
     });
   };
 
-  const waitFor = async (predicate: (state: OrchestratorHarnessState) => boolean) => {
-    await sharedHarness.waitFor(() => latest !== null && predicate(toHarnessState(latest)));
+  const waitFor = async (predicate: (state: OrchestratorHookState) => boolean) => {
+    await sharedHarness.waitFor(() => latest !== null && predicate(latest));
     return getLatest();
   };
 
@@ -174,7 +164,7 @@ export const createHookHarness = (args: {
     if (!latest) {
       throw new Error("Hook state unavailable");
     }
-    return toHarnessState(latest);
+    return latest;
   };
 
   return {

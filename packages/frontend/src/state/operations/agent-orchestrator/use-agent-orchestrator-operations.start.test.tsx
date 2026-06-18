@@ -9,6 +9,7 @@ import {
   createTestDependencies,
   createUnavailableBuildTaskFixture,
   host,
+  listHarnessSessions,
   OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
@@ -100,14 +101,18 @@ describe("use-agent-orchestrator-operations start and send", () => {
     try {
       await harness.mount();
 
-      const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
-      const session = sessionState.sessions[0];
+      const sessionState = await harness.waitFor(
+        (state) => listHarnessSessions(state).length === 1,
+      );
+      const session = listHarnessSessions(sessionState)[0];
       if (!session) {
         throw new Error("Expected loaded session");
       }
 
       await harness.run(async () => {
-        await harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
+        await harness
+          .getLatest()
+          .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
       expect(subscribeCalls).toBeGreaterThan(0);
@@ -170,7 +175,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.sessions.length === 1);
+      await harness.waitFor((state) => listHarnessSessions(state).length === 1);
 
       expect(subscribeCalls).toBe(1);
     } finally {
@@ -235,15 +240,19 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     try {
       await harness.mount();
-      const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
-      const session = sessionState.sessions[0];
+      const sessionState = await harness.waitFor(
+        (state) => listHarnessSessions(state).length === 1,
+      );
+      const session = listHarnessSessions(sessionState)[0];
       if (!session) {
         throw new Error("Expected loaded session");
       }
 
       await harness.run(async () => {
         await expect(
-          harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
+          harness
+            .getLatest()
+            .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
         ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       });
 
@@ -349,7 +358,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       let firstSessionId = "";
       await harness.run(async () => {
-        const session = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "fresh",
@@ -360,7 +369,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       let secondSessionId = "";
       await harness.run(async () => {
-        const session = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
@@ -478,7 +487,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       let firstSessionId = "";
       let secondSessionId = "";
       await harness.run(async () => {
-        const operations = harness.getLatest();
+        const operations = harness.getLatest().operations;
         const firstStart = operations.startAgentSession({
           taskId: "task-1",
           role: "build",
@@ -603,7 +612,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       let externalSessionId = "";
       await harness.run(async () => {
-        const session = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
@@ -619,7 +628,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(externalSessionId).toBe("external-1");
       expect(startCalls).toBe(0);
       await harness.waitFor((state) =>
-        state.sessions.some((entry) => entry.externalSessionId === "external-1"),
+        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
       );
     } finally {
       await harness.unmount();
@@ -678,7 +687,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     try {
       await harness.mount();
 
-      const startPromise = harness.getLatest().startAgentSession({
+      const startPromise = harness.getLatest().operations.startAgentSession({
         taskId: "task-1",
         role: "build",
         startMode: "fresh",

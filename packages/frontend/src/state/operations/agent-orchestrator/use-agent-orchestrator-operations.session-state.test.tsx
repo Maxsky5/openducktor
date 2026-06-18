@@ -9,6 +9,7 @@ import {
   createHookHarness,
   createUnavailableBuildTaskFixture,
   host,
+  listHarnessSessions,
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
   persistedSessionFixture,
@@ -212,14 +213,16 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
 
-      const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
-      const session = loadedState.sessions[0];
+      const loadedState = await harness.waitFor((state) => listHarnessSessions(state).length === 1);
+      const session = listHarnessSessions(loadedState)[0];
       if (!session) {
         throw new Error("Expected loaded session");
       }
 
       await harness.run(async () => {
-        await harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "prime" }]);
+        await harness
+          .getLatest()
+          .operations.sendAgentMessage(session, [{ kind: "text", text: "prime" }]);
       });
 
       expect(eventHandlerRef.current).not.toBeNull();
@@ -269,18 +272,18 @@ describe("use-agent-orchestrator-operations session state", () => {
 
       const pendingState = await harness.waitFor(
         (state) =>
-          state.sessions.find((entry) => entry.externalSessionId === "external-1")?.pendingApprovals
-            .length === 1,
+          listHarnessSessions(state).find((entry) => entry.externalSessionId === "external-1")
+            ?.pendingApprovals.length === 1,
       );
-      const pendingSession = pendingState.sessions.find(
+      const pendingSession = listHarnessSessions(pendingState).find(
         (entry) => entry.externalSessionId === "external-1",
       );
       expect(pendingSession?.pendingApprovals).toHaveLength(1);
       expect(pendingSession?.pendingQuestions).toHaveLength(1);
 
-      const recoveredSession = harness
-        .getLatest()
-        .sessions.find((entry) => entry.externalSessionId === "external-1");
+      const recoveredSession = listHarnessSessions(harness.getLatest()).find(
+        (entry) => entry.externalSessionId === "external-1",
+      );
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
       expect(subscribeCalls).toBeGreaterThan(0);
@@ -383,7 +386,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.mount();
 
       await harness.run(async () => {
-        await harness.getLatest().startAgentSession({
+        await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "fresh",
@@ -454,8 +457,8 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
 
-      const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
-      const session = loadedState.sessions[0];
+      const loadedState = await harness.waitFor((state) => listHarnessSessions(state).length === 1);
+      const session = listHarnessSessions(loadedState)[0];
       if (!session) {
         throw new Error("Expected loaded session");
       }
@@ -463,7 +466,9 @@ describe("use-agent-orchestrator-operations session state", () => {
 
       await harness.run(async () => {
         await expect(
-          harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
+          harness
+            .getLatest()
+            .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
         ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       });
 
@@ -529,21 +534,23 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       const loaded = await harness.waitFor((state) =>
-        state.sessions.some((session) => session.externalSessionId === "external-1"),
+        listHarnessSessions(state).some((session) => session.externalSessionId === "external-1"),
       );
-      const session = loaded.sessions.find((entry) => entry.externalSessionId === "external-1");
+      const session = listHarnessSessions(loaded).find(
+        (entry) => entry.externalSessionId === "external-1",
+      );
       if (!session) {
         throw new Error("Expected loaded session");
       }
 
       await harness.run(() => {
-        harness.getLatest().updateAgentSessionModel(session, BUILD_SELECTION);
+        harness.getLatest().operations.updateAgentSessionModel(session, BUILD_SELECTION);
       });
       await Promise.resolve();
 
-      const updatedSession = harness
-        .getLatest()
-        .sessions.find((entry) => entry.externalSessionId === "external-1");
+      const updatedSession = listHarnessSessions(harness.getLatest()).find(
+        (entry) => entry.externalSessionId === "external-1",
+      );
       expect(updatedSession?.selectedModel).toEqual(BUILD_SELECTION);
       expect(upsertedRecords).toEqual([
         expect.objectContaining({
@@ -629,12 +636,12 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.mount();
 
       await harness.waitFor((state) =>
-        state.sessions.some((entry) => entry.externalSessionId === "external-1"),
+        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
       );
 
       let reusedSessionId = "";
       await harness.run(async () => {
-        const session = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
@@ -684,12 +691,11 @@ describe("use-agent-orchestrator-operations session state", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.sessions.length === 2);
+      await harness.waitFor((state) => listHarnessSessions(state).length === 2);
 
       expect(
-        harness
-          .getLatest()
-          .sessions.map((session) => session.externalSessionId)
+        listHarnessSessions(harness.getLatest())
+          .map((session) => session.externalSessionId)
           .sort(),
       ).toEqual(["external-1", "external-spec"]);
 
@@ -705,9 +711,9 @@ describe("use-agent-orchestrator-operations session state", () => {
         await harness.getLatest().readModelState.refreshTaskSessions("task-1");
       });
 
-      expect(harness.getLatest().sessions.map((session) => session.externalSessionId)).toEqual([
-        "external-spec",
-      ]);
+      expect(
+        listHarnessSessions(harness.getLatest()).map((session) => session.externalSessionId),
+      ).toEqual(["external-spec"]);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
       await harness.unmount();
@@ -738,8 +744,8 @@ describe("use-agent-orchestrator-operations session state", () => {
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixtureWithPersistedBuildSession],
       });
-      const loaded = await harness.waitFor((state) => state.sessions.length === 1);
-      expect(loaded.sessions[0]?.externalSessionId).toBe("external-1");
+      const loaded = await harness.waitFor((state) => listHarnessSessions(state).length === 1);
+      expect(listHarnessSessions(loaded)[0]?.externalSessionId).toBe("external-1");
       expect(persistedListCalls).toBe(1);
     } finally {
       await harness.unmount();
@@ -796,12 +802,13 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       const resolved = await harness.waitFor((state) =>
-        state.sessions.some(
+        listHarnessSessions(state).some(
           (session) => session.externalSessionId === "external-1" && session.status === "running",
         ),
       );
       expect(
-        resolved.sessions.find((session) => session.externalSessionId === "external-1")?.status,
+        listHarnessSessions(resolved).find((session) => session.externalSessionId === "external-1")
+          ?.status,
       ).toBe("running");
       expect(subscribeCalls).toBe(1);
     } finally {
@@ -873,25 +880,25 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) =>
-        state.sessions.some(
+        listHarnessSessions(state).some(
           (session) => session.externalSessionId === codexRecord.externalSessionId,
         ),
       );
       await harness.run(async () => {
-        await harness.getLatest().loadAgentSessionHistory({
+        await harness.getLatest().operations.loadAgentSessionHistory({
           externalSessionId: codexRecord.externalSessionId,
           runtimeKind: codexRecord.runtimeKind,
           workingDirectory: codexRecord.workingDirectory,
         });
       });
       const loaded = await harness.waitFor((state) =>
-        state.sessions.some(
+        listHarnessSessions(state).some(
           (session) =>
             session.externalSessionId === codexRecord.externalSessionId &&
             session.historyLoadState === "loaded",
         ),
       );
-      const session = loaded.sessions.find(
+      const session = listHarnessSessions(loaded).find(
         (entry) => entry.externalSessionId === codexRecord.externalSessionId,
       );
       const receivedHistoryInput = receivedHistoryInputRef.current;
@@ -971,7 +978,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) =>
-        state.sessions.some((session) => session.externalSessionId === "external-1"),
+        listHarnessSessions(state).some((session) => session.externalSessionId === "external-1"),
       );
       expect(liveSnapshotScans).toBe(1);
       expect(resumeCalls).toBe(0);
