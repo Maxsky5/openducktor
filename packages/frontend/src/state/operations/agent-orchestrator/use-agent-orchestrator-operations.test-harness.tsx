@@ -88,7 +88,7 @@ type OrchestratorHarnessState = OrchestratorHookState &
 
 const toHarnessState = (state: OrchestratorHookState): OrchestratorHarnessState => ({
   get sessions() {
-    return state.sessionStore.getSessionSummariesSnapshot().flatMap((summary) => {
+    return state.sessionStore.getActivitySnapshot().sessions.flatMap((summary) => {
       const session = state.sessionStore.getSessionSnapshot(summary);
       return session ? [session] : [];
     });

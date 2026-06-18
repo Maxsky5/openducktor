@@ -9,7 +9,6 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import type {
   AgentActivitySessionsSnapshot,
-  AgentSessionSummary,
   AgentSessionsStore,
   WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
@@ -65,7 +64,6 @@ const createActivityStore = (
     workspaceRepoPath: activityWorkspaceRepoPath,
     sessions: activitySessions,
   };
-  const emptySummaries: AgentSessionSummary[] = [];
   const listeners = new Set<() => void>();
 
   const updateSnapshot = (): void => {
@@ -88,7 +86,6 @@ const createActivityStore = (
         listeners.delete(listener);
       };
     },
-    getSessionSummariesSnapshot: (): AgentSessionSummary[] => emptySummaries,
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
     commitSessionCollection: () => {

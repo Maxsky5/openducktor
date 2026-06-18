@@ -108,15 +108,6 @@ export const useAgentOperations = (): AgentOperationsContextValue => useAgentOpe
 export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
   useAgentSessionReadModelStateContext();
 
-export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getSessionSummariesSnapshot,
-    sessionStore.getSessionSummariesSnapshot,
-  );
-};
-
 export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
@@ -125,6 +116,9 @@ export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
     sessionStore.getActivitySnapshot,
   );
 };
+
+export const useAgentSessionSummaries = (): AgentSessionSummary[] =>
+  useAgentActivitySnapshot().sessions;
 
 export const useAgentSession = (
   identity: AgentSessionIdentity | null,

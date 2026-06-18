@@ -11,7 +11,6 @@ import {
 } from "@/state/agent-session-collection";
 import {
   type AgentActivitySessionsSnapshot,
-  type AgentSessionSummary,
   createAgentActivitySnapshot,
   createEmptyAgentActivitySnapshot,
 } from "@/state/agent-session-snapshots";
@@ -33,7 +32,6 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
-  getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
@@ -93,7 +91,6 @@ export const createAgentSessionsStore = (
         listeners.delete(listener);
       };
     },
-    getSessionSummariesSnapshot: () => activitySnapshot.sessions,
     getActivitySnapshot: () => activitySnapshot,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     commitSessionCollection,
