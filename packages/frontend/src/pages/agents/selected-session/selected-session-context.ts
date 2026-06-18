@@ -14,7 +14,12 @@ import {
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import {
   type AgentStudioDocumentsContext,
@@ -25,6 +30,8 @@ import {
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
+const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
+const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuestionRequest[];
 
 type SelectedSessionPendingQuestionsContext = {
   canSubmit: boolean;
@@ -51,6 +58,8 @@ export type SelectedSessionRuntimeContext = {
 
 export type SelectedSessionPendingInputContext = {
   waitingInputPlaceholder: string | null;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
   pendingQuestions: SelectedSessionPendingQuestionsContext;
   approvals: SelectedSessionApprovalsContext;
   subagentPendingApprovalCountBySessionKey: Record<string, number>;
@@ -149,15 +158,20 @@ export const buildAgentStudioSelectedSessionContext = ({
         qaDoc: documents.qaDoc,
       })
     : null;
-  const hasPendingQuestions = loadedSession
-    ? hasAgentSessionPendingQuestions(loadedSession)
-    : false;
-  const hasPendingApprovals = loadedSession
-    ? hasAgentSessionPendingApprovals(loadedSession)
-    : false;
-  const waitingInputPlaceholder = loadedSession
-    ? getAgentSessionWaitingInputPlaceholder(loadedSession)
-    : null;
+  const pendingApprovalRequests =
+    loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVAL_REQUESTS;
+  const pendingQuestionRequests =
+    loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS;
+  const hasPendingQuestions = hasAgentSessionPendingQuestions({
+    pendingQuestions: pendingQuestionRequests,
+  });
+  const hasPendingApprovals = hasAgentSessionPendingApprovals({
+    pendingApprovals: pendingApprovalRequests,
+  });
+  const waitingInputPlaceholder = getAgentSessionWaitingInputPlaceholder({
+    pendingApprovals: pendingApprovalRequests,
+    pendingQuestions: pendingQuestionRequests,
+  });
 
   return {
     taskId,
@@ -178,6 +192,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     },
     pendingInput: {
       waitingInputPlaceholder,
+      pendingApprovalRequests,
+      pendingQuestionRequests,
       pendingQuestions: {
         canSubmit: hasPendingQuestions,
         isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,

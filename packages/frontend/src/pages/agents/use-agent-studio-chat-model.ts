@@ -13,7 +13,6 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -88,9 +87,6 @@ const toChatContextUsage = (
   };
 };
 
-const EMPTY_PENDING_APPROVALS = Object.freeze([]) as readonly AgentApprovalRequest[];
-const EMPTY_PENDING_QUESTIONS = Object.freeze([]) as readonly AgentQuestionRequest[];
-
 export function useAgentStudioChatModel({
   selectedSession,
   sessionActions,
@@ -109,10 +105,8 @@ export function useAgentStudioChatModel({
         : null,
     [selectedSession.loadedSession],
   );
-  const pendingApprovalRequests =
-    selectedSession.loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
-  const pendingQuestionRequests =
-    selectedSession.loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
+  const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
+  const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
   const sessionAccentColor = useMemo(
     () =>
       resolveAgentSessionAccentColor({

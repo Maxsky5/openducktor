@@ -366,6 +366,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.pendingInput.waitingInputPlaceholder).toBe(
       "Resolve the pending questions and approval requests above to continue",
     );
+    expect(context.pendingInput.pendingQuestionRequests).toBe(session.pendingQuestions);
+    expect(context.pendingInput.pendingApprovalRequests).toBe(session.pendingApprovals);
     expect(context.pendingInput.approvals).toMatchObject({
       canReply: true,
       isSubmittingByRequestId: { "approval-main": true },
