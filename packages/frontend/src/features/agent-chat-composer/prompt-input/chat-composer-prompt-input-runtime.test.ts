@@ -1,20 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { ChatComposerPromptInputRuntimeSource } from "./chat-composer-prompt-input-runtime";
 import { resolveChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
-const sessionIdentity = (runtimeKind: RuntimeKind = "codex") => ({
+const sessionIdentity = (runtimeKind: RuntimeKind = "codex"): AgentSessionIdentity => ({
   externalSessionId: "session-1",
   runtimeKind,
   workingDirectory: "/repo/worktree",
 });
 
+const sessionSource = (
+  session: AgentSessionIdentity = sessionIdentity(),
+): ChatComposerPromptInputRuntimeSource => ({ kind: "session", session });
+
+const repoSource = (
+  runtimeKind: RuntimeKind | null = "opencode",
+): ChatComposerPromptInputRuntimeSource => ({ kind: "repo", runtimeKind });
+
 describe("resolveChatComposerPromptInputRuntime", () => {
   test("uses the loaded session working directory for session-scoped prompt inputs", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: sessionIdentity(),
       repoReadinessState: "ready",
-      selectedRuntimeKind: "opencode",
+      source: sessionSource(),
     });
 
     expect(runtime).toEqual({
@@ -31,15 +40,13 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("waits for selected-session prompt inputs until the selected runtime is ready", () => {
     const checkingRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: sessionIdentity(),
       repoReadinessState: "checking",
-      selectedRuntimeKind: "opencode",
+      source: sessionSource(),
     });
     const blockedRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: sessionIdentity(),
       repoReadinessState: "blocked",
-      selectedRuntimeKind: "opencode",
+      source: sessionSource(),
     });
 
     expect(checkingRuntime).toEqual({
@@ -57,9 +64,8 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("keeps waiting-input sessions usable even when their raw status is starting", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: sessionIdentity(),
       repoReadinessState: "ready",
-      selectedRuntimeKind: "opencode",
+      source: sessionSource(),
     });
 
     expect(runtime).toEqual({
@@ -76,9 +82,8 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("reports invalid selected session runtime context as unavailable", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: null,
-      selectedSessionIdentity: sessionIdentity(),
       repoReadinessState: "ready",
-      selectedRuntimeKind: "opencode",
+      source: sessionSource(),
     });
 
     expect(runtime).toEqual({
@@ -92,12 +97,11 @@ describe("resolveChatComposerPromptInputRuntime", () => {
     expect(() =>
       resolveChatComposerPromptInputRuntime({
         workspaceRepoPath: "/repo",
-        selectedSessionIdentity: {
+        repoReadinessState: "ready",
+        source: sessionSource({
           ...sessionIdentity(),
           workingDirectory: "",
-        },
-        repoReadinessState: "ready",
-        selectedRuntimeKind: "opencode",
+        }),
       }),
     ).toThrow("read selected session runtime data");
   });
@@ -105,9 +109,8 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("uses repo runtime inputs before a session exists", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: null,
       repoReadinessState: "ready",
-      selectedRuntimeKind: "opencode",
+      source: repoSource(),
     });
 
     expect(runtime).toEqual({
@@ -124,9 +127,8 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("waits for repo-scoped prompt inputs until the selected runtime is ready", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: null,
       repoReadinessState: "checking",
-      selectedRuntimeKind: "opencode",
+      source: repoSource(),
     });
 
     expect(runtime).toEqual({
@@ -139,15 +141,13 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("reports missing repo and runtime as unavailable runtime input", () => {
     const missingRepoRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: null,
-      selectedSessionIdentity: null,
       repoReadinessState: "ready",
-      selectedRuntimeKind: "opencode",
+      source: repoSource(),
     });
     const missingRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      selectedSessionIdentity: null,
       repoReadinessState: "ready",
-      selectedRuntimeKind: null,
+      source: repoSource(null),
     });
 
     expect(missingRepoRuntime).toEqual({

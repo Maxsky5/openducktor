@@ -21,7 +21,10 @@ import {
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
 import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
-import { resolveChatComposerPromptInputRuntime } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
+import {
+  type ChatComposerPromptInputRuntimeSource,
+  resolveChatComposerPromptInputRuntime,
+} from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
@@ -174,15 +177,20 @@ export function useAgentStudioChatComposer({
       runtimeKind: selectedRuntimeKind,
     };
   }, [selectedRuntimeKind, workspaceRepoPath]);
+  const promptInputRuntimeSource = useMemo<ChatComposerPromptInputRuntimeSource>(() => {
+    if (selectedSessionIdentity) {
+      return { kind: "session", session: selectedSessionIdentity };
+    }
+    return { kind: "repo", runtimeKind: selectedRuntimeKind };
+  }, [selectedRuntimeKind, selectedSessionIdentity]);
   const promptInputRuntime = useMemo(
     () =>
       resolveChatComposerPromptInputRuntime({
         workspaceRepoPath,
-        selectedSessionIdentity,
         repoReadinessState,
-        selectedRuntimeKind,
+        source: promptInputRuntimeSource,
       }),
-    [repoReadinessState, selectedSessionIdentity, selectedRuntimeKind, workspaceRepoPath],
+    [promptInputRuntimeSource, repoReadinessState, workspaceRepoPath],
   );
   const promptInputRuntimeKind =
     promptInputRuntime.state === "available"

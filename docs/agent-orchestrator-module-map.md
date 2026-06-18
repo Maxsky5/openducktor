@@ -582,9 +582,8 @@ Owns:
 - keeping selected-session target identity and selected-model fallback available
   while the full selected session is still loading
 - deriving context usage from the loaded session's live context usage and messages
-- resolving the single prompt-input runtime state from the selected session
-  identity, repo-runtime readiness, repo runtime selection, and unavailable
-  runtime context
+- resolving the single prompt-input runtime state from one explicit prompt-input
+  source, repo-runtime readiness, and unavailable runtime context
 - passing runtime-backed composer tools a `RuntimeWorkingDirectoryRef` for both
   loaded-session and pre-session repo targets
 

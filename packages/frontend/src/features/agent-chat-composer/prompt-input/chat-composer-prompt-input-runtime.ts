@@ -21,23 +21,25 @@ export type ChatComposerPromptInputRuntime =
       error: string;
     };
 
+export type ChatComposerPromptInputRuntimeSource =
+  | { kind: "repo"; runtimeKind: RuntimeKind | null }
+  | { kind: "session"; session: AgentSessionIdentity };
+
 type ResolveChatComposerPromptInputRuntimeArgs = {
   workspaceRepoPath: string | null;
-  selectedSessionIdentity: AgentSessionIdentity | null;
   repoReadinessState: RepoRuntimeReadinessState;
-  selectedRuntimeKind: RuntimeKind | null;
+  source: ChatComposerPromptInputRuntimeSource;
 };
 
 const runtimeWaitingMessage = "File search is unavailable until the runtime is ready.";
 
 export const resolveChatComposerPromptInputRuntime = ({
   workspaceRepoPath,
-  selectedSessionIdentity,
   repoReadinessState,
-  selectedRuntimeKind,
+  source,
 }: ResolveChatComposerPromptInputRuntimeArgs): ChatComposerPromptInputRuntime => {
-  if (selectedSessionIdentity) {
-    const runtimeKind = selectedSessionIdentity.runtimeKind;
+  if (source.kind === "session") {
+    const runtimeKind = source.session.runtimeKind;
     if (!workspaceRepoPath) {
       return {
         state: "unavailable",
@@ -52,14 +54,15 @@ export const resolveChatComposerPromptInputRuntime = ({
         message: runtimeWaitingMessage,
       };
     }
+    const session = source.session;
 
     return {
       state: "available",
       scope: "session",
       runtimeRef: toRuntimeWorkingDirectoryRef({
         repoPath: workspaceRepoPath,
-        runtimeKind: selectedSessionIdentity.runtimeKind,
-        workingDirectory: selectedSessionIdentity.workingDirectory,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
         action: "read selected session runtime data",
       }),
     };
@@ -72,7 +75,7 @@ export const resolveChatComposerPromptInputRuntime = ({
       error: "No repository selected.",
     };
   }
-  if (!selectedRuntimeKind) {
+  if (!source.runtimeKind) {
     return {
       state: "unavailable",
       runtimeKind: null,
@@ -82,7 +85,7 @@ export const resolveChatComposerPromptInputRuntime = ({
   if (repoReadinessState !== "ready") {
     return {
       state: "waiting",
-      runtimeKind: selectedRuntimeKind,
+      runtimeKind: source.runtimeKind,
       message: runtimeWaitingMessage,
     };
   }
@@ -91,7 +94,7 @@ export const resolveChatComposerPromptInputRuntime = ({
     scope: "repo",
     runtimeRef: toRuntimeWorkingDirectoryRef({
       repoPath: workspaceRepoPath,
-      runtimeKind: selectedRuntimeKind,
+      runtimeKind: source.runtimeKind,
       workingDirectory: workspaceRepoPath,
       action: "read repo runtime data",
     }),
