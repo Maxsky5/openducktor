@@ -10,7 +10,7 @@ import type {
 import { host } from "./host";
 import { createHostRuntimeCatalogOperations } from "./runtime-catalog";
 
-type HostRepoRuntimeHealthCheck = Awaited<ReturnType<typeof host.repoRuntimeHealthStatus>>;
+type HostRepoRuntimeHealthCheck = Awaited<ReturnType<typeof host.repoRuntimeHealth>>;
 
 const runtimeFixture: NonNullable<HostRepoRuntimeHealthCheck["runtime"]["instance"]> = {
   kind: "opencode",
@@ -232,18 +232,25 @@ describe("runtime-catalog", () => {
     });
   });
 
-  test("delegates repo runtime health to the status-only host command", async () => {
-    const repoRuntimeHealthStatus = mock(async () => healthyRepoRuntimeHealthFixture);
+  test("delegates repo runtime health to the host command that starts missing runtimes", async () => {
+    const repoRuntimeHealth = mock(async () => healthyRepoRuntimeHealthFixture);
+    const repoRuntimeHealthStatus = mock(async () => {
+      throw new Error("status-only health must not drive readiness");
+    });
+    const originalRepoRuntimeHealth = host.repoRuntimeHealth;
     const originalRepoRuntimeHealthStatus = host.repoRuntimeHealthStatus;
+    host.repoRuntimeHealth = repoRuntimeHealth;
     host.repoRuntimeHealthStatus = repoRuntimeHealthStatus;
 
     try {
       const operations = createOperations(createAdapter());
       const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
-      expect(repoRuntimeHealthStatus).toHaveBeenCalledWith("/tmp/repo", "opencode");
+      expect(repoRuntimeHealth).toHaveBeenCalledWith("/tmp/repo", "opencode");
+      expect(repoRuntimeHealthStatus).not.toHaveBeenCalled();
       expect(result).toEqual(healthyRepoRuntimeHealthFixture);
     } finally {
+      host.repoRuntimeHealth = originalRepoRuntimeHealth;
       host.repoRuntimeHealthStatus = originalRepoRuntimeHealthStatus;
     }
   });
