@@ -4,6 +4,10 @@ import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import {
+  type AgentChatDraftScope,
+  agentChatDraftScopeKey,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { toAgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat-thread-session";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
@@ -57,7 +61,7 @@ export type AgentStudioChatModelSelectionContext = {
 };
 
 export type AgentStudioChatComposerContext = {
-  draftStateKey: string;
+  draftScope: AgentChatDraftScope;
 };
 
 type UseAgentStudioChatModelArgs = {
@@ -175,7 +179,8 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      draftStateKey: composer.draftStateKey,
+      draftStateKey: agentChatDraftScopeKey(composer.draftScope),
+      draftScope: composer.draftScope,
       onSend: sessionActions.onSend,
       isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
@@ -206,7 +211,7 @@ export function useAgentStudioChatModel({
     }),
     [
       chatContextUsage,
-      composer.draftStateKey,
+      composer.draftScope,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,

@@ -4,6 +4,10 @@ import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
+import {
+  type AgentChatDraftScope,
+  agentChatDraftScopeKey,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
@@ -38,6 +42,12 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
+
+const draftScopeFixture = (taskId: string): AgentChatDraftScope => ({
+  taskId,
+  role: "planner",
+  session: null,
+});
 
 type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
@@ -258,7 +268,11 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
   const chatSettings = createChatSettingsFixture(overrides.chatSettings);
   const composer = {
-    draftStateKey: "draft-1",
+    draftScope: {
+      taskId: selectedSessionCore.taskId,
+      role: selectedSessionCore.role,
+      session: selectedSessionCore.selectedSessionIdentity,
+    },
     ...overrides.composer,
   };
   const selectedSession = {
@@ -336,7 +350,7 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
         composer: {
-          draftStateKey: "draft-message",
+          draftScope: draftScopeFixture("draft-message"),
         },
         runtimeReadiness: {
           refreshChecks: onRefreshChecks,
@@ -1064,7 +1078,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([session]),
       },
       composer: {
-        draftStateKey: "draft-empty",
+        draftScope: draftScopeFixture("draft-empty"),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -1078,14 +1092,16 @@ describe("useAgentStudioPageModels", () => {
       ...baseProps,
       composer: {
         ...baseProps.composer,
-        draftStateKey: "draft-update",
+        draftScope: draftScopeFixture("draft-update"),
       },
     });
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
-    expect(nextState.agentChatModel.composer.draftStateKey).toBe("draft-update");
+    expect(nextState.agentChatModel.composer.draftStateKey).toBe(
+      agentChatDraftScopeKey(draftScopeFixture("draft-update")),
+    );
 
     await harness.unmount();
   });
@@ -1098,7 +1114,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([session]),
       },
       composer: {
-        draftStateKey: "draft-thread-stable",
+        draftScope: draftScopeFixture("draft-thread-stable"),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -1128,7 +1144,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([session]),
       },
       composer: {
-        draftStateKey: "draft-thinking-toggle",
+        draftScope: draftScopeFixture("draft-thinking-toggle"),
       },
       chatSettings: createChatSettingsFixture(),
     });
@@ -1160,7 +1176,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([session]),
       },
       composer: {
-        draftStateKey: "draft-diff-toggle",
+        draftScope: draftScopeFixture("draft-diff-toggle"),
       },
       chatSettings: createChatSettingsFixture(),
     });
@@ -1192,7 +1208,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([session]),
       },
       composer: {
-        draftStateKey: "draft-pending-maps",
+        draftScope: draftScopeFixture("draft-pending-maps"),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -1516,7 +1532,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([initialSession]),
       },
       composer: {
-        draftStateKey: "draft-same-session",
+        draftScope: draftScopeFixture("draft-same-session"),
       },
       sessionActions: {
         isSessionWorking: true,
@@ -1565,7 +1581,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: summarizeSessions([initialSession]),
       },
       composer: {
-        draftStateKey: "draft-waiting-input",
+        draftScope: draftScopeFixture("draft-waiting-input"),
       },
       sessionActions: {
         isSessionWorking: true,

@@ -18,21 +18,10 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
-
-const parseDraftStateKey = (draftStateKey: string) => {
-  const [taskId = "", role = "", sessionKey = ""] = draftStateKey.split(":");
-  return { taskId, role, sessionKey };
-};
-
-const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string): boolean => {
-  const previous = parseDraftStateKey(previousKey);
-  const next = parseDraftStateKey(nextKey);
-  return (
-    previous.taskId === next.taskId &&
-    previous.role === next.role &&
-    previous.sessionKey !== next.sessionKey
-  );
-};
+import {
+  type AgentChatDraftScope,
+  didAgentChatDraftScopeSwitchSessionOnly,
+} from "./agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 
@@ -60,6 +49,7 @@ export type AgentChatComposerConfig = {
   isReadOnly: boolean;
   readOnlyReason: string | null;
   draftStateKey: string;
+  draftScope: AgentChatDraftScope;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;
@@ -115,22 +105,23 @@ export function useAgentChatComposerModel({
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatComposerModelArgs): AgentChatComposerModel | undefined {
   const pendingInlineCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
-  const previousDraftStateKeyRef = useRef<string | null>(null);
+  const previousDraftScopeRef = useRef<AgentChatDraftScope | null>(null);
   const composerDraftStateKey = composer?.draftStateKey ?? null;
+  const composerDraftScope = composer?.draftScope ?? null;
 
   useEffect(() => {
-    if (!composerDraftStateKey) {
+    if (!composerDraftStateKey || !composerDraftScope) {
       return;
     }
     const store = useInlineCommentDraftStore.getState();
-    const previousDraftStateKey = previousDraftStateKeyRef.current;
-    if (previousDraftStateKey === composerDraftStateKey) {
+    const previousDraftScope = previousDraftScopeRef.current;
+    if (previousDraftScope === composerDraftScope) {
       return;
     }
 
     if (
-      previousDraftStateKey != null &&
-      isSessionOnlyDraftStateTransition(previousDraftStateKey, composerDraftStateKey) &&
+      previousDraftScope != null &&
+      didAgentChatDraftScopeSwitchSessionOnly(previousDraftScope, composerDraftScope) &&
       store.drafts.some((draft) => draft.status === "submitting")
     ) {
       store.setDraftStateKey(composerDraftStateKey);
@@ -138,8 +129,8 @@ export function useAgentChatComposerModel({
       store.resetForContext(composerDraftStateKey);
     }
 
-    previousDraftStateKeyRef.current = composerDraftStateKey;
-  }, [composerDraftStateKey]);
+    previousDraftScopeRef.current = composerDraftScope;
+  }, [composerDraftScope, composerDraftStateKey]);
 
   const submitComposerDraft = useCallback(
     async (

@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useMemo } from "react";
+import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
@@ -65,16 +65,15 @@ export function useAgentsPageOrchestrationShellModel({
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
   const { selection, scheduleQueryUpdate, scheduleSelectionIntent } = routeSession;
 
-  const draftStateKey = useMemo(
-    () =>
-      [
-        selection.view.taskId,
-        selection.view.role,
-        selection.view.loadedSession
-          ? agentSessionIdentityKey(selection.view.loadedSession)
-          : "new",
-      ].join(":"),
-    [selection.view.loadedSession, selection.view.role, selection.view.taskId],
+  const composer = useMemo(
+    (): { draftScope: AgentChatDraftScope } => ({
+      draftScope: {
+        taskId: selection.view.taskId,
+        role: selection.view.role,
+        session: selection.view.selectedSessionIdentity,
+      },
+    }),
+    [selection.view.role, selection.view.selectedSessionIdentity, selection.view.taskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -94,7 +93,7 @@ export function useAgentsPageOrchestrationShellModel({
     workspaceRepoPath,
     selection: orchestrationSelection,
     hasActiveGitConflict,
-    draftStateKey,
+    composer,
     actions: {
       updateQuery: scheduleQueryUpdate,
       openTaskDetails,

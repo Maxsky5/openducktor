@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
+import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -437,12 +438,12 @@ const registerModuleMocks = (): void => {
         };
       }
 
-      const loadedSession = routeSession.selection.view.loadedSession;
-      const draftStateKey = [
-        routeSession.selection.view.taskId,
-        routeSession.selection.view.role,
-        loadedSession ? agentSessionIdentityKey(loadedSession) : "new",
-      ].join(":");
+      const draftScope = {
+        taskId: routeSession.selection.view.taskId,
+        role: routeSession.selection.view.role,
+        session: routeSession.selection.view.selectedSessionIdentity,
+      };
+      const draftStateKey = agentChatDraftScopeKey(draftScope);
 
       if (!lastOrchestrationSelection) {
         throw new Error("Missing orchestration selection");
@@ -796,6 +797,17 @@ describe("useAgentsPageShellModel", () => {
   });
 
   test("keys composer drafts by full selected session identity", async () => {
+    selectionState = {
+      ...selectionState,
+      view: {
+        ...selectionState.view,
+        selectedSessionIdentity: {
+          externalSessionId: initialSelectionSession.externalSessionId,
+          runtimeKind: "opencode",
+          workingDirectory: initialSelectionSession.workingDirectory,
+        },
+      },
+    };
     const harness = createHookHarness();
 
     try {

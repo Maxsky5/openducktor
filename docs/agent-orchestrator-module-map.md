@@ -579,6 +579,8 @@ Owns:
   selected session or new session
 - resolving selected composer runtime kind from selected-session model, draft
   selection, role default, and repo default
+- deriving composer draft scope from task, role, and selected-session identity;
+  rendered chat components may receive a string key, but hooks must not parse it
 - deriving Agent Studio chat empty-state/kickoff visibility and composer
   read-only state
 - keeping selected-session target identity and selected-model fallback available

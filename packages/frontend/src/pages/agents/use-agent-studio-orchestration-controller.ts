@@ -29,9 +29,9 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 
-type AgentStudioOrchestrationComposerContext = {
-  draftStateKey: string;
-};
+type AgentStudioOrchestrationComposerContext = Parameters<
+  typeof useAgentStudioPageModels
+>[0]["composer"];
 
 type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
@@ -54,7 +54,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   hasActiveGitConflict: boolean;
-  draftStateKey: string;
+  composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
 };
 
@@ -193,7 +193,7 @@ export function useAgentStudioOrchestrationController({
   workspaceRepoPath,
   selection,
   hasActiveGitConflict,
-  draftStateKey,
+  composer,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const {
@@ -441,9 +441,7 @@ export function useAgentStudioOrchestrationController({
       handleSelectVariant,
     },
     chatSettings,
-    composer: {
-      draftStateKey,
-    },
+    composer,
   });
 
   const {

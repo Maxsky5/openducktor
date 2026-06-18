@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   createAgentSessionFixture,
@@ -147,7 +148,11 @@ const baseArgs: BuildArgs = {
     expandFileDiffsByDefault: false,
   },
   composer: {
-    draftStateKey: "draft-1",
+    draftScope: {
+      taskId: "task-1",
+      role: "planner",
+      session: toAgentSessionIdentity(session),
+    },
   },
 };
 
@@ -174,7 +179,14 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
     expect(mapped.chatSettings.expandFileDiffsByDefault).toBe(false);
-    expect(mapped.composer.draftStateKey).toBe("draft-1");
+    expect(mapped.composer.draftScope).toEqual({
+      taskId: "task-1",
+      role: "planner",
+      session: toAgentSessionIdentity(session),
+    });
+    expect(agentChatDraftScopeKey(mapped.composer.draftScope)).toBe(
+      `task-1:planner:${agentSessionIdentityKey(toAgentSessionIdentity(session))}`,
+    );
   });
 
   test("derives activeTabValue from tab id, task id, then empty sentinel", () => {
