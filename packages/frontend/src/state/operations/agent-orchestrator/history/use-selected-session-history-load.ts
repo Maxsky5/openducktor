@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentOperationsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -30,25 +31,19 @@ export const useSelectedSessionHistoryLoad = ({
   target: AgentSessionIdentity | null;
 }): void => {
   const { loadAgentSessionHistory } = useAgentOperationsContext();
-  const externalSessionId = target?.externalSessionId ?? null;
-  const runtimeKind = target?.runtimeKind ?? null;
-  const workingDirectory = target?.workingDirectory ?? null;
+  const stableTarget = useStableAgentSessionIdentity(target);
 
   useEffect(() => {
-    if (!externalSessionId || !runtimeKind || !workingDirectory) {
+    if (stableTarget === null) {
       return;
     }
 
     runOrchestratorSideEffect(
       "selected-session-history-load",
-      loadAgentSessionHistory({ externalSessionId, runtimeKind, workingDirectory }),
+      loadAgentSessionHistory(stableTarget),
       {
-        tags: {
-          externalSessionId,
-          runtimeKind,
-          workingDirectory,
-        },
+        tags: stableTarget,
       },
     );
-  }, [externalSessionId, loadAgentSessionHistory, runtimeKind, workingDirectory]);
+  }, [loadAgentSessionHistory, stableTarget]);
 };

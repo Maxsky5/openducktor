@@ -593,7 +593,6 @@ export const buildDiagnosticsPanelModel = (
       hasActiveWorkspace: Boolean(workspaceRepoPath),
       isChecking: isSummaryChecking,
       hasCriticalIssues: criticalReasons.length > 0,
-      hasPendingRuntimeStartup: hasNotStartedRuntimeHealth,
       hasSetupIssues: setupReasons.length > 0,
     }),
     criticalReasons,

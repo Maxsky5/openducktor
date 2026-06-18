@@ -29,8 +29,10 @@ runtime refs for history queries. Do not add a separate history-source resolver
 or nullable live/history/empty field bundle.
 
 Session identity equality and stable identity keys are owned by
-`lib/agent-session-identity.ts`. Do not hand-roll externalSessionId/runtimeKind/
-working directory comparisons in the hooks.
+`lib/agent-session-identity.ts`; React hooks use
+`lib/use-stable-agent-session-identity.ts` before memoizing identity-dependent
+work. Do not hand-roll externalSessionId/runtimeKind/working directory
+comparisons in the hooks.
 
 ## Integration Points
 

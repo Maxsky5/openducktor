@@ -3,6 +3,7 @@ import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import {
   agentSessionTodosQueryKeys,
   SESSION_TODOS_STALE_TIME_MS,
@@ -52,28 +53,7 @@ export const useSessionRuntimeData = ({
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
-  const selectedSessionExternalSessionId = selectedSessionIdentity?.externalSessionId ?? null;
-  const selectedSessionRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
-  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
-  const stableSelectedSessionIdentity = useMemo(() => {
-    if (
-      selectedSessionExternalSessionId === null ||
-      selectedSessionRuntimeKind === null ||
-      selectedSessionWorkingDirectory === null
-    ) {
-      return null;
-    }
-
-    return {
-      externalSessionId: selectedSessionExternalSessionId,
-      runtimeKind: selectedSessionRuntimeKind,
-      workingDirectory: selectedSessionWorkingDirectory,
-    };
-  }, [
-    selectedSessionExternalSessionId,
-    selectedSessionRuntimeKind,
-    selectedSessionWorkingDirectory,
-  ]);
+  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,

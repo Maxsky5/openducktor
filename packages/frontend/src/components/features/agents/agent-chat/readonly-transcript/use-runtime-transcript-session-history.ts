@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentOperations } from "@/state/app-state-provider";
 import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
@@ -54,38 +55,19 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory } = useAgentOperations();
-  const targetExternalSessionId = target?.externalSessionId ?? null;
-  const targetRuntimeKind = target?.runtimeKind ?? null;
-  const targetWorkingDirectory = target?.workingDirectory ?? null;
+  const stableTarget = useStableAgentSessionIdentity(target);
   const source = useMemo<RuntimeTranscriptSource>(() => {
-    if (
-      !isOpen ||
-      targetExternalSessionId === null ||
-      targetRuntimeKind === null ||
-      targetWorkingDirectory === null
-    ) {
+    if (!isOpen || stableTarget === null) {
       return { kind: "empty", reason: "inactive" };
     }
-    const targetIdentity: AgentSessionIdentity = {
-      externalSessionId: targetExternalSessionId,
-      runtimeKind: targetRuntimeKind,
-      workingDirectory: targetWorkingDirectory,
-    };
     if (!repoPath) {
       return { kind: "empty", reason: "unavailable" };
     }
-    if (liveSession && matchesAgentSessionIdentity(liveSession, targetIdentity)) {
+    if (liveSession && matchesAgentSessionIdentity(liveSession, stableTarget)) {
       return { kind: "live", session: liveSession };
     }
-    return { kind: "history", ref: toRuntimeSessionRef(repoPath, targetIdentity) };
-  }, [
-    isOpen,
-    liveSession,
-    repoPath,
-    targetExternalSessionId,
-    targetRuntimeKind,
-    targetWorkingDirectory,
-  ]);
+    return { kind: "history", ref: toRuntimeSessionRef(repoPath, stableTarget) };
+  }, [isOpen, liveSession, repoPath, stableTarget]);
 
   const historyQuery = useQuery(
     source.kind === "history" && repoReadinessState === "ready"

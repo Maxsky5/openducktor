@@ -37,19 +37,6 @@ describe("buildDiagnosticsSummary", () => {
     expect(summary.label).toBe("Healthy");
   });
 
-  test("returns runtime not started when runtime health is explicitly not started", () => {
-    const summary = buildDiagnosticsSummary({
-      hasActiveWorkspace: true,
-      isChecking: false,
-      hasCriticalIssues: false,
-      hasPendingRuntimeStartup: true,
-      hasSetupIssues: false,
-    });
-
-    expect(summary.label).toBe("Runtime not started");
-    expect(summary.toneClass).toBe("text-warning-muted");
-  });
-
   test("keeps critical issues ahead of retrying state", () => {
     const summary = buildDiagnosticsSummary({
       hasActiveWorkspace: true,
