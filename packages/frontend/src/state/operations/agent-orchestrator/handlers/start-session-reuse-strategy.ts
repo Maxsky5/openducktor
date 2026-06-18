@@ -2,6 +2,7 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
+import { hasLoadedSessionHistory } from "../support/session-transcript-content";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -16,9 +17,6 @@ type ReuseStrategyInput = {
   input: Pick<Extract<StartAgentSessionInput, { startMode: "reuse" }>, "sourceSession">;
   deps: StartSessionExecutionDependencies;
 };
-
-const hasLoadedSessionHistory = (session: Pick<AgentSessionState, "historyLoadState">): boolean =>
-  session.historyLoadState === "loaded";
 
 const unavailableSourceSessionError = (
   ctx: StartSessionContext,

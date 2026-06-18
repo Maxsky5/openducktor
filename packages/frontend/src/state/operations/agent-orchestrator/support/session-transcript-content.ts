@@ -6,8 +6,12 @@ type SessionTranscriptContent = Pick<
   "externalSessionId" | "messages" | "historyLoadState"
 >;
 
+export const hasLoadedSessionHistory = (
+  session: Pick<AgentSessionState, "historyLoadState">,
+): boolean => session.historyLoadState === "loaded";
+
 export const hasRenderableSessionTranscript = (session: SessionTranscriptContent): boolean =>
-  getSessionMessageCount(session) > 0 || session.historyLoadState === "loaded";
+  getSessionMessageCount(session) > 0 || hasLoadedSessionHistory(session);
 
 export const needsInitialSessionHistoryLoad = (session: SessionTranscriptContent): boolean =>
   session.historyLoadState === "not_requested" && !hasRenderableSessionTranscript(session);

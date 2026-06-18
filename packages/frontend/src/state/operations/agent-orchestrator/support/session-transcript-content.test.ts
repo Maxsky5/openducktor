@@ -1,11 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
+  hasLoadedSessionHistory,
   hasRenderableSessionTranscript,
   needsInitialSessionHistoryLoad,
 } from "./session-transcript-content";
 
 describe("agent-orchestrator/support/session-transcript-content", () => {
+  test("reports only loaded history as loaded session history", () => {
+    expect(hasLoadedSessionHistory(createAgentSessionFixture({ historyLoadState: "loaded" }))).toBe(
+      true,
+    );
+    expect(
+      hasLoadedSessionHistory(createAgentSessionFixture({ historyLoadState: "not_requested" })),
+    ).toBe(false);
+  });
+
   test("treats loaded history or existing messages as renderable transcript content", () => {
     expect(
       hasRenderableSessionTranscript(

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
+import { hasLoadedSessionHistory } from "./support/session-transcript-content";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -895,7 +896,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         listHarnessSessions(state).some(
           (session) =>
             session.externalSessionId === codexRecord.externalSessionId &&
-            session.historyLoadState === "loaded",
+            hasLoadedSessionHistory(session),
         ),
       );
       const session = listHarnessSessions(loaded).find(
