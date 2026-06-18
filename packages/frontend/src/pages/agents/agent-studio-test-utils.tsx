@@ -15,12 +15,17 @@ import {
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
+  createRepoRuntimeHealthFixture as createSharedRepoRuntimeHealthFixture,
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -37,11 +42,16 @@ type ReactActEnvironment = typeof globalThis & {
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
 >;
+type ChecksStateContextValue = NonNullable<
+  ComponentProps<typeof ChecksStateContext.Provider>["value"]
+>;
 
 type HookHarnessOptions = {
   queryClient?: QueryClient;
   runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
+  checksStateContext?: ChecksStateContextValue;
+  checksStateContextRef?: { current: ChecksStateContextValue };
   wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
@@ -162,6 +172,21 @@ export const createRuntimeDefinitionsContextValue = (
   };
 };
 
+export const createChecksStateContextValue = (
+  overrides: Partial<ChecksStateContextValue> = {},
+): ChecksStateContextValue => ({
+  runtimeCheck: null,
+  taskStoreCheck: null,
+  runtimeCheckFailureKind: null,
+  taskStoreCheckFailureKind: null,
+  runtimeHealthByRuntime: {
+    opencode: createSharedRepoRuntimeHealthFixture(),
+  },
+  isLoadingChecks: false,
+  refreshChecks: async () => undefined,
+  ...overrides,
+});
+
 const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
     gitOk: true,
@@ -213,6 +238,9 @@ export const createHookHarness = <Props, State>(
   const runtimeDefinitionsContextRef = options?.runtimeDefinitionsContextRef ?? {
     current: options?.runtimeDefinitionsContext ?? createRuntimeDefinitionsContextValue(),
   };
+  const checksStateContextRef = options?.checksStateContextRef ?? {
+    current: options?.checksStateContext ?? createChecksStateContextValue(),
+  };
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
     if (options?.queryClient) {
@@ -235,9 +263,13 @@ export const createHookHarness = <Props, State>(
       { value: checksOperationsContext },
       renderQueryProvider(
         createElement(
-          RuntimeDefinitionsContext.Provider,
-          { value: runtimeDefinitionsContextRef.current },
-          renderOwnerProviders(children),
+          ChecksStateContext.Provider,
+          { value: checksStateContextRef.current },
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            { value: runtimeDefinitionsContextRef.current },
+            renderOwnerProviders(children),
+          ),
         ),
       ),
     );

@@ -420,6 +420,11 @@ a mirrored `hasSelectedSessionModel` flag.
 Selection controllers may add task/tab context, but must not rename the selected
 session, runtime-data, readiness, role, launch-action, or transcript fields into
 a parallel view model.
+Shell, route, and selection-controller modules must not accept or forward
+runtime readiness, runtime health, runtime definitions, or runtime catalog
+loader props for the selected session. The selected-session view owner reads the
+runtime/check contexts directly when deriving `runtimeReadiness` and
+`sessionRuntimeData`.
 `selected-session-view-source.ts` owns the selected-session source projection:
 loaded session, selected session, selected task, or inactive. Runtime target,
 transcript state, selected activity, and selected model must derive from that one

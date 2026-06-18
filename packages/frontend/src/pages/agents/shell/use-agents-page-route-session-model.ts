@@ -1,8 +1,5 @@
-import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
-import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
@@ -15,18 +12,11 @@ import { useAgentStudioSelectionIntentState } from "./use-agent-studio-selection
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
   workspaceRepoPath: string | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: boolean;
-  runtimeDefinitionsError: string | null;
-  runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
 };
 
 export type AgentsPageRouteSessionModel = {
@@ -40,18 +30,11 @@ export type AgentsPageRouteSessionModel = {
 export function useAgentsPageRouteSessionModel({
   activeWorkspaceId,
   workspaceRepoPath,
-  runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  runtimeDefinitionsError,
-  runtimeHealthByRuntime,
-  isLoadingChecks,
-  refreshChecks,
   tasks,
   isForegroundLoadingTasks,
   sessions,
   repoSettings,
   isLoadingRepoSettings,
-  loadRepoRuntimeCatalog,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
@@ -102,13 +85,6 @@ export function useAgentsPageRouteSessionModel({
     repoSettings,
     isLoadingRepoSettings,
     updateQuery: scheduleQueryUpdate,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
-    loadRepoRuntimeCatalog,
   });
 
   useAgentStudioQuerySessionSync({

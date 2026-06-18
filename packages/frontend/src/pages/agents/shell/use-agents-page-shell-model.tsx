@@ -4,7 +4,6 @@ import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSessionSummaries,
-  useChecksState,
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
@@ -48,13 +47,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const {
-    availableRuntimeDefinitions: runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    loadRepoRuntimeCatalog,
-  } = useRuntimeAvailabilityContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
+  const { availableRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
     activeWorkspaceId,
   });
@@ -95,18 +88,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const routeSession = useAgentsPageRouteSessionModel({
     activeWorkspaceId,
     workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
     tasks,
     isForegroundLoadingTasks,
     sessions,
     repoSettings,
     isLoadingRepoSettings,
-    loadRepoRuntimeCatalog,
   });
   const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 

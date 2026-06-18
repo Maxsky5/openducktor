@@ -1,5 +1,5 @@
-import type { RepoRuntimeRef, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import {
   firstLaunchAction,
@@ -9,17 +9,19 @@ import {
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSession,
   useAgentSessionReadModelState,
+  useChecksState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
-import type { ChecksStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
@@ -43,13 +45,6 @@ type UseAgentStudioSelectedSessionViewArgs = {
   sessionIdentityFromRoute: AgentSessionIdentity | null;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
-  runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: boolean;
-  runtimeDefinitionsError: string | null;
-  runtimeHealthByRuntime: ChecksStateContextValue["runtimeHealthByRuntime"];
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
 };
 
 export type AgentStudioSelectedSessionView = {
@@ -77,15 +72,15 @@ export function useAgentStudioSelectedSessionView({
   sessionIdentityFromRoute,
   repoSettings,
   isLoadingRepoSettings,
-  runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  runtimeDefinitionsError,
-  runtimeHealthByRuntime,
-  isLoadingChecks,
-  refreshChecks,
-  loadRepoRuntimeCatalog,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
   const { readSessionTodos } = useAgentOperations();
+  const {
+    availableRuntimeDefinitions: runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    loadRepoRuntimeCatalog,
+  } = useRuntimeAvailabilityContext();
+  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const selection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
       sessionSummaries,

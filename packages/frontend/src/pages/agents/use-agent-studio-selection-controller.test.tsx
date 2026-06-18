@@ -26,7 +26,8 @@ import {
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
-  createDefaultRuntimeDefinitions,
+  createChecksStateContextValue,
+  createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -59,6 +60,8 @@ type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
   loadSessionHistory?: (session: AgentSessionIdentity) => Promise<void>;
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
+  runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
+  checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
 };
 const emptyCatalog = {
   providers: [],
@@ -136,6 +139,12 @@ const applyTestContextOverrides = (
 const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContextOverrides = {}) => {
   applyTestContextOverrides(initialProps, contextOverrides);
   syncSessionLookup(initialProps.sessions);
+  const runtimeDefinitionsContextRef = {
+    current: createRuntimeDefinitionsContextValue(contextOverrides.runtimeDefinitionsContext),
+  };
+  const checksStateContextRef = {
+    current: createChecksStateContextValue(contextOverrides.checksStateContext),
+  };
   const agentOperationsValue = (): AgentOperationsContextValue => ({
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
@@ -167,12 +176,24 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   );
   const harness = createSharedHookHarness(useAgentStudioSelectionController, initialProps, {
     wrapper,
+    runtimeDefinitionsContextRef,
+    checksStateContextRef,
   });
 
   return {
     ...harness,
     update: async (nextProps: HookArgs, nextContextOverrides: TestContextOverrides = {}) => {
       applyTestContextOverrides(nextProps, nextContextOverrides);
+      if ("runtimeDefinitionsContext" in nextContextOverrides) {
+        runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue(
+          nextContextOverrides.runtimeDefinitionsContext,
+        );
+      }
+      if ("checksStateContext" in nextContextOverrides) {
+        checksStateContextRef.current = createChecksStateContextValue(
+          nextContextOverrides.checksStateContext,
+        );
+      }
       syncSessionLookup(nextProps.sessions);
       await harness.update(nextProps);
     },
@@ -195,15 +216,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     repoSettings,
     isLoadingRepoSettings: false,
     updateQuery: () => {},
-    runtimeDefinitions: createDefaultRuntimeDefinitions(),
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture(),
-    },
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-    loadRepoRuntimeCatalog: async () => emptyCatalog,
     ...overrides,
   };
 };
@@ -332,12 +344,6 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspaceId,
         workspaceRepoPath,
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture({
-            status: "checking",
-            runtime: { status: "checking", stage: "waiting_for_runtime" },
-          }),
-        },
         tasks: [task],
         sessions: [],
         taskIdParam: "task-1",
@@ -347,6 +353,14 @@ describe("useAgentStudioSelectionController", () => {
       }),
       {
         sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              status: "checking",
+              runtime: { status: "checking", stage: "waiting_for_runtime" },
+            }),
+          },
+        },
       },
     );
 
@@ -379,14 +393,6 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspaceId,
         workspaceRepoPath,
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture(),
-          codex: createRepoRuntimeHealthFixture({
-            status: "checking",
-            runtime: { status: "checking", stage: "waiting_for_runtime" },
-          }),
-        },
         tasks: [task],
         sessions: [codexSession],
         taskIdParam: "task-1",
@@ -394,6 +400,21 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        },
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture(),
+            codex: createRepoRuntimeHealthFixture({
+              status: "checking",
+              runtime: { status: "checking", stage: "waiting_for_runtime" },
+            }),
+          },
+        },
+      },
     );
 
     try {
@@ -420,14 +441,6 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspaceId,
         workspaceRepoPath,
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture({
-            status: "checking",
-            runtime: { status: "checking", stage: "waiting_for_runtime" },
-          }),
-          codex: createRepoRuntimeHealthFixture(),
-        },
         tasks: [task],
         sessions: [],
         taskIdParam: "task-1",
@@ -435,6 +448,20 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        },
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              status: "checking",
+              runtime: { status: "checking", stage: "waiting_for_runtime" },
+            }),
+            codex: createRepoRuntimeHealthFixture(),
+          },
+        },
+      },
     );
 
     try {
@@ -461,10 +488,6 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspaceId,
         workspaceRepoPath,
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture(),
-        },
         repoSettings: {
           ...repoSettings,
           defaultRuntimeKind: "codex",
@@ -476,6 +499,11 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        },
+      },
     );
 
     try {
@@ -505,11 +533,6 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspaceId,
         workspaceRepoPath,
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture(),
-          codex: createRepoRuntimeHealthFixture(),
-        },
         repoSettings: null,
         isLoadingRepoSettings: true,
         tasks: [task],
@@ -519,6 +542,17 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        },
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture(),
+            codex: createRepoRuntimeHealthFixture(),
+          },
+        },
+      },
     );
 
     try {
@@ -655,13 +689,17 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [session],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(session),
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture({
-            runtime: { status: "checking" },
-          }),
-        },
       }),
-      { loadSessionHistory },
+      {
+        loadSessionHistory,
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              runtime: { status: "checking" },
+            }),
+          },
+        },
+      },
     );
 
     try {
@@ -910,9 +948,13 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(staleSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        loadRepoRuntimeCatalog,
       }),
-      { readSessionTodos },
+      {
+        readSessionTodos,
+        runtimeDefinitionsContext: {
+          loadRepoRuntimeCatalog,
+        },
+      },
     );
 
     try {

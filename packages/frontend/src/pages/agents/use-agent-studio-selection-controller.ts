@@ -1,10 +1,8 @@
-import type { RepoRuntimeRef, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
-import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   resolveSelectedSessionHistoryLoadTarget,
   useSelectedSessionHistoryLoad,
@@ -44,17 +42,6 @@ type UseAgentStudioSelectionControllerArgs = {
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
   updateQuery: (updates: QueryUpdate) => void;
-  runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: ReturnType<
-    typeof useRuntimeDefinitionsContext
-  >["isLoadingRuntimeDefinitions"];
-  runtimeDefinitionsError: ReturnType<
-    typeof useRuntimeDefinitionsContext
-  >["runtimeDefinitionsError"];
-  runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
 };
 
 export type AgentStudioSelectedView = {
@@ -101,13 +88,6 @@ export function useAgentStudioSelectionController({
   repoSettings,
   isLoadingRepoSettings,
   updateQuery,
-  runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  runtimeDefinitionsError,
-  runtimeHealthByRuntime,
-  isLoadingChecks,
-  refreshChecks,
-  loadRepoRuntimeCatalog,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const selectionBaseParams = resolveAgentStudioSelectionBaseParams({
     isRepoNavigationBoundaryPending,
@@ -247,13 +227,6 @@ export function useAgentStudioSelectionController({
     sessionIdentityFromRoute: viewSelectionParams.sessionIdentity,
     repoSettings,
     isLoadingRepoSettings,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
-    loadRepoRuntimeCatalog,
   });
   useSelectedSessionHistoryLoad({
     target: resolveSelectedSessionHistoryLoadTarget({
