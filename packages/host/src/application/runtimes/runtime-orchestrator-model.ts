@@ -9,7 +9,7 @@ import {
   repoRuntimeStartupStatusSchema,
 } from "@openducktor/contracts";
 import { Clock, Effect, Schedule } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
+import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type {
@@ -140,12 +140,8 @@ export const loadTargetSession = (
 ) =>
   Effect.gen(function* () {
     const metadata = yield* taskReader.getTaskMetadata({ repoPath, taskId });
-    const requestWorkingDirectory = normalizePathForComparison(request.workingDirectory);
-    const session = metadata.agentSessions.find(
-      (entry) =>
-        entry.externalSessionId.trim() === request.externalSessionId.trim() &&
-        entry.runtimeKind.trim() === request.runtimeKind &&
-        normalizePathForComparison(entry.workingDirectory) === requestWorkingDirectory,
+    const session = metadata.agentSessions.find((entry) =>
+      hasSameAgentSessionIdentity(entry, request),
     );
     if (!session) {
       return yield* Effect.fail(
