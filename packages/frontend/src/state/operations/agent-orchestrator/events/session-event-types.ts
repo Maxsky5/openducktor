@@ -68,6 +68,7 @@ export type ObserveAgentSessionParams = {
 export type SessionEventSessionContext = {
   identity: AgentSessionIdentity;
   key: string;
+  repoPath: string;
 };
 
 export type SessionStoreContext = Pick<
@@ -88,14 +89,12 @@ export type SessionTurnContext = Pick<
   | "clearTurnDuration"
 >;
 
-export type SessionApprovalContext = {
-  repoPath: string;
-} & Pick<
+export type SessionApprovalContext = Pick<
   ObserveAgentSessionParams,
   "adapter" | "readOnlyApprovalAutoRejectSafe" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
-export type SessionRefreshContext = { repoPath: string } & Pick<
+export type SessionRefreshContext = Pick<
   ObserveAgentSessionParams,
   "refreshTaskData" | "workflowToolAliasesByCanonical"
 >;
@@ -127,6 +126,7 @@ export type SessionToolPartEventContext = Pick<
 const createSessionContext = (context: ObserveAgentSessionParams): SessionEventSessionContext => ({
   identity: context.sessionRef,
   key: agentSessionIdentityKey(context.sessionRef),
+  repoPath: context.sessionRef.repoPath,
 });
 
 const createStoreContext = (context: ObserveAgentSessionParams): SessionStoreContext => ({
@@ -155,13 +155,11 @@ export const createSessionEventContext = (
     store,
     turn,
     approvals: {
-      repoPath: context.sessionRef.repoPath,
       adapter: context.adapter,
       buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
       readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
     },
     refresh: {
-      repoPath: context.sessionRef.repoPath,
       refreshTaskData: context.refreshTaskData,
       workflowToolAliasesByCanonical: context.workflowToolAliasesByCanonical,
     },

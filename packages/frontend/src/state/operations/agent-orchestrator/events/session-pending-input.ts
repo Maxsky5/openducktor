@@ -141,7 +141,7 @@ const autoRejectMutatingApproval = (
 
   let replyTarget: ReturnType<typeof toRuntimeSessionContextRef>;
   try {
-    replyTarget = toRuntimeSessionContextRef(context.approvals.repoPath, loadedReplySession);
+    replyTarget = toRuntimeSessionContextRef(context.session.repoPath, loadedReplySession);
   } catch (error) {
     markManualResponseRequired(error);
     return;

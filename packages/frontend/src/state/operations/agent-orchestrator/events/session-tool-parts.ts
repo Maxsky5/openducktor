@@ -248,10 +248,10 @@ export const handleToolPart = (
   if (shouldRefreshTaskData) {
     runOrchestratorSideEffect(
       "session-events-refresh-task-data",
-      context.refresh.refreshTaskData(context.refresh.repoPath, taskId),
+      context.refresh.refreshTaskData(context.session.repoPath, taskId),
       {
         tags: {
-          repoPath: context.refresh.repoPath,
+          repoPath: context.session.repoPath,
           externalSessionId: context.session.identity.externalSessionId,
           tool: part.tool,
         },

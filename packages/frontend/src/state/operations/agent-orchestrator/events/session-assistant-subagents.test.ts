@@ -451,6 +451,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       session: {
         identity: session,
         key: sessionKey,
+        repoPath: "/tmp/repo",
       },
       store: {
         updateSession: createSessionUpdater(sessionsRef),
@@ -465,7 +466,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         clearTurnDuration: () => {},
       },
       refresh: {
-        repoPath: "/tmp/repo",
         refreshTaskData: async () => {},
         workflowToolAliasesByCanonical: undefined,
       },
