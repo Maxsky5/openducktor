@@ -280,7 +280,6 @@ export function AgentStudioTaskTabs({
   } = model;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState("");
-  const [isCreateDialogReady, setIsCreateDialogReady] = useState(false);
   const suppressedSelectionTaskIdRef = useRef<string | null>(null);
   const selectionSuppressionFrameRef = useRef<number | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
@@ -301,15 +300,6 @@ export function AgentStudioTaskTabs({
   const selectedTaskId = availableTabTasks.some((task) => task.id === pendingTaskId)
     ? pendingTaskId
     : (availableTabTasks[0]?.id ?? "");
-
-  useEffect(() => {
-    if (!isCreateDialogOpen) {
-      setIsCreateDialogReady(false);
-      return;
-    }
-    const frame = globalThis.requestAnimationFrame(() => setIsCreateDialogReady(true));
-    return () => globalThis.cancelAnimationFrame(frame);
-  }, [isCreateDialogOpen]);
 
   const canOpenCreateDialog = agentStudioReady;
   const hasCreatableTasks = availableTabTasks.length > 0;
@@ -427,7 +417,7 @@ export function AgentStudioTaskTabs({
           </DialogHeader>
 
           <DialogBody className="py-4">
-            {!isCreateDialogReady || isLoadingAvailableTabTasks ? (
+            {isLoadingAvailableTabTasks ? (
               <div className="relative">
                 <TaskSelector
                   tasks={[]}
