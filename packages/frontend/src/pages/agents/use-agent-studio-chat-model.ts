@@ -19,6 +19,7 @@ import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/su
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
@@ -91,21 +92,21 @@ const toChatContextUsage = (
 };
 
 const toSelectedSessionThreadSession = ({
-  selectedSessionIdentity,
-  selectedSessionActivityState,
+  identity,
+  activityState,
   loadedSession,
 }: Pick<
-  AgentStudioSelectedSessionContext,
-  "selectedSessionIdentity" | "selectedSessionActivityState" | "loadedSession"
+  AgentStudioSelectedSessionState,
+  "identity" | "activityState" | "loadedSession"
 >): AgentChatThreadSession | null => {
-  if (!selectedSessionIdentity || !loadedSession) {
+  if (!identity || !loadedSession) {
     return null;
   }
 
   return {
-    ...selectedSessionIdentity,
+    ...identity,
     ...(loadedSession.title ? { title: loadedSession.title } : {}),
-    activityState: selectedSessionActivityState,
+    activityState,
     messages: toSessionMessagesState(loadedSession),
   };
 };
@@ -121,18 +122,22 @@ export function useAgentStudioChatModel({
     selectedSession.pendingInput.subagentPendingApprovalCountBySessionKey;
   const subagentPendingQuestionCountBySessionKey =
     selectedSession.pendingInput.subagentPendingQuestionCountBySessionKey;
-  const selectedSessionIdentity = selectedSession.selectedSessionIdentity;
-  const selectedSessionActivityState = selectedSession.selectedSessionActivityState;
-  const selectedSessionModel = selectedSession.selectedSessionModel;
-  const loadedSession = selectedSession.loadedSession;
+  const selectedSessionState = selectedSession.selectedSession;
+  const selectedSessionIdentity = selectedSessionState.identity;
+  const selectedSessionModel = selectedSessionState.selectedModel;
+  const selectedSessionRuntimeData = selectedSessionState.runtimeData;
   const activeThreadSession = useMemo(
     () =>
       toSelectedSessionThreadSession({
-        selectedSessionIdentity,
-        selectedSessionActivityState,
-        loadedSession,
+        identity: selectedSessionIdentity,
+        activityState: selectedSessionState.activityState,
+        loadedSession: selectedSessionState.loadedSession,
       }),
-    [loadedSession, selectedSessionActivityState, selectedSessionIdentity],
+    [
+      selectedSessionIdentity,
+      selectedSessionState.activityState,
+      selectedSessionState.loadedSession,
+    ],
   );
   const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
   const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
@@ -153,8 +158,8 @@ export function useAgentStudioChatModel({
     () => toChatContextUsage(modelSelection.selectedSessionContextUsage),
     [modelSelection.selectedSessionContextUsage],
   );
-  const selectedSessionTranscriptState = selectedSession.transcriptState;
-  const runtimeReadiness = selectedSession.runtime.runtimeReadiness;
+  const selectedSessionTranscriptState = selectedSessionState.transcriptState;
+  const runtimeReadiness = selectedSessionState.runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
   const selectedSessionKey = selectedSessionIdentity
@@ -198,7 +203,7 @@ export function useAgentStudioChatModel({
             selectedModel: selectedSessionModel,
           }
         : null,
-      isSessionModelCatalogLoading: selectedSession.runtime.runtimeData.isLoadingModelCatalog,
+      isSessionModelCatalogLoading: selectedSessionRuntimeData.isLoadingModelCatalog,
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
       waitingInputPlaceholder: selectedSession.pendingInput.waitingInputPlaceholder,
@@ -267,7 +272,7 @@ export function useAgentStudioChatModel({
       selectedSessionIdentity,
       selectedSessionModel,
       selectedSessionKey,
-      selectedSession.runtime.runtimeData.isLoadingModelCatalog,
+      selectedSessionRuntimeData.isLoadingModelCatalog,
       selectedSession.taskId,
       surfaceState.composerReadOnly,
       surfaceState.composerReadOnlyReason,
@@ -287,13 +292,13 @@ export function useAgentStudioChatModel({
     session: activeThreadSession,
     transcriptState: selectedSessionTranscriptState,
     chatSettings,
-    runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
-    sessionAuxiliaryError: selectedSession.runtime.runtimeData.error,
+    runtimeDefinitions: selectedSession.runtimeDefinitions,
+    sessionAuxiliaryError: selectedSessionRuntimeData.error,
     runtimeReadiness,
     emptyState: surfaceState.emptyState,
     pendingApprovalRequests,
     pendingQuestionRequests,
-    todos: selectedSession.runtime.runtimeData.todos,
+    todos: selectedSessionRuntimeData.todos,
     sessionAccentColor,
     pendingQuestions,
     approvals,

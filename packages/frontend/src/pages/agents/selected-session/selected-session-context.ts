@@ -11,16 +11,8 @@ import {
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
 } from "@/lib/agent-session-waiting-input";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type {
-  AgentApprovalRequest,
-  AgentQuestionRequest,
-  AgentSessionIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
   buildActiveDocumentForRole,
@@ -51,12 +43,6 @@ export type SelectedSessionDocumentsContext = {
   activeDocument: AgentStudioWorkspaceDocument | null;
 };
 
-export type SelectedSessionRuntimeContext = {
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeReadiness: RepoRuntimeReadiness;
-  runtimeData: SelectedSessionRuntimeData;
-};
-
 export type SelectedSessionPendingInputContext = {
   waitingInputPlaceholder: string | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
@@ -72,14 +58,10 @@ export type AgentStudioSelectedSessionContext = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionActivityState: AgentSessionActivityState | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
-  loadedSession: AgentSessionState | null;
-  transcriptState: AgentStudioSelectedSessionState["transcriptState"];
+  selectedSession: AgentStudioSelectedSessionState;
+  runtimeDefinitions: RuntimeDescriptor[];
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
-  runtime: SelectedSessionRuntimeContext;
   pendingInput: SelectedSessionPendingInputContext;
 };
 
@@ -133,15 +115,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionActions,
   roleLabelByRole,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
-  const {
-    identity: selectedSessionIdentity,
-    activityState: selectedSessionActivityState,
-    selectedModel: selectedSessionModel,
-    loadedSession,
-    runtimeData: sessionRuntimeData,
-    runtimeReadiness,
-    transcriptState,
-  } = selectedSession;
+  const { identity: selectedSessionIdentity, loadedSession } = selectedSession;
   const workflow = buildWorkflowModelContext({
     selectedTask,
     sessionsForTask,
@@ -179,19 +153,11 @@ export const buildAgentStudioSelectedSessionContext = ({
     role,
     selectedTask,
     sessionsForTask,
-    selectedSessionIdentity,
-    selectedSessionActivityState,
-    selectedSessionModel,
-    loadedSession,
-    transcriptState,
+    selectedSession,
+    runtimeDefinitions,
     workflow,
     documents: {
       activeDocument,
-    },
-    runtime: {
-      runtimeDefinitions,
-      runtimeReadiness,
-      runtimeData: sessionRuntimeData,
     },
     pendingInput: {
       waitingInputPlaceholder,

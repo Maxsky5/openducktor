@@ -60,7 +60,7 @@ export function useAgentStudioPageModels({
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
   agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
 } {
-  const agentStudioReady = selectedSession.runtime.runtimeReadiness.state === "ready";
+  const agentStudioReady = selectedSession.selectedSession.runtimeReadiness.state === "ready";
   const agentStudioTaskTabsModel = useMemo(
     () =>
       buildAgentStudioTaskTabsModel({

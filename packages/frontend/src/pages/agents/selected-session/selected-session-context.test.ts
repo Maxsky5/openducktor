@@ -125,7 +125,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.documents.activeDocument).toBeNull();
-    expect(context.runtime.runtimeData.error).toBeNull();
+    expect(context.selectedSession.runtimeData.error).toBeNull();
   });
 
   test("maps active document from selected role semantics", () => {
@@ -177,7 +177,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.selectedSessionIdentity).toEqual(toAgentSessionIdentity(selectedSession));
+    expect(context.selectedSession.identity).toEqual(toAgentSessionIdentity(selectedSession));
     expect(context.workflow.sessionSelectorValue).toBe(agentSessionIdentityKey(selectedSession));
     expect(context.role).toBe("planner");
     expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
@@ -227,7 +227,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.workflow.selectedRoleAvailable).toBe(false);
-    expect(context.loadedSession).toBe(qaSession);
+    expect(context.selectedSession.loadedSession).toBe(qaSession);
   });
 
   test("projects selected runtime data for chat adaptation", () => {
@@ -246,9 +246,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.loadedSession).toBe(loadedSession);
-    expect(context.runtime.runtimeData.isLoadingModelCatalog).toBe(true);
-    expect(context.runtime.runtimeData.todos).toEqual([]);
+    expect(context.selectedSession.loadedSession).toBe(loadedSession);
+    expect(context.selectedSession.runtimeData.isLoadingModelCatalog).toBe(true);
+    expect(context.selectedSession.runtimeData.todos).toEqual([]);
   });
 
   test("projects runtime readiness and runtime-data errors without masking", () => {
@@ -275,14 +275,14 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.runtimeData.error).toBe("session todos unavailable");
-    expect(context.transcriptState).toEqual({ kind: "runtime_waiting" });
-    expect(context.runtime.runtimeReadiness).toMatchObject({
+    expect(context.selectedSession.runtimeData.error).toBe("session todos unavailable");
+    expect(context.selectedSession.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.selectedSession.runtimeReadiness).toMatchObject({
       state: "blocked",
       message: "Runtime unavailable",
       isLoadingChecks: true,
     });
-    expect(context.runtime.runtimeReadiness.refreshChecks).toBe(refreshChecks);
+    expect(context.selectedSession.runtimeReadiness.refreshChecks).toBe(refreshChecks);
   });
 
   test("marks no-session task view as waiting while runtime startup is in progress", () => {
@@ -305,7 +305,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.selectedSession.transcriptState).toEqual({ kind: "runtime_waiting" });
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {
@@ -326,7 +326,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.transcriptState).toEqual({ kind: "visible" });
+    expect(context.selectedSession.transcriptState).toEqual({ kind: "visible" });
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {

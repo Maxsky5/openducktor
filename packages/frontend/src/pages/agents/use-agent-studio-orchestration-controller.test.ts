@@ -161,10 +161,8 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     expect(mapped.activeTabValue).toBe("task-1");
     expect(mapped.selectedSession.role).toBe("planner");
-    expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
-      OPENCODE_RUNTIME_DESCRIPTOR,
-    ]);
-    expect(mapped.selectedSession.transcriptState).toEqual({
+    expect(mapped.selectedSession.runtimeDefinitions).toEqual([OPENCODE_RUNTIME_DESCRIPTOR]);
+    expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
@@ -172,7 +170,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
-    expect(mapped.selectedSession.runtime.runtimeReadiness.state).toBe("ready");
+    expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
@@ -228,14 +226,17 @@ describe("buildAgentStudioPageModelsArgs", () => {
       ...baseArgs,
       selectedSession: {
         ...baseArgs.selectedSession,
-        transcriptState: createSelectedSessionTranscriptStateFixture({
-          kind: "failed",
-          message: "Selected session failed",
-        }),
+        selectedSession: {
+          ...baseArgs.selectedSession.selectedSession,
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "failed",
+            message: "Selected session failed",
+          }),
+        },
       },
     });
 
-    expect(failed.selectedSession.transcriptState).toEqual({
+    expect(failed.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "failed",
       message: "Selected session failed",
     });
