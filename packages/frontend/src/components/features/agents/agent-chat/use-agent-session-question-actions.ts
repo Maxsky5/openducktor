@@ -2,6 +2,12 @@ import { useCallback, useMemo, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
+import {
+  type AgentSessionRequestState,
+  removeAgentSessionRequestValue,
+  selectPendingAgentSessionRequestValues,
+  setAgentSessionRequestValue,
+} from "./agent-session-request-state";
 
 type UseAgentSessionQuestionActionsArgs = {
   sessionIdentity: AgentSessionIdentity | null;
@@ -20,7 +26,7 @@ export function useAgentSessionQuestionActions({
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
 } {
   const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
-    Record<string, Record<string, boolean>>
+    AgentSessionRequestState<boolean>
   >({});
   const sessionExternalSessionId = sessionIdentity?.externalSessionId ?? null;
   const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
@@ -44,31 +50,15 @@ export function useAgentSessionQuestionActions({
         workingDirectory: sessionWorkingDirectory,
       });
 
-      setSubmittingQuestionBySessionKey((current) => ({
-        ...current,
-        [sessionKey]: {
-          ...(current[sessionKey] ?? {}),
-          [requestId]: true,
-        },
-      }));
+      setSubmittingQuestionBySessionKey((current) =>
+        setAgentSessionRequestValue(current, sessionKey, requestId, true),
+      );
       try {
         await answerAgentQuestion(sessionActionTarget, requestId, answers);
       } finally {
-        setSubmittingQuestionBySessionKey((current) => {
-          const sessionRequests = current[sessionKey];
-          if (!sessionRequests?.[requestId]) {
-            return current;
-          }
-          const nextSessionRequests = { ...sessionRequests };
-          delete nextSessionRequests[requestId];
-          const next = { ...current };
-          if (Object.keys(nextSessionRequests).length === 0) {
-            delete next[sessionKey];
-          } else {
-            next[sessionKey] = nextSessionRequests;
-          }
-          return next;
-        });
+        setSubmittingQuestionBySessionKey((current) =>
+          removeAgentSessionRequestValue(current, sessionKey, requestId),
+        );
       }
     },
     [
@@ -86,10 +76,10 @@ export function useAgentSessionQuestionActions({
       return {};
     }
 
-    const sessionRequests = submittingQuestionBySessionKey[sessionKey] ?? {};
-    const activeRequestIds = new Set(pendingQuestionRequestIds);
-    return Object.fromEntries(
-      Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
+    return selectPendingAgentSessionRequestValues(
+      submittingQuestionBySessionKey,
+      sessionKey,
+      pendingQuestionRequestIds,
     );
   }, [pendingQuestionRequestIds, sessionKey, submittingQuestionBySessionKey]);
 
