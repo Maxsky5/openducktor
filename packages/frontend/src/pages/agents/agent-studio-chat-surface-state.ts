@@ -18,7 +18,7 @@ type DeriveAgentStudioChatSurfaceStateInput = {
   transcriptState: AgentSessionTranscriptState;
   workflow: AgentStudioChatWorkflowState;
   isStarting: boolean;
-  canKickoffNewSession: boolean;
+  canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   startLaunchKickoff: () => Promise<void>;
 };
@@ -79,7 +79,7 @@ export const deriveAgentStudioChatSurfaceState = ({
   transcriptState,
   workflow,
   isStarting,
-  canKickoffNewSession,
+  canUseKickoffPrompt,
   kickoffLabel,
   startLaunchKickoff,
 }: DeriveAgentStudioChatSurfaceStateInput): AgentStudioChatSurfaceState => {
@@ -90,7 +90,7 @@ export const deriveAgentStudioChatSurfaceState = ({
       taskId,
       transcriptState,
       isStarting,
-      canKickoff: canKickoffNewSession,
+      canKickoff: canUseKickoffPrompt,
       kickoffLabel,
       startLaunchKickoff,
     }),

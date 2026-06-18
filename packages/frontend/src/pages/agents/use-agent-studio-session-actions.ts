@@ -29,8 +29,8 @@ import { deriveAgentStudioSessionActionState } from "./session-actions/agent-stu
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
 import {
-  canExposeAgentStudioKickoff,
   canStartAgentStudioSessionRole,
+  canUseAgentStudioKickoffPrompt,
 } from "./session-start/agent-studio-session-start-availability";
 import { useAgentStudioSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
 import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
@@ -81,7 +81,7 @@ export type UseAgentStudioSessionActionsResult = {
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
-  canKickoffNewSession: boolean;
+  canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
   startLaunchKickoff: () => Promise<void>;
@@ -229,10 +229,9 @@ export function useAgentStudioSessionActions({
     scheduleSelectionIntent,
   });
 
-  const canKickoffNewSession = canExposeAgentStudioKickoff({
+  const canUseKickoffPrompt = canUseAgentStudioKickoffPrompt({
     canStartSession: canStartNewSession,
     launchActionId,
-    selectedSessionIdentity,
   });
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
@@ -247,7 +246,7 @@ export function useAgentStudioSessionActions({
     isSessionWorking,
     isWaitingInput: sessionState.isWaitingInput,
     busySendBlockedReason,
-    canKickoffNewSession,
+    canUseKickoffPrompt,
     kickoffLabel,
     canStopSession,
     startLaunchKickoff,

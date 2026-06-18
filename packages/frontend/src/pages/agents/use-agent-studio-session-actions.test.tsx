@@ -1740,7 +1740,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().canKickoffNewSession).toBe(false);
+    expect(harness.getLatest().canUseKickoffPrompt).toBe(false);
 
     await harness.unmount();
   });
@@ -1757,7 +1757,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().canKickoffNewSession).toBe(true);
+    expect(harness.getLatest().canUseKickoffPrompt).toBe(true);
 
     await harness.unmount();
   });

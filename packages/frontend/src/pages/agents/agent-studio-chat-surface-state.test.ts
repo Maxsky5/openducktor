@@ -12,7 +12,7 @@ const baseSurfaceInput = {
     selectedRoleReadOnlyReason: null,
   },
   isStarting: false,
-  canKickoffNewSession: false,
+  canUseKickoffPrompt: false,
   kickoffLabel: "Start Spec",
   startLaunchKickoff,
 };
@@ -39,7 +39,7 @@ describe("deriveAgentStudioChatSurfaceState", () => {
       deriveAgentStudioChatSurfaceState({
         ...baseSurfaceInput,
         transcriptState: transcriptState("runtime_waiting"),
-        canKickoffNewSession: true,
+        canUseKickoffPrompt: true,
       }).emptyState,
     ).toBeNull();
   });
@@ -50,7 +50,7 @@ describe("deriveAgentStudioChatSurfaceState", () => {
         ...baseSurfaceInput,
         transcriptState: transcriptState("empty"),
         isStarting: true,
-        canKickoffNewSession: true,
+        canUseKickoffPrompt: true,
       }).emptyState,
     ).toEqual({
       title: "Initializing session...",
@@ -62,13 +62,23 @@ describe("deriveAgentStudioChatSurfaceState", () => {
     const state = deriveAgentStudioChatSurfaceState({
       ...baseSurfaceInput,
       transcriptState: transcriptState("empty"),
-      canKickoffNewSession: true,
+      canUseKickoffPrompt: true,
     });
 
     state.emptyState?.onAction?.();
 
     expect(state.emptyState?.actionLabel).toBe("Start Spec");
     expect(startLaunchKickoff).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not expose kickoff outside the transcript-owned sessionless state", () => {
+    expect(
+      deriveAgentStudioChatSurfaceState({
+        ...baseSurfaceInput,
+        transcriptState: { kind: "empty", reason: "inactive" },
+        canUseKickoffPrompt: true,
+      }).emptyState,
+    ).toBeNull();
   });
 
   test("keeps composer editable when a selected session exists even if the role is unavailable", () => {

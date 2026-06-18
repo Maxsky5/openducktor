@@ -217,7 +217,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionWorking: true,
     isWaitingInput: false,
     busySendBlockedReason: null,
-    canKickoffNewSession: false,
+    canUseKickoffPrompt: false,
     kickoffLabel: "Start Spec",
     canStopSession: true,
     startLaunchKickoff: async () => {},
@@ -571,7 +571,7 @@ describe("useAgentStudioPageModels", () => {
           isRuntimeStarting: true,
         },
         sessionActions: {
-          canKickoffNewSession: true,
+          canUseKickoffPrompt: true,
           kickoffLabel: "Start Spec",
         },
       }),
@@ -603,7 +603,7 @@ describe("useAgentStudioPageModels", () => {
           isRuntimeStarting: true,
         },
         sessionActions: {
-          canKickoffNewSession: true,
+          canUseKickoffPrompt: true,
           kickoffLabel: "Start Spec",
         },
       }),
@@ -633,7 +633,7 @@ describe("useAgentStudioPageModels", () => {
           }),
         },
         sessionActions: {
-          canKickoffNewSession: true,
+          canUseKickoffPrompt: true,
           kickoffLabel: "Start Spec",
         },
       }),
@@ -1655,7 +1655,7 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [],
         },
         sessionActions: {
-          canKickoffNewSession: false,
+          canUseKickoffPrompt: false,
           isSessionWorking: false,
         },
       }),

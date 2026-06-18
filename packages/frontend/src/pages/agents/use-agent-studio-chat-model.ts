@@ -24,7 +24,7 @@ export type AgentStudioChatSessionActionsContext = {
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
-  canKickoffNewSession: boolean;
+  canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
   startLaunchKickoff: () => Promise<void>;
@@ -148,7 +148,7 @@ export function useAgentStudioChatModel({
           selectedRoleReadOnlyReason: selectedSession.workflow.selectedRoleReadOnlyReason,
         },
         isStarting: sessionActions.isStarting,
-        canKickoffNewSession: sessionActions.canKickoffNewSession,
+        canUseKickoffPrompt: sessionActions.canUseKickoffPrompt,
         kickoffLabel: sessionActions.kickoffLabel,
         startLaunchKickoff: sessionActions.startLaunchKickoff,
       }),
@@ -158,7 +158,7 @@ export function useAgentStudioChatModel({
       selectedSession.workflow.selectedRoleAvailable,
       selectedSession.workflow.selectedRoleReadOnlyReason,
       selectedSessionTranscriptState,
-      sessionActions.canKickoffNewSession,
+      sessionActions.canUseKickoffPrompt,
       sessionActions.isStarting,
       sessionActions.kickoffLabel,
       sessionActions.startLaunchKickoff,
