@@ -45,6 +45,42 @@ const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
 describe("useSessionRuntimeData", () => {
+  test("returns empty runtime data without a selected session", async () => {
+    const loadRuntimeCatalog = mock(async () => {
+      throw new Error("model catalog should not be queried");
+    });
+    const readSessionTodos = mock(async () => {
+      throw new Error("todos should not be queried");
+    });
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: null,
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toEqual({
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+        error: null,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not query session todos when the runtime does not support todos", async () => {
     const loadRuntimeCatalog = mock(() => new Promise<AgentModelCatalog>(() => {}));
     const readSessionTodos = mock(async () => {

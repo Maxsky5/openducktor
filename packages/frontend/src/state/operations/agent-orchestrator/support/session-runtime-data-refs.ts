@@ -4,11 +4,10 @@ import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-ru
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRef } from "./session-runtime-ref";
 
-export type SessionRuntimeDataRefs = {
-  catalogRef: RepoRuntimeRef | null;
-  todosRef: AgentSessionRef | null;
-  error: string | null;
-};
+export type SessionRuntimeDataRefs =
+  | { kind: "none" }
+  | { kind: "unavailable"; error: string }
+  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: AgentSessionRef | null };
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
@@ -17,9 +16,7 @@ export type ResolveSessionRuntimeDataRefsInput = {
 };
 
 export const emptySessionRuntimeDataRefs: SessionRuntimeDataRefs = Object.freeze({
-  catalogRef: null,
-  todosRef: null,
-  error: null,
+  kind: "none",
 });
 
 const runtimeSupportsTodos = (
@@ -46,7 +43,7 @@ export const resolveSessionRuntimeDataRefs = ({
 
   if (!repoPath) {
     return {
-      ...emptySessionRuntimeDataRefs,
+      kind: "unavailable",
       error: "Repository path is required to read selected session runtime data.",
     };
   }
@@ -58,15 +55,15 @@ export const resolveSessionRuntimeDataRefs = ({
 
   if (!runtimeSupportsTodos(runtimeDefinitions, selectedSessionIdentity)) {
     return {
+      kind: "available",
       catalogRef,
       todosRef: null,
-      error: null,
     };
   }
 
   return {
+    kind: "available",
     catalogRef,
     todosRef: toRuntimeSessionRef(repoPath, selectedSessionIdentity),
-    error: null,
   };
 };

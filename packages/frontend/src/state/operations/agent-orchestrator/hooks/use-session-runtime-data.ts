@@ -61,22 +61,24 @@ export const useSessionRuntimeData = ({
       }),
     [repoPath, runtimeDefinitions, selectedSessionIdentity],
   );
-  const canReadRuntimeData = selectedSessionIdentity !== null && repoReadinessState === "ready";
+  const isRuntimeReady = repoReadinessState === "ready";
+  const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
+  const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
 
   const catalogQuery = useQuery(
-    runtimeDataRefs.catalogRef && canReadRuntimeData
-      ? repoRuntimeCatalogQueryOptions(runtimeDataRefs.catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions(runtimeDataRefs.catalogRef),
+    catalogRef && isRuntimeReady
+      ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
+      : skippedRuntimeCatalogQueryOptions(catalogRef),
   );
 
   const todosQuery = useQuery(
-    runtimeDataRefs.todosRef && canReadRuntimeData
-      ? sessionTodosQueryOptions(runtimeDataRefs.todosRef, readSessionTodos)
-      : skippedSessionTodosQueryOptions(runtimeDataRefs.todosRef),
+    todosRef && isRuntimeReady
+      ? sessionTodosQueryOptions(todosRef, readSessionTodos)
+      : skippedSessionTodosQueryOptions(todosRef),
   );
 
   return useMemo(() => {
-    if (!selectedSessionIdentity) {
+    if (runtimeDataRefs.kind === "none") {
       return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
@@ -84,14 +86,12 @@ export const useSessionRuntimeData = ({
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const error = runtimeDataRefs.error ?? runtimeDataQueryError;
+    const error =
+      runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : runtimeDataQueryError;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const canShowModelCatalogLoading =
-      canReadRuntimeData &&
-      runtimeDataRefs.catalogRef !== null &&
-      !runtimeDataRefs.error &&
-      !catalogQueryError;
+      isRuntimeReady && runtimeDataRefs.kind === "available" && !catalogQueryError;
     const isLoadingModelCatalog =
       canShowModelCatalogLoading && resolvedCatalog === null && catalogQuery.isPending;
 
@@ -105,10 +105,8 @@ export const useSessionRuntimeData = ({
     catalogQuery.data,
     catalogQuery.error,
     catalogQuery.isPending,
-    canReadRuntimeData,
-    runtimeDataRefs.catalogRef,
-    runtimeDataRefs.error,
-    selectedSessionIdentity,
+    isRuntimeReady,
+    runtimeDataRefs,
     todosQuery.data,
     todosQuery.error,
   ]);

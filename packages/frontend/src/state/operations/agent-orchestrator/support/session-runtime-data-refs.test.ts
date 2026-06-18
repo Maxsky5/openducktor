@@ -28,9 +28,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
-      catalogRef: null,
-      todosRef: null,
-      error: null,
+      kind: "none",
     });
   });
 
@@ -42,8 +40,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
-      catalogRef: null,
-      todosRef: null,
+      kind: "unavailable",
       error: "Repository path is required to read selected session runtime data.",
     });
   });
@@ -56,6 +53,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
+      kind: "available",
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
@@ -66,7 +64,6 @@ describe("resolveSessionRuntimeDataRefs", () => {
         workingDirectory: "/repo",
         externalSessionId: "external-1",
       },
-      error: null,
     });
   });
 
@@ -78,12 +75,12 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
       }),
     ).toEqual({
+      kind: "available",
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
       },
       todosRef: null,
-      error: null,
     });
   });
 
