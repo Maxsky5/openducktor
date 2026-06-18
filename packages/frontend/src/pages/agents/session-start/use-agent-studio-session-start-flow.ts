@@ -224,6 +224,18 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
+  const runGatedSessionStartRequest = useCallback(
+    (request: AgentStudioSessionStartRequest): Promise<SessionStartWorkflowResult | undefined> => {
+      const startKey = buildSessionStartKey({
+        taskId: request.taskId,
+        role: request.role,
+        launchActionId: request.launchActionId,
+      });
+      return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
+    },
+    [runSessionStartRequest, sessionStartGate],
+  );
+
   const runSessionStart = useCallback(
     async (params: {
       postStartAction: SessionStartPostAction;
@@ -232,30 +244,22 @@ export function useAgentStudioSessionStartFlow({
         return undefined;
       }
 
-      const startKey = buildSessionStartKey({
+      return runGatedSessionStartRequest({
         taskId,
         role,
         launchActionId,
+        postStartAction: params.postStartAction,
+        initialTargetBranch: selectedTask?.targetBranch ?? null,
+        initialTargetBranchError: selectedTask?.targetBranchError ?? null,
       });
-      return sessionStartGate.run(startKey, () =>
-        runSessionStartRequest({
-          taskId,
-          role,
-          launchActionId,
-          postStartAction: params.postStartAction,
-          initialTargetBranch: selectedTask?.targetBranch ?? null,
-          initialTargetBranchError: selectedTask?.targetBranchError ?? null,
-        }),
-      );
     },
     [
       canStartRole,
       launchActionId,
       role,
-      runSessionStartRequest,
+      runGatedSessionStartRequest,
       selectedTask?.targetBranch,
       selectedTask?.targetBranchError,
-      sessionStartGate,
       taskId,
     ],
   );
@@ -311,28 +315,14 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      const startKey = buildSessionStartKey({
+      void runGatedSessionStartRequest({
         taskId,
         role: nextRole,
         launchActionId: nextLaunchActionId,
+        postStartAction: "kickoff",
       });
-      void sessionStartGate.run(startKey, () =>
-        runSessionStartRequest({
-          taskId,
-          role: nextRole,
-          launchActionId: nextLaunchActionId,
-          postStartAction: "kickoff",
-        }),
-      );
     },
-    [
-      loadedSession,
-      canStartRole,
-      isSessionWorking,
-      runSessionStartRequest,
-      sessionStartGate,
-      taskId,
-    ],
+    [loadedSession, canStartRole, isSessionWorking, runGatedSessionStartRequest, taskId],
   );
 
   const handleCreateSessionWithHumanFeedback = useCallback(
@@ -365,35 +355,21 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      const startKey = buildSessionStartKey({
+      void runGatedSessionStartRequest({
         taskId,
         role: option.role,
         launchActionId: option.launchActionId,
+        postStartAction: option.postStartAction,
+        ...(option.initialStartMode ? { initialStartMode: option.initialStartMode } : {}),
+        ...(option.existingSessionOptions
+          ? { existingSessionOptions: option.existingSessionOptions }
+          : {}),
+        ...(option.initialSourceSession !== undefined
+          ? { initialSourceSession: option.initialSourceSession }
+          : {}),
       });
-      void sessionStartGate.run(startKey, () =>
-        startSessionRequest({
-          taskId,
-          role: option.role,
-          launchActionId: option.launchActionId,
-          postStartAction: option.postStartAction,
-          ...(option.initialStartMode ? { initialStartMode: option.initialStartMode } : {}),
-          ...(option.existingSessionOptions
-            ? { existingSessionOptions: option.existingSessionOptions }
-            : {}),
-          ...(option.initialSourceSession !== undefined
-            ? { initialSourceSession: option.initialSourceSession }
-            : {}),
-        }),
-      );
     },
-    [
-      canStartRole,
-      isSessionWorking,
-      openHumanReviewFeedback,
-      sessionStartGate,
-      startSessionRequest,
-      taskId,
-    ],
+    [canStartRole, isSessionWorking, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],
   );
 
   return {
