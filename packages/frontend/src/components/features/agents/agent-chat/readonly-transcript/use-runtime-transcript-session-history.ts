@@ -94,13 +94,15 @@ export function useRuntimeTranscriptSessionHistory({
       transcriptSource = { kind: "visible" };
     } else if (source.kind === "empty") {
       transcriptSource = { kind: "empty", reason: source.reason };
+    } else if (historyQuery.error && repoReadinessState === "ready") {
+      transcriptSource = {
+        kind: "failed",
+        message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
+      };
     } else {
       transcriptSource = {
         kind: "pending",
         reason: "history",
-        failureMessage: historyQuery.error
-          ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
-          : null,
       };
     }
 

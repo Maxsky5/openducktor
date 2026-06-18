@@ -18,15 +18,29 @@ export type AgentSessionTranscriptState =
 export type AgentSessionTranscriptSource =
   | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
   | { kind: "runtime_gated_empty"; reason: AgentSessionTranscriptEmptyReason }
-  | {
-      kind: "pending";
-      reason: AgentSessionTranscriptLoadingReason;
-      failureMessage: string | null;
-    }
+  | { kind: "pending"; reason: AgentSessionTranscriptLoadingReason }
   | { kind: "failed"; message: string }
   | { kind: "visible" };
 
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
+
+const deriveLoadedAgentSessionTranscriptSource = ({
+  session,
+  repoReadinessState,
+}: {
+  session: AgentSessionState;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptSource => {
+  if (hasRenderableSessionTranscript(session)) {
+    return { kind: "visible" };
+  }
+
+  if (session.historyLoadState === "failed" && repoReadinessState === "ready") {
+    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
+  }
+
+  return { kind: "pending", reason: "history" };
+};
 
 export const isAgentSessionTranscriptLoading = (
   transcriptState: AgentSessionTranscriptState,
@@ -74,10 +88,6 @@ export const deriveAgentSessionTranscriptState = ({
     return { kind: "runtime_waiting" };
   }
 
-  if (source.failureMessage !== null) {
-    return { kind: "failed", message: source.failureMessage };
-  }
-
   return { kind: "session_loading", reason: source.reason };
 };
 
@@ -88,14 +98,10 @@ export const deriveLoadedAgentSessionTranscriptState = ({
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionTranscriptState => {
-  const source: AgentSessionTranscriptSource = hasRenderableSessionTranscript(session)
-    ? { kind: "visible" }
-    : {
-        kind: "pending",
-        reason: "history",
-        failureMessage:
-          session.historyLoadState === "failed" ? DEFAULT_TRANSCRIPT_FAILURE_MESSAGE : null,
-      };
+  const source = deriveLoadedAgentSessionTranscriptSource({
+    session,
+    repoReadinessState,
+  });
 
   return deriveAgentSessionTranscriptState({
     source,

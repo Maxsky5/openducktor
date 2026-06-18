@@ -259,7 +259,7 @@ describe("deriveAgentSessionTranscriptState", () => {
 
   test("waits for runtime readiness before surfacing history loading", () => {
     const transcriptState = deriveAgentSessionTranscriptState({
-      source: { kind: "pending", reason: "history", failureMessage: null },
+      source: { kind: "pending", reason: "history" },
       repoReadinessState: "checking",
     });
 
@@ -268,7 +268,7 @@ describe("deriveAgentSessionTranscriptState", () => {
 
   test("surfaces history loading once runtime is ready", () => {
     const transcriptState = deriveAgentSessionTranscriptState({
-      source: { kind: "pending", reason: "history", failureMessage: null },
+      source: { kind: "pending", reason: "history" },
       repoReadinessState: "ready",
     });
 
@@ -277,24 +277,11 @@ describe("deriveAgentSessionTranscriptState", () => {
 
   test("surfaces preparing loading once runtime is ready", () => {
     const transcriptState = deriveAgentSessionTranscriptState({
-      source: { kind: "pending", reason: "preparing", failureMessage: null },
+      source: { kind: "pending", reason: "preparing" },
       repoReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
-  });
-
-  test("surfaces history failures through the transcript-state owner", () => {
-    const transcriptState = deriveAgentSessionTranscriptState({
-      source: {
-        kind: "pending",
-        reason: "history",
-        failureMessage: "history unavailable",
-      },
-      repoReadinessState: "ready",
-    });
-
-    expect(transcriptState).toEqual({ kind: "failed", message: "history unavailable" });
   });
 
   test("surfaces source failures directly", () => {

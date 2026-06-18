@@ -152,7 +152,7 @@ export const deriveSelectedSessionTranscriptState = ({
   } else if (source.readModelLoadState.kind === "failed") {
     transcriptSource = { kind: "failed", message: source.readModelLoadState.message };
   } else if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
-    transcriptSource = { kind: "pending", reason: "preparing", failureMessage: null };
+    transcriptSource = { kind: "pending", reason: "preparing" };
   } else {
     transcriptSource = { kind: "runtime_gated_empty", reason: "sessionless" };
   }
