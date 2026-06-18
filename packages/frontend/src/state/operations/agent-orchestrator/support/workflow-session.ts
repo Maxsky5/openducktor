@@ -5,9 +5,3 @@ export const isWorkflowAgentSession = (
 ): session is WorkflowAgentSessionState => {
   return Boolean(session && session.role !== null);
 };
-
-export const shouldIncludeAgentSessionInActivity = (
-  session: AgentSessionState,
-): session is WorkflowAgentSessionState => {
-  return isWorkflowAgentSession(session);
-};

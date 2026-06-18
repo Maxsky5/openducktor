@@ -8,7 +8,7 @@ import type {
   WorkflowAgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
+import { isWorkflowAgentSession } from "./operations/agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
   Pick<WorkflowAgentSessionState, "title" | "taskId" | "role" | "startedAt"> & {
@@ -101,7 +101,7 @@ export const createAgentActivitySnapshot = ({
   );
   const sessions = listAgentSessions(collection).sort(sortByStartedAtDesc);
   const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
-    if (!shouldIncludeAgentSessionInActivity(session)) {
+    if (!isWorkflowAgentSession(session)) {
       return [];
     }
     const nextSummary = toAgentSessionSummary(session);
