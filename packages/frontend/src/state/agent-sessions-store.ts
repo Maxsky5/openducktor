@@ -12,8 +12,8 @@ import {
 import {
   type AgentActivitySessionsSnapshot,
   type AgentSessionSummary,
-  createAgentSessionSnapshots,
-  createEmptyAgentSessionSnapshots,
+  createAgentActivitySnapshot,
+  createEmptyAgentActivitySnapshot,
 } from "@/state/agent-session-snapshots";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -52,7 +52,7 @@ export const createAgentSessionsStore = (
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
-  let snapshots = createEmptyAgentSessionSnapshots(workspaceRepoPath);
+  let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
@@ -70,9 +70,9 @@ export const createAgentSessionsStore = (
     }
 
     sessionCollection = nextCollection;
-    snapshots = createAgentSessionSnapshots({
+    activitySnapshot = createAgentActivitySnapshot({
       collection: nextCollection,
-      previous: snapshots,
+      previous: activitySnapshot,
       workspaceRepoPath,
     });
     notifyListeners();
@@ -93,8 +93,8 @@ export const createAgentSessionsStore = (
         listeners.delete(listener);
       };
     },
-    getSessionSummariesSnapshot: () => snapshots.sessionSummaries,
-    getActivitySnapshot: () => snapshots.activitySnapshot,
+    getSessionSummariesSnapshot: () => activitySnapshot.sessions,
+    getActivitySnapshot: () => activitySnapshot,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     commitSessionCollection,
     setSessionCollection,
@@ -123,7 +123,7 @@ export const createAgentSessionsStore = (
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = emptyAgentSessionCollection();
-      snapshots = createEmptyAgentSessionSnapshots(workspaceRepoPath);
+      activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
       notifyListeners();
     },
   };

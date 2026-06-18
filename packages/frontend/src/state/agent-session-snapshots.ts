@@ -36,12 +36,6 @@ export type AgentActivitySessionsSnapshot = {
   sessions: WorkflowAgentSessionSummary[];
 };
 
-export type AgentSessionSnapshots = {
-  sessions: AgentSessionState[];
-  sessionSummaries: WorkflowAgentSessionSummary[];
-  activitySnapshot: AgentActivitySessionsSnapshot;
-};
-
 const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
@@ -100,31 +94,24 @@ const createActivitySnapshot = (
   sessions,
 });
 
-export const createEmptyAgentSessionSnapshots = (
+export const createEmptyAgentActivitySnapshot = (
   workspaceRepoPath: string | null,
-): AgentSessionSnapshots => {
-  const sessionSummaries: WorkflowAgentSessionSummary[] = [];
-  return {
-    sessions: [],
-    sessionSummaries,
-    activitySnapshot: createActivitySnapshot(workspaceRepoPath, sessionSummaries),
-  };
-};
+): AgentActivitySessionsSnapshot => createActivitySnapshot(workspaceRepoPath, []);
 
-export const createAgentSessionSnapshots = ({
+export const createAgentActivitySnapshot = ({
   collection,
   previous,
   workspaceRepoPath,
 }: {
   collection: AgentSessionCollection;
-  previous: AgentSessionSnapshots;
+  previous: AgentActivitySessionsSnapshot;
   workspaceRepoPath: string | null;
-}): AgentSessionSnapshots => {
+}): AgentActivitySessionsSnapshot => {
   const previousSummaryByIdentity = new Map(
-    previous.sessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
+    previous.sessions.map((summary) => [agentSessionIdentityKey(summary), summary]),
   );
   const sessions = listAgentSessions(collection).sort(sortByStartedAtDesc);
-  const nextSessionSummaries = sessions.flatMap((session): WorkflowAgentSessionSummary[] => {
+  const nextActivitySessions = sessions.flatMap((session): WorkflowAgentSessionSummary[] => {
     if (!shouldIncludeAgentSessionInActivity(session)) {
       return [];
     }
@@ -134,19 +121,9 @@ export const createAgentSessionSnapshots = ({
       ? [previousSummary]
       : [nextSummary];
   });
-  const sessionSummaries = reuseArrayWhenItemsMatch(
-    previous.sessionSummaries,
-    nextSessionSummaries,
-  );
-  const activitySnapshot =
-    previous.activitySnapshot.workspaceRepoPath === workspaceRepoPath &&
-    previous.activitySnapshot.sessions === sessionSummaries
-      ? previous.activitySnapshot
-      : createActivitySnapshot(workspaceRepoPath, sessionSummaries);
+  const activitySessions = reuseArrayWhenItemsMatch(previous.sessions, nextActivitySessions);
 
-  return {
-    sessions,
-    sessionSummaries,
-    activitySnapshot,
-  };
+  return previous.workspaceRepoPath === workspaceRepoPath && previous.sessions === activitySessions
+    ? previous
+    : createActivitySnapshot(workspaceRepoPath, activitySessions);
 };
