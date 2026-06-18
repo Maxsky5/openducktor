@@ -226,8 +226,8 @@ export function useAgentStudioSelectionController({
     isLoadingRepoSettings,
   });
   useSelectedSessionHistoryLoad({
-    session: selectedSessionView.loadedSession,
-    repoReadinessState: selectedSessionView.runtimeReadiness.state,
+    session: selectedSessionView.selectedSession.loadedSession,
+    repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
   const isActiveTaskReady = Boolean(activeWorkspaceId && selectedViewTaskId);
 

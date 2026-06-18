@@ -250,7 +250,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedTask?.id).toBe("task-2");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-2");
       expect(latest.view.taskId).toBe("task-2");
-      expect(latest.view.loadedSession?.externalSessionId).toBe("session-2");
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-2");
     } finally {
       await harness.unmount();
     }
@@ -274,11 +274,11 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.transcriptState).toEqual({
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
         kind: "session_loading",
         reason: "preparing",
       });
-      expect(harness.getLatest().view.loadedSession).toBeNull();
+      expect(harness.getLatest().view.selectedSession.loadedSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
         role: "build",
@@ -296,10 +296,12 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().view.transcriptState).toEqual({
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
         kind: "visible",
       });
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-reloaded");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-reloaded",
+      );
     } finally {
       await harness.unmount();
     }
@@ -325,11 +327,11 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "session_loading",
         reason: "preparing",
       });
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -369,10 +371,10 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -422,9 +424,9 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
-      expect(latest.view.runtimeReadiness.state).toBe("checking");
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.loadedSession?.runtimeKind).toBe("codex");
+      expect(latest.view.selectedSession.runtimeReadiness.state).toBe("checking");
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -473,12 +475,12 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
-      expect(latest.view.runtimeReadiness.state).toBe("blocked");
-      expect(latest.view.runtimeReadiness.message).toBe(
+      expect(latest.view.selectedSession.loadedSession?.runtimeKind).toBe("codex");
+      expect(latest.view.selectedSession.runtimeReadiness.state).toBe("blocked");
+      expect(latest.view.selectedSession.runtimeReadiness.message).toBe(
         "Codex runtime is disabled in Agent Runtime settings.",
       );
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -523,9 +525,9 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.state).toBe("checking");
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.runtimeReadiness.state).toBe("checking");
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -565,12 +567,12 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.state).toBe("blocked");
-      expect(latest.view.runtimeReadiness.message).toBe(
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.runtimeReadiness.state).toBe("blocked");
+      expect(latest.view.selectedSession.runtimeReadiness.message).toBe(
         "Runtime 'codex' is not available for agent chat.",
       );
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -614,9 +616,9 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.state).toBe("checking");
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.runtimeReadiness.state).toBe("checking");
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -653,11 +655,11 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.view.transcriptState).toEqual({
+      expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "failed",
         message: "Failed to load agent session read model",
       });
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -719,7 +721,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.transcriptState).toEqual({ kind: "visible" });
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({ kind: "visible" });
       expect(loadSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -760,7 +762,9 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.transcriptState).toEqual({ kind: "runtime_waiting" });
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
       expect(loadSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -803,7 +807,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.view.role).toBe("planner");
       expect(latest.view.launchActionId).toBe("planner_initial");
-      expect(latest.view.loadedSession?.externalSessionId).toBe("session-planner");
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-planner");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
@@ -836,7 +840,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.resolvedRouteSession).toBeNull();
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
     } finally {
@@ -873,7 +877,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.selectedSessionFromRoute?.externalSessionId).toBe("session-build");
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-build");
-      expect(latest.view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-build");
       expect(latest.view.role).toBe("build");
     } finally {
       await harness.unmount();
@@ -910,10 +914,10 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.view.sessionRuntimeData.todos.length === 1);
+      await harness.waitFor((latest) => latest.view.selectedSession.runtimeData.todos.length === 1);
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().view.sessionRuntimeData.todos[0]?.id).toBe("todo-1");
+      expect(harness.getLatest().view.selectedSession.runtimeData.todos[0]?.id).toBe("todo-1");
     } finally {
       await harness.unmount();
     }
@@ -956,7 +960,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
       await harness.waitFor(
-        (latest) => latest.view.sessionRuntimeData.todos[0]?.id === "todo-session-build",
+        (latest) => latest.view.selectedSession.runtimeData.todos[0]?.id === "todo-session-build",
       );
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledWith({
@@ -971,7 +975,7 @@ describe("useAgentStudioSelectionController", () => {
         state.handleSelectTab("task-2");
       });
       await harness.waitFor(
-        (latest) => latest.view.sessionRuntimeData.todos[0]?.id === "todo-session-qa",
+        (latest) => latest.view.selectedSession.runtimeData.todos[0]?.id === "todo-session-qa",
       );
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
@@ -1021,7 +1025,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedTask).toBeNull();
       expect(latest.resolvedRouteSession).toBeNull();
       expect(latest.view.taskId).toBe("");
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
       expect(readSessionTodos).toHaveBeenCalledTimes(0);
     } finally {
@@ -1086,7 +1090,9 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-1");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-1",
+      );
 
       await harness.run((state) => {
         state.handleSelectTab("task-2");
@@ -1094,7 +1100,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.taskId).toBe("task-2");
-      expect(latest.view.loadedSession?.externalSessionId).toBe("session-2");
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-2");
       expect(latest.view.role).toBe("qa");
       expect(latest.view.launchActionId).toBe("qa_review");
     } finally {
@@ -1235,7 +1241,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
       const latest = harness.getLatest();
 
-      expect(latest.view.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
     } finally {
@@ -1273,7 +1279,9 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
 
       await harness.update(
@@ -1286,7 +1294,9 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {
@@ -1324,7 +1334,9 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
 
       await harness.update(
@@ -1338,7 +1350,9 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {
@@ -1385,7 +1399,9 @@ describe("useAgentStudioSelectionController", () => {
       });
 
       expect(harness.getLatest().view.taskId).toBe("task-2");
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
       expect(updateQuery).toHaveBeenCalledWith({
         task: "task-2",
@@ -1406,7 +1422,9 @@ describe("useAgentStudioSelectionController", () => {
       );
 
       expect(harness.getLatest().view.taskId).toBe("task-2");
-      expect(harness.getLatest().view.loadedSession?.externalSessionId).toBe("session-build");
+      expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
+        "session-build",
+      );
       expect(harness.getLatest().view.role).toBe("build");
       expect(harness.getLatest().view.launchActionId).toBe("build_after_human_request_changes");
     } finally {

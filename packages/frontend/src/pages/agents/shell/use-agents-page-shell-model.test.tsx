@@ -71,23 +71,26 @@ type SelectionState = {
     selectedTask: typeof task | null;
     sessionsForTask: SessionFixture[];
     selectedSessionSummary: SessionFixture | null;
-    loadedSession: SessionFixture | null;
-    selectedSessionIdentity: ReturnType<typeof sessionIdentity> | null;
-    selectedSessionActivityState: null;
-    sessionRuntimeData: {
-      modelCatalog: null;
-      todos: [];
-      isLoadingModelCatalog: false;
-      error: null;
-    };
-    runtimeReadiness: {
-      state: "ready";
-      message: null;
-      isLoadingChecks: false;
-      refreshChecks: () => Promise<void>;
+    selectedSession: {
+      identity: ReturnType<typeof sessionIdentity> | null;
+      activityState: null;
+      selectedModel: null;
+      loadedSession: SessionFixture | null;
+      runtimeData: {
+        modelCatalog: null;
+        todos: [];
+        isLoadingModelCatalog: false;
+        error: null;
+      };
+      runtimeReadiness: {
+        state: "ready";
+        message: null;
+        isLoadingChecks: false;
+        refreshChecks: () => Promise<void>;
+      };
+      transcriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
     };
     isTaskReady: boolean;
-    transcriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
   };
   activeTaskTabId: string;
   taskTabs: [];
@@ -225,23 +228,26 @@ let selectionState: SelectionState = {
     selectedTask: task,
     sessionsForTask: [initialSelectionSession],
     selectedSessionSummary: initialSelectionSession,
-    loadedSession: initialSelectionSession,
-    selectedSessionIdentity: null,
-    selectedSessionActivityState: null,
-    sessionRuntimeData: {
-      modelCatalog: null,
-      todos: [],
-      isLoadingModelCatalog: false,
-      error: null,
-    },
-    runtimeReadiness: {
-      state: "ready",
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
+    selectedSession: {
+      identity: null,
+      activityState: null,
+      selectedModel: null,
+      loadedSession: initialSelectionSession,
+      runtimeData: {
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+        error: null,
+      },
+      runtimeReadiness: {
+        state: "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
     },
     isTaskReady: true,
-    transcriptState: createSelectedSessionTranscriptStateFixture(),
   },
   activeTaskTabId: "task-1",
   taskTabs: [],
@@ -437,7 +443,7 @@ const registerModuleMocks = (): void => {
       const draftScope = {
         taskId: routeSession.selection.view.taskId,
         role: routeSession.selection.view.role,
-        session: routeSession.selection.view.selectedSessionIdentity,
+        session: routeSession.selection.view.selectedSession.identity,
       };
       const draftStateKey = agentChatDraftScopeKey(draftScope);
 
@@ -476,7 +482,7 @@ const registerModuleMocks = (): void => {
           isPanelOpen: panel.isPanelOpen,
           selectedView: {
             role: selection.view.role,
-            loadedSession: selection.view.loadedSession,
+            loadedSession: selection.view.selectedSession.loadedSession,
           },
         },
         rightPanel: {
@@ -584,23 +590,26 @@ beforeEach(async () => {
       selectedTask: task,
       sessionsForTask: [session],
       selectedSessionSummary: session,
-      loadedSession: session,
-      selectedSessionIdentity: null,
-      selectedSessionActivityState: null,
-      sessionRuntimeData: {
-        modelCatalog: null,
-        todos: [],
-        isLoadingModelCatalog: false,
-        error: null,
-      },
-      runtimeReadiness: {
-        state: "ready",
-        message: null,
-        isLoadingChecks: false,
-        refreshChecks: async () => {},
+      selectedSession: {
+        identity: null,
+        activityState: null,
+        selectedModel: null,
+        loadedSession: session,
+        runtimeData: {
+          modelCatalog: null,
+          todos: [],
+          isLoadingModelCatalog: false,
+          error: null,
+        },
+        runtimeReadiness: {
+          state: "ready",
+          message: null,
+          isLoadingChecks: false,
+          refreshChecks: async () => {},
+        },
+        transcriptState: createSelectedSessionTranscriptStateFixture(),
       },
       isTaskReady: true,
-      transcriptState: createSelectedSessionTranscriptStateFixture(),
     },
     activeTaskTabId: "task-1",
     taskTabs: [],
@@ -738,7 +747,10 @@ describe("useAgentsPageShellModel", () => {
         taskId: "",
         selectedTask: null,
         selectedSessionSummary: null,
-        loadedSession: null,
+        selectedSession: {
+          ...selectionState.view.selectedSession,
+          loadedSession: null,
+        },
         sessionsForTask: [],
       },
       taskId: "",
@@ -795,10 +807,13 @@ describe("useAgentsPageShellModel", () => {
       ...selectionState,
       view: {
         ...selectionState.view,
-        selectedSessionIdentity: {
-          externalSessionId: initialSelectionSession.externalSessionId,
-          runtimeKind: "opencode",
-          workingDirectory: initialSelectionSession.workingDirectory,
+        selectedSession: {
+          ...selectionState.view.selectedSession,
+          identity: {
+            externalSessionId: initialSelectionSession.externalSessionId,
+            runtimeKind: "opencode",
+            workingDirectory: initialSelectionSession.workingDirectory,
+          },
         },
       },
     };

@@ -4,7 +4,6 @@ import type {
   TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
   buildDisabledRuntimeHealth,
@@ -75,19 +74,6 @@ type BuildDiagnosticsPanelModelInput = {
 };
 
 type RuntimeHealthState = RepoRuntimeHealthMap[string] | undefined;
-
-const formatCliRuntimeValue = (cliHealth: RuntimeCheck["runtimes"][number] | null): string => {
-  if (cliHealth?.enabled === false) {
-    const detectedValue = cliHealth.ok ? (cliHealth.version ?? "detected") : "missing";
-    return `${detectedValue} (runtime disabled)`;
-  }
-
-  if (cliHealth?.ok) {
-    return cliHealth.version ?? "detected";
-  }
-
-  return "missing";
-};
 
 const getFailureBadge = (
   ok: boolean | null,
@@ -465,16 +451,6 @@ export const buildDiagnosticsPanelModel = (
     ...(activeWorkspace ? {} : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
-  const cliRuntimeRows =
-    runtimeDefinitions.length > 0
-      ? runtimeEntries.map(({ definition, cliHealth }) => ({
-          label: runtimeLabelFor({ runtimeDefinitions, runtimeKind: definition.kind }),
-          value: formatCliRuntimeValue(cliHealth),
-        }))
-      : (runtimeCheck?.runtimes ?? []).map((runtimeEntry) => ({
-          label: runtimeEntry.kind,
-          value: runtimeEntry.ok ? (runtimeEntry.version ?? "detected") : "missing",
-        }));
   const cliToolsHealthy = runtimeCheck === null ? null : !hasRuntimeCheckFailure(runtimeCheck);
 
   const cliToolsSection: DiagnosticsSectionModel = {
@@ -490,7 +466,6 @@ export const buildDiagnosticsPanelModel = (
       ? [
           { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
           { label: "GitHub CLI", value: runtimeCheck.ghVersion ?? "missing" },
-          ...cliRuntimeRows,
         ]
       : [],
     errors:

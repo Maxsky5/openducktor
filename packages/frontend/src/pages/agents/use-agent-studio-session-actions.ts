@@ -20,17 +20,12 @@ import type {
 } from "@/features/session-start";
 import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type {
-  AgentApprovalRequest,
-  AgentSessionIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
+import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
+import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./session-actions/agent-studio-session-action-state";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
@@ -52,11 +47,7 @@ type UseAgentStudioSessionActionsArgs = {
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionActivityState: AgentSessionActivityState | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
-  loadedSession: AgentSessionState | null;
-  sessionRuntimeData: SelectedSessionRuntimeData;
+  selectedSession: AgentStudioSelectedSessionState;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   sessionsForTask: AgentSessionSummary[];
@@ -111,11 +102,7 @@ export function useAgentStudioSessionActions({
   taskId,
   role,
   launchActionId,
-  selectedSessionIdentity,
-  selectedSessionActivityState,
-  selectedSessionModel,
-  loadedSession,
-  sessionRuntimeData,
+  selectedSession,
   runtimeDefinitions,
   selectedModelDescriptor,
   sessionsForTask,
@@ -136,11 +123,11 @@ export function useAgentStudioSessionActions({
   scheduleSelectionIntent,
 }: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
   const sessionState = deriveAgentStudioSessionActionState({
-    selectedSessionIdentity,
-    selectedSessionActivityState,
-    sessionRuntimeData,
+    selectedSession,
     runtimeDefinitions,
   });
+  const loadedSession = selectedSession.loadedSession;
+  const selectedSessionIdentity = selectedSession.identity;
   const loadedSessionPendingQuestionRequestIds = useMemo(
     () =>
       loadedSession?.pendingQuestions.map((pendingQuestion) => pendingQuestion.requestId) ??
@@ -195,9 +182,9 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     selectedSessionIdentity,
-    selectedSessionModel,
+    selectedSessionModel: selectedSession.selectedModel,
     sessionState,
-    isSessionModelCatalogLoading: sessionRuntimeData.isLoadingModelCatalog,
+    isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
     agentStudioReady,
     canStartNewSession,
     reusablePrompts,

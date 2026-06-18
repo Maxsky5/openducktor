@@ -3,7 +3,7 @@ import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/us
 
 export type BuildToolsSelectedView = Pick<
   AgentStudioOrchestrationSelectionContext["view"],
-  "role" | "taskId" | "selectedTask" | "selectedSessionIdentity" | "selectedSessionActivityState"
+  "role" | "taskId" | "selectedTask" | "selectedSession"
 >;
 
 type UseAgentStudioBuildToolsBootstrapArgs = {
@@ -26,7 +26,7 @@ export function useAgentStudioBuildToolsBootstrap({
   panelKind,
   isPanelOpen,
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
-  const selectedSessionIdentity = selectedView.selectedSessionIdentity;
+  const selectedSessionIdentity = selectedView.selectedSession.identity;
 
   return useMemo(() => {
     const isVisibleBuildToolsPanel =

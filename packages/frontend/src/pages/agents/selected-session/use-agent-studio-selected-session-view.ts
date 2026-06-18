@@ -6,7 +6,6 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -17,15 +16,13 @@ import {
   useChecksState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
+import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
   deriveSelectedSessionTranscriptState,
   projectSelectedSessionViewSource,
@@ -48,15 +45,9 @@ type UseAgentStudioSelectedSessionViewArgs = {
 };
 
 export type AgentStudioSelectedSessionView = {
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionActivityState: AgentSessionActivityState | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
-  loadedSession: AgentSessionState | null;
-  sessionRuntimeData: SelectedSessionRuntimeData;
-  runtimeReadiness: RepoRuntimeReadiness;
+  selectedSession: AgentStudioSelectedSessionState;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  transcriptState: AgentSessionTranscriptState;
 };
 
 export function useAgentStudioSelectedSessionView({
@@ -170,28 +161,33 @@ export function useAgentStudioSelectedSessionView({
     readSessionTodos,
   });
 
-  return useMemo<AgentStudioSelectedSessionView>(
+  const selectedSession = useMemo<AgentStudioSelectedSessionState>(
     () => ({
-      selectedSessionIdentity,
-      selectedSessionActivityState,
-      selectedSessionModel,
+      identity: selectedSessionIdentity,
+      activityState: selectedSessionActivityState,
+      selectedModel: selectedSessionModel,
       loadedSession: session,
-      sessionRuntimeData: runtimeData,
+      runtimeData,
       runtimeReadiness,
-      role: selection.role,
-      launchActionId,
       transcriptState,
     }),
     [
-      launchActionId,
       transcriptState,
       runtimeReadiness,
       runtimeData,
       selectedSessionActivityState,
       selectedSessionIdentity,
       selectedSessionModel,
-      selection.role,
       session,
     ],
+  );
+
+  return useMemo<AgentStudioSelectedSessionView>(
+    () => ({
+      selectedSession,
+      role: selection.role,
+      launchActionId,
+    }),
+    [launchActionId, selectedSession, selection.role],
   );
 }

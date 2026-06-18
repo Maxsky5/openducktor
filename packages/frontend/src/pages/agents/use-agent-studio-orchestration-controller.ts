@@ -206,7 +206,8 @@ export function useAgentStudioOrchestrationController({
     handleCloseTab,
     handleReorderTab,
   } = selection;
-  const agentStudioReady = view.runtimeReadiness.state === "ready";
+  const selectedSession = view.selectedSession;
+  const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     updateQuery,
     runSessionStartWorkflow,
@@ -225,8 +226,8 @@ export function useAgentStudioOrchestrationController({
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     workspaceRepoPath,
     taskId: view.taskId,
-    selectedSessionIdentity: view.selectedSessionIdentity,
-    loadedSession: view.loadedSession,
+    selectedSessionIdentity: selectedSession.identity,
+    loadedSession: selectedSession.loadedSession,
     selectedTask: view.selectedTask,
   });
 
@@ -259,11 +260,7 @@ export function useAgentStudioOrchestrationController({
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
-    loadedSession: view.loadedSession,
-    selectedSessionIdentity: view.selectedSessionIdentity,
-    selectedSessionModel: view.selectedSessionModel,
-    sessionRuntimeData: view.sessionRuntimeData,
-    repoReadinessState: view.runtimeReadiness.state,
+    selectedSession,
     role: view.role,
     reusablePrompts,
     repoSettings,
@@ -299,11 +296,7 @@ export function useAgentStudioOrchestrationController({
     taskId: view.taskId,
     role: view.role,
     launchActionId: view.launchActionId,
-    selectedSessionIdentity: view.selectedSessionIdentity,
-    selectedSessionActivityState: view.selectedSessionActivityState,
-    selectedSessionModel: view.selectedSessionModel,
-    loadedSession: view.loadedSession,
-    sessionRuntimeData: view.sessionRuntimeData,
+    selectedSession,
     runtimeDefinitions,
     selectedModelDescriptor,
     sessionsForTask: view.sessionsForTask,
@@ -333,15 +326,9 @@ export function useAgentStudioOrchestrationController({
         selectedTask: view.selectedTask,
         sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
-        selectedSessionIdentity: view.selectedSessionIdentity,
-        selectedSessionActivityState: view.selectedSessionActivityState,
-        selectedSessionModel: view.selectedSessionModel,
-        loadedSession: view.loadedSession,
-        sessionRuntimeData: view.sessionRuntimeData,
+        selectedSession,
         runtimeDefinitions,
         hasActiveGitConflict,
-        transcriptState: view.transcriptState,
-        runtimeReadiness: view.runtimeReadiness,
         documents: {
           specDoc,
           planDoc,
@@ -370,6 +357,7 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
+      selectedSession,
       specDoc,
       view,
     ],

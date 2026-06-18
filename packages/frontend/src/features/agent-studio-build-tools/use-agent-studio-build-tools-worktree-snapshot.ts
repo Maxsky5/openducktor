@@ -301,7 +301,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         viewRole: selectedView.role,
         isSelectedBuilderWorking:
           selectedView.role === "build" &&
-          isAgentSessionActivityWorking(selectedView.selectedSessionActivityState),
+          isAgentSessionActivityWorking(selectedView.selectedSession.activityState),
         sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
         hasSelectedTask,
       },
@@ -326,7 +326,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       resolvedGitPanelBranch,
       selectedTaskId,
       selectedView.role,
-      selectedView.selectedSessionActivityState,
+      selectedView.selectedSession.activityState,
       taskTargetBranchState,
       taskId,
       worktree,

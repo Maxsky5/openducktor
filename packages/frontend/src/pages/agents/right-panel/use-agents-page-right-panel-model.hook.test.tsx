@@ -127,8 +127,32 @@ const createGitActions = (gitConflictId: string | null) => ({
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
   loadedSession?: AgentSessionState | null;
   selectedSessionIdentity?: AgentSessionIdentity | null;
+  selectedSessionActivityState?: HookArgs["selectedView"]["selectedSession"]["activityState"];
   selectedSessionSummary?: AgentSessionSummary | null;
 };
+
+const createSelectedSession = (
+  overrides: Partial<HookArgs["selectedView"]["selectedSession"]> = {},
+): HookArgs["selectedView"]["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: {
+    modelCatalog: null,
+    todos: [],
+    isLoadingModelCatalog: false,
+    error: null,
+  },
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
+});
 
 const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["selectedView"] => {
   const {
@@ -164,8 +188,11 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
     role,
     taskId: "task-1",
     selectedTask: createTaskCardFixture({ id: "task-1" }),
-    selectedSessionIdentity,
-    selectedSessionActivityState,
+    selectedSession: createSelectedSession({
+      identity: selectedSessionIdentity,
+      activityState: selectedSessionActivityState,
+      loadedSession,
+    }),
     ...viewOverrides,
   };
 };

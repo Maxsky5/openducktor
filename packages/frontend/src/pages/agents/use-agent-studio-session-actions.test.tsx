@@ -38,8 +38,8 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
 const createSessionRuntimeData = (
-  overrides: Partial<HookArgs["sessionRuntimeData"]> = {},
-): HookArgs["sessionRuntimeData"] => ({
+  overrides: Partial<HookArgs["selectedSession"]["runtimeData"]> = {},
+): HookArgs["selectedSession"]["runtimeData"] => ({
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
@@ -49,7 +49,7 @@ const createSessionRuntimeData = (
 
 const createRuntimeCatalog = (
   runtime: RuntimeDescriptor,
-): NonNullable<HookArgs["sessionRuntimeData"]["modelCatalog"]> => ({
+): NonNullable<HookArgs["selectedSession"]["runtimeData"]["modelCatalog"]> => ({
   runtime,
   models: [],
   defaultModelsByProvider: {},
@@ -131,23 +131,52 @@ const createRunSessionStartWorkflow = (
 const localSessionIdentity = (externalSessionId: string) =>
   toAgentSessionIdentity(createSession({ externalSessionId }));
 
-const selectedSessionFactsFromSession = (session: ReturnType<typeof createSession>) => ({
-  selectedSessionIdentity: toAgentSessionIdentity(session),
-  selectedSessionActivityState: toAgentSessionSummary(session).activityState,
-  selectedSessionModel: session.selectedModel,
+const createSelectedSessionState = (
+  overrides: Partial<HookArgs["selectedSession"]> = {},
+): HookArgs["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: createSessionRuntimeData(),
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
 });
 
-const selectedSessionFactsFromIdentity = (identity: AgentSessionIdentity) => ({
-  selectedSessionIdentity: identity,
-  selectedSessionActivityState: null,
-  selectedSessionModel: null,
-});
+const selectedSessionFromSession = (session: ReturnType<typeof createSession>) =>
+  createSelectedSessionState({
+    identity: toAgentSessionIdentity(session),
+    activityState: toAgentSessionSummary(session).activityState,
+    selectedModel: session.selectedModel,
+    loadedSession: session,
+  });
+
+const selectedSessionFromIdentity = (identity: AgentSessionIdentity) =>
+  createSelectedSessionState({ identity });
 
 const selectedSessionArgs = (overrides = {}) => {
   const loadedSession = createSession(overrides);
   return {
-    loadedSession,
-    ...selectedSessionFactsFromSession(loadedSession),
+    selectedSession: selectedSessionFromSession(loadedSession),
+  };
+};
+
+const selectedSessionWithRuntimeData = (
+  sessionOverrides: Parameters<typeof selectedSessionArgs>[0],
+  runtimeDataOverrides: Partial<HookArgs["selectedSession"]["runtimeData"]>,
+) => {
+  const { selectedSession } = selectedSessionArgs(sessionOverrides);
+  return {
+    selectedSession: {
+      ...selectedSession,
+      runtimeData: createSessionRuntimeData(runtimeDataOverrides),
+    },
   };
 };
 
@@ -294,11 +323,7 @@ const createBaseArgs = (): HookArgs => {
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",
-    selectedSessionIdentity: null,
-    selectedSessionActivityState: null,
-    selectedSessionModel: null,
-    loadedSession: null,
-    sessionRuntimeData: createSessionRuntimeData(),
+    selectedSession: createSelectedSessionState(),
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
     selectedModelDescriptor: null,
     sessionsForTask: [],
@@ -660,8 +685,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionFactsFromIdentity(selectedSessionIdentity),
-      loadedSession: null,
+      selectedSession: selectedSessionFromIdentity(selectedSessionIdentity),
       sendAgentMessage,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
@@ -847,22 +871,24 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-      }),
-      sessionRuntimeData: createSessionRuntimeData({
-        modelCatalog: createRuntimeCatalog({
-          ...OPENCODE_RUNTIME_DESCRIPTOR,
-          capabilities: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-            sessionLifecycle: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-              supportsQueuedUserMessages: true,
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: true,
+              },
             },
-          },
-        }),
-      }),
+          }),
+        },
+      ),
       sendAgentMessage,
     });
 
@@ -885,22 +911,24 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "starting",
-      }),
-      sessionRuntimeData: createSessionRuntimeData({
-        modelCatalog: createRuntimeCatalog({
-          ...OPENCODE_RUNTIME_DESCRIPTOR,
-          capabilities: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-            sessionLifecycle: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-              supportsQueuedUserMessages: true,
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "starting",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: true,
+              },
             },
-          },
-        }),
-      }),
+          }),
+        },
+      ),
       sendAgentMessage,
     });
 
@@ -922,22 +950,24 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-      }),
-      sessionRuntimeData: createSessionRuntimeData({
-        modelCatalog: createRuntimeCatalog({
-          ...OPENCODE_RUNTIME_DESCRIPTOR,
-          capabilities: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-            sessionLifecycle: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-              supportsQueuedUserMessages: false,
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
-          },
-        }),
-      }),
+          }),
+        },
+      ),
       sendAgentMessage,
     });
 
@@ -1013,22 +1043,24 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-      }),
-      sessionRuntimeData: createSessionRuntimeData({
-        modelCatalog: createRuntimeCatalog({
-          ...OPENCODE_RUNTIME_DESCRIPTOR,
-          capabilities: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-            sessionLifecycle: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-              supportsQueuedUserMessages: false,
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
-          },
-        }),
-      }),
+          }),
+        },
+      ),
       sendAgentMessage,
     });
 
@@ -1064,23 +1096,25 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-        runtimeKind: "opencode",
-      }),
-      sessionRuntimeData: createSessionRuntimeData({
-        modelCatalog: createRuntimeCatalog({
-          ...OPENCODE_RUNTIME_DESCRIPTOR,
-          capabilities: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-            sessionLifecycle: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-              supportsQueuedUserMessages: false,
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+          runtimeKind: "opencode",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
-          },
-        }),
-      }),
+          }),
+        },
+      ),
       sendAgentMessage,
     });
 
@@ -1313,8 +1347,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      loadedSession: taskOneSession,
-      ...selectedSessionFactsFromSession(taskOneSession),
+      selectedSession: selectedSessionFromSession(taskOneSession),
       sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
@@ -1332,8 +1365,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      loadedSession: taskTwoSession,
-      ...selectedSessionFactsFromSession(taskTwoSession),
+      selectedSession: selectedSessionFromSession(taskTwoSession),
       sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
@@ -1366,8 +1398,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      loadedSession: taskOneSession,
-      ...selectedSessionFactsFromSession(taskOneSession),
+      selectedSession: selectedSessionFromSession(taskOneSession),
       sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
@@ -1383,8 +1414,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      loadedSession: taskTwoSession,
-      ...selectedSessionFactsFromSession(taskTwoSession),
+      selectedSession: selectedSessionFromSession(taskTwoSession),
       sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
@@ -1392,8 +1422,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      loadedSession: taskOneSession,
-      ...selectedSessionFactsFromSession(taskOneSession),
+      selectedSession: selectedSessionFromSession(taskOneSession),
       sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
@@ -1427,8 +1456,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      loadedSession: taskOneSession,
-      ...selectedSessionFactsFromSession(taskOneSession),
+      selectedSession: selectedSessionFromSession(taskOneSession),
       sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
@@ -1444,8 +1472,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      loadedSession: taskTwoSession,
-      ...selectedSessionFactsFromSession(taskTwoSession),
+      selectedSession: selectedSessionFromSession(taskTwoSession),
       sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
@@ -1453,8 +1480,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      loadedSession: taskOneSession,
-      ...selectedSessionFactsFromSession(taskOneSession),
+      selectedSession: selectedSessionFromSession(taskOneSession),
       sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
@@ -1484,8 +1510,7 @@ describe("useAgentStudioSessionActions", () => {
     });
     const harness = createHookHarness({
       ...createBaseArgs(),
-      loadedSession,
-      ...selectedSessionFactsFromSession(loadedSession),
+      selectedSession: selectedSessionFromSession(loadedSession),
       sessionsForTask: summarizeSessions([loadedSession]),
       sendAgentMessage,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
@@ -1556,8 +1581,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      loadedSession: nextSession,
-      ...selectedSessionFactsFromSession(nextSession),
+      selectedSession: selectedSessionFromSession(nextSession),
       sessionsForTask: summarizeSessions([nextSession]),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
@@ -1588,8 +1612,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      loadedSession: existingSpecSession,
-      ...selectedSessionFactsFromSession(existingSpecSession),
+      selectedSession: selectedSessionFromSession(existingSpecSession),
       sessionsForTask: summarizeSessions([existingSpecSession]),
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -1766,7 +1789,6 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_rebase_conflict_resolution",
       selectedTask: createTask(),
-      loadedSession: null,
       sessionsForTask: [],
     });
 
@@ -1783,7 +1805,6 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_after_human_request_changes",
       selectedTask: createTask({ status: "human_review" }),
-      loadedSession: null,
       sessionsForTask: [],
     });
 

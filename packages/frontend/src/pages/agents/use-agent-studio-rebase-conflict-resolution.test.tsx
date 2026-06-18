@@ -32,6 +32,29 @@ const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixt
     ...overrides,
   });
 
+const createSelectedSession = (
+  overrides: Partial<HookArgs["selection"]["view"]["selectedSession"]> = {},
+): HookArgs["selection"]["view"]["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: {
+    modelCatalog: null,
+    todos: [],
+    isLoadingModelCatalog: false,
+    error: null,
+  },
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
+});
+
 const createConflict = (overrides: Record<string, unknown> = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
@@ -71,8 +94,9 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
           title: "Resolve rebase conflict",
           description: "Fix the branch divergence.",
         }),
-        loadedSession: null,
-        selectedSessionIdentity: toAgentSessionIdentity(plannerSession),
+        selectedSession: createSelectedSession({
+          identity: toAgentSessionIdentity(plannerSession),
+        }),
         sessionsForTask: [builderSession],
       },
     },
@@ -310,8 +334,10 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         ...baseSelection,
         view: {
           ...baseSelection.view,
-          loadedSession: liveBuilderSession,
-          selectedSessionIdentity: toAgentSessionIdentity(liveBuilderSession),
+          selectedSession: createSelectedSession({
+            identity: toAgentSessionIdentity(liveBuilderSession),
+            loadedSession: liveBuilderSession,
+          }),
           sessionsForTask: [],
         },
       },

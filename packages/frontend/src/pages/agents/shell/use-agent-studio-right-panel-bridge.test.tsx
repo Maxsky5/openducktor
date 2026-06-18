@@ -35,25 +35,27 @@ const createSelectionView = (
     taskId: "task-1",
     selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
     sessionsForTask: [],
-    selectedSessionIdentity: toAgentSessionIdentity(loadedSession),
-    selectedSessionActivityState: "running",
-    selectedSessionModel: loadedSession.selectedModel,
-    loadedSession,
-    sessionRuntimeData: {
-      modelCatalog: null,
-      todos: [],
-      isLoadingModelCatalog: false,
-      error: null,
-    },
-    runtimeReadiness: {
-      state: "ready",
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
+    selectedSession: {
+      identity: toAgentSessionIdentity(loadedSession),
+      activityState: "running",
+      selectedModel: loadedSession.selectedModel,
+      loadedSession,
+      runtimeData: {
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+        error: null,
+      },
+      runtimeReadiness: {
+        state: "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
     },
     launchActionId: "build_implementation_start",
     isTaskReady: true,
-    transcriptState: createSelectedSessionTranscriptStateFixture(),
     ...overrides,
   };
 };
@@ -101,7 +103,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
       expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.loadedSession).toBe(
-        args.selection.view.loadedSession,
+        args.selection.view.selectedSession.loadedSession,
       );
     } finally {
       await harness.unmount();

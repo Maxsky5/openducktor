@@ -32,7 +32,6 @@ import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-inp
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
@@ -40,17 +39,13 @@ import {
   runtimeCatalogQueryKeys,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
-  loadedSession: AgentSessionState | null;
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
-  sessionRuntimeData: SelectedSessionRuntimeData;
-  repoReadinessState: RepoRuntimeReadinessState;
+  selectedSession: AgentStudioSelectedSessionState;
   role: AgentRole;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
@@ -106,11 +101,7 @@ const skippedComposerCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =
 
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
-  loadedSession,
-  selectedSessionIdentity,
-  selectedSessionModel,
-  sessionRuntimeData,
-  repoReadinessState,
+  selectedSession,
   role,
   reusablePrompts,
   repoSettings,
@@ -133,9 +124,13 @@ export function useAgentStudioChatComposer({
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const loadSkillsForRepo = loadSkills ?? loadRepoRuntimeSkills;
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
-  const sessionModelCatalog = sessionRuntimeData.modelCatalog;
-  const isSessionModelCatalogLoading = sessionRuntimeData.isLoadingModelCatalog;
+  const loadedSession = selectedSession.loadedSession;
+  const selectedSessionIdentity = selectedSession.identity;
+  const selectedSessionModel = selectedSession.selectedModel;
+  const sessionModelCatalog = selectedSession.runtimeData.modelCatalog;
+  const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
+  const repoReadinessState = selectedSession.runtimeReadiness.state;
   const hasSessionTarget = selectedSessionIdentity !== null;
   const roleDefaultSelection = useMemo(
     () =>

@@ -43,8 +43,8 @@ afterEach(() => {
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
 const createSessionRuntimeData = (
-  overrides: Partial<HookArgs["sessionRuntimeData"]> = {},
-): HookArgs["sessionRuntimeData"] => ({
+  overrides: Partial<HookArgs["selectedSession"]["runtimeData"]> = {},
+): HookArgs["selectedSession"]["runtimeData"] => ({
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
@@ -138,11 +138,20 @@ const createBaseArgs = (): HookArgs => {
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",
-    selectedSessionIdentity,
-    selectedSessionActivityState: "running",
-    selectedSessionModel: loadedSession.selectedModel,
-    loadedSession,
-    sessionRuntimeData: createSessionRuntimeData(),
+    selectedSession: {
+      identity: selectedSessionIdentity,
+      activityState: "running",
+      selectedModel: loadedSession.selectedModel,
+      loadedSession,
+      runtimeData: createSessionRuntimeData(),
+      runtimeReadiness: {
+        state: "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: { kind: "visible" },
+    },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     selectedModelDescriptor: {
       id: "openai/gpt-5",

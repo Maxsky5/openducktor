@@ -16,6 +16,7 @@ import {
   type AgentStudioSelectedSessionContextInput,
   buildAgentStudioSelectedSessionContext,
 } from "./selected-session-context";
+import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
 const createDoc = (markdown: string): TaskDocumentState => ({
   markdown,
@@ -35,27 +36,34 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     ...overrides,
   });
 
+type CreateInputOverrides = Partial<
+  Omit<AgentStudioSelectedSessionContextInput, "selectedSession">
+> & {
+  selectedSession?: Partial<AgentStudioSelectedSessionState>;
+};
+
 const createInput = (
-  overrides: Partial<AgentStudioSelectedSessionContextInput> = {},
+  overrides: CreateInputOverrides = {},
 ): AgentStudioSelectedSessionContextInput => {
+  const { selectedSession: selectedSessionOverrides = {}, ...inputOverrides } = overrides;
   const selectedTask = createTaskCardFixture({ id: "task-1", title: "Task 1" });
   const sessionsForTask = overrides.sessionsForTask ?? [];
-  const loadedSession = overrides.loadedSession ?? null;
+  const loadedSession = selectedSessionOverrides.loadedSession ?? null;
   const selectedSessionIdentity =
-    overrides.selectedSessionIdentity !== undefined
-      ? overrides.selectedSessionIdentity
+    selectedSessionOverrides.identity !== undefined
+      ? selectedSessionOverrides.identity
       : loadedSession
         ? toAgentSessionIdentity(loadedSession)
         : null;
   const selectedSessionActivityState =
-    overrides.selectedSessionActivityState !== undefined
-      ? overrides.selectedSessionActivityState
+    selectedSessionOverrides.activityState !== undefined
+      ? selectedSessionOverrides.activityState
       : loadedSession
         ? getAgentSessionActivityStateFromSession(loadedSession)
         : null;
   const selectedSessionModel =
-    overrides.selectedSessionModel !== undefined
-      ? overrides.selectedSessionModel
+    selectedSessionOverrides.selectedModel !== undefined
+      ? selectedSessionOverrides.selectedModel
       : (loadedSession?.selectedModel ?? null);
 
   return {
@@ -64,29 +72,32 @@ const createInput = (
     selectedTask,
     sessionsForTask,
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
-    selectedSessionIdentity,
-    selectedSessionActivityState,
-    selectedSessionModel,
-    loadedSession,
-    sessionRuntimeData: {
-      modelCatalog: null,
-      todos: [],
-      isLoadingModelCatalog: false,
-      error: null,
+    selectedSession: {
+      identity: selectedSessionIdentity,
+      activityState: selectedSessionActivityState,
+      selectedModel: selectedSessionModel,
+      loadedSession,
+      runtimeData: selectedSessionOverrides.runtimeData ?? {
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+        error: null,
+      },
+      runtimeReadiness: selectedSessionOverrides.runtimeReadiness ?? {
+        state: "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState:
+        selectedSessionOverrides.transcriptState ?? createSelectedSessionTranscriptStateFixture(),
     },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     hasActiveGitConflict: false,
-    transcriptState: createSelectedSessionTranscriptStateFixture(),
     documents: {
       specDoc: createDoc("spec"),
       planDoc: createDoc("plan"),
       qaDoc: createDoc("qa"),
-    },
-    runtimeReadiness: {
-      state: "ready",
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
     },
     sessionActions: {
       isSessionWorking: false,
@@ -97,7 +108,7 @@ const createInput = (
       onReplyApproval: async () => {},
     },
     roleLabelByRole: AGENT_ROLE_LABELS,
-    ...overrides,
+    ...inputOverrides,
   };
 };
 
@@ -109,7 +120,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         selectedTask: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        loadedSession: null,
+        selectedSession: { loadedSession: null },
       }),
     );
 
@@ -133,7 +144,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       const context = buildAgentStudioSelectedSessionContext(
         createInput({
           role,
-          loadedSession: session,
+          selectedSession: { loadedSession: session },
           sessionsForTask: [toAgentSessionSummary(session)],
           allSessionSummaries: [toAgentSessionSummary(session)],
         }),
@@ -157,8 +168,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         role: "planner",
-        selectedSessionIdentity: toAgentSessionIdentity(selectedSession),
-        loadedSession: staleLoadedSession,
+        selectedSession: {
+          identity: toAgentSessionIdentity(selectedSession),
+          loadedSession: staleLoadedSession,
+        },
         sessionsForTask: [toAgentSessionSummary(selectedSession)],
         allSessionSummaries: [toAgentSessionSummary(selectedSession)],
       }),
@@ -207,7 +220,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         role: "qa",
         selectedTask: unavailableQaTask,
-        loadedSession: qaSession,
+        selectedSession: { loadedSession: qaSession },
         sessionsForTask: [toAgentSessionSummary(qaSession)],
         allSessionSummaries: [toAgentSessionSummary(qaSession)],
       }),
@@ -221,12 +234,14 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const loadedSession = createSession();
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        loadedSession,
-        sessionRuntimeData: {
-          modelCatalog: null,
-          todos: [],
-          isLoadingModelCatalog: true,
-          error: null,
+        selectedSession: {
+          loadedSession,
+          runtimeData: {
+            modelCatalog: null,
+            todos: [],
+            isLoadingModelCatalog: true,
+            error: null,
+          },
         },
       }),
     );
@@ -240,18 +255,22 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const refreshChecks = mock(async () => {});
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        sessionRuntimeData: {
-          modelCatalog: null,
-          todos: [],
-          isLoadingModelCatalog: false,
-          error: "session todos unavailable",
-        },
-        transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
-        runtimeReadiness: {
-          state: "blocked",
-          message: "Runtime unavailable",
-          isLoadingChecks: true,
-          refreshChecks,
+        selectedSession: {
+          runtimeData: {
+            modelCatalog: null,
+            todos: [],
+            isLoadingModelCatalog: false,
+            error: "session todos unavailable",
+          },
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "runtime_waiting",
+          }),
+          runtimeReadiness: {
+            state: "blocked",
+            message: "Runtime unavailable",
+            isLoadingChecks: true,
+            refreshChecks,
+          },
         },
       }),
     );
@@ -269,15 +288,19 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("marks no-session task view as waiting while runtime startup is in progress", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        loadedSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
-        runtimeReadiness: {
-          state: "checking",
-          message: null,
-          isLoadingChecks: true,
-          refreshChecks: async () => {},
+        selectedSession: {
+          loadedSession: null,
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "runtime_waiting",
+          }),
+          runtimeReadiness: {
+            state: "checking",
+            message: null,
+            isLoadingChecks: true,
+            refreshChecks: async () => {},
+          },
         },
       }),
     );
@@ -288,15 +311,17 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("does not treat generic readiness checking as runtime startup", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        loadedSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        transcriptState: createSelectedSessionTranscriptStateFixture(),
-        runtimeReadiness: {
-          state: "checking",
-          message: null,
-          isLoadingChecks: true,
-          refreshChecks: async () => {},
+        selectedSession: {
+          loadedSession: null,
+          transcriptState: createSelectedSessionTranscriptStateFixture(),
+          runtimeReadiness: {
+            state: "checking",
+            message: null,
+            isLoadingChecks: true,
+            refreshChecks: async () => {},
+          },
         },
       }),
     );
@@ -341,7 +366,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        loadedSession: session,
+        selectedSession: { loadedSession: session },
         sessionsForTask: [toAgentSessionSummary(session)],
         allSessionSummaries: [
           toAgentSessionSummary(session),
@@ -386,7 +411,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
   test("disables pending input actions when the selected session has no pending items", () => {
     const noActiveSessionContext = buildAgentStudioSelectedSessionContext(
-      createInput({ loadedSession: null }),
+      createInput({ selectedSession: { loadedSession: null } }),
     );
 
     expect(noActiveSessionContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
@@ -396,7 +421,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const idleSession = createSession({ pendingApprovals: [], pendingQuestions: [] });
     const idleContext = buildAgentStudioSelectedSessionContext(
       createInput({
-        loadedSession: idleSession,
+        selectedSession: { loadedSession: idleSession },
         sessionsForTask: [toAgentSessionSummary(idleSession)],
         allSessionSummaries: [toAgentSessionSummary(idleSession)],
       }),

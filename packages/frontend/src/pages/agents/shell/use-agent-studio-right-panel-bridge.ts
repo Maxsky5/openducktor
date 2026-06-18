@@ -51,7 +51,10 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
   "panelKind" | "isPanelOpen"
 > & {
-  selectedView: Pick<AgentStudioOrchestrationSelectionContext["view"], "role" | "loadedSession">;
+  selectedView: {
+    role: AgentStudioOrchestrationSelectionContext["view"]["role"];
+    loadedSession: AgentStudioOrchestrationSelectionContext["view"]["selectedSession"]["loadedSession"];
+  };
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -93,7 +96,7 @@ function buildAgentStudioRightPanelBridgeModel({
       isPanelOpen,
       selectedView: {
         role: selection.view.role,
-        loadedSession: selection.view.loadedSession,
+        loadedSession: selection.view.selectedSession.loadedSession,
       },
     },
     rightPanel: {

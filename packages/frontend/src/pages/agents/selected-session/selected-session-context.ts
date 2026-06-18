@@ -13,7 +13,6 @@ import {
 } from "@/lib/agent-session-waiting-input";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -28,6 +27,7 @@ import {
   buildWorkflowModelContext,
   type WorkflowModelContext,
 } from "../use-agent-studio-page-model-builders";
+import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
@@ -76,7 +76,7 @@ export type AgentStudioSelectedSessionContext = {
   selectedSessionActivityState: AgentSessionActivityState | null;
   selectedSessionModel: AgentSessionState["selectedModel"];
   loadedSession: AgentSessionState | null;
-  transcriptState: AgentSessionTranscriptState;
+  transcriptState: AgentStudioSelectedSessionState["transcriptState"];
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
   runtime: SelectedSessionRuntimeContext;
@@ -89,16 +89,10 @@ export type AgentStudioSelectedSessionContextInput = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionActivityState: AgentSessionActivityState | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
-  loadedSession: AgentSessionState | null;
-  sessionRuntimeData: SelectedSessionRuntimeData;
+  selectedSession: AgentStudioSelectedSessionState;
   runtimeDefinitions: RuntimeDescriptor[];
   hasActiveGitConflict: boolean;
-  transcriptState: AgentSessionTranscriptState;
   documents: AgentStudioDocumentsContext;
-  runtimeReadiness: RepoRuntimeReadiness;
   sessionActions: {
     isSessionWorking: boolean;
     onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
@@ -132,19 +126,22 @@ export const buildAgentStudioSelectedSessionContext = ({
   selectedTask,
   sessionsForTask,
   allSessionSummaries,
-  selectedSessionIdentity,
-  selectedSessionActivityState,
-  selectedSessionModel,
-  loadedSession,
-  sessionRuntimeData,
+  selectedSession,
   runtimeDefinitions,
   hasActiveGitConflict,
-  transcriptState,
   documents,
-  runtimeReadiness,
   sessionActions,
   roleLabelByRole,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
+  const {
+    identity: selectedSessionIdentity,
+    activityState: selectedSessionActivityState,
+    selectedModel: selectedSessionModel,
+    loadedSession,
+    runtimeData: sessionRuntimeData,
+    runtimeReadiness,
+    transcriptState,
+  } = selectedSession;
   const workflow = buildWorkflowModelContext({
     selectedTask,
     sessionsForTask,

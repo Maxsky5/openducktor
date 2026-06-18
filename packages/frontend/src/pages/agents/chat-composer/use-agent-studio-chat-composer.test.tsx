@@ -41,14 +41,19 @@ enableReactActEnvironment();
 let messageCounter = 0;
 
 type HookArgs = Parameters<typeof useAgentStudioChatComposer>[0];
-type BasePropsOverrides = Partial<HookArgs> & {
+type BasePropsOverrides = Partial<Omit<HookArgs, "selectedSession">> & {
+  selectedSession?: Partial<HookArgs["selectedSession"]>;
+  loadedSession?: AgentSessionState | null;
   selectedSessionIdentity?: AgentSessionIdentity | null;
+  selectedSessionModel?: AgentSessionState["selectedModel"];
+  sessionRuntimeData?: HookArgs["selectedSession"]["runtimeData"];
+  repoReadinessState?: HookArgs["selectedSession"]["runtimeReadiness"]["state"];
   selectedSessionSummary?: AgentSessionSummary | null;
 };
 
 const createSessionRuntimeData = (
-  overrides: Partial<HookArgs["sessionRuntimeData"]> = {},
-): HookArgs["sessionRuntimeData"] => ({
+  overrides: Partial<HookArgs["selectedSession"]["runtimeData"]> = {},
+): HookArgs["selectedSession"]["runtimeData"] => ({
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
@@ -283,9 +288,12 @@ const createAssistantMessage = (
 
 const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
   const {
+    selectedSession: selectedSessionOverride,
     loadedSession: loadedSessionOverride,
     selectedSessionIdentity: selectedSessionIdentityOverride,
     selectedSessionModel: selectedSessionModelOverride,
+    sessionRuntimeData: sessionRuntimeDataOverride,
+    repoReadinessState,
     selectedSessionSummary: selectedSessionSummaryOverride,
     role: roleOverride,
     ...hookOverrides
@@ -307,11 +315,21 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
 
   return {
     workspaceRepoPath: "/repo",
-    loadedSession,
-    selectedSessionIdentity,
-    selectedSessionModel,
-    sessionRuntimeData: createSessionRuntimeData(),
-    repoReadinessState: "ready",
+    selectedSession: {
+      identity: selectedSessionIdentity,
+      activityState: null,
+      selectedModel: selectedSessionModel,
+      loadedSession,
+      runtimeData: sessionRuntimeDataOverride ?? createSessionRuntimeData(),
+      runtimeReadiness: {
+        state: repoReadinessState ?? "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: { kind: "visible" },
+      ...selectedSessionOverride,
+    },
     role,
     reusablePrompts: [],
     repoSettings: createRepoSettings(null),

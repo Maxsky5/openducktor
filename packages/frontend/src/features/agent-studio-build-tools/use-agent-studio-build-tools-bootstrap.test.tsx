@@ -15,14 +15,36 @@ type HookArgs = Parameters<typeof useAgentStudioBuildToolsBootstrap>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioBuildToolsBootstrap, initialProps);
 
+const createSelectedSession = (
+  overrides: Partial<HookArgs["selectedView"]["selectedSession"]> = {},
+): HookArgs["selectedView"]["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: {
+    modelCatalog: null,
+    todos: [],
+    isLoadingModelCatalog: false,
+    error: null,
+  },
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
+});
+
 const createSelectedView = (
   overrides: Partial<HookArgs["selectedView"]> = {},
 ): HookArgs["selectedView"] => ({
   role: "build",
   taskId: "task-1",
   selectedTask: null,
-  selectedSessionIdentity: null,
-  selectedSessionActivityState: null,
+  selectedSession: createSelectedSession(),
   ...overrides,
 });
 
@@ -46,8 +68,10 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          selectedSessionIdentity: selectedSessionSummary,
-          selectedSessionActivityState: selectedSessionSummary.activityState,
+          selectedSession: createSelectedSession({
+            identity: selectedSessionSummary,
+            activityState: selectedSessionSummary.activityState,
+          }),
         }),
       }),
     );
@@ -75,8 +99,10 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
-          selectedSessionIdentity: toAgentSessionIdentity(loadedSession),
-          selectedSessionActivityState: "running",
+          selectedSession: createSelectedSession({
+            identity: toAgentSessionIdentity(loadedSession),
+            activityState: "running",
+          }),
         }),
       }),
     );
@@ -105,8 +131,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          selectedSessionIdentity,
-          selectedSessionActivityState: null,
+          selectedSession: createSelectedSession({ identity: selectedSessionIdentity }),
         }),
       }),
     );

@@ -106,11 +106,7 @@ export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): Task
 
 export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
   return (
-    runtimeCheck !== null &&
-    (!runtimeCheck.gitOk ||
-      !runtimeCheck.ghOk ||
-      !runtimeCheck.ghAuthOk ||
-      runtimeCheck.runtimes.some((entry) => entry.enabled !== false && !entry.ok))
+    runtimeCheck !== null && (!runtimeCheck.gitOk || !runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
   );
 };
 

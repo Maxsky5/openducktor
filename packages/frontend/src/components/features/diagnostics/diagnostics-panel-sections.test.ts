@@ -153,7 +153,9 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Repository:");
     expect(html).toContain("Repository path:");
     expect(html).toContain("Worktree directory:");
-    expect(html).toContain("OpenCode:");
+    expect(html).toContain("Git:");
+    expect(html).toContain("GitHub CLI:");
+    expect(html).toContain("OpenCode Runtime");
     expect(html).toContain("Working directory:");
     expect(html).toContain("Server name:");
     expect(html).toContain("Status:");

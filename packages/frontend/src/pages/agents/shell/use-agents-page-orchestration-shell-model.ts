@@ -70,10 +70,10 @@ export function useAgentsPageOrchestrationShellModel({
       draftScope: {
         taskId: selection.view.taskId,
         role: selection.view.role,
-        session: selection.view.selectedSessionIdentity,
+        session: selection.view.selectedSession.identity,
       },
     }),
-    [selection.view.role, selection.view.selectedSessionIdentity, selection.view.taskId],
+    [selection.view.role, selection.view.selectedSession.identity, selection.view.taskId],
   );
 
   const orchestrationSelection = useMemo<

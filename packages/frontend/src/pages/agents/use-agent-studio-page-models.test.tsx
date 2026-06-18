@@ -52,16 +52,24 @@ const draftScopeFixture = (taskId: string): AgentChatDraftScope => ({
 
 type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
-  "documents" | "runtimeReadiness" | "sessionActions" | "roleLabelByRole"
+  "documents" | "selectedSession" | "sessionActions" | "roleLabelByRole"
 > & {
   activeTabValue: string;
+  selectedSessionIdentity: AgentStudioSelectedSessionContextInput["selectedSession"]["identity"];
+  selectedSessionActivityState: AgentStudioSelectedSessionContextInput["selectedSession"]["activityState"];
+  selectedSessionModel: AgentStudioSelectedSessionContextInput["selectedSession"]["selectedModel"];
+  loadedSession: AgentStudioSelectedSessionContextInput["selectedSession"]["loadedSession"];
+  sessionRuntimeData: AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeData"];
+  transcriptState: AgentStudioSelectedSessionContextInput["selectedSession"]["transcriptState"];
 };
 
 type HookArgsOverrides = {
   selectedSessionCore?: Partial<SelectedSessionTestCore>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
   documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
-  runtimeReadiness?: Partial<AgentStudioSelectedSessionContextInput["runtimeReadiness"]>;
+  runtimeReadiness?: Partial<
+    AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeReadiness"]
+  >;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
   selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
@@ -209,13 +217,14 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     qaDoc: createDocumentState(""),
     ...overrides.documents,
   };
-  const runtimeReadiness: AgentStudioSelectedSessionContextInput["runtimeReadiness"] = {
-    state: "ready",
-    message: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-    ...overrides.runtimeReadiness,
-  };
+  const runtimeReadiness: AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeReadiness"] =
+    {
+      state: "ready",
+      message: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+      ...overrides.runtimeReadiness,
+    };
   const sessionActions: HookArgs["sessionActions"] = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
@@ -289,16 +298,18 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       selectedTask: selectedSessionCore.selectedTask,
       sessionsForTask: selectedSessionCore.sessionsForTask,
       allSessionSummaries: selectedSessionCore.allSessionSummaries,
-      selectedSessionIdentity: selectedSessionCore.selectedSessionIdentity,
-      selectedSessionActivityState: selectedSessionCore.selectedSessionActivityState,
-      selectedSessionModel: selectedSessionCore.selectedSessionModel,
-      loadedSession: selectedSessionCore.loadedSession,
-      sessionRuntimeData: selectedSessionCore.sessionRuntimeData,
+      selectedSession: {
+        identity: selectedSessionCore.selectedSessionIdentity,
+        activityState: selectedSessionCore.selectedSessionActivityState,
+        selectedModel: selectedSessionCore.selectedSessionModel,
+        loadedSession: selectedSessionCore.loadedSession,
+        runtimeData: selectedSessionCore.sessionRuntimeData,
+        runtimeReadiness,
+        transcriptState: selectedSessionCore.transcriptState,
+      },
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
-      transcriptState: selectedSessionCore.transcriptState,
       documents,
-      runtimeReadiness,
       sessionActions: selectedSessionActions,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),

@@ -166,10 +166,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(false);
     expect(cliToolsSection?.badge.label).toBe("Available");
-    expect(cliToolsSection?.rows).toContainEqual({
-      label: "Codex",
-      value: "missing (runtime disabled)",
-    });
+    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
     expect(codexRuntimeSection?.badge.label).toBe("Disabled");
     expect(codexRuntimeSection?.rows).toContainEqual(
       expect.objectContaining({
