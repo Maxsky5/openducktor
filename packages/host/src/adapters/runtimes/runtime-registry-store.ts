@@ -32,6 +32,24 @@ export const createRuntimeRegistryStore = (
     upsert(runtime);
   }
 
+  const listByRepo = ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind?: string;
+  }): RuntimeInstanceSummary[] => {
+    const normalizedRepoPath = normalizePathForComparison(repoPath);
+    return [...entries.values()].filter(
+      (runtime) =>
+        normalizePathForComparison(runtime.repoPath) === normalizedRepoPath &&
+        (runtimeKind === undefined || runtime.kind === runtimeKind),
+    );
+  };
+
+  const isWorkspaceRuntime = (runtime: RuntimeInstanceSummary): boolean =>
+    runtime.role === "workspace" && runtime.taskId === null;
+
   return {
     upsert,
     remove(runtimeId) {
@@ -48,24 +66,9 @@ export const createRuntimeRegistryStore = (
     list() {
       return [...entries.values()];
     },
-    listByRepo({ repoPath, runtimeKind }) {
-      const normalizedRepoPath = normalizePathForComparison(repoPath);
-      return [...entries.values()].filter((runtime) => {
-        if (normalizePathForComparison(runtime.repoPath) !== normalizedRepoPath) {
-          return false;
-        }
-        return !runtimeKind || runtime.kind === runtimeKind;
-      });
-    },
+    listByRepo,
     findWorkspaceRuntime(input) {
-      const normalizedRepoPath = normalizePathForComparison(input.repoPath);
-      const matches = [...entries.values()].filter(
-        (runtime) =>
-          runtime.role === "workspace" &&
-          runtime.taskId === null &&
-          runtime.kind === input.runtimeKind &&
-          normalizePathForComparison(runtime.repoPath) === normalizedRepoPath,
-      );
+      const matches = listByRepo(input).filter(isWorkspaceRuntime);
       if (matches.length === 0) {
         return Effect.succeed(null);
       }
