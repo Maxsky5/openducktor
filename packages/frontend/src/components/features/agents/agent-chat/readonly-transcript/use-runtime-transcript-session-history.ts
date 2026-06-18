@@ -34,6 +34,11 @@ type RuntimeTranscriptSessionHistory = {
   transcriptState: AgentSessionTranscriptState;
 };
 
+type RuntimeTranscriptSource =
+  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
+  | { kind: "live"; session: AgentSessionState }
+  | { kind: "history"; ref: ReturnType<typeof toRuntimeSessionRef> };
+
 const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
   queryKey: ["runtime-transcript-session-history", "skipped"] as const,
   staleTime: SESSION_HISTORY_STALE_TIME_MS,
@@ -48,53 +53,50 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory } = useAgentOperations();
-  const matchedLiveSession =
-    target && matchesAgentSessionIdentity(liveSession, target) ? liveSession : null;
-  let emptyReason: AgentSessionTranscriptEmptyReason | null = null;
-  if (!isOpen || !target) {
-    emptyReason = "inactive";
-  } else if (!repoPath) {
-    emptyReason = "unavailable";
-  }
-  const historySessionRef = useMemo(
-    () =>
-      isOpen && target && repoPath && !matchedLiveSession
-        ? toRuntimeSessionRef(repoPath, target)
-        : null,
-    [isOpen, matchedLiveSession, repoPath, target],
-  );
+  const source = useMemo<RuntimeTranscriptSource>(() => {
+    if (!isOpen || !target) {
+      return { kind: "empty", reason: "inactive" };
+    }
+    if (!repoPath) {
+      return { kind: "empty", reason: "unavailable" };
+    }
+    if (liveSession && matchesAgentSessionIdentity(liveSession, target)) {
+      return { kind: "live", session: liveSession };
+    }
+    return { kind: "history", ref: toRuntimeSessionRef(repoPath, target) };
+  }, [isOpen, liveSession, repoPath, target]);
 
   const historyQuery = useQuery(
-    historySessionRef && repoReadinessState === "ready"
-      ? sessionHistoryQueryOptions(historySessionRef, readSessionHistory)
+    source.kind === "history" && repoReadinessState === "ready"
+      ? sessionHistoryQueryOptions(source.ref, readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
 
   const session = useMemo(() => {
-    if (matchedLiveSession) {
-      return toAgentChatThreadSession(matchedLiveSession);
+    if (source.kind === "live") {
+      return toAgentChatThreadSession(source.session);
     }
-    if (!historySessionRef || !historyQuery.data) {
+    if (source.kind !== "history" || !historyQuery.data) {
       return null;
     }
 
     return createReadonlyTranscriptSession({
-      ...toAgentSessionIdentity(historySessionRef),
+      ...toAgentSessionIdentity(source.ref),
       history: historyQuery.data,
     });
-  }, [historyQuery.data, historySessionRef, matchedLiveSession]);
-  const historyFailureMessage = historyQuery.error
-    ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
-    : null;
+  }, [historyQuery.data, source]);
   const transcriptState = useMemo(() => {
     return deriveRuntimeTranscriptState({
       hasVisibleTranscript: session !== null,
-      hasHistoryTarget: historySessionRef !== null,
-      historyFailureMessage,
+      hasHistoryTarget: source.kind !== "empty",
+      historyFailureMessage:
+        source.kind === "history" && historyQuery.error
+          ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
+          : null,
       repoReadinessState,
-      ...(emptyReason ? { emptyReason } : {}),
+      ...(source.kind === "empty" ? { emptyReason: source.reason } : {}),
     });
-  }, [emptyReason, historyFailureMessage, historySessionRef, repoReadinessState, session]);
+  }, [historyQuery.error, repoReadinessState, session, source]);
 
   return {
     session,
