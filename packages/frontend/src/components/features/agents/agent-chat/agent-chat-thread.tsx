@@ -41,7 +41,6 @@ type AgentChatThreadMotionRowProps = {
 
 type AgentChatTranscriptProps = {
   activeStreamingAssistantMessageId: string | null;
-  hasSession: boolean;
   emptyState: AgentChatThreadModel["emptyState"];
   isStarting: boolean;
   isSending: boolean;
@@ -282,7 +281,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 
 const AgentChatTranscript = memo(function AgentChatTranscript({
   activeStreamingAssistantMessageId,
-  hasSession,
   emptyState,
   isStarting,
   isSending,
@@ -299,6 +297,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   transcriptNotice,
   runtimeReadiness,
 }: AgentChatTranscriptProps): ReactElement {
+  const hasSession = sessionIdentity !== null;
+
   return (
     <div
       ref={messagesContainerRef}
@@ -337,21 +337,19 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {hasSession
-          ? renderedTurns.map((turn) => (
-              <AgentChatTurnGroup
-                key={turn.key}
-                turn={turn}
-                activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-                sessionAgentColors={sessionAgentColors}
-                sessionIdentity={sessionIdentity}
-                subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-                subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-                resolveRowRef={resolveRowRef}
-                allowTurnContainment={allowTurnContainment}
-              />
-            ))
-          : null}
+        {renderedTurns.map((turn) => (
+          <AgentChatTurnGroup
+            key={turn.key}
+            turn={turn}
+            activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+            sessionAgentColors={sessionAgentColors}
+            sessionIdentity={sessionIdentity}
+            subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+            subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+            resolveRowRef={resolveRowRef}
+            allowTurnContainment={allowTurnContainment}
+          />
+        ))}
       </div>
     </div>
   );
@@ -592,7 +590,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
         activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-        hasSession={session !== null}
         emptyState={emptyState}
         isStarting={isStarting}
         isSending={isSending}
