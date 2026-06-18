@@ -6,10 +6,7 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { createSessionMessagesState } from "../support/messages";
-import {
-  resolveSelectedSessionHistoryLoadTarget,
-  useSelectedSessionHistoryLoad,
-} from "./use-selected-session-history-load";
+import { useSelectedSessionHistoryLoad } from "./use-selected-session-history-load";
 
 const selectedSessionIdentity: AgentSessionIdentity = {
   externalSessionId: "session-1",
@@ -84,70 +81,6 @@ const createHistoryLoadHarness = (
     wrapper: createHistoryLoadWrapper(loadSessionHistory),
   });
 
-describe("resolveSelectedSessionHistoryLoadTarget", () => {
-  test("returns a target only for ready sessions with unrequested history", () => {
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: createSession(),
-        repoReadinessState: "ready",
-      }),
-    ).toEqual(selectedSessionIdentity);
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: createSession({ historyLoadState: "loaded" }),
-        repoReadinessState: "ready",
-      }),
-    ).toBeNull();
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: createSession(),
-        repoReadinessState: "checking",
-      }),
-    ).toBeNull();
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: null,
-        repoReadinessState: "ready",
-      }),
-    ).toBeNull();
-  });
-
-  test("does not request history when the selected session already has visible messages", () => {
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: createSession({
-          messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId, [
-            {
-              id: "live-user-message",
-              role: "user",
-              content: "Continue after QA rejection",
-              timestamp: "2026-06-12T08:00:01.000Z",
-            },
-          ]),
-        }),
-        repoReadinessState: "ready",
-      }),
-    ).toBeNull();
-  });
-
-  test("uses the selected session state as the history load identity", () => {
-    expect(
-      resolveSelectedSessionHistoryLoadTarget({
-        session: createSession({
-          externalSessionId: "session-from-state",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/codex-worktree",
-        }),
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({
-      externalSessionId: "session-from-state",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/codex-worktree",
-    });
-  });
-});
-
 describe("useSelectedSessionHistoryLoad", () => {
   test("loads the selected session history when the runtime is ready", async () => {
     const loadSessionHistory = mock(async () => undefined);
@@ -219,6 +152,32 @@ describe("useSelectedSessionHistoryLoad", () => {
       await harness.mount();
 
       expect(loadSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the selected session state as the history load identity", async () => {
+    const loadSessionHistory = mock(async () => undefined);
+    const harness = createHistoryLoadHarness(
+      createProps({
+        session: createSession({
+          externalSessionId: "session-from-state",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex-worktree",
+        }),
+      }),
+      loadSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: "session-from-state",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/codex-worktree",
+      });
     } finally {
       await harness.unmount();
     }

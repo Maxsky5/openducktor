@@ -7,7 +7,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { needsInitialSessionHistoryLoad } from "../support/session-transcript-content";
 
-export const resolveSelectedSessionHistoryLoadTarget = ({
+const resolveSelectedSessionHistoryLoadTarget = ({
   session,
   repoReadinessState,
 }: {
