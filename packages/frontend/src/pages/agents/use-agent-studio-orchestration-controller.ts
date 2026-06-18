@@ -9,7 +9,6 @@ import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
-import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -278,6 +277,8 @@ export function useAgentStudioOrchestrationController({
     startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
+    isSubmittingApprovalByRequestId,
+    approvalReplyErrorByRequestId,
     isSessionWorking,
     isWaitingInput,
     busySendBlockedReason,
@@ -287,6 +288,7 @@ export function useAgentStudioOrchestrationController({
     startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,
+    onReplyApproval,
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handlePrepareMessageFirstSession,
@@ -316,18 +318,11 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     humanRequestChangesTask,
     setTaskTargetBranch,
+    replyAgentApproval,
     answerAgentQuestion,
     updateQuery,
     scheduleSelectionIntent,
   });
-
-  const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
-    useAgentSessionApprovalActions({
-      sessionIdentity: view.selectedSessionIdentity,
-      pendingApprovals: view.loadedSession?.pendingApprovals ?? [],
-      canReplyToApprovals: agentStudioReady,
-      replyAgentApproval,
-    });
 
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
   const selectedSessionContext = useMemo(
@@ -354,8 +349,6 @@ export function useAgentStudioOrchestrationController({
           isSessionWorking,
           onSubmitQuestionAnswers,
           isSubmittingQuestionByRequestId,
-        },
-        approvals: {
           isSubmittingApprovalByRequestId,
           approvalReplyErrorByRequestId,
           onReplyApproval,

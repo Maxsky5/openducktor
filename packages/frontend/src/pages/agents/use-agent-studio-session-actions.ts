@@ -2,6 +2,7 @@ import type {
   GitBranch,
   GitTargetBranch,
   ReusablePrompt,
+  RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
   TaskCard,
 } from "@openducktor/contracts";
@@ -9,6 +10,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback, useMemo } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
@@ -18,7 +20,11 @@ import type {
 } from "@/features/session-start";
 import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -38,6 +44,7 @@ import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
 const EMPTY_PENDING_QUESTION_REQUEST_IDS: readonly string[] = Object.freeze([]);
+const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
 
 type UseAgentStudioSessionActionsArgs = {
   activeWorkspaceId: string | null;
@@ -64,6 +71,7 @@ type UseAgentStudioSessionActionsArgs = {
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
+  replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent?: (intent: AgentStudioSelectionIntent) => void;
@@ -78,6 +86,8 @@ export type UseAgentStudioSessionActionsResult = {
   ) => Promise<SessionStartWorkflowResult | undefined>;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
+  isSubmittingApprovalByRequestId: Record<string, boolean>;
+  approvalReplyErrorByRequestId: Record<string, string>;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
@@ -87,6 +97,7 @@ export type UseAgentStudioSessionActionsResult = {
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
@@ -119,6 +130,7 @@ export function useAgentStudioSessionActions({
   sendAgentMessage,
   humanRequestChangesTask,
   setTaskTargetBranch,
+  replyAgentApproval,
   answerAgentQuestion,
   updateQuery,
   scheduleSelectionIntent,
@@ -216,6 +228,13 @@ export function useAgentStudioSessionActions({
       canAnswerQuestions: agentStudioReady,
       answerAgentQuestion,
     });
+  const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
+    useAgentSessionApprovalActions({
+      sessionIdentity: selectedSessionIdentity,
+      pendingApprovals: loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVAL_REQUESTS,
+      canReplyToApprovals: agentStudioReady,
+      replyAgentApproval,
+    });
 
   const {
     handleWorkflowStepSelect,
@@ -243,6 +262,8 @@ export function useAgentStudioSessionActions({
     startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
+    isSubmittingApprovalByRequestId,
+    approvalReplyErrorByRequestId,
     isSessionWorking,
     isWaitingInput: sessionState.isWaitingInput,
     busySendBlockedReason,
@@ -252,6 +273,7 @@ export function useAgentStudioSessionActions({
     startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,
+    onReplyApproval,
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handleCreateSession,

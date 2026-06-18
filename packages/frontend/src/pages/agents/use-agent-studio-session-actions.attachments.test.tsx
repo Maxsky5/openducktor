@@ -179,6 +179,7 @@ const createBaseArgs = (): HookArgs => {
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
     humanRequestChangesTask: async () => {},
+    replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     updateQuery: () => {},
   };

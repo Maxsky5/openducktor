@@ -65,12 +65,10 @@ const baseSessionActions = {
   onSend: async () => true,
   onSubmitQuestionAnswers: async () => {},
   isSubmittingQuestionByRequestId: {},
-  stopAgentSession: async () => {},
-};
-const baseApprovals = {
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onReplyApproval: async () => {},
+  stopAgentSession: async () => {},
 };
 const baseDocuments = {
   specDoc: taskDocument,
@@ -103,7 +101,6 @@ const baseArgs: BuildArgs = {
     documents: baseDocuments,
     runtimeReadiness: baseRuntimeReadiness,
     sessionActions: baseSessionActions,
-    approvals: baseApprovals,
     roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
   }),
   tabs: {

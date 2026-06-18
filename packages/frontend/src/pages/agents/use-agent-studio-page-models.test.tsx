@@ -51,7 +51,7 @@ const draftScopeFixture = (taskId: string): AgentChatDraftScope => ({
 
 type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
-  "documents" | "runtimeReadiness" | "sessionActions" | "approvals" | "roleLabelByRole"
+  "documents" | "runtimeReadiness" | "sessionActions" | "roleLabelByRole"
 > & {
   activeTabValue: string;
 };
@@ -65,7 +65,6 @@ type HookArgsOverrides = {
   selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
   selectedSessionContextUsage?: HookArgs["modelSelection"]["selectedSessionContextUsage"];
-  approvals?: Partial<AgentStudioSelectedSessionContextInput["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
 };
@@ -229,6 +228,9 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionWorking: sessionActions.isSessionWorking,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
     ...overrides.selectedSessionActions,
   };
   const modelSelection: HookArgs["modelSelection"] = {
@@ -260,12 +262,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     },
     ...overrides.modelSelection,
   };
-  const approvals: AgentStudioSelectedSessionContextInput["approvals"] = {
-    isSubmittingApprovalByRequestId: {},
-    approvalReplyErrorByRequestId: {},
-    onReplyApproval: async () => {},
-    ...overrides.approvals,
-  };
   const chatSettings = createChatSettingsFixture(overrides.chatSettings);
   const composer = {
     draftScope: {
@@ -291,7 +287,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       documents,
       runtimeReadiness,
       sessionActions: selectedSessionActions,
-      approvals,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),
   };

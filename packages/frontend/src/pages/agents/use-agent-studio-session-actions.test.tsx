@@ -320,6 +320,7 @@ const createBaseArgs = (): HookArgs => {
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
     humanRequestChangesTask: async () => {},
+    replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     updateQuery: () => {},
   };
@@ -1683,6 +1684,40 @@ describe("useAgentStudioSessionActions", () => {
     expect(answerAgentQuestion).toHaveBeenCalledWith(localSessionIdentity("session-9"), "req-1", [
       ["yes"],
     ]);
+
+    await harness.unmount();
+  });
+
+  test("replies to approval requests when session is active", async () => {
+    const replyAgentApproval = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs({
+        externalSessionId: "session-approval",
+        pendingApprovals: [
+          {
+            requestId: "approval-1",
+            requestType: "permission_grant",
+            title: "Approve command",
+            mutation: "mutating",
+            supportedReplyOutcomes: ["approve_once", "reject"],
+          },
+        ],
+      }),
+      replyAgentApproval,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onReplyApproval("approval-1", "approve_once");
+    });
+
+    expect(replyAgentApproval).toHaveBeenCalledWith(
+      localSessionIdentity("session-approval"),
+      "approval-1",
+      "approve_once",
+    );
 
     await harness.unmount();
   });

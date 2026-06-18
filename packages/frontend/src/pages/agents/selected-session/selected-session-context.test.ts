@@ -81,8 +81,6 @@ const createInput = (
       isSessionWorking: false,
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
-    },
-    approvals: {
       isSubmittingApprovalByRequestId: {},
       approvalReplyErrorByRequestId: {},
       onReplyApproval: async () => {},
@@ -349,8 +347,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           ...createInput().sessionActions,
           onSubmitQuestionAnswers: questionReply,
           isSubmittingQuestionByRequestId: { "question-main": true },
-        },
-        approvals: {
           isSubmittingApprovalByRequestId: { "approval-main": true },
           approvalReplyErrorByRequestId: { "approval-main": "failed" },
           onReplyApproval: approvalReply,

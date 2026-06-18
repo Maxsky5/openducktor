@@ -98,8 +98,6 @@ export type AgentStudioSelectedSessionContextInput = {
     isSessionWorking: boolean;
     onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
     isSubmittingQuestionByRequestId: Record<string, boolean>;
-  };
-  approvals: {
     isSubmittingApprovalByRequestId: Record<string, boolean>;
     approvalReplyErrorByRequestId: Record<string, string>;
     onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
@@ -138,7 +136,6 @@ export const buildAgentStudioSelectedSessionContext = ({
   documents,
   runtimeReadiness,
   sessionActions,
-  approvals,
   roleLabelByRole,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
   const workflow = buildWorkflowModelContext({
@@ -201,9 +198,9 @@ export const buildAgentStudioSelectedSessionContext = ({
       },
       approvals: {
         canReply: hasPendingApprovals,
-        isSubmittingByRequestId: approvals.isSubmittingApprovalByRequestId,
-        errorByRequestId: approvals.approvalReplyErrorByRequestId,
-        onReply: approvals.onReplyApproval,
+        isSubmittingByRequestId: sessionActions.isSubmittingApprovalByRequestId,
+        errorByRequestId: sessionActions.approvalReplyErrorByRequestId,
+        onReply: sessionActions.onReplyApproval,
       },
       subagentPendingApprovalCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
         allSessionSummaries,
