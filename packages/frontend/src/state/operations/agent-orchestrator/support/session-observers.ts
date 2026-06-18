@@ -5,10 +5,19 @@ import {
 
 type SessionObserverUnsubscribe = () => void;
 type SessionObserverFactory = () => Promise<SessionObserverUnsubscribe>;
-type PendingSessionObserver = {
+
+type PendingSessionObserverSlot = {
+  kind: "pending";
   cancelled: boolean;
   promise: Promise<void>;
 };
+
+type OpenSessionObserverSlot = {
+  kind: "open";
+  unsubscribe: SessionObserverUnsubscribe;
+};
+
+type SessionObserverSlot = PendingSessionObserverSlot | OpenSessionObserverSlot;
 
 export type SessionObservers = {
   has: (session: AgentSessionIdentityLike) => boolean;
@@ -21,81 +30,70 @@ export type SessionObservers = {
 };
 
 export const createSessionObservers = (): SessionObservers => {
-  const unsubscribeBySessionKey = new Map<string, SessionObserverUnsubscribe>();
-  const pendingBySessionKey = new Map<string, PendingSessionObserver>();
+  const observerBySessionKey = new Map<string, SessionObserverSlot>();
 
-  const cancelPending = (sessionKey: string): void => {
-    const pending = pendingBySessionKey.get(sessionKey);
-    if (!pending) {
+  const closeSlot = (slot: SessionObserverSlot): void => {
+    if (slot.kind === "pending") {
+      slot.cancelled = true;
       return;
     }
-    pending.cancelled = true;
-    pendingBySessionKey.delete(sessionKey);
-  };
-
-  const take = (session: AgentSessionIdentityLike): SessionObserverUnsubscribe | null => {
-    const sessionKey = agentSessionIdentityKey(session);
-    cancelPending(sessionKey);
-    const unsubscribe = unsubscribeBySessionKey.get(sessionKey);
-    if (!unsubscribe) {
-      return null;
-    }
-    unsubscribeBySessionKey.delete(sessionKey);
-    return unsubscribe;
+    slot.unsubscribe();
   };
 
   return {
     has: (session) => {
       const sessionKey = agentSessionIdentityKey(session);
-      return unsubscribeBySessionKey.has(sessionKey) || pendingBySessionKey.has(sessionKey);
+      return observerBySessionKey.has(sessionKey);
     },
     ensureObserver: (session, createObserver) => {
       const sessionKey = agentSessionIdentityKey(session);
-      if (unsubscribeBySessionKey.has(sessionKey)) {
+      const currentSlot = observerBySessionKey.get(sessionKey);
+      if (currentSlot?.kind === "open") {
         return Promise.resolve(false);
       }
-      const pending = pendingBySessionKey.get(sessionKey);
-      if (pending) {
-        return pending.promise.then(() => false);
+      if (currentSlot?.kind === "pending") {
+        return currentSlot.promise.then(() => false);
       }
 
-      const nextPending: PendingSessionObserver = {
+      const pendingSlot: PendingSessionObserverSlot = {
+        kind: "pending",
         cancelled: false,
         promise: Promise.resolve(),
       };
-      pendingBySessionKey.set(sessionKey, nextPending);
+      observerBySessionKey.set(sessionKey, pendingSlot);
       const registration = (async (): Promise<boolean> => {
         const unsubscribe = await createObserver();
-        if (nextPending.cancelled || unsubscribeBySessionKey.has(sessionKey)) {
+        if (pendingSlot.cancelled || observerBySessionKey.get(sessionKey) !== pendingSlot) {
           unsubscribe();
           return false;
         }
-        unsubscribeBySessionKey.set(sessionKey, unsubscribe);
+        observerBySessionKey.set(sessionKey, {
+          kind: "open",
+          unsubscribe,
+        });
         return true;
       })().finally(() => {
-        if (pendingBySessionKey.get(sessionKey) === nextPending) {
-          pendingBySessionKey.delete(sessionKey);
+        if (observerBySessionKey.get(sessionKey) === pendingSlot) {
+          observerBySessionKey.delete(sessionKey);
         }
       });
-      nextPending.promise = registration.then(() => undefined);
+      pendingSlot.promise = registration.then(() => undefined);
       return registration;
     },
     remove: (session) => {
-      const unsubscribe = take(session);
-      if (!unsubscribe) {
+      const sessionKey = agentSessionIdentityKey(session);
+      const slot = observerBySessionKey.get(sessionKey);
+      if (!slot) {
         return;
       }
-      unsubscribe();
+      observerBySessionKey.delete(sessionKey);
+      closeSlot(slot);
     },
     clear: () => {
-      for (const pending of pendingBySessionKey.values()) {
-        pending.cancelled = true;
-      }
-      pendingBySessionKey.clear();
-      const observers = [...unsubscribeBySessionKey.values()];
-      unsubscribeBySessionKey.clear();
-      for (const unsubscribe of observers) {
-        unsubscribe();
+      const slots = [...observerBySessionKey.values()];
+      observerBySessionKey.clear();
+      for (const slot of slots) {
+        closeSlot(slot);
       }
     },
   };

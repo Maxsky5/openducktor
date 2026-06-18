@@ -69,6 +69,31 @@ describe("session observers", () => {
     expect(observers.has(session)).toBe(false);
   });
 
+  test("does not let a removed pending observer replace a newer observer", async () => {
+    const observers = createSessionObservers();
+    const calls: string[] = [];
+    const session = createSessionRef("/tmp/repo/first");
+    let resolveFirstObserver!: (unsubscribe: () => void) => void;
+    const firstObserverPromise = new Promise<() => void>((resolve) => {
+      resolveFirstObserver = resolve;
+    });
+
+    const firstRegistration = observers.ensureObserver(session, () => firstObserverPromise);
+    observers.remove(session);
+    const secondRegistration = observers.ensureObserver(session, async () => () => {
+      calls.push("second");
+    });
+    resolveFirstObserver(() => calls.push("first"));
+
+    await expect(firstRegistration).resolves.toBe(false);
+    await expect(secondRegistration).resolves.toBe(true);
+    expect(observers.has(session)).toBe(true);
+
+    observers.remove(session);
+
+    expect(calls).toEqual(["first", "second"]);
+  });
+
   test("clears all observers before callbacks can mutate the collection", async () => {
     const observers = createSessionObservers();
     const calls: string[] = [];
