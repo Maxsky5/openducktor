@@ -26,12 +26,12 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-export const inactiveAgentSessionTranscriptState: AgentSessionTranscriptState = {
+const inactiveAgentSessionTranscriptState: AgentSessionTranscriptState = {
   kind: "empty",
   reason: "inactive",
 };
 
-export const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
+const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
   kind: "empty",
   reason: "sessionless",
 };

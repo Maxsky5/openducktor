@@ -6,15 +6,13 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { getSessionMessageCount } from "../support/messages";
 
-export type SelectedSessionHistoryLoadTarget = {
-  session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
-};
-
 export const resolveSelectedSessionHistoryLoadTarget = ({
   session,
   repoReadinessState,
-}: SelectedSessionHistoryLoadTarget): AgentSessionIdentity | null => {
+}: {
+  session: AgentSessionState | null;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionIdentity | null => {
   if (
     session === null ||
     session.historyLoadState !== "not_requested" ||
