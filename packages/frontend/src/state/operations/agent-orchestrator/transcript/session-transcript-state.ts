@@ -109,21 +109,14 @@ const deriveLoadedSelectedSessionTranscriptState = ({
 }: {
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  if (hasRenderableSessionTranscript(session)) {
-    return { kind: "visible" };
-  }
-
-  if (repoReadinessState !== "ready") {
-    return { kind: "runtime_waiting" };
-  }
-
-  if (session.historyLoadState === "failed") {
-    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
-  }
-
-  return { kind: "session_loading", reason: "history" };
-};
+}): AgentSessionTranscriptState =>
+  deriveRuntimeTranscriptState({
+    hasVisibleTranscript: hasRenderableSessionTranscript(session),
+    hasHistoryTarget: true,
+    historyFailureMessage:
+      session.historyLoadState === "failed" ? DEFAULT_TRANSCRIPT_FAILURE_MESSAGE : null,
+    repoReadinessState,
+  });
 
 export const deriveSelectedAgentSessionTranscriptState = ({
   selectedSessionIdentity,
