@@ -1,10 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import { findAgentStudioSessionSummaryByKey } from "../agents-page-selection";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
@@ -18,7 +15,7 @@ type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
-  sessionsForTask: AgentSessionSummary[];
+  sessionsForTask: WorkflowAgentSessionSummary[];
   canPrepareMessageFirstSession: CanPrepareMessageFirstSession;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -26,7 +23,7 @@ type UseAgentStudioSelectionActionsArgs = {
 
 type ApplySelectionIntentParams = {
   nextTaskId: string;
-  nextSessionIdentity: AgentSessionSummary | null;
+  nextSessionIdentity: WorkflowAgentSessionSummary | null;
   nextRole: AgentRole;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -65,7 +62,7 @@ export function useAgentStudioSelectionActions({
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
 } {
   const findSessionByValue = useCallback(
-    (sessionValue: string): AgentSessionSummary | null =>
+    (sessionValue: string): WorkflowAgentSessionSummary | null =>
       findAgentStudioSessionSummaryByKey(sessionsForTask, sessionValue),
     [sessionsForTask],
   );
@@ -88,7 +85,7 @@ export function useAgentStudioSelectionActions({
       }
 
       const session = findSessionByValue(sessionValue);
-      if (!isWorkflowAgentSessionSummary(session)) {
+      if (!session) {
         return;
       }
 
@@ -110,7 +107,7 @@ export function useAgentStudioSelectionActions({
       }
 
       const selectedSession = findSessionByValue(nextValue);
-      if (!isWorkflowAgentSessionSummary(selectedSession)) {
+      if (!selectedSession) {
         return;
       }
 

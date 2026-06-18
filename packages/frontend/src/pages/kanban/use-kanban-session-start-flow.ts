@@ -30,11 +30,7 @@ import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@/lib/agent-session-identity";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -49,7 +45,7 @@ type UseKanbanSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
-  sessions: AgentSessionSummary[];
+  sessions: WorkflowAgentSessionSummary[];
   navigate: NavigateFunction;
   workspaceRepoPath: string | null;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -74,7 +70,7 @@ type UseKanbanSessionStartFlowResult = {
 };
 
 const findLatestSessionByRoleForTask = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
   taskId: string,
   role: AgentRole,
 ): WorkflowAgentSessionSummary | null => {
@@ -82,7 +78,7 @@ const findLatestSessionByRoleForTask = (
 };
 
 const findPreferredSessionByRoleForTask = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
   taskId: string,
   role: AgentRole,
 ): WorkflowAgentSessionSummary | null => {
@@ -109,17 +105,12 @@ const findPreferredSessionByRoleForTask = (
 };
 
 const findSessionsByRoleForTask = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
   taskId: string,
   role: AgentRole,
 ): WorkflowAgentSessionSummary[] => {
   return sessions
-    .filter(
-      (session): session is WorkflowAgentSessionSummary =>
-        isWorkflowAgentSessionSummary(session) &&
-        session.taskId === taskId &&
-        session.role === role,
-    )
+    .filter((session) => session.taskId === taskId && session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 };
 

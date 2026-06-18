@@ -19,7 +19,7 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const comparePrimaryTaskSession = (
@@ -30,7 +30,7 @@ const comparePrimaryTaskSession = (
 };
 
 export const buildActiveTaskSessionContextByTaskId = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
 ): Map<string, ActiveTaskSessionContext> => {
   const activeTaskSessionContextByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary>();
 
@@ -107,7 +107,7 @@ export const sortTasksByActivityState = (
 };
 
 export const buildTaskSessionsByTaskId = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
   const sessionsByTaskId = new Map<string, ActiveWorkflowAgentSessionSummary[]>();
   for (const session of sessions) {
@@ -141,7 +141,7 @@ type UseKanbanBoardModelArgs = {
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
-  sessions: AgentSessionSummary[];
+  sessions: WorkflowAgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;

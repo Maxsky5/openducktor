@@ -20,7 +20,10 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeServices } from "./agent-runtime-services";
-import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
+import type {
+  AgentActivitySessionsSnapshot,
+  WorkflowAgentSessionSummary,
+} from "./agent-sessions-store";
 import {
   ChecksStateContext,
   DelegationStateContext,
@@ -117,7 +120,7 @@ export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
   );
 };
 
-export const useAgentSessionSummaries = (): AgentSessionSummary[] =>
+export const useAgentSessionSummaries = (): WorkflowAgentSessionSummary[] =>
   useAgentActivitySnapshot().sessions;
 
 export const useAgentSession = (

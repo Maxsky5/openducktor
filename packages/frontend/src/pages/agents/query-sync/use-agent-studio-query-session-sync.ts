@@ -2,10 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
@@ -14,9 +11,9 @@ type UseAgentStudioQuerySessionSyncArgs = {
   tasks: TaskCard[];
   taskIdParam: string;
   sessionKeyParam: string | null;
-  sessionFromQuery: AgentSessionSummary | null;
+  sessionFromQuery: WorkflowAgentSessionSummary | null;
   resolvedTaskId: string;
-  resolvedSession: AgentSessionSummary | null;
+  resolvedSession: WorkflowAgentSessionSummary | null;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
 };
@@ -74,7 +71,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
     }
   }
 
-  if (sessionKeyParam && !shouldClearSessionKey && isWorkflowAgentSessionSummary(resolvedSession)) {
+  if (sessionKeyParam && !shouldClearSessionKey && resolvedSession) {
     if (taskIdParam !== resolvedSession.taskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = resolvedSession.taskId;
     }

@@ -19,7 +19,6 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 export {
   type AgentActivitySessionsSnapshot,
   type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
   toAgentSessionSummary,
   type WorkflowAgentSessionSummary,
 } from "@/state/agent-session-snapshots";

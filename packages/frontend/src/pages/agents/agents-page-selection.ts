@@ -14,7 +14,11 @@ import {
 } from "@/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+  type WorkflowAgentSessionSummary,
+} from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
@@ -110,7 +114,7 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
 };
 
 type AgentStudioSessionSelectionInput = {
-  sessionsForTask: AgentSessionSummary[];
+  sessionsForTask: WorkflowAgentSessionSummary[];
   sessionKey: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
@@ -119,13 +123,8 @@ type AgentStudioSessionSelectionInput = {
   keepExplicitRoleSessionless?: boolean;
 };
 
-const isActiveSessionSelectionCandidate = (session: AgentSessionSummary): boolean => {
-  if (session.role === null) {
-    return false;
-  }
-
-  return isAgentSessionActivityActive(session.activityState);
-};
+const isActiveSessionSelectionCandidate = (session: WorkflowAgentSessionSummary): boolean =>
+  isAgentSessionActivityActive(session.activityState);
 
 export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,
@@ -136,11 +135,11 @@ export const resolveAgentStudioSessionSelection = ({
   sessionlessRole,
   keepExplicitRoleSessionless = false,
 }: AgentStudioSessionSelectionInput): {
-  sessionSummary: AgentSessionSummary | null;
+  sessionSummary: WorkflowAgentSessionSummary | null;
   role: AgentRole;
 } => {
   const activeSessionSummary =
-    sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
+    sessionsForTask.reduce<WorkflowAgentSessionSummary | null>((latest, session) => {
       if (!isActiveSessionSelectionCandidate(session)) {
         return latest;
       }
@@ -150,8 +149,8 @@ export const resolveAgentStudioSessionSelection = ({
       return latest;
     }, null) ?? null;
 
-  const latestSessionByRole = (role: AgentRole): AgentSessionSummary | null => {
-    return sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
+  const latestSessionByRole = (role: AgentRole): WorkflowAgentSessionSummary | null => {
+    return sessionsForTask.reduce<WorkflowAgentSessionSummary | null>((latest, session) => {
       if (session.role !== role) {
         return latest;
       }
@@ -162,7 +161,7 @@ export const resolveAgentStudioSessionSelection = ({
     }, null);
   };
 
-  const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
+  const toSelection = (role: AgentRole, session: WorkflowAgentSessionSummary | null) => {
     return {
       sessionSummary: session,
       role,
@@ -171,7 +170,7 @@ export const resolveAgentStudioSessionSelection = ({
 
   if (sessionKey) {
     const explicitSession = findAgentStudioSessionSummaryByKey(sessionsForTask, sessionKey);
-    if (explicitSession?.role) {
+    if (explicitSession) {
       return toSelection(explicitSession.role, explicitSession);
     }
     return toSelection(sessionlessRole, null);
@@ -184,7 +183,7 @@ export const resolveAgentStudioSessionSelection = ({
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
-  if (activeSessionSummary?.role) {
+  if (activeSessionSummary) {
     return toSelection(activeSessionSummary.role, activeSessionSummary);
   }
 
@@ -193,11 +192,8 @@ export const resolveAgentStudioSessionSelection = ({
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
-  const mostRecentSession = sessionsForTask.reduce<AgentSessionSummary | null>(
+  const mostRecentSession = sessionsForTask.reduce<WorkflowAgentSessionSummary | null>(
     (latest, session) => {
-      if (session.role === null) {
-        return latest;
-      }
       if (!latest || compareAgentSessionRecency(session, latest) < 0) {
         return session;
       }
@@ -206,7 +202,7 @@ export const resolveAgentStudioSessionSelection = ({
     null,
   );
 
-  const withRoleFallback = (session: AgentSessionSummary | null) =>
+  const withRoleFallback = (session: WorkflowAgentSessionSummary | null) =>
     toSelection(session?.role ?? defaultRole ?? sessionlessRole, session);
 
   switch (selectedTask.status) {
@@ -230,9 +226,9 @@ export const resolveAgentStudioSessionSelection = ({
 };
 
 export const findAgentStudioSessionSummaryByKey = (
-  sessions: AgentSessionSummary[],
+  sessions: WorkflowAgentSessionSummary[],
   sessionKey: string | null,
-): AgentSessionSummary | null => {
+): WorkflowAgentSessionSummary | null => {
   if (!sessionKey) {
     return null;
   }
@@ -241,9 +237,9 @@ export const findAgentStudioSessionSummaryByKey = (
 };
 
 export const groupSessionsByTaskId = (
-  sessions: AgentSessionSummary[],
-): Map<string, AgentSessionSummary[]> => {
-  const grouped = new Map<string, AgentSessionSummary[]>();
+  sessions: WorkflowAgentSessionSummary[],
+): Map<string, WorkflowAgentSessionSummary[]> => {
+  const grouped = new Map<string, WorkflowAgentSessionSummary[]>();
   for (const session of sessions) {
     const current = grouped.get(session.taskId);
     if (current) {
@@ -266,9 +262,9 @@ export type AgentStudioViewSessionSelectionIntent = {
 };
 
 const findViewSessionCandidateByIdentity = (
-  candidates: AgentSessionSummary[],
+  candidates: WorkflowAgentSessionSummary[],
   sessionIdentity: AgentSessionIdentity,
-): AgentSessionSummary | null => {
+): WorkflowAgentSessionSummary | null => {
   return (
     candidates.find((candidate) => matchesAgentSessionIdentity(candidate, sessionIdentity)) ?? null
   );
@@ -279,7 +275,7 @@ const resolveViewSessionKey = ({
   candidates,
 }: {
   sessionKey: string | null;
-  candidates: AgentSessionSummary[];
+  candidates: WorkflowAgentSessionSummary[];
 }): string | null => {
   if (!sessionKey) {
     return null;
@@ -299,7 +295,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   keepExplicitRoleSessionless = false,
   selectionIntent = null,
 }: {
-  sessionSummaries: AgentSessionSummary[];
+  sessionSummaries: WorkflowAgentSessionSummary[];
   sessionKey: string | null;
   sessionIdentity: AgentSessionIdentity | null;
   hasExplicitRoleParam: boolean;
@@ -311,7 +307,7 @@ export const resolveAgentStudioViewSessionSelection = ({
 }): {
   role: AgentRole;
   sessionIdentity: AgentSessionIdentity | null;
-  sessionSummary: AgentSessionSummary | null;
+  sessionSummary: WorkflowAgentSessionSummary | null;
 } => {
   if (selectionIntent) {
     if (selectionIntent.sessionIdentity) {

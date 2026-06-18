@@ -11,25 +11,14 @@ import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
-  Pick<AgentSessionState, "title" | "taskId" | "role" | "startedAt"> & {
+  Pick<WorkflowAgentSessionState, "title" | "taskId" | "role" | "startedAt"> & {
     activityState: AgentSessionActivityState;
     pendingApprovalCount: number;
     pendingQuestionCount: number;
     selectedModel: AgentSessionState["selectedModel"];
   };
 
-export type WorkflowAgentSessionSummary = AgentSessionSummary &
-  Pick<WorkflowAgentSessionState, "role">;
-
-export const isWorkflowAgentSessionSummary = (
-  session: AgentSessionSummary | null | undefined,
-): session is WorkflowAgentSessionSummary => {
-  if (!session) {
-    return false;
-  }
-
-  return session.role !== null;
-};
+export type WorkflowAgentSessionSummary = AgentSessionSummary;
 
 export type AgentActivitySessionsSnapshot = {
   workspaceRepoPath: string | null;
@@ -44,6 +33,10 @@ export function toAgentSessionSummary(
 ): WorkflowAgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
+  if (session.role === null) {
+    throw new Error("Cannot create an activity session summary for a role-less session.");
+  }
+
   return {
     ...toAgentSessionIdentity(session),
     ...(session.title ? { title: session.title } : {}),

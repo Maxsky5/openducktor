@@ -1,11 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { WorkflowAgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -42,12 +38,8 @@ export const toKanbanTaskSession = (
 });
 
 export const isKanbanActiveTaskSession = (
-  session: AgentSessionSummary,
+  session: WorkflowAgentSessionSummary,
 ): session is ActiveWorkflowAgentSessionSummary => {
-  if (!isWorkflowAgentSessionSummary(session)) {
-    return false;
-  }
-
   return isAgentSessionActivityActive(session.activityState);
 };
 
