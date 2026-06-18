@@ -203,6 +203,7 @@ const createBaseArgs = (): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",
+  selectedSessionIdentity: null,
   loadedSession: null,
   sessionsForTask: [],
   selectedTask: createTask(),
@@ -407,6 +408,47 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("keeps starting state while fresh creation replaces a loaded selection", async () => {
+    const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const startAgentSession = mock(() => startDeferred.promise);
+    const loadedSession = createSession({
+      taskId: "task-1",
+      externalSessionId: "session-active",
+      role: "spec",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedSessionIdentity: sessionIdentity("session-active"),
+      loadedSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+    });
+
+    await harness.mount();
+
+    let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
+    await harness.run((state) => {
+      startPromise = state.startSession();
+    });
+    await confirmSessionStartModal({
+      harness,
+      agent: "spec",
+      modelId: "openai/gpt-5",
+      variant: "default",
+    });
+
+    await harness.waitFor((state) => state.isStarting);
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    await harness.run(async () => {
+      startDeferred.resolve(sessionIdentity("session-new"));
+      await startPromise;
+    });
+    await harness.waitFor((state) => !state.isStarting);
+
+    await harness.unmount();
+  });
+
   test("startSession uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const updateCalls: Array<Record<string, string | undefined>> = [];
@@ -562,6 +604,34 @@ describe("useAgentStudioSessionStartFlow", () => {
       session: agentSessionIdentityKey(sessionIdentity("session-plan")),
       agent: "planner",
     });
+
+    await harness.unmount();
+  });
+
+  test("handleCreateSession does not start a second session while the selected session is working before hydration", async () => {
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedSessionIdentity: sessionIdentity("session-selected"),
+      loadedSession: null,
+      isSessionWorking: true,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
+        role: "planner",
+        label: "Planner · Start Planner",
+        description: "Create a new planner session from scratch",
+        disabled: false,
+      });
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(harness.getLatest().sessionStartModal).toBeNull();
 
     await harness.unmount();
   });

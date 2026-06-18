@@ -22,7 +22,7 @@ import {
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
@@ -43,6 +43,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
+  selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
@@ -80,6 +81,7 @@ export function useAgentStudioSessionStartFlow({
   taskId,
   role,
   launchActionId,
+  selectedSessionIdentity,
   loadedSession,
   sessionsForTask,
   selectedTask,
@@ -125,7 +127,7 @@ export function useAgentStudioSessionStartFlow({
       workspaceId,
       taskId,
       role,
-      session: loadedSession,
+      session: null,
     }),
   );
 
@@ -307,7 +309,7 @@ export function useAgentStudioSessionStartFlow({
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
       const { role: nextRole, launchActionId: nextLaunchActionId } = option;
-      if (loadedSession && isSessionWorking) {
+      if (selectedSessionIdentity && isSessionWorking) {
         return;
       }
 
@@ -322,7 +324,7 @@ export function useAgentStudioSessionStartFlow({
         postStartAction: "kickoff",
       });
     },
-    [loadedSession, canStartRole, isSessionWorking, runGatedSessionStartRequest, taskId],
+    [canStartRole, isSessionWorking, runGatedSessionStartRequest, selectedSessionIdentity, taskId],
   );
 
   const handleCreateSessionWithHumanFeedback = useCallback(

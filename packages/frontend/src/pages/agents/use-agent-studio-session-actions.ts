@@ -162,6 +162,7 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     launchActionId,
+    selectedSessionIdentity,
     loadedSession,
     sessionsForTask,
     selectedTask,
