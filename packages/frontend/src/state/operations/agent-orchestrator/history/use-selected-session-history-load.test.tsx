@@ -45,8 +45,10 @@ const createProps = ({
   session?: AgentSessionState | null;
   repoReadinessState?: RepoRuntimeReadinessState;
 } = {}) => ({
-  session,
-  repoReadinessState,
+  target: resolveSelectedSessionHistoryLoadTarget({
+    session,
+    repoReadinessState,
+  }),
 });
 
 const createHistoryLoadWrapper = (
@@ -157,6 +159,30 @@ describe("useSelectedSessionHistoryLoad", () => {
       await harness.mount();
 
       expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not restart history loading for unrelated selected-session changes", async () => {
+    const loadSessionHistory = mock(async () => undefined);
+    const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createProps({
+          session: createSession({
+            status: "running",
+            title: "Updated title",
+          }),
+        }),
+      );
+
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

@@ -4,7 +4,7 @@ import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import { useAgentOperationsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { needsInitialSessionHistoryLoad } from "../support/session-transcript-content";
+import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
 
 export const resolveSelectedSessionHistoryLoadTarget = ({
   session,
@@ -15,7 +15,8 @@ export const resolveSelectedSessionHistoryLoadTarget = ({
 }): AgentSessionIdentity | null => {
   if (
     session === null ||
-    !needsInitialSessionHistoryLoad(session) ||
+    session.historyLoadState !== "not_requested" ||
+    hasRenderableSessionTranscript(session) ||
     repoReadinessState !== "ready"
   ) {
     return null;
@@ -25,29 +26,30 @@ export const resolveSelectedSessionHistoryLoadTarget = ({
 };
 
 export const useSelectedSessionHistoryLoad = ({
-  session,
-  repoReadinessState,
+  target,
 }: {
-  session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  target: AgentSessionIdentity | null;
 }): void => {
   const { loadAgentSessionHistory } = useAgentOperationsContext();
+  const externalSessionId = target?.externalSessionId ?? null;
+  const runtimeKind = target?.runtimeKind ?? null;
+  const workingDirectory = target?.workingDirectory ?? null;
 
   useEffect(() => {
-    const target = resolveSelectedSessionHistoryLoadTarget({
-      session,
-      repoReadinessState,
-    });
-    if (!target) {
+    if (!externalSessionId || !runtimeKind || !workingDirectory) {
       return;
     }
 
-    runOrchestratorSideEffect("selected-session-history-load", loadAgentSessionHistory(target), {
-      tags: {
-        externalSessionId: target.externalSessionId,
-        runtimeKind: target.runtimeKind,
-        workingDirectory: target.workingDirectory,
+    runOrchestratorSideEffect(
+      "selected-session-history-load",
+      loadAgentSessionHistory({ externalSessionId, runtimeKind, workingDirectory }),
+      {
+        tags: {
+          externalSessionId,
+          runtimeKind,
+          workingDirectory,
+        },
       },
-    });
-  }, [loadAgentSessionHistory, repoReadinessState, session]);
+    );
+  }, [externalSessionId, loadAgentSessionHistory, runtimeKind, workingDirectory]);
 };

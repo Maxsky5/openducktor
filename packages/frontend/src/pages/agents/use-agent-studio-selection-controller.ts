@@ -5,7 +5,10 @@ import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
+import {
+  resolveSelectedSessionHistoryLoadTarget,
+  useSelectedSessionHistoryLoad,
+} from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   findAgentStudioSessionSummaryByKey,
@@ -253,8 +256,10 @@ export function useAgentStudioSelectionController({
     loadRepoRuntimeCatalog,
   });
   useSelectedSessionHistoryLoad({
-    session: selectedSessionView.loadedSession,
-    repoReadinessState: selectedSessionView.runtimeReadiness.readinessState,
+    target: resolveSelectedSessionHistoryLoadTarget({
+      session: selectedSessionView.loadedSession,
+      repoReadinessState: selectedSessionView.runtimeReadiness.readinessState,
+    }),
   });
   const isActiveTaskReady = Boolean(activeWorkspaceId && selectedViewTaskId);
 
