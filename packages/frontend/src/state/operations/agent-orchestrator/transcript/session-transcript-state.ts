@@ -1,6 +1,5 @@
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
@@ -20,12 +19,6 @@ export type RuntimeTranscriptStateSource =
   | { kind: "history"; failureMessage: string | null }
   | { kind: "visible" };
 
-export type SelectedAgentSessionTranscriptSource =
-  | { kind: "inactive" }
-  | { kind: "loaded_session"; session: AgentSessionState }
-  | { kind: "selected_session"; readModelLoadState: AgentSessionReadModelLoadState }
-  | { kind: "selected_task"; readModelLoadState: AgentSessionReadModelLoadState };
-
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
 
 export const isAgentSessionTranscriptLoading = (
@@ -36,16 +29,6 @@ export const isAgentSessionTranscriptLoading = (
 export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
-
-const inactiveAgentSessionTranscriptState: AgentSessionTranscriptState = {
-  kind: "empty",
-  reason: "inactive",
-};
-
-const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
-  kind: "empty",
-  reason: "sessionless",
-};
 
 export const deriveRuntimeTranscriptState = ({
   source,
@@ -76,33 +59,7 @@ export const deriveRuntimeTranscriptState = ({
   return { kind: "session_loading", reason: "history" };
 };
 
-const deriveMissingSelectedSessionTranscriptState = ({
-  source,
-  repoReadinessState,
-}: {
-  source: Exclude<SelectedAgentSessionTranscriptSource, { kind: "loaded_session" }>;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  if (source.kind === "inactive") {
-    return inactiveAgentSessionTranscriptState;
-  }
-
-  if (source.readModelLoadState.kind === "failed") {
-    return { kind: "failed", message: source.readModelLoadState.message };
-  }
-
-  if (repoReadinessState !== "ready") {
-    return { kind: "runtime_waiting" };
-  }
-
-  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
-    return { kind: "session_loading", reason: "preparing" };
-  }
-
-  return sessionlessAgentSessionTranscriptState;
-};
-
-const deriveLoadedSelectedSessionTranscriptState = ({
+export const deriveLoadedAgentSessionTranscriptState = ({
   session,
   repoReadinessState,
 }: {
@@ -121,22 +78,4 @@ const deriveLoadedSelectedSessionTranscriptState = ({
     source,
     repoReadinessState,
   });
-};
-
-export const deriveSelectedAgentSessionTranscriptState = ({
-  source,
-  repoReadinessState,
-}: {
-  source: SelectedAgentSessionTranscriptSource;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  return source.kind === "loaded_session"
-    ? deriveLoadedSelectedSessionTranscriptState({
-        session: source.session,
-        repoReadinessState,
-      })
-    : deriveMissingSelectedSessionTranscriptState({
-        source,
-        repoReadinessState,
-      });
 };

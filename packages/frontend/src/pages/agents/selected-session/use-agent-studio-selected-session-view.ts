@@ -15,10 +15,7 @@ import {
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import {
-  type AgentSessionTranscriptState,
-  deriveSelectedAgentSessionTranscriptState,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
@@ -27,8 +24,8 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
-import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 import {
+  deriveSelectedSessionTranscriptState,
   projectSelectedSessionViewSource,
   resolveSelectedSessionViewSource,
 } from "./selected-session-view-source";
@@ -134,17 +131,18 @@ export function useAgentStudioSelectedSessionView({
     ],
   );
   const selectedSessionViewProjection = useMemo(
-    () => projectSelectedSessionViewSource(selectedSessionViewSource),
-    [selectedSessionViewSource],
+    () =>
+      projectSelectedSessionViewSource({
+        source: selectedSessionViewSource,
+        role: selection.role,
+        repoSettings,
+        isLoadingRepoSettings,
+      }),
+    [isLoadingRepoSettings, repoSettings, selectedSessionViewSource, selection.role],
   );
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
-  const runtimeTarget = resolveSelectedSessionRuntimeTarget({
-    source: selectedSessionViewProjection.runtimeTargetSource,
-    role: selection.role,
-    repoSettings,
-    isLoadingRepoSettings,
-  });
+  const runtimeTarget = selectedSessionViewProjection.runtimeTarget;
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeDefinitions,
@@ -163,11 +161,11 @@ export function useAgentStudioSelectedSessionView({
       : firstLaunchAction(selection.role);
 
   const transcriptState = useMemo(() => {
-    return deriveSelectedAgentSessionTranscriptState({
-      source: selectedSessionViewProjection.transcriptSource,
+    return deriveSelectedSessionTranscriptState({
+      source: selectedSessionViewSource,
       repoReadinessState,
     });
-  }, [repoReadinessState, selectedSessionViewProjection.transcriptSource]);
+  }, [repoReadinessState, selectedSessionViewSource]);
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,

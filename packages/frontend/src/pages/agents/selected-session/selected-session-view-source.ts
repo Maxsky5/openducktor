@@ -1,11 +1,23 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
+import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
+import {
+  inactiveRepoRuntimeReadinessTarget,
+  type RepoRuntimeReadinessState,
+  type RepoRuntimeReadinessTarget,
+  repoRuntimeReadinessTargetForRuntime,
+  resolvingRepoRuntimeReadinessTarget,
+} from "@/lib/repo-runtime-health";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { SelectedAgentSessionTranscriptSource } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import {
+  type AgentSessionTranscriptState,
+  deriveLoadedAgentSessionTranscriptState,
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import type { SelectedSessionRuntimeTargetSource } from "./selected-session-runtime-target";
+import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type SelectedSessionViewSource =
   | {
@@ -28,8 +40,7 @@ export type SelectedSessionViewSource =
 export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
-  runtimeTargetSource: SelectedSessionRuntimeTargetSource;
-  transcriptSource: SelectedAgentSessionTranscriptSource;
+  runtimeTarget: RepoRuntimeReadinessTarget;
 };
 
 export const resolveSelectedSessionViewSource = ({
@@ -72,18 +83,22 @@ export const resolveSelectedSessionViewSource = ({
   return { kind: "inactive" };
 };
 
-export const projectSelectedSessionViewSource = (
-  source: SelectedSessionViewSource,
-): SelectedSessionViewProjection => {
+export const projectSelectedSessionViewSource = ({
+  source,
+  role,
+  repoSettings,
+  isLoadingRepoSettings,
+}: {
+  source: SelectedSessionViewSource;
+  role: AgentRole;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+}): SelectedSessionViewProjection => {
   if (source.kind === "loaded_session") {
     return {
       activityState: getAgentSessionActivityStateFromSession(source.session),
       selectedModel: source.session.selectedModel,
-      runtimeTargetSource: {
-        kind: "selected_session",
-        runtimeKind: source.identity.runtimeKind,
-      },
-      transcriptSource: { kind: "loaded_session", session: source.session },
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
     };
   }
 
@@ -91,14 +106,7 @@ export const projectSelectedSessionViewSource = (
     return {
       activityState: source.summary?.activityState ?? null,
       selectedModel: source.summary?.selectedModel ?? null,
-      runtimeTargetSource: {
-        kind: "selected_session",
-        runtimeKind: source.identity.runtimeKind,
-      },
-      transcriptSource: {
-        kind: "selected_session",
-        readModelLoadState: source.readModelLoadState,
-      },
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
     };
   }
 
@@ -106,18 +114,50 @@ export const projectSelectedSessionViewSource = (
     return {
       activityState: null,
       selectedModel: null,
-      runtimeTargetSource: { kind: "selected_task" },
-      transcriptSource: {
-        kind: "selected_task",
-        readModelLoadState: source.readModelLoadState,
-      },
+      runtimeTarget: isLoadingRepoSettings
+        ? resolvingRepoRuntimeReadinessTarget
+        : repoRuntimeReadinessTargetForRuntime(
+            resolveConfiguredAgentRuntimeKind(repoSettings, role),
+          ),
     };
   }
 
   return {
     activityState: null,
     selectedModel: null,
-    runtimeTargetSource: { kind: "inactive" },
-    transcriptSource: { kind: "inactive" },
+    runtimeTarget: inactiveRepoRuntimeReadinessTarget,
   };
+};
+
+export const deriveSelectedSessionTranscriptState = ({
+  source,
+  repoReadinessState,
+}: {
+  source: SelectedSessionViewSource;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState => {
+  if (source.kind === "loaded_session") {
+    return deriveLoadedAgentSessionTranscriptState({
+      session: source.session,
+      repoReadinessState,
+    });
+  }
+
+  if (source.kind === "inactive") {
+    return { kind: "empty", reason: "inactive" };
+  }
+
+  if (source.readModelLoadState.kind === "failed") {
+    return { kind: "failed", message: source.readModelLoadState.message };
+  }
+
+  if (repoReadinessState !== "ready") {
+    return { kind: "runtime_waiting" };
+  }
+
+  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
+    return { kind: "session_loading", reason: "preparing" };
+  }
+
+  return { kind: "empty", reason: "sessionless" };
 };
