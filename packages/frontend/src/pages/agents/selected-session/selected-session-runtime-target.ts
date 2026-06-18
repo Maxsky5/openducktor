@@ -8,24 +8,27 @@ import {
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
+export type SelectedSessionRuntimeTargetSource =
+  | { kind: "inactive" }
+  | { kind: "selected_session"; runtimeKind: AgentSessionIdentity["runtimeKind"] }
+  | { kind: "selected_task" };
+
 export const resolveSelectedSessionRuntimeTarget = ({
-  hasSelectedTask,
-  selectedSessionIdentity,
+  source,
   role,
   repoSettings,
   isLoadingRepoSettings,
 }: {
-  hasSelectedTask: boolean;
-  selectedSessionIdentity: AgentSessionIdentity | null;
+  source: SelectedSessionRuntimeTargetSource;
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
 }): RepoRuntimeReadinessTarget => {
-  if (selectedSessionIdentity) {
-    return repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind);
+  if (source.kind === "selected_session") {
+    return repoRuntimeReadinessTargetForRuntime(source.runtimeKind);
   }
 
-  if (hasSelectedTask && isLoadingRepoSettings) {
+  if (source.kind === "selected_task" && isLoadingRepoSettings) {
     return resolvingRepoRuntimeReadinessTarget;
   }
 

@@ -29,7 +29,10 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
-import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
+import {
+  resolveSelectedSessionRuntimeTarget,
+  type SelectedSessionRuntimeTargetSource,
+} from "./selected-session-runtime-target";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
@@ -123,9 +126,19 @@ export function useAgentStudioSelectedSessionView({
       session?.selectedModel ?? selection.sessionSummary?.selectedModel ?? null;
   }
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  let runtimeTargetSource: SelectedSessionRuntimeTargetSource;
+  if (selectedSessionIdentity) {
+    runtimeTargetSource = {
+      kind: "selected_session",
+      runtimeKind: selectedSessionIdentity.runtimeKind,
+    };
+  } else if (selectedTask) {
+    runtimeTargetSource = { kind: "selected_task" };
+  } else {
+    runtimeTargetSource = { kind: "inactive" };
+  }
   const runtimeTarget = resolveSelectedSessionRuntimeTarget({
-    hasSelectedTask: selectedTask !== null,
-    selectedSessionIdentity,
+    source: runtimeTargetSource,
     role: selection.role,
     repoSettings,
     isLoadingRepoSettings,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import type { SelectedSessionRuntimeTargetSource } from "./selected-session-runtime-target";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
 const repoSettings = {
@@ -26,23 +26,21 @@ const repoSettings = {
   },
 } satisfies RepoSettingsInput;
 
-const createSelectedSessionIdentity = (
+const createRuntimeTargetSource = (
   runtimeKind: "codex" | "opencode" | null,
-): AgentSessionIdentity | null =>
+): SelectedSessionRuntimeTargetSource =>
   runtimeKind
     ? {
-        externalSessionId: "external-1",
+        kind: "selected_session",
         runtimeKind,
-        workingDirectory: "/repo/worktree",
       }
-    : null;
+    : { kind: "selected_task" };
 
 describe("resolveSelectedSessionRuntimeTarget", () => {
   test("uses the selected session runtime before repository defaults", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
-        hasSelectedTask: true,
-        selectedSessionIdentity: createSelectedSessionIdentity("opencode"),
+        source: createRuntimeTargetSource("opencode"),
         role: "build",
         repoSettings,
         isLoadingRepoSettings: true,
@@ -53,8 +51,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
   test("keeps a sessionless selected task resolving while repository settings load", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
-        hasSelectedTask: true,
-        selectedSessionIdentity: createSelectedSessionIdentity(null),
+        source: createRuntimeTargetSource(null),
         role: "build",
         repoSettings: null,
         isLoadingRepoSettings: true,
@@ -65,8 +62,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
   test("uses the selected role runtime once repository settings are available", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
-        hasSelectedTask: true,
-        selectedSessionIdentity: createSelectedSessionIdentity(null),
+        source: createRuntimeTargetSource(null),
         role: "build",
         repoSettings,
         isLoadingRepoSettings: false,
@@ -77,8 +73,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
   test("falls back to the repository runtime when the selected role has no runtime override", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
-        hasSelectedTask: true,
-        selectedSessionIdentity: createSelectedSessionIdentity(null),
+        source: createRuntimeTargetSource(null),
         role: "qa",
         repoSettings,
         isLoadingRepoSettings: false,
@@ -89,8 +84,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
   test("does not block an inactive selection on repository settings", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
-        hasSelectedTask: false,
-        selectedSessionIdentity: createSelectedSessionIdentity(null),
+        source: { kind: "inactive" },
         role: "build",
         repoSettings: null,
         isLoadingRepoSettings: true,
