@@ -185,11 +185,8 @@ describe("agent-orchestrator-public-operations", () => {
     });
   });
 
-  test("exposes store-backed session history loading without leaking loader result", async () => {
-    const loadAgentSessionHistory = mock(async () => ({
-      externalSessionId: SESSION_IDENTITY.externalSessionId,
-      status: "applied" as const,
-    }));
+  test("exposes store-backed session history loading as a command", async () => {
+    const loadAgentSessionHistory = mock(async () => undefined);
     const operations = createPublicOperations({
       loadAgentSessionHistory,
     });

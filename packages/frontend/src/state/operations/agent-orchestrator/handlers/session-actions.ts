@@ -34,7 +34,7 @@ type SessionActionsDependencies = {
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadAgentSessions: (taskId: string) => Promise<void>;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],

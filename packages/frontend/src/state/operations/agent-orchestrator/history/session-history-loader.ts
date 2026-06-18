@@ -12,12 +12,6 @@ type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
-export type SessionHistoryLoadResult =
-  | { externalSessionId: string; status: "applied" }
-  | { externalSessionId: string; status: "stale" }
-  | { externalSessionId: string; status: "skipped" }
-  | { externalSessionId: string; status: "failed"; error: unknown };
-
 type LoadSessionHistorySystemPromptContext = (
   session: AgentSessionState,
 ) => Promise<AgentSessionHistorySystemPromptContext | undefined>;
@@ -131,10 +125,9 @@ export const loadSessionHistoryIntoStore = async ({
   identity: AgentSessionIdentity;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
-}): Promise<SessionHistoryLoadResult> => {
-  const externalSessionId = identity.externalSessionId;
+}): Promise<void> => {
   if (isStaleRepoOperation()) {
-    return { externalSessionId, status: "stale" };
+    return;
   }
 
   const claimedSession = claimSessionHistoryLoad({
@@ -143,12 +136,11 @@ export const loadSessionHistoryIntoStore = async ({
     updateSession,
   });
   if (!claimedSession) {
-    return { externalSessionId, status: "skipped" };
+    return;
   }
 
-  const finishStaleHistoryLoad = (): SessionHistoryLoadResult => {
+  const finishStaleHistoryLoad = (): void => {
     settleClaimedSessionHistoryLoad(claimedSession, updateSession, "not_requested");
-    return { externalSessionId, status: "stale" };
   };
 
   try {
@@ -169,13 +161,12 @@ export const loadSessionHistoryIntoStore = async ({
     }
 
     updateSession(claimedSession, (current) => applyLoadedSessionHistory(current, history));
-    return { externalSessionId: claimedSession.externalSessionId, status: "applied" };
-  } catch (error) {
+  } catch {
     if (isStaleRepoOperation()) {
-      return finishStaleHistoryLoad();
+      finishStaleHistoryLoad();
+      return;
     }
     settleClaimedSessionHistoryLoad(claimedSession, updateSession, "failed");
-    return { externalSessionId: identity.externalSessionId, status: "failed", error };
   }
 };
 
@@ -191,8 +182,8 @@ export const createLoadAgentSessionHistory = ({
   loadRepoPromptOverrides,
 }: CreateLoadAgentSessionHistoryArgs): ((
   sessionIdentity: AgentSessionIdentity,
-) => Promise<SessionHistoryLoadResult>) => {
-  return async (sessionIdentity: AgentSessionIdentity): Promise<SessionHistoryLoadResult> => {
+) => Promise<void>) => {
+  return async (sessionIdentity: AgentSessionIdentity): Promise<void> => {
     if (!workspaceRepoPath || !workspaceId) {
       throw new Error("Cannot load agent session history without an active workspace.");
     }
@@ -204,7 +195,7 @@ export const createLoadAgentSessionHistory = ({
       currentWorkspaceRepoPathRef,
     });
     if (isStaleRepoOperation()) {
-      return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
+      return;
     }
 
     if (!readSessionSnapshot(sessionIdentity)) {

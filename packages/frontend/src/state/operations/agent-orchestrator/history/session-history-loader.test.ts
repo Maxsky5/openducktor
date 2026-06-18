@@ -95,7 +95,7 @@ describe("session history loader", () => {
     const harness = createHistoryLoadHarness();
     const updateSession = mock(harness.updateSession);
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -104,19 +104,16 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => true,
     });
 
-    expect(result).toEqual({
-      externalSessionId: sessionTarget.externalSessionId,
-      status: "stale",
-    });
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(updateSession).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("not_requested");
   });
 
   test("releases a loading history claim when the operation becomes stale", async () => {
     const harness = createHistoryLoadHarness();
     let stale = false;
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -130,17 +127,13 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => stale,
     });
 
-    expect(result).toEqual({
-      externalSessionId: sessionTarget.externalSessionId,
-      status: "stale",
-    });
     expect(harness.session.historyLoadState).toBe("not_requested");
   });
 
   test("marks the session failed when history loading fails for the current repo operation", async () => {
     const harness = createHistoryLoadHarness();
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -153,7 +146,6 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result.status).toBe("failed");
     expect(harness.session.historyLoadState).toBe("failed");
   });
 
@@ -172,7 +164,7 @@ describe("session history loader", () => {
       historyLoadState: "failed",
     });
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -181,7 +173,6 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result).toEqual({ externalSessionId: "external-1", status: "applied" });
     expect(loadSessionHistory).toHaveBeenCalledTimes(1);
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
@@ -217,9 +208,8 @@ describe("session history loader", () => {
       loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
     });
 
-    const result = await loadAgentSessionHistory(sessionTarget);
+    await loadAgentSessionHistory(sessionTarget);
 
-    expect(result).toEqual({ externalSessionId: "external-1", status: "applied" });
     expect(receivedSystemPrompt).toContain("Task context");
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
@@ -264,9 +254,8 @@ describe("session history loader", () => {
       loadRepoPromptOverrides,
     });
 
-    const result = await loadAgentSessionHistory(sessionTarget);
+    await loadAgentSessionHistory(sessionTarget);
 
-    expect(result).toEqual({ externalSessionId: "external-1", status: "applied" });
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
     expect(receivedSystemPrompt).toBeUndefined();
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
@@ -308,7 +297,7 @@ describe("session history loader", () => {
       historyLoadState: "loading",
     });
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -317,10 +306,6 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result).toEqual({
-      externalSessionId: sessionTarget.externalSessionId,
-      status: "skipped",
-    });
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("loading");
   });
@@ -336,7 +321,7 @@ describe("session history loader", () => {
       historyLoadState: "loaded",
     });
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -346,10 +331,6 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result).toEqual({
-      externalSessionId: sessionTarget.externalSessionId,
-      status: "skipped",
-    });
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(loadSystemPromptContext).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("loaded");
@@ -373,7 +354,7 @@ describe("session history loader", () => {
       pendingQuestions,
     });
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [],
@@ -384,7 +365,6 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result.status).toBe("applied");
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(harness.session.pendingQuestions).toBe(pendingQuestions);
   });
@@ -485,7 +465,7 @@ describe("session history loader", () => {
         >[0]
       | null = null;
 
-    const result = await loadSessionHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async (input) => {
@@ -511,7 +491,7 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(result.status).toBe("applied");
+    expect(harness.session.historyLoadState).toBe("loaded");
     expect(historyInput).toMatchObject({
       externalSessionId: "external-1",
       systemPromptContext: {

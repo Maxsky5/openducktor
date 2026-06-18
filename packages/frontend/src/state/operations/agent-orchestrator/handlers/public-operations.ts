@@ -38,7 +38,7 @@ type SessionActions = {
 type CreatePublicOperationsArgs = {
   agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory">;
   sessionActions: SessionActions;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
 };
 
 const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {
@@ -62,9 +62,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> => agentEngine.loadSessionHistory(session),
-  loadAgentSessionHistory: async (session): Promise<void> => {
-    await loadAgentSessionHistory(session);
-  },
+  loadAgentSessionHistory,
   startAgentSession: sessionActions.startAgentSession,
   sendAgentMessage: (session, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () => sessionActions.sendAgentMessage(session, parts)),
