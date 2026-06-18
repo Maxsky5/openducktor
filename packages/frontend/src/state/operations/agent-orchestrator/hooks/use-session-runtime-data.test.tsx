@@ -246,6 +246,37 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
+  test("keeps runtime data stable when the selected session identity object is rebuilt", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => [todoFixture]);
+    const props: Parameters<typeof useSessionRuntimeData>[0] = {
+      repoPath: "/repo",
+      selectedSessionIdentity: sessionIdentity(),
+      runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      repoReadinessState: "ready",
+      loadRuntimeCatalog,
+      readSessionTodos,
+    };
+    const harness = createHookHarness(useSessionRuntimeData, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
+      const runtimeData = harness.getLatest();
+
+      await harness.update({
+        ...props,
+        selectedSessionIdentity: sessionIdentity(),
+      });
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest()).toBe(runtimeData);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reports missing workspace repo path without querying runtime data", async () => {
     const loadRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => [todoFixture]);

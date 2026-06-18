@@ -52,15 +52,40 @@ export const useSessionRuntimeData = ({
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
-  const runtimeDataRefs = useMemo(
-    () =>
-      resolveSessionRuntimeDataRefs({
+  const hasSelectedSessionIdentity = selectedSessionIdentity !== null;
+  const selectedSessionExternalSessionId = selectedSessionIdentity?.externalSessionId ?? "";
+  const selectedSessionRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
+  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? "";
+  const runtimeDataRefs = useMemo(() => {
+    if (!hasSelectedSessionIdentity) {
+      return resolveSessionRuntimeDataRefs({
         repoPath,
-        selectedSessionIdentity,
+        selectedSessionIdentity: null,
         runtimeDefinitions,
-      }),
-    [repoPath, runtimeDefinitions, selectedSessionIdentity],
-  );
+      });
+    }
+
+    if (selectedSessionRuntimeKind === null) {
+      throw new Error("Selected session runtime kind is required.");
+    }
+
+    return resolveSessionRuntimeDataRefs({
+      repoPath,
+      selectedSessionIdentity: {
+        externalSessionId: selectedSessionExternalSessionId,
+        runtimeKind: selectedSessionRuntimeKind,
+        workingDirectory: selectedSessionWorkingDirectory,
+      },
+      runtimeDefinitions,
+    });
+  }, [
+    hasSelectedSessionIdentity,
+    repoPath,
+    runtimeDefinitions,
+    selectedSessionExternalSessionId,
+    selectedSessionRuntimeKind,
+    selectedSessionWorkingDirectory,
+  ]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;

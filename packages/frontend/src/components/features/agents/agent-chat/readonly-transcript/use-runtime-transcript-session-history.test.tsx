@@ -104,6 +104,26 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("keeps the readonly session stable when the target identity object is rebuilt", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    readSessionHistoryRef.current = readSessionHistory;
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+      const loadedSession = harness.getLatest().session;
+
+      await harness.update(createBaseArgs({ target: createTarget() }));
+
+      expect(readSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().session).toBe(loadedSession);
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("prefers an already-live runtime session over history loading", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     readSessionHistoryRef.current = readSessionHistory;

@@ -54,18 +54,38 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory } = useAgentOperations();
+  const targetExternalSessionId = target?.externalSessionId ?? null;
+  const targetRuntimeKind = target?.runtimeKind ?? null;
+  const targetWorkingDirectory = target?.workingDirectory ?? null;
   const source = useMemo<RuntimeTranscriptSource>(() => {
-    if (!isOpen || !target) {
+    if (
+      !isOpen ||
+      targetExternalSessionId === null ||
+      targetRuntimeKind === null ||
+      targetWorkingDirectory === null
+    ) {
       return { kind: "empty", reason: "inactive" };
     }
+    const targetIdentity: AgentSessionIdentity = {
+      externalSessionId: targetExternalSessionId,
+      runtimeKind: targetRuntimeKind,
+      workingDirectory: targetWorkingDirectory,
+    };
     if (!repoPath) {
       return { kind: "empty", reason: "unavailable" };
     }
-    if (liveSession && matchesAgentSessionIdentity(liveSession, target)) {
+    if (liveSession && matchesAgentSessionIdentity(liveSession, targetIdentity)) {
       return { kind: "live", session: liveSession };
     }
-    return { kind: "history", ref: toRuntimeSessionRef(repoPath, target) };
-  }, [isOpen, liveSession, repoPath, target]);
+    return { kind: "history", ref: toRuntimeSessionRef(repoPath, targetIdentity) };
+  }, [
+    isOpen,
+    liveSession,
+    repoPath,
+    targetExternalSessionId,
+    targetRuntimeKind,
+    targetWorkingDirectory,
+  ]);
 
   const historyQuery = useQuery(
     source.kind === "history" && repoReadinessState === "ready"
