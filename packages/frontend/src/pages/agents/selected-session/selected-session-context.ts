@@ -13,7 +13,7 @@ import {
 } from "@/lib/agent-session-waiting-input";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { SelectedSessionRuntimeData } from "@/types/selected-session-runtime-data";
 import {
@@ -64,7 +64,7 @@ export type AgentStudioSelectedSessionContext = {
   sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
-  transcriptState: SelectedAgentSessionTranscriptState;
+  transcriptState: AgentSessionTranscriptState;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
   runtime: SelectedSessionRuntimeContext;
@@ -82,7 +82,7 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionRuntimeData: SelectedSessionRuntimeData;
   runtimeDefinitions: RuntimeDescriptor[];
   hasActiveGitConflict: boolean;
-  transcriptState: SelectedAgentSessionTranscriptState;
+  transcriptState: AgentSessionTranscriptState;
   documents: AgentStudioDocumentsContext;
   runtimeReadiness: RepoRuntimeReadiness;
   sessionActions: {

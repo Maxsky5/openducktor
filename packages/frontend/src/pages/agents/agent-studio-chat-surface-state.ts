@@ -1,5 +1,5 @@
 import type { AgentChatEmptyStateModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export type AgentStudioChatSurfaceState = {
   emptyState: AgentChatEmptyStateModel | null;
@@ -15,7 +15,7 @@ type AgentStudioChatWorkflowState = {
 type DeriveAgentStudioChatSurfaceStateInput = {
   taskId: string;
   selectedSessionKey: string | null;
-  transcriptState: SelectedAgentSessionTranscriptState;
+  transcriptState: AgentSessionTranscriptState;
   workflow: AgentStudioChatWorkflowState;
   isStarting: boolean;
   canKickoffNewSession: boolean;
@@ -32,7 +32,7 @@ const deriveAgentStudioChatEmptyState = ({
   startLaunchKickoff,
 }: {
   taskId: string;
-  transcriptState: SelectedAgentSessionTranscriptState;
+  transcriptState: AgentSessionTranscriptState;
   isStarting: boolean;
   canKickoff: boolean;
   kickoffLabel: string;

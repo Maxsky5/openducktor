@@ -4,10 +4,6 @@ import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-
 import { getSessionMessageCount } from "../support/messages";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
-type SelectedAgentSessionTranscriptEmptyReason = Exclude<
-  AgentSessionTranscriptEmptyReason,
-  "unavailable"
->;
 
 type AgentSessionTranscriptNonEmptyState =
   | { kind: "runtime_waiting" }
@@ -17,10 +13,6 @@ type AgentSessionTranscriptNonEmptyState =
 
 export type AgentSessionTranscriptState =
   | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
-  | AgentSessionTranscriptNonEmptyState;
-
-export type SelectedAgentSessionTranscriptState =
-  | { kind: "empty"; reason: SelectedAgentSessionTranscriptEmptyReason }
   | AgentSessionTranscriptNonEmptyState;
 
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
@@ -34,12 +26,12 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-export const inactiveAgentSessionTranscriptState: SelectedAgentSessionTranscriptState = {
+export const inactiveAgentSessionTranscriptState: AgentSessionTranscriptState = {
   kind: "empty",
   reason: "inactive",
 };
 
-export const sessionlessAgentSessionTranscriptState: SelectedAgentSessionTranscriptState = {
+export const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
   kind: "empty",
   reason: "sessionless",
 };
@@ -89,7 +81,7 @@ const deriveMissingSelectedSessionTranscriptState = ({
   selectedSessionIdentity: AgentSessionIdentity | null;
   repoReadinessState: RepoRuntimeReadinessState;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-}): SelectedAgentSessionTranscriptState => {
+}): AgentSessionTranscriptState => {
   const hasSelectedSession = selectedSessionIdentity !== null;
   const hasSelectionContext = hasSelectedTask || hasSelectedSession;
   if (!hasSelectionContext) {
@@ -117,7 +109,7 @@ const deriveLoadedSelectedSessionTranscriptState = ({
 }: {
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
-}): SelectedAgentSessionTranscriptState => {
+}): AgentSessionTranscriptState => {
   if (getSessionMessageCount(session) > 0 || session.historyLoadState === "loaded") {
     return { kind: "visible" };
   }
@@ -145,7 +137,7 @@ export const deriveSelectedAgentSessionTranscriptState = ({
   hasSelectedTask: boolean;
   repoReadinessState: RepoRuntimeReadinessState;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-}): SelectedAgentSessionTranscriptState => {
+}): AgentSessionTranscriptState => {
   return session
     ? deriveLoadedSelectedSessionTranscriptState({
         session,

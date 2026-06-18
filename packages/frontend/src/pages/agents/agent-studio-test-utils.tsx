@@ -16,7 +16,7 @@ import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { SelectedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -66,12 +66,12 @@ const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
 };
 
 type TranscriptStateFixtureInput =
-  | SelectedAgentSessionTranscriptState
+  | AgentSessionTranscriptState
   | { kind: "failed"; message?: string };
 
 export const createSelectedSessionTranscriptStateFixture = (
   transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
-): SelectedAgentSessionTranscriptState =>
+): AgentSessionTranscriptState =>
   transcriptState.kind === "failed"
     ? {
         kind: "failed",

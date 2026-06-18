@@ -16,8 +16,8 @@ import {
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import {
+  type AgentSessionTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
-  type SelectedAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -64,7 +64,7 @@ export type AgentStudioSelectedSessionView = {
   runtimeReadiness: RepoRuntimeReadiness;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  transcriptState: SelectedAgentSessionTranscriptState;
+  transcriptState: AgentSessionTranscriptState;
 };
 
 export function useAgentStudioSelectedSessionView({
