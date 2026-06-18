@@ -96,7 +96,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.externalSessionId).toBe("session-1");
       expect(session?.runtimeKind).toBe("opencode");
       expect(session?.workingDirectory).toBe("/repo-a/worktree");
-      expect(session?.activityState).toBe("idle");
+      expect(session?.activityState).toBeNull();
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
     } finally {
@@ -154,7 +154,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
       });
-      expect(harness.getLatest().session?.activityState).toBe("idle");
+      expect(harness.getLatest().session?.activityState).toBeNull();
       expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");
     } finally {
       await harness.unmount();

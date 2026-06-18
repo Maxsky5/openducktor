@@ -505,7 +505,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("loads existing history as an idle transcript without parent-observed pending inputs", async () => {
+  test("loads existing history without live activity or parent-observed pending inputs", async () => {
     const transcriptTarget = makeTranscriptTarget();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
@@ -532,7 +532,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );
-      expect(harness.getLatest().model.thread.session?.activityState).toBe("idle");
+      expect(harness.getLatest().model.thread.session?.activityState).toBeNull();
       expect(harness.getLatest().model.thread.session?.pendingApprovals).toEqual([]);
       expect(harness.getLatest().model.thread.session?.pendingQuestions).toEqual([]);
     } finally {

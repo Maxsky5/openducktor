@@ -39,7 +39,7 @@ export type AgentChatEmptyStateModel = {
 
 export type AgentChatThreadSession = AgentSessionIdentity &
   Pick<AgentSessionState, "title" | "pendingApprovals" | "pendingQuestions" | "selectedModel"> & {
-    activityState: AgentSessionActivityState;
+    activityState: AgentSessionActivityState | null;
     messages: SessionMessagesState;
     todos: AgentSessionTodoItem[];
   };
