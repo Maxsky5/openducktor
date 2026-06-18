@@ -7,8 +7,8 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
+  deriveAgentSessionTranscriptState,
   deriveLoadedAgentSessionTranscriptState,
-  deriveRuntimeTranscriptState,
 } from "./session-transcript-state";
 
 type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
@@ -229,9 +229,9 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
   });
 });
 
-describe("deriveRuntimeTranscriptState", () => {
+describe("deriveAgentSessionTranscriptState", () => {
   test("stays empty without a transcript target", () => {
-    const transcriptState = deriveRuntimeTranscriptState({
+    const transcriptState = deriveAgentSessionTranscriptState({
       source: { kind: "empty", reason: "inactive" },
       repoReadinessState: "ready",
     });
@@ -239,9 +239,27 @@ describe("deriveRuntimeTranscriptState", () => {
     expect(transcriptState).toEqual({ kind: "empty", reason: "inactive" });
   });
 
+  test("waits for runtime readiness before surfacing runtime-gated empty states", () => {
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_empty", reason: "sessionless" },
+      repoReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("surfaces runtime-gated empty states after runtime readiness", () => {
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_empty", reason: "sessionless" },
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
   test("waits for runtime readiness before surfacing history loading", () => {
-    const transcriptState = deriveRuntimeTranscriptState({
-      source: { kind: "history", failureMessage: null },
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "pending", reason: "history", failureMessage: null },
       repoReadinessState: "checking",
     });
 
@@ -249,25 +267,47 @@ describe("deriveRuntimeTranscriptState", () => {
   });
 
   test("surfaces history loading once runtime is ready", () => {
-    const transcriptState = deriveRuntimeTranscriptState({
-      source: { kind: "history", failureMessage: null },
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "pending", reason: "history", failureMessage: null },
       repoReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "history" });
   });
 
+  test("surfaces preparing loading once runtime is ready", () => {
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "pending", reason: "preparing", failureMessage: null },
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
   test("surfaces history failures through the transcript-state owner", () => {
-    const transcriptState = deriveRuntimeTranscriptState({
-      source: { kind: "history", failureMessage: "history unavailable" },
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: {
+        kind: "pending",
+        reason: "history",
+        failureMessage: "history unavailable",
+      },
       repoReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "failed", message: "history unavailable" });
   });
 
+  test("surfaces source failures directly", () => {
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "failed", message: "read model unavailable" },
+      repoReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "failed", message: "read model unavailable" });
+  });
+
   test("shows the transcript when a live or history-loaded session exists", () => {
-    const transcriptState = deriveRuntimeTranscriptState({
+    const transcriptState = deriveAgentSessionTranscriptState({
       source: { kind: "visible" },
       repoReadinessState: "ready",
     });

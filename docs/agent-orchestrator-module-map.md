@@ -470,9 +470,11 @@ records as the session existence source. Missing records remove non-starting
 local sessions for those tasks and report the removed refs to the observer owner.
 Only local `starting` sessions may remain without a visible record while session
 registration catches up.
-The transcript-state module exposes generic runtime transcript derivation and
-loaded-session transcript derivation only. Do not add parallel selected-session
-source or target state helpers.
+The transcript-state module owns the generic transcript-source projection:
+empty, runtime-gated empty, pending, failed, or visible. Selected-session and
+read-only transcript surfaces choose a source, then delegate runtime-waiting,
+loading, failure, and visible-state projection to that module. Do not add
+parallel selected-session or read-only transcript state machines.
 
 Invariant: subagent waiting badges are derived from child session summaries.
 Selected-session state must not maintain parent-owned pending-input projections.

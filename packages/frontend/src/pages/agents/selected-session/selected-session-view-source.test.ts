@@ -183,6 +183,12 @@ describe("selected-session-view-source", () => {
         repoReadinessState: "ready",
       }),
     ).toEqual({ kind: "empty", reason: "sessionless" });
+    expect(
+      deriveSelectedSessionTranscriptState({
+        source: selectedTaskSource,
+        repoReadinessState: "checking",
+      }),
+    ).toEqual({ kind: "runtime_waiting" });
     expect(project(inactiveSource).runtimeTarget).toEqual({
       kind: "inactive",
     });
