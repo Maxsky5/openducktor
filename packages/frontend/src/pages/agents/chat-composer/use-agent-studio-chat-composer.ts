@@ -169,6 +169,10 @@ export function useAgentStudioChatComposer({
       selectedSessionModel,
     ],
   );
+  const selectedTargetRuntimeKind = selectedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
+  const selectedTargetRuntimeDefinitions = hasSessionTarget
+    ? allRuntimeDefinitions
+    : availableRuntimeDefinitions;
   const selectedRepoRuntimeRef = useMemo<RepoRuntimeRef | null>(() => {
     if (!workspaceRepoPath || !selectedRuntimeKind) {
       return null;
@@ -182,8 +186,8 @@ export function useAgentStudioChatComposer({
     if (selectedSessionIdentity) {
       return { kind: "session", session: selectedSessionIdentity };
     }
-    return { kind: "repo", runtimeKind: selectedRuntimeKind };
-  }, [selectedRuntimeKind, selectedSessionIdentity]);
+    return { kind: "repo", runtimeKind: selectedTargetRuntimeKind };
+  }, [selectedSessionIdentity, selectedTargetRuntimeKind]);
   const promptInputRuntime = useMemo(
     () =>
       resolveChatComposerPromptInputRuntime({
@@ -197,36 +201,24 @@ export function useAgentStudioChatComposer({
     promptInputRuntime.state === "available"
       ? promptInputRuntime.runtimeRef.runtimeKind
       : promptInputRuntime.runtimeKind;
-  const promptInputRuntimeDefinitions = hasSessionTarget
-    ? allRuntimeDefinitions
-    : availableRuntimeDefinitions;
   const { runtimeSupportsSlashCommands, supportsFileSearch, supportsSkillReferences } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
-        runtimeDefinitions: promptInputRuntimeDefinitions,
+        runtimeDefinitions: selectedTargetRuntimeDefinitions,
         runtimeKind: promptInputRuntimeKind,
       }),
-    [promptInputRuntimeDefinitions, promptInputRuntimeKind],
+    [promptInputRuntimeKind, selectedTargetRuntimeDefinitions],
   );
   const supportsProfiles = useMemo(() => {
-    const runtimeKind = hasSessionTarget
-      ? selectedSessionIdentity.runtimeKind
-      : selectedRuntimeKind;
-    if (!runtimeKind) {
+    if (!selectedTargetRuntimeKind) {
       return true;
     }
-    const runtimeDefinitions = hasSessionTarget
-      ? allRuntimeDefinitions
-      : availableRuntimeDefinitions;
-    const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+    const definition = findRuntimeDefinition(
+      selectedTargetRuntimeDefinitions,
+      selectedTargetRuntimeKind,
+    );
     return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
-  }, [
-    allRuntimeDefinitions,
-    availableRuntimeDefinitions,
-    hasSessionTarget,
-    selectedSessionIdentity,
-    selectedRuntimeKind,
-  ]);
+  }, [selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
 
   const composerCatalogQuery = useQuery(
     selectedRepoRuntimeRef && !hasSessionTarget
