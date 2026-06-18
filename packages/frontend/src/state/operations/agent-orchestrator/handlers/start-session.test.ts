@@ -66,7 +66,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       }),
-    ).rejects.toThrow("Select a workspace first.");
+    ).rejects.toThrow("Active workspace repo path is unavailable.");
   });
 
   test("reuses an existing in-flight start promise", async () => {

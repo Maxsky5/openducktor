@@ -1,7 +1,7 @@
 import type { AgentSessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
+import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type {
   RuntimeDependencies,
   SessionDependencies,
@@ -89,7 +89,7 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   return async (input: StartAgentSessionInput): Promise<StartAgentSessionResult> => {
     const { taskId, role, startMode } = input;
-    const repoPath = requireActiveRepo(repo.workspaceRepoPath);
+    const repoPath = requireWorkspaceRepoPath(repo.workspaceRepoPath);
     const workspaceId = repo.workspaceId?.trim();
     if (!workspaceId) {
       throw new Error("Active workspace is required.");

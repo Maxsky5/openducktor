@@ -1,9 +1,9 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
+import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionObservers } from "../support/session-observers";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
@@ -64,7 +64,7 @@ export const createPrepareSessionSend = ({
   loadRepoPromptOverrides,
 }: PrepareSessionSendDependencies) => {
   return async (session: WorkflowAgentSessionState): Promise<PreparedSessionSend> => {
-    const repoPath = requireActiveRepo(workspaceRepoPath);
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
