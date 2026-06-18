@@ -1,20 +1,22 @@
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   type AgentSessionReadModelLoadState,
+  currentAgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
+  unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import { loadRepoAgentSessionsForTasks } from "../session-read-model/load-sessions";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
-type UseRepoSessionReadModelEffectsArgs = {
+type UseRepoSessionReadModelArgs = {
   workspaceRepoPath: string | null;
   taskIds: string[];
   isLoadingTasks: boolean;
@@ -24,7 +26,6 @@ type UseRepoSessionReadModelEffectsArgs = {
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
-  commitSessionReadModelLoadState: (state: AgentSessionReadModelLoadState) => void;
   queryClient: QueryClient;
 };
 
@@ -33,7 +34,7 @@ const TASK_ID_SEPARATOR = "\u001f";
 const toTaskIdSetKey = (taskIds: string[]): string =>
   [...new Set(taskIds)].toSorted().join(TASK_ID_SEPARATOR);
 
-export const useRepoSessionReadModelEffects = ({
+export const useRepoSessionReadModel = ({
   workspaceRepoPath,
   taskIds,
   isLoadingTasks,
@@ -43,9 +44,18 @@ export const useRepoSessionReadModelEffects = ({
   agentEngine,
   observeAgentSession,
   clearSessionObservationState,
-  commitSessionReadModelLoadState,
   queryClient,
-}: UseRepoSessionReadModelEffectsArgs) => {
+}: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
+  const [sessionReadModelLoadState, setSessionReadModelLoadState] =
+    useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
+  const currentSessionReadModelLoadState = useMemo(
+    () =>
+      currentAgentSessionReadModelLoadState({
+        workspaceRepoPath,
+        state: sessionReadModelLoadState,
+      }),
+    [sessionReadModelLoadState, workspaceRepoPath],
+  );
   const taskIdsKey = toTaskIdSetKey(taskIds);
   const taskSessionTargets = useMemo(() => {
     if (!taskIdsKey) {
@@ -72,7 +82,7 @@ export const useRepoSessionReadModelEffects = ({
       if (isStaleRepoOperation()) {
         return;
       }
-      commitSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+      setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
         await loadRepoAgentSessionsForTasks({
           repoPath: workspaceRepoPath,
@@ -85,11 +95,11 @@ export const useRepoSessionReadModelEffects = ({
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation()) {
-          commitSessionReadModelLoadState(readyAgentSessionReadModelLoadState(workspaceRepoPath));
+          setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(workspaceRepoPath));
         }
       } catch (error) {
         if (!isStaleRepoOperation()) {
-          commitSessionReadModelLoadState(
+          setSessionReadModelLoadState(
             failedAgentSessionReadModelLoadState(
               workspaceRepoPath,
               `Failed to load agent session read model for repo '${workspaceRepoPath}': ${errorMessage(
@@ -114,9 +124,10 @@ export const useRepoSessionReadModelEffects = ({
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
-    commitSessionReadModelLoadState,
     isLoadingTasks,
     taskSessionTargets,
     workspaceRepoPath,
   ]);
+
+  return currentSessionReadModelLoadState;
 };

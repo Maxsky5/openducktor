@@ -1,12 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import {
-  type AgentSessionReadModelLoadState,
-  currentAgentSessionReadModelLoadState,
-  unavailableAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -18,7 +13,7 @@ import { createAgentSessionActions } from "./handlers/session-actions";
 import { createLoadAgentSessionHistory } from "./history/session-history-loader";
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
-import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
+import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createLoadAgentSessions } from "./session-read-model/load-sessions";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
@@ -62,17 +57,7 @@ export function useAgentOrchestratorOperations({
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const workspaceId = activeWorkspace?.workspaceId ?? null;
-  const [sessionReadModelLoadState, setSessionReadModelLoadState] =
-    useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
-  const currentSessionReadModelLoadState = useMemo(
-    () =>
-      currentAgentSessionReadModelLoadState({
-        workspaceRepoPath,
-        state: sessionReadModelLoadState,
-      }),
-    [sessionReadModelLoadState, workspaceRepoPath],
-  );
   const resolvedDependencies = useMemo(
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
@@ -191,7 +176,7 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
-  useRepoSessionReadModelEffects({
+  const currentSessionReadModelLoadState = useRepoSessionReadModel({
     workspaceRepoPath,
     taskIds,
     isLoadingTasks,
@@ -201,7 +186,6 @@ export function useAgentOrchestratorOperations({
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
-    commitSessionReadModelLoadState: setSessionReadModelLoadState,
     queryClient,
   });
   const ensureRuntime = useMemo(

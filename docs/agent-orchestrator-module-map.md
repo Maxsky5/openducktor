@@ -96,7 +96,7 @@ Files:
 - `session-read-model/load-sessions.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `session-read-model/session-runtime-snapshot.ts`
-- `hooks/use-repo-session-read-model-effects.ts`
+- `hooks/use-repo-session-read-model.ts`
 
 Owns:
 
@@ -460,11 +460,10 @@ from the context when deriving transcript state.
 The exposed read-model load state must be current for the active repository and
 the current read-model inputs; while either input is not ready, expose a loading
 state instead of an empty/ready state.
-`currentAgentSessionReadModelLoadState` owns that public projection. The repo
-read-model effect owns only the actual repo read lifecycle: start the repo read,
-commit ready, or commit failed. It must not also write the no-workspace or
-input-loading display states.
-The repo read-model effect is keyed by the selected repository plus the task id
+`useRepoSessionReadModel` owns that public projection and the actual repo read
+lifecycle: start the repo read, commit ready, or commit failed. It must not
+prepare runtime sessions or choose transcript/history load policy.
+The repo read-model load is keyed by the selected repository plus the task id
 set. Task metadata changes and task order changes must not restart the repo
 session read model, because that would temporarily demote selected sessions back
 to loading and cause transcript/status flicker.
@@ -837,7 +836,7 @@ unlisted session ref whose observer state can be cleared.
 ## Startup Flow
 
 1. The app loads task IDs from the task store.
-2. `use-repo-session-read-model-effects.ts` loads task session records for those
+2. `use-repo-session-read-model.ts` loads task session records for those
    task IDs through `loadRepoAgentSessionsForTasks`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
@@ -860,7 +859,7 @@ Use these compact tests as the first-line safety net:
 | Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
 | Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
 | Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/load-sessions.test.ts` |
-| Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model-effects.test.tsx` |
+| Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
 | Running-session history baseline after reload | `session-read-model/load-sessions.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
