@@ -6,6 +6,7 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -27,10 +28,6 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
-import {
-  resolveSelectedSessionActivityState,
-  resolveSelectedSessionModel,
-} from "./selected-session-facts";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
 type UseAgentStudioSelectedSessionViewArgs = {
@@ -115,18 +112,15 @@ export function useAgentStudioSelectedSessionView({
 
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
-  const selectedSessionActivityState = selectedSessionIdentity
-    ? resolveSelectedSessionActivityState({
-        selectedSessionSummary: selection.sessionSummary,
-        loadedSession: session,
-      })
-    : null;
-  const selectedSessionModel = selectedSessionIdentity
-    ? resolveSelectedSessionModel({
-        selectedSessionSummary: selection.sessionSummary,
-        loadedSession: session,
-      })
-    : null;
+  let selectedSessionActivityState: AgentSessionActivityState | null = null;
+  let selectedSessionModel: AgentSessionState["selectedModel"] = null;
+  if (selectedSessionIdentity) {
+    selectedSessionActivityState = session
+      ? getAgentSessionActivityStateFromSession(session)
+      : (selection.sessionSummary?.activityState ?? null);
+    selectedSessionModel =
+      session?.selectedModel ?? selection.sessionSummary?.selectedModel ?? null;
+  }
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const runtimeTarget = resolveSelectedSessionRuntimeTarget({
     hasSelectedTask: selectedTask !== null,
