@@ -6,7 +6,6 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -19,7 +18,6 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import {
   type AgentSessionTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
-  type SelectedAgentSessionTranscriptSource,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -29,10 +27,14 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
+import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 import {
-  resolveSelectedSessionRuntimeTarget,
-  type SelectedSessionRuntimeTargetSource,
-} from "./selected-session-runtime-target";
+  resolveSelectedSessionViewSource,
+  selectedSessionActivityStateFromSource,
+  selectedSessionModelFromSource,
+  selectedSessionRuntimeTargetSourceFromViewSource,
+  selectedSessionTranscriptSourceFromViewSource,
+} from "./selected-session-view-source";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
@@ -116,29 +118,29 @@ export function useAgentStudioSelectedSessionView({
 
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
-  let selectedSessionActivityState: AgentSessionActivityState | null = null;
-  let selectedSessionModel: AgentSessionState["selectedModel"] = null;
-  if (selectedSessionIdentity) {
-    selectedSessionActivityState = session
-      ? getAgentSessionActivityStateFromSession(session)
-      : (selection.sessionSummary?.activityState ?? null);
-    selectedSessionModel =
-      session?.selectedModel ?? selection.sessionSummary?.selectedModel ?? null;
-  }
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-  let runtimeTargetSource: SelectedSessionRuntimeTargetSource;
-  if (selectedSessionIdentity) {
-    runtimeTargetSource = {
-      kind: "selected_session",
-      runtimeKind: selectedSessionIdentity.runtimeKind,
-    };
-  } else if (selectedTask) {
-    runtimeTargetSource = { kind: "selected_task" };
-  } else {
-    runtimeTargetSource = { kind: "inactive" };
-  }
+  const selectedSessionViewSource = useMemo(
+    () =>
+      resolveSelectedSessionViewSource({
+        selectedSessionIdentity,
+        session,
+        sessionSummary: selection.sessionSummary,
+        selectedTask,
+        readModelLoadState: sessionReadModelLoadState,
+      }),
+    [
+      selectedSessionIdentity,
+      selectedTask,
+      session,
+      selection.sessionSummary,
+      sessionReadModelLoadState,
+    ],
+  );
+  const selectedSessionActivityState =
+    selectedSessionActivityStateFromSource(selectedSessionViewSource);
+  const selectedSessionModel = selectedSessionModelFromSource(selectedSessionViewSource);
   const runtimeTarget = resolveSelectedSessionRuntimeTarget({
-    source: runtimeTargetSource,
+    source: selectedSessionRuntimeTargetSourceFromViewSource(selectedSessionViewSource),
     role: selection.role,
     repoSettings,
     isLoadingRepoSettings,
@@ -161,31 +163,11 @@ export function useAgentStudioSelectedSessionView({
       : firstLaunchAction(selection.role);
 
   const transcriptState = useMemo(() => {
-    let transcriptSource: SelectedAgentSessionTranscriptSource;
-    if (session) {
-      transcriptSource = { kind: "loaded_session", session };
-    } else if (selectedSessionIdentity) {
-      transcriptSource = {
-        kind: "selected_session",
-        readModelLoadState: sessionReadModelLoadState,
-      };
-    } else if (selectedTask) {
-      transcriptSource = { kind: "selected_task", readModelLoadState: sessionReadModelLoadState };
-    } else {
-      transcriptSource = { kind: "inactive" };
-    }
-
     return deriveSelectedAgentSessionTranscriptState({
-      source: transcriptSource,
+      source: selectedSessionTranscriptSourceFromViewSource(selectedSessionViewSource),
       repoReadinessState,
     });
-  }, [
-    repoReadinessState,
-    selectedTask,
-    session,
-    sessionReadModelLoadState,
-    selectedSessionIdentity,
-  ]);
+  }, [repoReadinessState, selectedSessionViewSource]);
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,
