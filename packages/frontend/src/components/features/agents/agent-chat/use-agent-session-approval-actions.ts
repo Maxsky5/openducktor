@@ -1,6 +1,6 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type UseAgentSessionApprovalActionsParams = {
@@ -46,6 +46,40 @@ const filterStringMapByPendingRequestIds = (
   return changed ? next : source;
 };
 
+const setSessionRequestValue = <Value>(
+  source: Record<string, Record<string, Value>>,
+  sessionKey: string,
+  requestId: string,
+  value: Value,
+): Record<string, Record<string, Value>> => ({
+  ...source,
+  [sessionKey]: {
+    ...(source[sessionKey] ?? {}),
+    [requestId]: value,
+  },
+});
+
+const removeSessionRequestValue = <Value>(
+  source: Record<string, Record<string, Value>>,
+  sessionKey: string,
+  requestId: string,
+): Record<string, Record<string, Value>> => {
+  const sessionRequests = source[sessionKey];
+  if (!sessionRequests || !(requestId in sessionRequests)) {
+    return source;
+  }
+
+  const nextSessionRequests = { ...sessionRequests };
+  delete nextSessionRequests[requestId];
+  const next = { ...source };
+  if (Object.keys(nextSessionRequests).length === 0) {
+    delete next[sessionKey];
+  } else {
+    next[sessionKey] = nextSessionRequests;
+  }
+  return next;
+};
+
 export function useAgentSessionApprovalActions({
   sessionIdentity,
   pendingApprovals,
@@ -56,85 +90,89 @@ export function useAgentSessionApprovalActions({
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 } {
-  const [isSubmittingApprovalByRequestId, setIsSubmittingApprovalByRequestId] = useState<
-    Record<string, boolean>
+  const [submittingApprovalBySessionKey, setSubmittingApprovalBySessionKey] = useState<
+    Record<string, Record<string, boolean>>
   >({});
-  const [approvalReplyErrorByRequestId, setApprovalReplyErrorByRequestId] = useState<
-    Record<string, string>
+  const [approvalReplyErrorBySessionKey, setApprovalReplyErrorBySessionKey] = useState<
+    Record<string, Record<string, string>>
   >({});
-  const pendingApprovalRequestIdsKey = useMemo(
-    () => JSON.stringify(pendingApprovals.map((request) => request.requestId)),
+  const sessionExternalSessionId = sessionIdentity?.externalSessionId ?? null;
+  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
+  const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
+  const sessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
+  const pendingApprovalRequestIds = useMemo(
+    () => new Set(pendingApprovals.map((request) => request.requestId)),
     [pendingApprovals],
   );
-  const sessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
-  const [resetInputs, setResetInputs] = useState({
-    sessionKey,
-    pendingApprovalRequestIdsKey,
-  });
 
-  if (
-    resetInputs.sessionKey !== sessionKey ||
-    resetInputs.pendingApprovalRequestIdsKey !== pendingApprovalRequestIdsKey
-  ) {
-    const sessionChanged = resetInputs.sessionKey !== sessionKey;
-    setResetInputs({ sessionKey, pendingApprovalRequestIdsKey });
-
-    if (sessionChanged) {
-      setIsSubmittingApprovalByRequestId({});
-      setApprovalReplyErrorByRequestId({});
-    } else {
-      const pendingRequestIds = new Set(pendingApprovals.map((request) => request.requestId));
-      setIsSubmittingApprovalByRequestId((current) =>
-        filterBooleanMapByPendingRequestIds(current, pendingRequestIds),
-      );
-      setApprovalReplyErrorByRequestId((current) =>
-        filterStringMapByPendingRequestIds(current, pendingRequestIds),
-      );
+  const isSubmittingApprovalByRequestId = useMemo(() => {
+    if (!sessionKey) {
+      return {};
     }
-  }
+    return filterBooleanMapByPendingRequestIds(
+      submittingApprovalBySessionKey[sessionKey] ?? {},
+      pendingApprovalRequestIds,
+    );
+  }, [pendingApprovalRequestIds, sessionKey, submittingApprovalBySessionKey]);
+
+  const approvalReplyErrorByRequestId = useMemo(() => {
+    if (!sessionKey) {
+      return {};
+    }
+    return filterStringMapByPendingRequestIds(
+      approvalReplyErrorBySessionKey[sessionKey] ?? {},
+      pendingApprovalRequestIds,
+    );
+  }, [approvalReplyErrorBySessionKey, pendingApprovalRequestIds, sessionKey]);
 
   const onReplyApproval = useCallback(
     async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {
-      if (!sessionIdentity || !canReplyToApprovals) {
+      if (
+        !sessionKey ||
+        sessionExternalSessionId === null ||
+        sessionRuntimeKind === null ||
+        sessionWorkingDirectory === null ||
+        !canReplyToApprovals
+      ) {
         return;
       }
-
-      setIsSubmittingApprovalByRequestId((current) => ({
-        ...current,
-        [requestId]: true,
-      }));
-      setApprovalReplyErrorByRequestId((current) => {
-        if (!current[requestId]) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[requestId];
-        return next;
+      const sessionActionTarget = toAgentSessionIdentity({
+        externalSessionId: sessionExternalSessionId,
+        runtimeKind: sessionRuntimeKind,
+        workingDirectory: sessionWorkingDirectory,
       });
 
+      setSubmittingApprovalBySessionKey((current) =>
+        setSessionRequestValue(current, sessionKey, requestId, true),
+      );
+      setApprovalReplyErrorBySessionKey((current) =>
+        removeSessionRequestValue(current, sessionKey, requestId),
+      );
+
       try {
-        await replyAgentApproval(sessionIdentity, requestId, outcome);
+        await replyAgentApproval(sessionActionTarget, requestId, outcome);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0
             ? error.message
             : "Failed to reply to approval request.";
-        setApprovalReplyErrorByRequestId((current) => ({
-          ...current,
-          [requestId]: message,
-        }));
+        setApprovalReplyErrorBySessionKey((current) =>
+          setSessionRequestValue(current, sessionKey, requestId, message),
+        );
       } finally {
-        setIsSubmittingApprovalByRequestId((current) => {
-          if (!current[requestId]) {
-            return current;
-          }
-          const next = { ...current };
-          delete next[requestId];
-          return next;
-        });
+        setSubmittingApprovalBySessionKey((current) =>
+          removeSessionRequestValue(current, sessionKey, requestId),
+        );
       }
     },
-    [canReplyToApprovals, replyAgentApproval, sessionIdentity],
+    [
+      canReplyToApprovals,
+      replyAgentApproval,
+      sessionExternalSessionId,
+      sessionKey,
+      sessionRuntimeKind,
+      sessionWorkingDirectory,
+    ],
   );
 
   return {

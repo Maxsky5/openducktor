@@ -84,6 +84,27 @@ describe("useAgentSessionQuestionActions", () => {
     }
   });
 
+  test("keeps submit action stable when the session identity object is rebuilt", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const harness = createHookHarness(
+      useAgentSessionQuestionActions,
+      createBaseArgs({ answerAgentQuestion }),
+    );
+
+    try {
+      await harness.mount();
+      const submitQuestionAnswers = harness.getLatest().onSubmitQuestionAnswers;
+
+      await harness.update(
+        createBaseArgs({ sessionIdentity: sessionIdentity(), answerAgentQuestion }),
+      );
+
+      expect(harness.getLatest().onSubmitQuestionAnswers).toBe(submitQuestionAnswers);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps submitting state scoped by full session identity", async () => {
     const answerDeferred = createDeferred<void>();
     const answerAgentQuestion = mock(async () => answerDeferred.promise);

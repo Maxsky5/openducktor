@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 
@@ -22,13 +22,27 @@ export function useAgentSessionQuestionActions({
   const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
     Record<string, Record<string, boolean>>
   >({});
+  const sessionExternalSessionId = sessionIdentity?.externalSessionId ?? null;
+  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
+  const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
+  const sessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!sessionIdentity || !canAnswerQuestions) {
+      if (
+        !sessionKey ||
+        sessionExternalSessionId === null ||
+        sessionRuntimeKind === null ||
+        sessionWorkingDirectory === null ||
+        !canAnswerQuestions
+      ) {
         return;
       }
-      const sessionKey = agentSessionIdentityKey(sessionIdentity);
+      const sessionActionTarget = toAgentSessionIdentity({
+        externalSessionId: sessionExternalSessionId,
+        runtimeKind: sessionRuntimeKind,
+        workingDirectory: sessionWorkingDirectory,
+      });
 
       setSubmittingQuestionBySessionKey((current) => ({
         ...current,
@@ -38,7 +52,7 @@ export function useAgentSessionQuestionActions({
         },
       }));
       try {
-        await answerAgentQuestion(sessionIdentity, requestId, answers);
+        await answerAgentQuestion(sessionActionTarget, requestId, answers);
       } finally {
         setSubmittingQuestionBySessionKey((current) => {
           const sessionRequests = current[sessionKey];
@@ -57,21 +71,27 @@ export function useAgentSessionQuestionActions({
         });
       }
     },
-    [answerAgentQuestion, canAnswerQuestions, sessionIdentity],
+    [
+      answerAgentQuestion,
+      canAnswerQuestions,
+      sessionExternalSessionId,
+      sessionKey,
+      sessionRuntimeKind,
+      sessionWorkingDirectory,
+    ],
   );
 
   const isSubmittingQuestionByRequestId = useMemo(() => {
-    if (!sessionIdentity) {
+    if (!sessionKey) {
       return {};
     }
 
-    const sessionRequests =
-      submittingQuestionBySessionKey[agentSessionIdentityKey(sessionIdentity)] ?? {};
+    const sessionRequests = submittingQuestionBySessionKey[sessionKey] ?? {};
     const activeRequestIds = new Set(pendingQuestionRequestIds);
     return Object.fromEntries(
       Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
     );
-  }, [pendingQuestionRequestIds, sessionIdentity, submittingQuestionBySessionKey]);
+  }, [pendingQuestionRequestIds, sessionKey, submittingQuestionBySessionKey]);
 
   return {
     isSubmittingQuestionByRequestId,

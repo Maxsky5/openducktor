@@ -93,6 +93,24 @@ describe("useAgentSessionApprovalActions", () => {
     }
   });
 
+  test("keeps reply action stable when the session identity object is rebuilt", async () => {
+    const replyAgentApproval = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ replyAgentApproval }));
+
+    try {
+      await harness.mount();
+      const replyApproval = harness.getLatest().onReplyApproval;
+
+      await harness.update(
+        createBaseArgs({ sessionIdentity: sessionIdentity(), replyAgentApproval }),
+      );
+
+      expect(harness.getLatest().onReplyApproval).toBe(replyApproval);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("stores the thrown Error message when replying fails", async () => {
     const replyAgentApproval = mock(async () => {
       throw new Error("approval denied");
