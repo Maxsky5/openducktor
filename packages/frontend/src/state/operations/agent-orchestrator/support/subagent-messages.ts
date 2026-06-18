@@ -25,33 +25,24 @@ export const isSubagentMessage = (
   return message?.role === "system" && message.meta?.kind === "subagent";
 };
 
+const SUBAGENT_STATUS_PRECEDENCE: Record<SubagentMeta["status"], number> = {
+  pending: 0,
+  running: 1,
+  completed: 2,
+  cancelled: 3,
+  error: 4,
+};
+
 const resolveSubagentStatus = (
   existingStatus: SubagentMeta["status"] | undefined,
   incomingStatus: SubagentMeta["status"],
 ): SubagentMeta["status"] => {
-  if (existingStatus === "error") {
-    return "error";
+  if (!existingStatus) {
+    return incomingStatus;
   }
-  if (incomingStatus === "error") {
-    return "error";
-  }
-  if (existingStatus === "cancelled") {
-    return "cancelled";
-  }
-  if (incomingStatus === "cancelled") {
-    return "cancelled";
-  }
-  if (existingStatus === "completed") {
-    return "completed";
-  }
-  if (incomingStatus === "completed") {
-    return "completed";
-  }
-  if (existingStatus === "running" && incomingStatus === "pending") {
-    return "running";
-  }
-
-  return incomingStatus;
+  return SUBAGENT_STATUS_PRECEDENCE[incomingStatus] > SUBAGENT_STATUS_PRECEDENCE[existingStatus]
+    ? incomingStatus
+    : existingStatus;
 };
 
 export const formatSubagentContent = (meta: {

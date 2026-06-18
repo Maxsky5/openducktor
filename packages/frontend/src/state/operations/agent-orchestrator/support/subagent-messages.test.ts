@@ -35,7 +35,76 @@ const makeSubagentMessage = (
   };
 };
 
+const expectOnlySubagentStatus = (
+  messages: AgentChatMessage[],
+  status: SubagentMessage["meta"]["status"],
+): void => {
+  expect(messages).toHaveLength(1);
+  expect(messages[0]?.meta?.kind).toBe("subagent");
+  if (messages[0]?.meta?.kind !== "subagent") {
+    throw new Error("Expected subagent metadata");
+  }
+  expect(messages[0].meta.status).toBe(status);
+};
+
+const expectMergedSubagentStatus = ({
+  existingStatus,
+  incomingStatus,
+  expectedStatus,
+}: {
+  existingStatus: SubagentMessage["meta"]["status"];
+  incomingStatus: SubagentMessage["meta"]["status"];
+  expectedStatus: SubagentMessage["meta"]["status"];
+}): void => {
+  const messages: AgentChatMessage[] = [
+    makeSubagentMessage({
+      correlationKey: "part:m1:p-subagent",
+      status: existingStatus,
+      agent: "build",
+      prompt: "Review changes",
+      description: `Review ${existingStatus}`,
+    }),
+  ];
+
+  appendHistorySubagentMessage(
+    messages,
+    makeSubagentMessage({
+      correlationKey: "part:m1:p-subagent",
+      status: incomingStatus,
+      agent: "build",
+      prompt: "Review changes",
+      description: `Review ${incomingStatus}`,
+    }),
+  );
+
+  expectOnlySubagentStatus(messages, expectedStatus);
+};
+
 describe("appendHistorySubagentMessage", () => {
+  test("keeps running status when an older pending row arrives", () => {
+    expectMergedSubagentStatus({
+      existingStatus: "running",
+      incomingStatus: "pending",
+      expectedStatus: "running",
+    });
+  });
+
+  test("keeps terminal status over later non-terminal history rows", () => {
+    expectMergedSubagentStatus({
+      existingStatus: "cancelled",
+      incomingStatus: "running",
+      expectedStatus: "cancelled",
+    });
+  });
+
+  test("keeps error as the highest-precedence subagent status", () => {
+    expectMergedSubagentStatus({
+      existingStatus: "completed",
+      incomingStatus: "error",
+      expectedStatus: "error",
+    });
+  });
+
   test("merges an identified row into the earlier unidentified row", () => {
     const messages: AgentChatMessage[] = [
       makeSubagentMessage({
