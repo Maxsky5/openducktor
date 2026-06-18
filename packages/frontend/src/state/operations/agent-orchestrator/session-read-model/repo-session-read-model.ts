@@ -7,13 +7,13 @@ import {
   createAgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
+  listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { fromPersistedSessionRecord, toPersistedSessionIdentity } from "../support/persistence";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
-import { partitionRepoSessionLocalState } from "./repo-session-local-state";
 import {
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
@@ -23,8 +23,11 @@ import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-sessi
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: AgentSessionRef[];
-  removedSessionRefs: AgentSessionRef[];
+  unlistedSessionRefs: AgentSessionRef[];
 };
+
+const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
+  session.status === "starting";
 
 const toPersistedSessionView = ({
   taskId,
@@ -69,13 +72,24 @@ export const buildRepoSessionReadModel = ({
     ),
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
-  const localState = partitionRepoSessionLocalState({
-    repoPath,
-    currentSessions,
-    loadedTaskIds,
-    persistedSessionKeys,
-  });
-  let sessionCollection = createAgentSessionCollection(localState.carriedSessions);
+  const carriedSessions: AgentSessionState[] = [];
+  const unlistedSessionRefs: AgentSessionRef[] = [];
+
+  for (const session of listAgentSessions(currentSessions)) {
+    if (
+      !loadedTaskIds.has(session.taskId) ||
+      shouldKeepLocalSessionWithoutPersistedRecord(session)
+    ) {
+      carriedSessions.push(session);
+      continue;
+    }
+
+    if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
+      unlistedSessionRefs.push(toRuntimeSessionRef(repoPath, session));
+    }
+  }
+
+  let sessionCollection = createAgentSessionCollection(carriedSessions);
   const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
@@ -100,6 +114,6 @@ export const buildRepoSessionReadModel = ({
   return {
     sessionCollection,
     liveSessionRefs,
-    removedSessionRefs: localState.removedSessionRefs,
+    unlistedSessionRefs,
   };
 };

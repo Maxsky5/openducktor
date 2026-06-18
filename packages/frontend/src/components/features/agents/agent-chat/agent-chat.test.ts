@@ -20,10 +20,8 @@ const buildModel = () => ({
     isSessionWorking: true,
     transcriptState: buildThreadTranscriptState(),
     runtimeReadiness: {
-      readinessState: "ready" as const,
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: "",
+      state: "ready" as const,
+      message: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },

@@ -28,14 +28,14 @@ const deriveAgentChatTranscriptNotice = ({
 }): AgentChatTranscriptNotice | null => {
   if (
     transcriptState.kind === "runtime_waiting" &&
-    runtimeReadiness.readinessState === "blocked" &&
-    runtimeReadiness.blockedReason
+    runtimeReadiness.state === "blocked" &&
+    runtimeReadiness.message
   ) {
     return {
       kind: "runtime_blocked",
       severity: "error",
       title: "Runtime unavailable",
-      description: runtimeReadiness.blockedReason,
+      description: runtimeReadiness.message,
     };
   }
 
@@ -44,7 +44,9 @@ const deriveAgentChatTranscriptNotice = ({
       kind: "runtime_waiting",
       severity: "loading",
       title: "Runtime is starting",
-      description: "Waiting for runtime and MCP health before loading this session.",
+      description:
+        runtimeReadiness.message ??
+        "Waiting for runtime and MCP health before loading this session.",
     };
   }
 

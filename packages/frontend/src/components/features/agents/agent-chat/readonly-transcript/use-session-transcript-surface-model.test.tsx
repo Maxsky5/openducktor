@@ -51,10 +51,8 @@ let actualRepoRuntimeReadiness: Awaited<typeof import("@/lib/use-repo-runtime-re
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 let sessionStore = createAgentSessionsStore("/repo-a");
 let runtimeReadiness: RepoRuntimeReadiness = {
-  readinessState: "ready",
-  isReady: true,
-  isRuntimeStarting: false,
-  blockedReason: null,
+  state: "ready",
+  message: null,
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
@@ -222,10 +220,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
     runtimeReadiness = {
-      readinessState: "ready",
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: null,
+      state: "ready",
+      message: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
     };
@@ -472,10 +468,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("uses the canonical runtime waiting transcript state while runtime readiness is checking", async () => {
     runtimeReadiness = {
-      readinessState: "checking",
-      isReady: false,
-      isRuntimeStarting: true,
-      blockedReason: null,
+      state: "checking",
+      message: null,
       isLoadingChecks: true,
       refreshChecks: async () => {},
     };

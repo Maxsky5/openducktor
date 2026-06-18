@@ -192,10 +192,8 @@ export const describeRepoRuntimeStatus = (
 export type RepoRuntimeReadinessState = "ready" | "checking" | "blocked";
 
 export type RepoRuntimeReadinessSnapshot = {
-  readinessState: RepoRuntimeReadinessState;
-  isReady: boolean;
-  isRuntimeStarting: boolean;
-  blockedReason: string | null;
+  state: RepoRuntimeReadinessState;
+  message: string | null;
   isLoadingChecks: boolean;
 };
 
@@ -257,6 +255,30 @@ const findRuntimeDefinition = (
   return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
 };
 
+const readyRepoRuntimeReadiness = (isLoadingChecks: boolean): RepoRuntimeReadinessSnapshot => ({
+  state: "ready",
+  message: null,
+  isLoadingChecks,
+});
+
+const checkingRepoRuntimeReadiness = (
+  message: string | null,
+  isLoadingChecks: boolean,
+): RepoRuntimeReadinessSnapshot => ({
+  state: "checking",
+  message,
+  isLoadingChecks,
+});
+
+const blockedRepoRuntimeReadiness = (
+  message: string,
+  isLoadingChecks: boolean,
+): RepoRuntimeReadinessSnapshot => ({
+  state: "blocked",
+  message,
+  isLoadingChecks,
+});
+
 export const deriveRepoRuntimeReadiness = ({
   hasActiveWorkspace,
   runtimeDefinitions,
@@ -268,22 +290,14 @@ export const deriveRepoRuntimeReadiness = ({
 }: DeriveRepoRuntimeReadinessArgs): RepoRuntimeReadinessSnapshot => {
   if (runtimeTarget.kind === "inactive") {
     if (!hasActiveWorkspace) {
-      return {
-        readinessState: "blocked",
-        isReady: false,
-        isRuntimeStarting: false,
-        blockedReason: "Select a repository to use agent chat.",
-        isLoadingChecks,
-      };
+      return blockedRepoRuntimeReadiness("Select a repository to use agent chat.", isLoadingChecks);
     }
 
-    return {
-      readinessState: "ready",
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: null,
-      isLoadingChecks,
-    };
+    return readyRepoRuntimeReadiness(isLoadingChecks);
+  }
+
+  if (!hasActiveWorkspace) {
+    return blockedRepoRuntimeReadiness("Select a repository to use agent chat.", isLoadingChecks);
   }
 
   const runtimeKind = runtimeTarget.kind === "runtime" ? runtimeTarget.runtimeKind : null;
@@ -325,98 +339,55 @@ export const deriveRepoRuntimeReadiness = ({
   const blockedRuntimeHealth = blockedRuntimeDefinition
     ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
     : null;
-  const isReady = Boolean(
-    hasActiveWorkspace && !isResolvingRuntimeTarget && healthyRuntimeDefinition,
-  );
-  const isRuntimeStarting =
-    hasActiveWorkspace &&
-    scopedRuntimeDefinitions.some(
-      (definition) =>
-        isRepoRuntimeStarting(runtimeHealthByRuntime[definition.kind] ?? null) ||
-        isRepoRuntimeAwaitingStartup(runtimeHealthByRuntime[definition.kind] ?? null),
+
+  if (runtimeDefinitionsError) {
+    return blockedRepoRuntimeReadiness(runtimeDefinitionsError, isLoadingChecks);
+  }
+  if (isLoadingRuntimeDefinitions) {
+    return checkingRepoRuntimeReadiness("Loading runtime definitions...", isLoadingChecks);
+  }
+  if (isResolvingRuntimeTarget) {
+    return checkingRepoRuntimeReadiness("Resolving selected agent runtime...", isLoadingChecks);
+  }
+  if (runtimeKind && !targetRuntimeDefinition) {
+    return blockedRepoRuntimeReadiness(
+      `Runtime '${runtimeKind}' is not available for agent chat.`,
+      isLoadingChecks,
     );
-  const readinessState: RepoRuntimeReadinessState = (() => {
-    if (isReady) {
-      return "ready";
-    }
-    if (hasActiveWorkspace && isResolvingRuntimeTarget) {
-      return "checking";
-    }
-    if (hasActiveWorkspace && checkingRuntimeDefinition) {
-      return "checking";
-    }
-    if (hasActiveWorkspace && awaitingStartupRuntimeDefinition) {
-      return "checking";
-    }
-    if (
-      hasActiveWorkspace &&
-      (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)
-    ) {
-      return "checking";
-    }
-
-    return "blocked";
-  })();
-  const blockedReason = (() => {
-    if (isReady) {
-      return null;
-    }
-    if (!hasActiveWorkspace) {
-      return "Select a repository to use agent chat.";
-    }
-    if (runtimeDefinitionsError) {
-      return runtimeDefinitionsError;
-    }
-    if (isLoadingRuntimeDefinitions) {
-      return "Loading runtime definitions...";
-    }
-    if (isResolvingRuntimeTarget) {
-      return "Resolving selected agent runtime...";
-    }
-    if (runtimeKind && !targetRuntimeDefinition) {
-      return `Runtime '${runtimeKind}' is not available for agent chat.`;
-    }
-    if (isLoadingChecks || isRuntimeHealthPending) {
-      if (checkingRuntimeDefinition) {
-        return (
-          getBlockedRuntimeReason(
-            checkingRuntimeDefinition.label,
-            runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
-          ) ?? "Checking runtime health..."
-        );
-      }
-      return blockedRuntimeDefinition
-        ? (getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
-            "Checking runtime health...")
-        : "Checking runtime health...";
-    }
-    if (checkingRuntimeDefinition) {
-      return (
-        getBlockedRuntimeReason(
-          checkingRuntimeDefinition.label,
-          runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
-        ) ?? "Checking runtime health..."
-      );
-    }
-    if (awaitingStartupRuntimeDefinition) {
-      return `${awaitingStartupRuntimeDefinition.label} runtime is starting...`;
-    }
-
-    return (
-      (blockedRuntimeDefinition
-        ? getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth)
-        : null) ??
-      (runtimeDefinitions.length === 0
-        ? "No agent runtimes are available."
-        : "No configured runtime is ready for agent chat.")
+  }
+  if (healthyRuntimeDefinition) {
+    return readyRepoRuntimeReadiness(isLoadingChecks);
+  }
+  if (checkingRuntimeDefinition) {
+    return checkingRepoRuntimeReadiness(
+      getBlockedRuntimeReason(
+        checkingRuntimeDefinition.label,
+        runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+      ) ?? "Checking runtime health...",
+      isLoadingChecks,
     );
-  })();
+  }
+  if (awaitingStartupRuntimeDefinition) {
+    return checkingRepoRuntimeReadiness(
+      `${awaitingStartupRuntimeDefinition.label} runtime is starting...`,
+      isLoadingChecks,
+    );
+  }
+  if (isLoadingChecks || isRuntimeHealthPending) {
+    return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
+  }
+  if (blockedRuntimeDefinition) {
+    return blockedRepoRuntimeReadiness(
+      getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
+        "No configured runtime is ready for agent chat.",
+      isLoadingChecks,
+    );
+  }
 
-  return {
-    readinessState,
-    isReady,
-    isRuntimeStarting,
-    blockedReason,
+  return blockedRepoRuntimeReadiness(
+    runtimeDefinitions.length === 0
+      ? "No agent runtimes are available."
+      : "No configured runtime is ready for agent chat.",
     isLoadingChecks,
-  };
+  );
 };

@@ -49,13 +49,13 @@ export function useSessionTranscriptSurfaceModel({
     isOpen,
     repoPath: workspaceRepoPath,
     target,
-    repoReadinessState: runtimeReadiness.readinessState,
+    repoReadinessState: runtimeReadiness.state,
     liveSession,
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     liveSession,
     target,
-    isRuntimeReady: runtimeReadiness.isReady,
+    isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval,
     answerAgentQuestion,
   });

@@ -132,7 +132,7 @@ export function useAgentOrchestratorOperations({
     (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
     [queryClient],
   );
-  const { observeAgentSession, cleanupLocalSessions } = useAgentSessionObservers({
+  const { observeAgentSession, clearSessionObservationState } = useAgentSessionObservers({
     agentEngine,
     workspaceId,
     loadRepoPromptOverrides: queryBackedPromptOverrides,
@@ -152,14 +152,14 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef,
         commitSessionCollection: sessionStore.commitSessionCollection,
         observeAgentSession,
-        cleanupLocalSessions,
+        clearSessionObservationState,
         queryClient,
       }),
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
-      cleanupLocalSessions,
+      clearSessionObservationState,
       queryClient,
       repoEpochRef,
       sessionStore,
@@ -200,7 +200,7 @@ export function useAgentOrchestratorOperations({
     commitSessionCollection: sessionStore.commitSessionCollection,
     agentEngine,
     observeAgentSession,
-    cleanupLocalSessions,
+    clearSessionObservationState,
     commitSessionReadModelLoadState: setSessionReadModelLoadState,
     queryClient,
   });

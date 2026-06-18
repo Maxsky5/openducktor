@@ -57,7 +57,7 @@ export const useAgentSessionObservers = ({
     [loadRepoPromptOverrides, workspaceId],
   );
 
-  const cleanupSessions = useCallback(
+  const clearSessionObservationState = useCallback(
     (sessions: readonly AgentSessionIdentity[]): void => {
       for (const session of sessions) {
         sessionObserversRef.current.remove(session);
@@ -112,6 +112,6 @@ export const useAgentSessionObservers = ({
 
   return {
     observeAgentSession,
-    cleanupLocalSessions: cleanupSessions,
+    clearSessionObservationState,
   };
 };

@@ -107,7 +107,7 @@ describe("useAgentSessionObservers", () => {
     await harness.unmount();
   });
 
-  test("cleanup clears subscriptions and turn state without mutating session collection", async () => {
+  test("clearSessionObservationState clears subscriptions and turn state without mutating session collection", async () => {
     const unsubscribe = mock(() => undefined);
     const queryClient = new QueryClient();
     const Harness = () => {
@@ -151,7 +151,7 @@ describe("useAgentSessionObservers", () => {
       workingDirectory: "/tmp/repo/worktree",
     };
     const removedSessionKey = agentSessionIdentityKey(removedSession);
-    await harness.run(({ observers }) => observers.cleanupLocalSessions([removedSession]));
+    await harness.run(({ observers }) => observers.clearSessionObservationState([removedSession]));
     const { state } = harness.getLatest();
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);

@@ -176,6 +176,7 @@ export function useAgentChatComposerModel({
     [scrollToBottomOnSendRef],
   );
 
+  const isRuntimeReady = runtimeReadiness.state === "ready";
   const composerState = useMemo(
     () =>
       composer
@@ -183,11 +184,11 @@ export function useAgentChatComposerModel({
             selectedSession: composer.selectedSession,
             selectedModelSelection: composer.selectedModelSelection,
             isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
-            isRuntimeReady: runtimeReadiness.isReady,
+            isRuntimeReady,
             sessionAgentColors,
           })
         : null,
-    [composer, runtimeReadiness.isReady, sessionAgentColors],
+    [composer, isRuntimeReady, sessionAgentColors],
   );
 
   return useMemo(() => {

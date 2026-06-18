@@ -39,10 +39,8 @@ const handleSelectAgentProfile = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
 const baseRuntimeReadiness = {
-  readinessState: "ready" as const,
-  isReady: true,
-  isRuntimeStarting: false,
-  blockedReason: null,
+  state: "ready" as const,
+  message: null,
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
@@ -172,7 +170,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
-    expect(mapped.selectedSession.runtime.runtimeReadiness.readinessState).toBe("ready");
+    expect(mapped.selectedSession.runtime.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);

@@ -90,7 +90,7 @@ const createLoaderHarness = ({
     observeAgentSession: async (session) => {
       listenedSessions.push(session);
     },
-    cleanupLocalSessions: (sessions) => {
+    clearSessionObservationState: (sessions) => {
       cleanedSessions.push(...sessions);
     },
     queryClient,
@@ -141,7 +141,7 @@ describe("createLoadAgentSessions", () => {
       observeAgentSession: async () => {
         throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
-      cleanupLocalSessions: () => undefined,
+      clearSessionObservationState: () => undefined,
       queryClient,
       isStaleRepoOperation: () => false,
     });
@@ -219,7 +219,7 @@ describe("createLoadAgentSessions", () => {
     expect(session?.historyLoadState).toBe("not_requested");
   });
 
-  test("uses empty persisted task records as authoritative local session cleanup", async () => {
+  test("uses empty persisted task records to clear unlisted session observation state", async () => {
     let runtimeSnapshotReads = 0;
     const localSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,

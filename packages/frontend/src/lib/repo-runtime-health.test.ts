@@ -87,8 +87,8 @@ describe("repo runtime health", () => {
       },
     });
 
-    expect(readiness.readinessState).toBe("ready");
-    expect(readiness.isReady).toBe(true);
+    expect(readiness.state).toBe("ready");
+    expect(readiness.message).toBeNull();
   });
 
   test("derives selected-runtime readiness from the selected runtime only", () => {
@@ -108,9 +108,8 @@ describe("repo runtime health", () => {
       },
     });
 
-    expect(readiness.readinessState).toBe("checking");
-    expect(readiness.isReady).toBe(false);
-    expect(readiness.isRuntimeStarting).toBe(true);
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toContain("Codex runtime is starting");
   });
 
   test("keeps selected-runtime readiness loading when automatic startup has not observed a runtime yet", () => {
@@ -133,10 +132,8 @@ describe("repo runtime health", () => {
       },
     });
 
-    expect(readiness.readinessState).toBe("checking");
-    expect(readiness.isReady).toBe(false);
-    expect(readiness.isRuntimeStarting).toBe(true);
-    expect(readiness.blockedReason).toBe("Codex runtime is starting...");
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toBe("Codex runtime is starting...");
   });
 
   test("keeps readiness checking while the target runtime is still resolving", () => {
@@ -153,9 +150,8 @@ describe("repo runtime health", () => {
       },
     });
 
-    expect(readiness.readinessState).toBe("checking");
-    expect(readiness.isReady).toBe(false);
-    expect(readiness.blockedReason).toBe("Resolving selected agent runtime...");
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toBe("Resolving selected agent runtime...");
   });
 
   test("treats inactive selections as having no runtime requirement", () => {
@@ -170,10 +166,8 @@ describe("repo runtime health", () => {
     });
 
     expect(readiness).toEqual({
-      readinessState: "ready",
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: null,
+      state: "ready",
+      message: null,
       isLoadingChecks: true,
     });
   });
@@ -190,10 +184,8 @@ describe("repo runtime health", () => {
     });
 
     expect(readiness).toEqual({
-      readinessState: "blocked",
-      isReady: false,
-      isRuntimeStarting: false,
-      blockedReason: "Select a repository to use agent chat.",
+      state: "blocked",
+      message: "Select a repository to use agent chat.",
       isLoadingChecks: false,
     });
   });

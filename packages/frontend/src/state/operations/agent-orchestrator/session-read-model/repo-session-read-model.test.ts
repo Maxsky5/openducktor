@@ -302,7 +302,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(readModel, otherTaskSession.externalSessionId)).toBe(
       otherTaskSession,
     );
-    expect(readModel.removedSessionRefs).toEqual([
+    expect(readModel.unlistedSessionRefs).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: removedSession.externalSessionId,
@@ -517,7 +517,7 @@ describe("repo session read model", () => {
     expect(session.historyLoadState).toBe("not_requested");
     expect(sessionMessagesToArray(session)).toEqual([]);
     expect(getAgentSession(readModel.sessionCollection, currentSession)).toBeNull();
-    expect(readModel.removedSessionRefs).toEqual([
+    expect(readModel.unlistedSessionRefs).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: currentSession.externalSessionId,
@@ -734,7 +734,7 @@ describe("repo session read model", () => {
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("uses loaded empty task session records as local session cleanup", async () => {
+  test("uses loaded empty task session records to surface unlisted local sessions", async () => {
     const tasks = [createTask([])];
     const currentSession = {
       ...createAgentSessionFixture({
@@ -770,7 +770,7 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
-    expect(readModel.removedSessionRefs).toEqual([
+    expect(readModel.unlistedSessionRefs).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: currentSession.externalSessionId,

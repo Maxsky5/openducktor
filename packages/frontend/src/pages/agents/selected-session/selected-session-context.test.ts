@@ -83,10 +83,8 @@ const createInput = (
       qaDoc: createDoc("qa"),
     },
     runtimeReadiness: {
-      readinessState: "ready",
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: null,
+      state: "ready",
+      message: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },
@@ -250,10 +248,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         },
         transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         runtimeReadiness: {
-          readinessState: "blocked",
-          isReady: false,
-          isRuntimeStarting: false,
-          blockedReason: "Runtime unavailable",
+          state: "blocked",
+          message: "Runtime unavailable",
           isLoadingChecks: true,
           refreshChecks,
         },
@@ -263,9 +259,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.runtime.runtimeData.error).toBe("session todos unavailable");
     expect(context.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.runtime.runtimeReadiness).toMatchObject({
-      readinessState: "blocked",
-      isReady: false,
-      blockedReason: "Runtime unavailable",
+      state: "blocked",
+      message: "Runtime unavailable",
       isLoadingChecks: true,
     });
     expect(context.runtime.runtimeReadiness.refreshChecks).toBe(refreshChecks);
@@ -279,10 +274,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         allSessionSummaries: [],
         transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         runtimeReadiness: {
-          readinessState: "checking",
-          isReady: false,
-          isRuntimeStarting: true,
-          blockedReason: null,
+          state: "checking",
+          message: null,
           isLoadingChecks: true,
           refreshChecks: async () => {},
         },
@@ -300,10 +293,8 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         allSessionSummaries: [],
         transcriptState: createSelectedSessionTranscriptStateFixture(),
         runtimeReadiness: {
-          readinessState: "checking",
-          isReady: false,
-          isRuntimeStarting: false,
-          blockedReason: null,
+          state: "checking",
+          message: null,
           isLoadingChecks: true,
           refreshChecks: async () => {},
         },

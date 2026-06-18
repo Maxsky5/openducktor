@@ -210,10 +210,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     ...overrides.documents,
   };
   const runtimeReadiness: AgentStudioSelectedSessionContextInput["runtimeReadiness"] = {
-    readinessState: "ready",
-    isReady: true,
-    isRuntimeStarting: false,
-    blockedReason: null,
+    state: "ready",
+    message: null,
     isLoadingChecks: false,
     refreshChecks: async () => {},
     ...overrides.runtimeReadiness,
@@ -383,7 +381,7 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
-    expect(state.agentChatModel.thread.runtimeReadiness.readinessState).toBe("ready");
+    expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
@@ -593,9 +591,7 @@ describe("useAgentStudioPageModels", () => {
           transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "visible" }),
         },
         runtimeReadiness: {
-          readinessState: "checking",
-          isReady: false,
-          isRuntimeStarting: true,
+          state: "checking",
         },
       }),
     );
@@ -604,7 +600,7 @@ describe("useAgentStudioPageModels", () => {
 
     const thread = harness.getLatest().agentChatModel.thread;
     expect(thread.transcriptState).toEqual({ kind: "visible" });
-    expect(thread.runtimeReadiness.readinessState).toBe("checking");
+    expect(thread.runtimeReadiness.state).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
     );
@@ -623,9 +619,7 @@ describe("useAgentStudioPageModels", () => {
           transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         },
         runtimeReadiness: {
-          readinessState: "checking",
-          isReady: false,
-          isRuntimeStarting: true,
+          state: "checking",
         },
         sessionActions: {
           canUseKickoffPrompt: true,
@@ -655,9 +649,7 @@ describe("useAgentStudioPageModels", () => {
           transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         },
         runtimeReadiness: {
-          readinessState: "checking",
-          isReady: false,
-          isRuntimeStarting: true,
+          state: "checking",
         },
         sessionActions: {
           canUseKickoffPrompt: true,

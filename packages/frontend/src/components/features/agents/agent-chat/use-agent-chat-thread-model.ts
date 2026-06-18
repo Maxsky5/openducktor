@@ -95,8 +95,9 @@ export function useAgentChatThreadModel({
     }));
   }, [displayedSessionKey]);
 
-  const canSubmitQuestionAnswers = runtimeReadiness.isReady && pendingQuestions.canSubmit;
-  const canReplyToApprovalRequests = runtimeReadiness.isReady && approvals.canReply;
+  const isRuntimeReady = runtimeReadiness.state === "ready";
+  const canSubmitQuestionAnswers = isRuntimeReady && pendingQuestions.canSubmit;
+  const canReplyToApprovalRequests = isRuntimeReady && approvals.canReply;
   const runtimeSupportedApprovalReplyOutcomes = useMemo(() => {
     const runtimeKind = threadSession?.runtimeKind;
     if (!runtimeKind) {
@@ -115,7 +116,7 @@ export function useAgentChatThreadModel({
       transcriptState,
       runtimeReadiness,
       isSessionWorking,
-      isInteractionEnabled: hasComposer && runtimeReadiness.isReady,
+      isInteractionEnabled: hasComposer && isRuntimeReady,
       emptyState,
       isStarting: composerActivity?.isStarting ?? false,
       isSending: composerActivity?.isSending ?? false,
@@ -155,6 +156,7 @@ export function useAgentChatThreadModel({
       emptyState,
       handleToggleTodoPanel,
       hasComposer,
+      isRuntimeReady,
       isSessionWorking,
       messagesContainerRef,
       pendingApprovalRequests,

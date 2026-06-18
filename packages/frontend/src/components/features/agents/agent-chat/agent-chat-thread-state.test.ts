@@ -6,10 +6,8 @@ import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 const readyTranscriptState = buildThreadTranscriptState();
 
 const readyRuntimeReadiness = {
-  readinessState: "ready" as const,
-  isReady: true,
-  isRuntimeStarting: false,
-  blockedReason: "",
+  state: "ready" as const,
+  message: null,
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
@@ -144,9 +142,8 @@ describe("projectAgentChatThreadState", () => {
       transcriptState: buildThreadTranscriptState({ kind: "visible" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
-        readinessState: "blocked",
-        isReady: false,
-        blockedReason: "Runtime unavailable",
+        state: "blocked",
+        message: "Runtime unavailable",
       },
     });
 
@@ -161,9 +158,8 @@ describe("projectAgentChatThreadState", () => {
       transcriptState: buildThreadTranscriptState({ kind: "failed" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
-        readinessState: "blocked",
-        isReady: false,
-        blockedReason: "Runtime unavailable",
+        state: "blocked",
+        message: "Runtime unavailable",
       },
     });
 
@@ -182,9 +178,8 @@ describe("projectAgentChatThreadState", () => {
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
-        readinessState: "blocked",
-        isReady: false,
-        blockedReason: "Runtime unavailable",
+        state: "blocked",
+        message: "Runtime unavailable",
       },
     });
     const hidden = projectAgentChatThreadState({
@@ -193,9 +188,8 @@ describe("projectAgentChatThreadState", () => {
       transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
-        readinessState: "blocked",
-        isReady: false,
-        blockedReason: "",
+        state: "blocked",
+        message: null,
       },
     });
 

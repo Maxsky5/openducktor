@@ -11,7 +11,7 @@ import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
-type CleanupLocalSessions = (sessions: readonly AgentSessionRef[]) => void;
+type ClearSessionObservationState = (sessions: readonly AgentSessionRef[]) => void;
 
 type CreateLoadAgentSessionsArgs = {
   workspaceRepoPath: string | null;
@@ -20,7 +20,7 @@ type CreateLoadAgentSessionsArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
-  cleanupLocalSessions: CleanupLocalSessions;
+  clearSessionObservationState: ClearSessionObservationState;
   queryClient: QueryClient;
 };
 
@@ -30,7 +30,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter,
   commitSessionCollection,
   observeAgentSession,
-  cleanupLocalSessions,
+  clearSessionObservationState,
   queryClient,
   isStaleRepoOperation,
   forceFresh,
@@ -40,7 +40,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter: SessionLoaderAdapter;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
-  cleanupLocalSessions: CleanupLocalSessions;
+  clearSessionObservationState: ClearSessionObservationState;
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
   forceFresh?: boolean;
@@ -80,7 +80,7 @@ export const loadRepoAgentSessionsForTasks = async ({
       result: readModel,
     };
   });
-  cleanupLocalSessions(readModel.removedSessionRefs);
+  clearSessionObservationState(readModel.unlistedSessionRefs);
 
   if (isStaleRepoOperation()) {
     return;
@@ -102,7 +102,7 @@ export const createLoadAgentSessions = ({
   currentWorkspaceRepoPathRef,
   commitSessionCollection,
   observeAgentSession,
-  cleanupLocalSessions,
+  clearSessionObservationState,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
   return async (taskId: string): Promise<void> => {
@@ -127,7 +127,7 @@ export const createLoadAgentSessions = ({
       adapter,
       commitSessionCollection,
       observeAgentSession,
-      cleanupLocalSessions,
+      clearSessionObservationState,
       queryClient,
       isStaleRepoOperation,
       forceFresh: true,

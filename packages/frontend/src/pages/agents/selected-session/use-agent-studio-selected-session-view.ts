@@ -148,7 +148,7 @@ export function useAgentStudioSelectedSessionView({
     refreshChecks,
     runtimeTarget,
   });
-  const repoReadinessState = runtimeReadiness.readinessState;
+  const repoReadinessState = runtimeReadiness.state;
 
   const launchActionId: SessionLaunchActionId =
     selection.role === "build"

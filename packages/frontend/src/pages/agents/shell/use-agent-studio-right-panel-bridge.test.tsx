@@ -46,10 +46,8 @@ const createSelectionView = (
       error: null,
     },
     runtimeReadiness: {
-      readinessState: "ready",
-      isReady: true,
-      isRuntimeStarting: false,
-      blockedReason: null,
+      state: "ready",
+      message: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },

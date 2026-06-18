@@ -206,7 +206,7 @@ export function useAgentStudioOrchestrationController({
     handleCloseTab,
     handleReorderTab,
   } = selection;
-  const agentStudioReady = view.runtimeReadiness.isReady;
+  const agentStudioReady = view.runtimeReadiness.state === "ready";
   const {
     updateQuery,
     runSessionStartWorkflow,
@@ -263,7 +263,7 @@ export function useAgentStudioOrchestrationController({
     selectedSessionIdentity: view.selectedSessionIdentity,
     selectedSessionModel: view.selectedSessionModel,
     sessionRuntimeData: view.sessionRuntimeData,
-    repoReadinessState: view.runtimeReadiness.readinessState,
+    repoReadinessState: view.runtimeReadiness.state,
     role: view.role,
     reusablePrompts,
     repoSettings,

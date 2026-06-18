@@ -60,6 +60,7 @@ export function useAgentStudioPageModels({
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
   agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
 } {
+  const agentStudioReady = selectedSession.runtime.runtimeReadiness.state === "ready";
   const agentStudioTaskTabsModel = useMemo(
     () =>
       buildAgentStudioTaskTabsModel({
@@ -70,10 +71,10 @@ export function useAgentStudioPageModels({
         onCreateTab: taskTabs.onCreateTab,
         onCloseTab: taskTabs.onCloseTab,
         onReorderTab: taskTabs.onReorderTab,
-        agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
+        agentStudioReady,
       }),
     [
-      selectedSession.runtime.runtimeReadiness.isReady,
+      agentStudioReady,
       taskTabs.availableTabTasks,
       taskTabs.isLoadingTasks,
       taskTabs.onCloseTab,
@@ -100,7 +101,7 @@ export function useAgentStudioPageModels({
     onOpenTaskDetails: selectedSession.selectedTask ? sessionActions.openTaskDetails : null,
     selectedRole: selectedSession.role,
     sessionsForTaskLength: selectedSession.sessionsForTask.length,
-    agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
+    agentStudioReady,
     isStarting: sessionActions.isStarting,
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,

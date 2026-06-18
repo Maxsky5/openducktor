@@ -422,7 +422,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.loadedSession?.runtimeKind).toBe("codex");
-      expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
+      expect(latest.view.runtimeReadiness.state).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
@@ -469,7 +469,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
+      expect(latest.view.runtimeReadiness.state).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
@@ -511,8 +511,8 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.readinessState).toBe("blocked");
-      expect(latest.view.runtimeReadiness.blockedReason).toBe(
+      expect(latest.view.runtimeReadiness.state).toBe("blocked");
+      expect(latest.view.runtimeReadiness.message).toBe(
         "Runtime 'codex' is not available for agent chat.",
       );
       expect(latest.view.transcriptState).toEqual({
@@ -560,7 +560,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.loadedSession).toBeNull();
-      expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
+      expect(latest.view.runtimeReadiness.state).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",
       });

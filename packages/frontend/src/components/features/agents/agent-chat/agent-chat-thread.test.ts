@@ -28,10 +28,8 @@ const buildBaseModel = () => ({
   isSessionWorking: false,
   transcriptState: buildThreadTranscriptState(),
   runtimeReadiness: {
-    readinessState: "ready" as const,
-    isReady: true,
-    isRuntimeStarting: false,
-    blockedReason: "",
+    state: "ready" as const,
+    message: null,
     isLoadingChecks: false,
     refreshChecks: async () => {},
   },
@@ -348,9 +346,8 @@ describe("AgentChatThread", () => {
           transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
-            readinessState: "blocked",
-            isReady: false,
-            blockedReason: "OpenCode runtime is unavailable",
+            state: "blocked",
+            message: "OpenCode runtime is unavailable",
           },
           isInteractionEnabled: false,
           session: null,
@@ -371,9 +368,8 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
-            readinessState: "blocked",
-            isReady: false,
-            blockedReason: "OpenCode runtime is unavailable",
+            state: "blocked",
+            message: "OpenCode runtime is unavailable",
           },
           isInteractionEnabled: false,
           session: buildSession({
@@ -413,9 +409,7 @@ describe("AgentChatThread", () => {
           transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
-            readinessState: "checking",
-            isReady: false,
-            isRuntimeStarting: true,
+            state: "checking",
           },
           isInteractionEnabled: false,
           session: buildSession({
@@ -455,8 +449,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
-            readinessState: "checking",
-            isReady: false,
+            state: "checking",
           },
           isInteractionEnabled: false,
           session: buildSession({

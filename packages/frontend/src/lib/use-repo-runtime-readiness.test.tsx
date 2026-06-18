@@ -73,9 +73,8 @@ describe("useRepoRuntimeReadiness", () => {
       }
 
       const readiness = latest as ReturnType<typeof useRepoRuntimeReadiness>;
-      expect(readiness.readinessState).toBe("checking");
-      expect(readiness.isRuntimeStarting).toBe(true);
-      expect(readiness.blockedReason).toContain("runtime is starting");
+      expect(readiness.state).toBe("checking");
+      expect(readiness.message).toContain("runtime is starting");
     } finally {
       await harness.unmount();
     }
@@ -134,8 +133,8 @@ describe("useRepoRuntimeReadiness", () => {
       }
 
       const readiness = latest as ReturnType<typeof useRepoRuntimeReadiness>;
-      expect(readiness.isRuntimeStarting).toBe(false);
-      expect(readiness.blockedReason).toContain("Checking OpenDucktor MCP");
+      expect(readiness.state).toBe("checking");
+      expect(readiness.message).toContain("Checking OpenDucktor MCP");
     } finally {
       await harness.unmount();
     }
@@ -194,10 +193,9 @@ describe("useRepoRuntimeReadiness", () => {
       }
 
       const readiness = latest as ReturnType<typeof useRepoRuntimeReadiness>;
-      expect(readiness.readinessState).toBe("checking");
-      expect(readiness.isRuntimeStarting).toBe(false);
-      expect(readiness.blockedReason).toContain("Checking OpenDucktor MCP");
-      expect(readiness.blockedReason).not.toContain("mock runtime failed");
+      expect(readiness.state).toBe("checking");
+      expect(readiness.message).toContain("Checking OpenDucktor MCP");
+      expect(readiness.message).not.toContain("mock runtime failed");
     } finally {
       await harness.unmount();
     }
@@ -246,8 +244,8 @@ describe("useRepoRuntimeReadiness", () => {
         throw new Error("Expected readiness hook to mount");
       }
       const checkingReadiness = latest as ReturnType<typeof useRepoRuntimeReadiness>;
-      expect(checkingReadiness.readinessState).toBe("checking");
-      expect(checkingReadiness.blockedReason).toContain("Checking OpenDucktor MCP");
+      expect(checkingReadiness.state).toBe("checking");
+      expect(checkingReadiness.message).toContain("Checking OpenDucktor MCP");
 
       await harness.update({
         args: {
@@ -262,8 +260,8 @@ describe("useRepoRuntimeReadiness", () => {
 
       const readiness = latest as ReturnType<typeof useRepoRuntimeReadiness>;
 
-      expect(readiness.isReady).toBe(true);
-      expect(readiness.blockedReason).toBeNull();
+      expect(readiness.state).toBe("ready");
+      expect(readiness.message).toBeNull();
     } finally {
       await harness.unmount();
     }
