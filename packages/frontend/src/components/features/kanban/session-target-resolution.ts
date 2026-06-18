@@ -1,6 +1,7 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
+import { compareActiveAgentSessionActivityState } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
@@ -17,27 +18,16 @@ type PrimarySessionOrderingCandidate = {
   startedAt?: string;
 };
 
-const rankActiveSessionForPrimary = (session: PrimarySessionOrderingCandidate): number => {
-  if (session.activityState === "waiting_input") {
-    return 0;
-  }
-  if (session.activityState === "running") {
-    return 1;
-  }
-  if (session.activityState === "starting") {
-    return 2;
-  }
-  return 3;
-};
-
 export const compareActiveSessionForPrimary = (
   left: PrimarySessionOrderingCandidate,
   right: PrimarySessionOrderingCandidate,
 ): number => {
-  const leftRank = rankActiveSessionForPrimary(left);
-  const rightRank = rankActiveSessionForPrimary(right);
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
+  const activityPriority = compareActiveAgentSessionActivityState(
+    left.activityState,
+    right.activityState,
+  );
+  if (activityPriority !== 0) {
+    return activityPriority;
   }
 
   if (left.startedAt !== right.startedAt) {

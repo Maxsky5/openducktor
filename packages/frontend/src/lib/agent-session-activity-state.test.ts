@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  compareActiveAgentSessionActivityState,
   formatAgentSessionActivityStateLabel,
   getAgentSessionActivityState,
   isAgentSessionActivityActive,
@@ -38,6 +39,12 @@ describe("agent-session-activity-state", () => {
     expect(isAgentSessionActivityActive("starting")).toBe(true);
     expect(isAgentSessionActivityActive("running")).toBe(true);
     expect(isAgentSessionActivityActive("idle")).toBe(false);
+  });
+
+  test("publishes the canonical active-session priority", () => {
+    expect(compareActiveAgentSessionActivityState("waiting_input", "running")).toBeLessThan(0);
+    expect(compareActiveAgentSessionActivityState("running", "starting")).toBeLessThan(0);
+    expect(compareActiveAgentSessionActivityState("starting", "starting")).toBe(0);
   });
 
   test("formats activity labels from the canonical vocabulary", () => {

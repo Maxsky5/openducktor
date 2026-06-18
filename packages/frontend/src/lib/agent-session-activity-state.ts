@@ -18,6 +18,13 @@ const AGENT_SESSION_ACTIVITY_LABELS: Record<AgentSessionActivityState, string> =
   error: "error",
 };
 
+const ACTIVE_AGENT_SESSION_ACTIVITY_PRIMARY_RANK: Record<ActiveAgentSessionActivityState, number> =
+  {
+    waiting_input: 0,
+    running: 1,
+    starting: 2,
+  };
+
 export const formatAgentSessionActivityStateLabel = (
   activityState: AgentSessionActivityState,
 ): string => AGENT_SESSION_ACTIVITY_LABELS[activityState];
@@ -31,6 +38,13 @@ export const isAgentSessionActivityActive = (
   activityState: OptionalAgentSessionActivityState,
 ): activityState is ActiveAgentSessionActivityState =>
   activityState === "waiting_input" || isAgentSessionActivityWorking(activityState);
+
+export const compareActiveAgentSessionActivityState = (
+  left: ActiveAgentSessionActivityState,
+  right: ActiveAgentSessionActivityState,
+): number =>
+  ACTIVE_AGENT_SESSION_ACTIVITY_PRIMARY_RANK[left] -
+  ACTIVE_AGENT_SESSION_ACTIVITY_PRIMARY_RANK[right];
 
 export const getAgentSessionActivityState = ({
   status,
