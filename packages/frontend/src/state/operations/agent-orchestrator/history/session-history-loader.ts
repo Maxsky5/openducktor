@@ -5,10 +5,9 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { UpdateSession } from "../events/session-event-types";
 import { createRepoStaleGuard } from "../support/core";
 import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
+import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
-
-type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 

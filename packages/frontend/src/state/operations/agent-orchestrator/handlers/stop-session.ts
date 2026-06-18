@@ -7,6 +7,7 @@ import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
+import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
@@ -14,8 +15,6 @@ import {
 import type { SessionObservers } from "../support/session-observers";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import { isWorkflowAgentSession } from "../support/workflow-session";
-
-type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
 
 export type StopAgentSessionDependencies = {
   workspaceRepoPath: string | null;
@@ -77,10 +76,7 @@ export const createStopAgentSession = ({
     }));
 
     try {
-      stopRepoPath = workspaceRepoPath;
-      if (!stopRepoPath) {
-        throw new Error("Active workspace repo path is unavailable.");
-      }
+      stopRepoPath = requireWorkspaceRepoPath(workspaceRepoPath);
 
       await stopAuthoritativeSession({
         repoPath: stopRepoPath,
