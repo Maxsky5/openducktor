@@ -467,7 +467,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       refresh: {
         repoPath: "/tmp/repo",
         refreshTaskData: async () => {},
-        resolveWorkflowToolAliasesByCanonical: () => undefined,
+        workflowToolAliasesByCanonical: undefined,
       },
       todos: {
         updateSessionTodos: () => {},

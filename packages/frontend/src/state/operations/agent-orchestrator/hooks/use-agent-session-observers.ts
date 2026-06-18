@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, RuntimeKind } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
   type AgentRole,
@@ -69,11 +69,13 @@ export const useAgentSessionObservers = ({
 
   const observeAgentSession = useCallback<ObserveAgentSession>(
     async (target): Promise<boolean> => {
-      const findRuntimeDefinitionForKind = (runtimeKind: RuntimeKind) =>
-        findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind);
+      return sessionObserversRef.current.ensureObserver(target, () => {
+        const runtimeDefinition = findRuntimeDefinition(
+          agentEngine.listRuntimeDefinitions(),
+          target.runtimeKind,
+        );
 
-      return sessionObserversRef.current.ensureObserver(target, () =>
-        listenToAgentSessionEvents({
+        return listenToAgentSessionEvents({
           adapter: agentEngine,
           sessionRef: target,
           turnMetadata: sessionTurnState.metadata,
@@ -89,16 +91,12 @@ export const useAgentSessionObservers = ({
           clearTurnDuration: sessionTurnState.timing.clearTurnDuration,
           buildReadOnlyApprovalRejectionMessage,
           refreshTaskData,
-          canAutoRejectReadOnlyApproval: (runtimeKind) => {
-            const runtimeDefinition = findRuntimeDefinitionForKind(runtimeKind);
-            return runtimeDefinition
-              ? runtimeSupportsCapability(runtimeDefinition, "approvals.readOnlyAutoRejectSafe")
-              : false;
-          },
-          resolveWorkflowToolAliasesByCanonical: (runtimeKind) =>
-            findRuntimeDefinitionForKind(runtimeKind)?.workflowToolAliasesByCanonical,
-        }),
-      );
+          readOnlyApprovalAutoRejectSafe: runtimeDefinition
+            ? runtimeSupportsCapability(runtimeDefinition, "approvals.readOnlyAutoRejectSafe")
+            : false,
+          workflowToolAliasesByCanonical: runtimeDefinition?.workflowToolAliasesByCanonical,
+        });
+      });
     },
     [
       agentEngine,

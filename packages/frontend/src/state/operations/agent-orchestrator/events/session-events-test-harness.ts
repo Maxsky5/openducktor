@@ -127,8 +127,8 @@ type ObserveAgentSessionEventsTestParams = Omit<
   | "recordTurnActivityTimestamp"
   | "recordTurnUserMessageTimestamp"
   | "buildReadOnlyApprovalRejectionMessage"
-  | "canAutoRejectReadOnlyApproval"
-  | "resolveWorkflowToolAliasesByCanonical"
+  | "readOnlyApprovalAutoRejectSafe"
+  | "workflowToolAliasesByCanonical"
   | "isSessionObserved"
 > &
   Partial<
@@ -140,8 +140,8 @@ type ObserveAgentSessionEventsTestParams = Omit<
       | "recordTurnActivityTimestamp"
       | "recordTurnUserMessageTimestamp"
       | "buildReadOnlyApprovalRejectionMessage"
-      | "canAutoRejectReadOnlyApproval"
-      | "resolveWorkflowToolAliasesByCanonical"
+      | "readOnlyApprovalAutoRejectSafe"
+      | "workflowToolAliasesByCanonical"
       | "isSessionObserved"
     >
   > & {
@@ -163,8 +163,8 @@ export const listenToAgentSessionEvents = (
     recordTurnActivityTimestamp,
     recordTurnUserMessageTimestamp,
     buildReadOnlyApprovalRejectionMessage,
-    canAutoRejectReadOnlyApproval,
-    resolveWorkflowToolAliasesByCanonical,
+    readOnlyApprovalAutoRejectSafe,
+    workflowToolAliasesByCanonical,
     isSessionObserved,
     ...eventParams
   } = params;
@@ -193,12 +193,11 @@ export const listenToAgentSessionEvents = (
             overrides: {},
           }),
         )),
-    canAutoRejectReadOnlyApproval:
-      canAutoRejectReadOnlyApproval ??
-      (() => OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.readOnlyAutoRejectSafe),
-    resolveWorkflowToolAliasesByCanonical:
-      resolveWorkflowToolAliasesByCanonical ??
-      (() => OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical),
+    readOnlyApprovalAutoRejectSafe:
+      readOnlyApprovalAutoRejectSafe ??
+      OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.readOnlyAutoRejectSafe,
+    workflowToolAliasesByCanonical:
+      workflowToolAliasesByCanonical ?? OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
     isSessionObserved:
       isSessionObserved ??
       ((candidateSession) =>

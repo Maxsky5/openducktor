@@ -287,8 +287,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      canAutoRejectReadOnlyApproval: () => false,
-      resolveWorkflowToolAliasesByCanonical: () => undefined,
+      readOnlyApprovalAutoRejectSafe: false,
+      workflowToolAliasesByCanonical: undefined,
     });
 
     adapter.stopSession = async (externalSessionId) => {

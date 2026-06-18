@@ -1,4 +1,4 @@
-import type { AgentToolName, RuntimeKind } from "@openducktor/contracts";
+import type { AgentToolName } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentEvent,
@@ -56,15 +56,13 @@ export type ObserveAgentSessionParams = {
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
-  canAutoRejectReadOnlyApproval: (runtimeKind: RuntimeKind) => boolean;
+  readOnlyApprovalAutoRejectSafe: boolean;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  resolveWorkflowToolAliasesByCanonical: (
-    runtimeKind: RuntimeKind,
-  ) => WorkflowToolAliasesByCanonical | undefined;
+  workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
 };
 
 export type SessionEventSessionContext = {
@@ -94,12 +92,12 @@ export type SessionApprovalContext = {
   repoPath: string;
 } & Pick<
   ObserveAgentSessionParams,
-  "adapter" | "canAutoRejectReadOnlyApproval" | "buildReadOnlyApprovalRejectionMessage"
+  "adapter" | "readOnlyApprovalAutoRejectSafe" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
 export type SessionRefreshContext = { repoPath: string } & Pick<
   ObserveAgentSessionParams,
-  "refreshTaskData" | "resolveWorkflowToolAliasesByCanonical"
+  "refreshTaskData" | "workflowToolAliasesByCanonical"
 >;
 
 export type SessionEventContext = {
@@ -160,12 +158,12 @@ export const createSessionEventContext = (
       repoPath: context.sessionRef.repoPath,
       adapter: context.adapter,
       buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
-      canAutoRejectReadOnlyApproval: context.canAutoRejectReadOnlyApproval,
+      readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
     },
     refresh: {
       repoPath: context.sessionRef.repoPath,
       refreshTaskData: context.refreshTaskData,
-      resolveWorkflowToolAliasesByCanonical: context.resolveWorkflowToolAliasesByCanonical,
+      workflowToolAliasesByCanonical: context.workflowToolAliasesByCanonical,
     },
     todos: {
       updateSessionTodos: context.updateSessionTodos,

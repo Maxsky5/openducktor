@@ -218,9 +218,7 @@ export const handleToolPart = (
   let shouldRefreshTaskData = false;
   const activeSession = context.store.readSession(context.session.identity);
   const taskId = activeSession?.taskId;
-  const workflowToolAliasesByCanonical = activeSession
-    ? context.refresh.resolveWorkflowToolAliasesByCanonical(activeSession.runtimeKind)
-    : undefined;
+  const workflowToolAliasesByCanonical = context.refresh.workflowToolAliasesByCanonical;
 
   if (todoUpdateFromTool && activeSession) {
     context.todos.updateSessionTodos((todos) =>

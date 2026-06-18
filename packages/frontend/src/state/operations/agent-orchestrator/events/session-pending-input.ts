@@ -95,12 +95,7 @@ const shouldAutoRejectApproval = (
   if (role === undefined || !isReadOnlyAgentRole(role) || event.mutation !== "mutating") {
     return false;
   }
-
-  const session = context.store.readSession(context.session.identity);
-  if (!session) {
-    return false;
-  }
-  return context.approvals.canAutoRejectReadOnlyApproval(session.runtimeKind);
+  return context.approvals.readOnlyApprovalAutoRejectSafe;
 };
 
 const autoRejectMutatingApproval = (
