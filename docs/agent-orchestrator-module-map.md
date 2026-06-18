@@ -156,6 +156,10 @@ App lifecycle and workspace selection must not start runtimes or manually
 refresh runtime health as a side effect; selecting a workspace only makes the
 runtime-health query eligible to run.
 
+Invariant: `not_started` is a passive runtime observation only. UI controlled by
+the automatic repository runtime-health path must treat it as a pending startup
+state, not as a terminal selected-session or diagnostics blocker.
+
 Must not own:
 
 - session start/send runtime preparation

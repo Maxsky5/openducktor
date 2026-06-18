@@ -467,6 +467,7 @@ export const buildDiagnosticsPanelModel = (
       taskStoreCheck === null ||
       isRuntimeHealthPending ||
       hasCheckingRuntimeHealth ||
+      hasNotStartedRuntimeHealth ||
       hasDiagnosticsRetryingState({
         runtimeDefinitions,
         runtimeCheckFailureKind,

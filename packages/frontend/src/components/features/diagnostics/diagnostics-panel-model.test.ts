@@ -81,7 +81,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
-  test("reports an enabled runtime as not started instead of healthy", () => {
+  test("keeps diagnostics checking while an enabled runtime awaits automatic startup", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -126,8 +126,8 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(false);
-    expect(model.summaryState.label).toBe("Runtime not started");
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
   });
 
   test("reports disabled runtimes without leaving diagnostics stuck checking", () => {

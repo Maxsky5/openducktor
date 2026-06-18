@@ -57,6 +57,9 @@ export const isRepoRuntimeStarting = (runtimeHealth: RepoRuntimeHealthCheck | nu
   );
 };
 
+const isRepoRuntimeAwaitingStartup = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean =>
+  runtimeHealth?.runtime.status === "not_started";
+
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
@@ -305,11 +308,18 @@ export const deriveRepoRuntimeReadiness = ({
     scopedRuntimeDefinitions.find(
       (definition) => runtimeHealthByRuntime[definition.kind]?.status === "checking",
     ) ?? null;
+  const awaitingStartupRuntimeDefinition =
+    scopedRuntimeDefinitions.find((definition) =>
+      isRepoRuntimeAwaitingStartup(runtimeHealthByRuntime[definition.kind] ?? null),
+    ) ?? null;
   const blockedRuntimeDefinition =
     scopedRuntimeDefinitions.find((definition) => {
       const runtimeHealth = runtimeHealthByRuntime[definition.kind];
       return Boolean(
-        runtimeHealth && runtimeHealth.status !== "ready" && runtimeHealth.status !== "checking",
+        runtimeHealth &&
+          runtimeHealth.status !== "ready" &&
+          runtimeHealth.status !== "checking" &&
+          !isRepoRuntimeAwaitingStartup(runtimeHealth),
       );
     }) ?? null;
   const blockedRuntimeHealth = blockedRuntimeDefinition
@@ -320,8 +330,10 @@ export const deriveRepoRuntimeReadiness = ({
   );
   const isRuntimeStarting =
     hasActiveWorkspace &&
-    scopedRuntimeDefinitions.some((definition) =>
-      isRepoRuntimeStarting(runtimeHealthByRuntime[definition.kind] ?? null),
+    scopedRuntimeDefinitions.some(
+      (definition) =>
+        isRepoRuntimeStarting(runtimeHealthByRuntime[definition.kind] ?? null) ||
+        isRepoRuntimeAwaitingStartup(runtimeHealthByRuntime[definition.kind] ?? null),
     );
   const readinessState: RepoRuntimeReadinessState = (() => {
     if (isReady) {
@@ -331,6 +343,9 @@ export const deriveRepoRuntimeReadiness = ({
       return "checking";
     }
     if (hasActiveWorkspace && checkingRuntimeDefinition) {
+      return "checking";
+    }
+    if (hasActiveWorkspace && awaitingStartupRuntimeDefinition) {
       return "checking";
     }
     if (
@@ -382,6 +397,9 @@ export const deriveRepoRuntimeReadiness = ({
           runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
         ) ?? "Checking runtime health..."
       );
+    }
+    if (awaitingStartupRuntimeDefinition) {
+      return `${awaitingStartupRuntimeDefinition.label} runtime is starting...`;
     }
 
     return (
