@@ -1,7 +1,7 @@
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import { getSessionMessageCount } from "../support/messages";
+import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
 
@@ -110,7 +110,7 @@ const deriveLoadedSelectedSessionTranscriptState = ({
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionTranscriptState => {
-  if (getSessionMessageCount(session) > 0 || session.historyLoadState === "loaded") {
+  if (hasRenderableSessionTranscript(session)) {
     return { kind: "visible" };
   }
 
