@@ -16,8 +16,9 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
   AgentSessionIdentity,
-  AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -37,12 +38,11 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
-export type AgentChatThreadSession = AgentSessionIdentity &
-  Pick<AgentSessionState, "title" | "pendingApprovals" | "pendingQuestions" | "selectedModel"> & {
-    activityState: AgentSessionActivityState | null;
-    messages: SessionMessagesState;
-    todos: AgentSessionTodoItem[];
-  };
+export type AgentChatThreadSession = AgentSessionIdentity & {
+  title?: string;
+  activityState: AgentSessionActivityState | null;
+  messages: SessionMessagesState;
+};
 
 export type AgentChatTranscriptNotice = {
   kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
@@ -62,8 +62,12 @@ export type AgentChatThreadModel = {
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
+  todos: readonly AgentSessionTodoItem[];
+  sessionAccentColor?: string | undefined;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;

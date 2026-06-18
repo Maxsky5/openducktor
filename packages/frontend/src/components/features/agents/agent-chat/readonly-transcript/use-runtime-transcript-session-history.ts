@@ -72,7 +72,7 @@ export function useRuntimeTranscriptSessionHistory({
 
   const session = useMemo(() => {
     if (matchedLiveSession) {
-      return toAgentChatThreadSession(matchedLiveSession, []);
+      return toAgentChatThreadSession(matchedLiveSession);
     }
     if (!historySessionRef || !historyQuery.data) {
       return null;

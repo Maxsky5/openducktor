@@ -1,8 +1,10 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
   AgentChatSurfaceModel,
@@ -34,6 +36,10 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAuxiliaryError: string | null;
   runtimeReadiness: RepoRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
+  todos: readonly AgentSessionTodoItem[];
+  sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
   composer?: AgentChatComposerConfig;
@@ -51,6 +57,10 @@ export function useAgentChatSurfaceModel({
   sessionAuxiliaryError,
   runtimeReadiness,
   emptyState,
+  pendingApprovalRequests,
+  pendingQuestionRequests,
+  todos,
+  sessionAccentColor,
   pendingQuestions,
   approvals,
   composer,
@@ -107,6 +117,10 @@ export function useAgentChatSurfaceModel({
     runtimeDefinitions,
     sessionAuxiliaryError,
     emptyState,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
+    todos,
+    sessionAccentColor,
     pendingQuestions,
     approvals,
     sessionAgentColors: resolvedSessionAgentColors,

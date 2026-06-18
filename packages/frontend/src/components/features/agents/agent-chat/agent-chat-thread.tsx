@@ -12,10 +12,8 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { cn } from "@/lib/utils";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentSessionAccentColor } from "../agent-accent-color";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
@@ -131,9 +129,9 @@ const EMPTY_RENDERED_TURNS: AgentChatRenderedTurn[] = [];
 
 type AgentChatBottomStackProps = {
   externalSessionId: string;
-  pendingQuestions: AgentSessionState["pendingQuestions"];
-  pendingApprovals: AgentSessionState["pendingApprovals"];
-  todos: AgentSessionTodoItem[];
+  pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
+  pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
+  todos: readonly AgentSessionTodoItem[];
   sessionAuxiliaryError: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
@@ -438,8 +436,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isStarting,
     isSending,
     sessionAgentColors,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
+    todos,
+    sessionAccentColor,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
@@ -496,16 +498,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef.current = scrollToBottomOnSend;
   }, [scrollToBottomOnSend, scrollToBottomOnSendRef]);
 
-  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
-  const sessionSelectedModel = session?.selectedModel ?? null;
-  const sessionAccentColor = useMemo(() => {
-    const profileId = sessionSelectedModel?.profileId;
-    return resolveAgentSessionAccentColor({
-      agentName: profileId,
-      agentColors: sessionAgentColors,
-      runtimeKind: sessionRuntimeKind,
-    });
-  }, [sessionAgentColors, sessionRuntimeKind, sessionSelectedModel?.profileId]);
   // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
   // under-measure rich attachment rows and break bottom pinning.
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
@@ -514,11 +506,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }
   const rowRefByKey = rowRefByKeyRef.current;
   const { registerRowElement } = useAgentChatRowMotion();
-  const hasVisibleTodo = session
-    ? getActionableSessionTodo(getVisibleSessionTodos(session.todos)) !== null
-    : false;
+  const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
+  const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const hasBottomStack = Boolean(
-    session && (isAgentSessionWaitingInput(session) || hasVisibleTodo || sessionAuxiliaryError),
+    session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError),
   );
 
   const resolveRowRef = useCallback(
@@ -623,9 +614,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         <div ref={bottomStackRef}>
           <AgentChatBottomStack
             externalSessionId={session.externalSessionId}
-            pendingQuestions={session.pendingQuestions}
-            pendingApprovals={session.pendingApprovals}
-            todos={session.todos}
+            pendingQuestions={pendingQuestionRequests}
+            pendingApprovals={pendingApprovalRequests}
+            todos={todos}
             canSubmitQuestionAnswers={canSubmitQuestionAnswers}
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}

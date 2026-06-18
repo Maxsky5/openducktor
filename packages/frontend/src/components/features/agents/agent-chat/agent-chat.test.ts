@@ -170,12 +170,11 @@ describe("AgentChat", () => {
           ...buildModel(),
           thread: {
             ...buildModel().thread,
-            sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
             session: buildSession({
               status: "idle",
-              selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
-              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
+            todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            sessionAccentColor: "#123456",
           },
         },
       }),
@@ -196,8 +195,8 @@ describe("AgentChat", () => {
             ...buildModel().thread,
             session: buildSession({
               status: "idle",
-              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
+            todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAuxiliaryError: "todos unavailable",
           },
         },

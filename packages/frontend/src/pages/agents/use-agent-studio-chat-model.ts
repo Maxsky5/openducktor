@@ -1,6 +1,7 @@
 import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
+import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat-thread-session";
@@ -8,6 +9,7 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -82,6 +84,9 @@ const toChatContextUsage = (
   };
 };
 
+const EMPTY_PENDING_APPROVALS = Object.freeze([]) as readonly AgentApprovalRequest[];
+const EMPTY_PENDING_QUESTIONS = Object.freeze([]) as readonly AgentQuestionRequest[];
+
 export function useAgentStudioChatModel({
   selectedSession,
   sessionActions,
@@ -96,12 +101,26 @@ export function useAgentStudioChatModel({
   const activeThreadSession = useMemo(
     () =>
       selectedSession.loadedSession
-        ? toAgentChatThreadSession(
-            selectedSession.loadedSession,
-            selectedSession.runtime.runtimeData.todos,
-          )
+        ? toAgentChatThreadSession(selectedSession.loadedSession)
         : null,
-    [selectedSession.loadedSession, selectedSession.runtime.runtimeData.todos],
+    [selectedSession.loadedSession],
+  );
+  const pendingApprovalRequests =
+    selectedSession.loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
+  const pendingQuestionRequests =
+    selectedSession.loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
+  const sessionAccentColor = useMemo(
+    () =>
+      resolveAgentSessionAccentColor({
+        agentName: selectedSession.loadedSession?.selectedModel?.profileId,
+        agentColors: modelSelection.agentAccentColorsByProfileId,
+        runtimeKind: activeThreadSession?.runtimeKind ?? null,
+      }),
+    [
+      activeThreadSession?.runtimeKind,
+      modelSelection.agentAccentColorsByProfileId,
+      selectedSession.loadedSession?.selectedModel?.profileId,
+    ],
   );
   const chatContextUsage = useMemo(
     () => toChatContextUsage(modelSelection.selectedSessionContextUsage),
@@ -238,6 +257,10 @@ export function useAgentStudioChatModel({
     sessionAuxiliaryError: selectedSession.runtime.runtimeData.error,
     runtimeReadiness,
     emptyState: surfaceState.emptyState,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
+    todos: selectedSession.runtime.runtimeData.todos,
+    sessionAccentColor,
     pendingQuestions,
     approvals,
     composer: composerConfig,

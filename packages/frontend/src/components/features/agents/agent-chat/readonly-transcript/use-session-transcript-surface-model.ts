@@ -1,3 +1,4 @@
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-health";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -9,6 +10,8 @@ import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
+
+const EMPTY_TODOS = Object.freeze([]) as readonly AgentSessionTodoItem[];
 
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -50,7 +53,7 @@ export function useSessionTranscriptSurfaceModel({
     liveSession,
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
-    session: sessionHistory.session,
+    liveSession,
     target,
     isRuntimeReady: runtimeReadiness.isReady,
     replyAgentApproval,
@@ -65,13 +68,16 @@ export function useSessionTranscriptSurfaceModel({
 
   const model = useAgentChatSurfaceModel({
     sessionKey,
-    session: transcriptInteractions.session,
+    session: sessionHistory.session,
     transcriptState: sessionHistory.transcriptState,
     chatSettings,
     runtimeDefinitions,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,
     runtimeReadiness,
     emptyState: transcriptSurfaceState.emptyState,
+    pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,
+    pendingQuestionRequests: transcriptInteractions.pendingQuestionRequests,
+    todos: EMPTY_TODOS,
     pendingQuestions: transcriptInteractions.pendingQuestions,
     approvals: transcriptInteractions.approvals,
   });

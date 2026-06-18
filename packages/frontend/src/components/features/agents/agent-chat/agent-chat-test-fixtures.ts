@@ -107,14 +107,12 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
 
 type AgentChatThreadSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: SessionMessagesState | AgentChatMessage[];
-  todos?: AgentChatThreadSession["todos"];
 };
 
 export const buildSession = (
   overrides: AgentChatThreadSessionOverrides = {},
 ): AgentChatThreadSession => {
-  const { todos = [], ...overrideSession } = overrides;
-  const { messages: overrideMessages, ...overrideSessionFields } = overrideSession;
+  const { messages: overrideMessages, ...overrideSessionFields } = overrides;
   const session = {
     ...baseSession,
     ...overrideSessionFields,
@@ -122,13 +120,10 @@ export const buildSession = (
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 
-  return toAgentChatThreadSession(
-    {
-      ...session,
-      messages,
-    },
-    todos,
-  );
+  return toAgentChatThreadSession({
+    ...session,
+    messages,
+  });
 };
 
 type TranscriptStateFixtureInput =
@@ -149,12 +144,19 @@ type AgentChatThreadProjectionFields =
   | "displayedSessionKey"
   | "shouldResetTranscriptWindow"
   | "transcriptNotice";
+type AgentChatThreadFixtureDefaults =
+  | "pendingApprovalRequests"
+  | "pendingQuestionRequests"
+  | "todos"
+  | "sessionAccentColor";
 
 export type AgentChatThreadModelInput = Omit<
   AgentChatThreadModel,
-  AgentChatThreadProjectionFields
+  AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults
 > &
-  Partial<Pick<AgentChatThreadModel, AgentChatThreadProjectionFields>>;
+  Partial<
+    Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
+  >;
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
   const threadState = projectAgentChatThreadState({
@@ -171,6 +173,9 @@ export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChat
     displayedSessionKey: threadState.displayedSessionKey,
     shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
     transcriptNotice: threadState.transcriptNotice,
+    pendingApprovalRequests: model.pendingApprovalRequests ?? [],
+    pendingQuestionRequests: model.pendingQuestionRequests ?? [],
+    todos: model.todos ?? [],
   };
 };
 

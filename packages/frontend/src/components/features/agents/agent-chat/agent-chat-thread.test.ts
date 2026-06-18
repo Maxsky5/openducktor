@@ -10,7 +10,6 @@ import {
   type AgentChatThreadModelInput,
   buildApprovalRequest,
   buildMessage,
-  buildModelSelection,
   buildQuestionRequest,
   buildSession,
   buildThreadTranscriptState,
@@ -173,8 +172,6 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
     externalSessionId,
     messages,
     status: "idle",
-    pendingQuestions: [],
-    pendingApprovals: [],
   });
 };
 
@@ -258,7 +255,6 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             status: "running",
-            pendingQuestions: [],
           }),
         },
       }),
@@ -275,8 +271,6 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "stopped",
             messages: [],
-            pendingQuestions: [],
-            pendingApprovals: [],
           }),
         },
       }),
@@ -297,8 +291,6 @@ describe("AgentChatThread", () => {
               buildMessage("thinking", "Reasoning trace 1", { id: "thinking-1" }),
               buildMessage("thinking", "Reasoning trace 2", { id: "thinking-2" }),
             ],
-            pendingQuestions: [],
-            pendingApprovals: [],
           }),
         },
       }),
@@ -315,9 +307,9 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -498,8 +490,8 @@ describe("AgentChatThread", () => {
                 id: "assistant-2",
               }),
             ],
-            pendingQuestions: [buildQuestionRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -517,8 +509,8 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "idle",
             messages: [buildMessage("assistant", "Need your input", { id: "assistant-idle-1" })],
-            pendingQuestions: [buildQuestionRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -532,24 +524,23 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingApprovals: [
-              buildApprovalRequest({
-                requestId: "perm-1",
-                requestType: "permission_grant" as const,
-                title: `Approve permission: ${"bash"}`,
-                summary: `Approval request for ${"bash"}.`,
-                affectedPaths: ["**/*.sh", "/tmp/*"],
-                action: { name: "bash" },
-                mutation: "read_only" as const,
-                supportedReplyOutcomes: [
-                  "approve_once" as const,
-                  "approve_session" as const,
-                  "reject" as const,
-                ],
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingApprovalRequests: [
+            buildApprovalRequest({
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"bash"}`,
+              summary: `Approval request for ${"bash"}.`,
+              affectedPaths: ["**/*.sh", "/tmp/*"],
+              action: { name: "bash" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            }),
+          ],
         },
       }),
     );
@@ -577,9 +568,9 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             messages: longMessages,
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -595,22 +586,21 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Analyze current styling",
-                status: "completed",
-              }),
-              buildTodoItem({
-                id: "todo-2",
-                content: "Read layout and pages",
-                status: "in_progress",
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Analyze current styling",
+              status: "completed",
+            }),
+            buildTodoItem({
+              id: "todo-2",
+              content: "Read layout and pages",
+              status: "in_progress",
+            }),
+          ],
         },
       }),
     );
@@ -644,21 +634,16 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             runtimeKind: "codex",
-            selectedModel: {
-              runtimeKind: "codex",
-              providerId: "openai",
-              modelId: "gpt-5.3-codex",
-              variant: "high",
-            },
             status: "idle",
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Keep Codex todo accented",
-                status: "in_progress",
-              }),
-            ],
           }),
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Keep Codex todo accented",
+              status: "in_progress",
+            }),
+          ],
+          sessionAccentColor: "var(--odt-runtime-accent-codex)",
         },
       }),
     );
@@ -672,19 +657,18 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
           session: buildSession({
             runtimeKind: "opencode",
-            selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
             status: "idle",
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Keep explicit todo accented",
-                status: "in_progress",
-              }),
-            ],
           }),
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Keep explicit todo accented",
+              status: "in_progress",
+            }),
+          ],
+          sessionAccentColor: "#123456",
         },
       }),
     );
@@ -827,8 +811,6 @@ describe("AgentChatThread", () => {
     const runningSession = buildSession({
       externalSessionId,
       messages,
-      pendingQuestions: [],
-      pendingApprovals: [],
       status: "running",
     });
     const sessionKey = agentSessionIdentityKey(runningSession);
@@ -866,8 +848,6 @@ describe("AgentChatThread", () => {
           session: buildSession({
             externalSessionId,
             messages,
-            pendingQuestions: [],
-            pendingApprovals: [],
             status: "idle",
           }),
         },
@@ -890,11 +870,8 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [],
-            todos: [],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -911,11 +888,8 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [],
-            pendingApprovals: [buildApprovalRequest()],
-            todos: [],
-          }),
+          session: buildSession(),
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -932,12 +906,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [],
-            pendingApprovals: [],
-            todos: [],
-            selectedModel: null,
-          }),
+          session: buildSession(),
           sessionAuxiliaryError: "todos unavailable",
         },
       }),
@@ -961,17 +930,15 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [],
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Read layout and pages",
-                status: "in_progress",
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Read layout and pages",
+              status: "in_progress",
+            }),
+          ],
         },
       }),
     );
@@ -1012,8 +979,6 @@ describe("AgentChatThread", () => {
           id: `message-${index + 1}`,
         }),
       ),
-      pendingQuestions: [],
-      pendingApprovals: [],
       status: "idle",
     });
 
@@ -1198,11 +1163,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
-      session: buildSession({
-        pendingQuestions: [],
-        pendingApprovals: [],
-        todos: [],
-      }),
+      session: buildSession(),
     };
 
     const rendered = render(
@@ -1219,10 +1180,8 @@ describe("AgentChatThread", () => {
           ...model,
           session: buildSession({
             externalSessionId: model.session?.externalSessionId,
-            pendingQuestions: [],
-            pendingApprovals: [],
-            todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
           }),
+          todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
         },
       }),
     );
@@ -1252,15 +1211,12 @@ describe("AgentChatThread", () => {
     const syncBottomAfterComposerLayoutRef = {
       current: null,
     } as { current: (() => void) | null };
-    const session = buildSession({
-      pendingQuestions: [],
-      pendingApprovals: [],
-      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
-    });
+    const session = buildSession();
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
       session,
+      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
       todoPanelCollapsed: true,
     };
 

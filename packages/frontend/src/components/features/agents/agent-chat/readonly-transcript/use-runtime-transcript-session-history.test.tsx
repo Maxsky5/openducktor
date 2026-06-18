@@ -123,7 +123,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession, []));
+      expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession));
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
     } finally {
       await harness.unmount();

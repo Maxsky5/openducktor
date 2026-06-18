@@ -533,8 +533,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );
       expect(harness.getLatest().model.thread.session?.activityState).toBeNull();
-      expect(harness.getLatest().model.thread.session?.pendingApprovals).toEqual([]);
-      expect(harness.getLatest().model.thread.session?.pendingQuestions).toEqual([]);
+      expect(harness.getLatest().model.thread.pendingApprovalRequests).toEqual([]);
+      expect(harness.getLatest().model.thread.pendingQuestionRequests).toEqual([]);
     } finally {
       await harness.unmount();
     }
@@ -560,7 +560,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
 
       const model = harness.getLatest().model;
-      expect(model.thread.session).toEqual(toAgentChatThreadSession(liveSession, []));
+      expect(model.thread.session).toEqual(toAgentChatThreadSession(liveSession));
       expect(model.thread.transcriptState).toEqual({ kind: "visible" });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();
@@ -569,7 +569,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("uses live subagent approvals on the transcript session", async () => {
+  test("uses live subagent approvals beside the transcript session", async () => {
     const pendingApproval = makePendingApproval();
     setLiveTranscriptSessions(makeLiveTranscriptSession());
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -587,10 +587,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.model.thread.session?.pendingApprovals.length === 1);
+      await harness.waitFor((state) => state.model.thread.pendingApprovalRequests.length === 1);
 
-      const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
-      expect(session.pendingApprovals).toEqual([pendingApproval]);
+      expect(harness.getLatest().model.thread.pendingApprovalRequests).toEqual([pendingApproval]);
       expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
     } finally {
       await harness.unmount();
@@ -650,8 +649,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
 
-      const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
-      expect(session.pendingQuestions).toEqual([pendingQuestion]);
+      expect(harness.getLatest().model.thread.pendingQuestionRequests).toEqual([pendingQuestion]);
       await harness.run(async () => {
         await harness.getLatest().model.thread.onSubmitQuestionAnswers("question-1", [["A"]]);
       });

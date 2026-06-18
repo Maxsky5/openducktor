@@ -44,8 +44,4 @@ export const createReadonlyTranscriptSession = ({
     }),
     transcriptHistoryVersion(history),
   ),
-  pendingApprovals: [],
-  pendingQuestions: [],
-  todos: [],
-  selectedModel: null,
 });

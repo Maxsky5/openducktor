@@ -6,9 +6,8 @@ import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
+  AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
-import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -46,17 +45,14 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
   ],
 });
 
-const createThreadSession = (
+const createLiveSession = (
   overrides: Parameters<typeof createAgentSessionFixture>[0] = {},
-): AgentChatThreadSession =>
-  toAgentChatThreadSession(
-    createAgentSessionFixture({
-      runtimeKind: "opencode",
-      workingDirectory: "/repo-a",
-      ...overrides,
-    }),
-    [],
-  );
+): AgentSessionState =>
+  createAgentSessionFixture({
+    runtimeKind: "opencode",
+    workingDirectory: "/repo-a",
+    ...overrides,
+  });
 
 const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
   externalSessionId: "session-1",
@@ -66,7 +62,7 @@ const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessi
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  session: createThreadSession({
+  liveSession: createLiveSession({
     externalSessionId: "session-1",
     runtimeKind: "opencode",
     workingDirectory: "/repo-a",
@@ -81,12 +77,12 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useRuntimeTranscriptInteractions", () => {
-  test("uses session-owned pending requests on the transcript session", async () => {
+  test("uses pending requests from the matching live session", async () => {
     const sessionApproval = createApprovalRequest("session-approval");
     const sessionQuestion = createQuestionRequest("session-question");
     const harness = createHookHarness(
       createBaseArgs({
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-1",
           pendingApprovals: [sessionApproval],
           pendingQuestions: [sessionQuestion],
@@ -97,8 +93,8 @@ describe("useRuntimeTranscriptInteractions", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().session?.pendingApprovals).toEqual([sessionApproval]);
-      expect(harness.getLatest().session?.pendingQuestions).toEqual([sessionQuestion]);
+      expect(harness.getLatest().pendingApprovalRequests).toEqual([sessionApproval]);
+      expect(harness.getLatest().pendingQuestionRequests).toEqual([sessionQuestion]);
       expect(harness.getLatest().approvals.canReply).toBe(true);
       expect(harness.getLatest().pendingQuestions.canSubmit).toBe(true);
     } finally {
@@ -117,7 +113,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const pendingApproval = createApprovalRequest("approval-1");
     const harness = createHookHarness(
       createBaseArgs({
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-1",
           pendingApprovals: [pendingApproval],
           pendingQuestions: [],
@@ -154,7 +150,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const harness = createHookHarness(
       createBaseArgs({
         target: createTarget({ externalSessionId: "session-requested" }),
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-other",
           pendingApprovals: [pendingApproval],
           pendingQuestions: [],
@@ -182,7 +178,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const pendingQuestion = createQuestionRequest("question-1");
     const harness = createHookHarness(
       createBaseArgs({
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-1",
           pendingApprovals: [],
           pendingQuestions: [pendingQuestion],
@@ -213,7 +209,7 @@ describe("useRuntimeTranscriptInteractions", () => {
       await harness.waitFor(
         (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === undefined,
       );
-      expect(harness.getLatest().session?.pendingQuestions).toEqual([pendingQuestion]);
+      expect(harness.getLatest().pendingQuestionRequests).toEqual([pendingQuestion]);
       expect(harness.getLatest().pendingQuestions.isSubmittingByRequestId["question-1"]).toBe(
         undefined,
       );
@@ -228,7 +224,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const baseArgs = createBaseArgs({
-      session: createThreadSession({
+      liveSession: createLiveSession({
         externalSessionId: "session-1",
         pendingApprovals: [],
         pendingQuestions: [pendingQuestion],
@@ -249,7 +245,7 @@ describe("useRuntimeTranscriptInteractions", () => {
       await harness.update({
         ...baseArgs,
         target: createTarget({ externalSessionId: "session-2" }),
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-2",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
@@ -270,7 +266,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const baseArgs = createBaseArgs({
-      session: createThreadSession({
+      liveSession: createLiveSession({
         externalSessionId: "session-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
@@ -292,7 +288,7 @@ describe("useRuntimeTranscriptInteractions", () => {
 
       await harness.update({
         ...baseArgs,
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-1",
           runtimeKind: "opencode",
           workingDirectory: "/repo-b",
@@ -311,7 +307,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   test("keeps actions disabled while the runtime is not ready", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        session: createThreadSession({
+        liveSession: createLiveSession({
           externalSessionId: "session-1",
           pendingApprovals: [createApprovalRequest("approval-1")],
           pendingQuestions: [createQuestionRequest("question-1")],

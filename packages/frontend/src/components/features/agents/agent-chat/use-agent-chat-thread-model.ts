@@ -1,8 +1,10 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentChatEmptyStateModel, AgentChatThreadModel } from "./agent-chat.types";
 import type { AgentChatThreadState } from "./agent-chat-thread-state";
 
@@ -37,6 +39,10 @@ type UseAgentChatThreadModelArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   sessionAuxiliaryError: string | null;
   emptyState: AgentChatEmptyStateModel | null;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
+  todos: readonly AgentSessionTodoItem[];
+  sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
   sessionAgentColors: Record<string, string>;
@@ -57,6 +63,10 @@ export function useAgentChatThreadModel({
   runtimeDefinitions,
   sessionAuxiliaryError,
   emptyState,
+  pendingApprovalRequests,
+  pendingQuestionRequests,
+  todos,
+  sessionAccentColor,
   pendingQuestions,
   approvals,
   sessionAgentColors,
@@ -110,10 +120,14 @@ export function useAgentChatThreadModel({
       isStarting: composerActivity?.isStarting ?? false,
       isSending: composerActivity?.isSending ?? false,
       sessionAgentColors,
+      pendingApprovalRequests,
+      pendingQuestionRequests,
       subagentPendingApprovalCountBySessionKey:
         subagentPendingApprovalCountBySessionKey ?? EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
       subagentPendingQuestionCountBySessionKey:
         subagentPendingQuestionCountBySessionKey ?? EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+      todos,
+      sessionAccentColor,
       canSubmitQuestionAnswers,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
@@ -143,12 +157,16 @@ export function useAgentChatThreadModel({
       hasComposer,
       isSessionWorking,
       messagesContainerRef,
+      pendingApprovalRequests,
+      pendingQuestionRequests,
       pendingQuestions,
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
       scrollToBottomOnSendRef,
+      sessionAccentColor,
       sessionAgentColors,
       transcriptState,
+      todos,
       sessionAuxiliaryError,
       shouldResetTranscriptWindow,
       subagentPendingApprovalCountBySessionKey,

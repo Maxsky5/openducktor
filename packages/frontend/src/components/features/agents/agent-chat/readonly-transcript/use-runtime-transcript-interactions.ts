@@ -9,8 +9,8 @@ import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
+  AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "../use-agent-session-question-actions";
 
@@ -18,7 +18,7 @@ const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
 
 type UseRuntimeTranscriptInteractionsArgs = {
-  session: AgentChatThreadSession | null;
+  liveSession: AgentSessionState | null;
   target: AgentSessionIdentity | null;
   isRuntimeReady: boolean;
   replyAgentApproval: (
@@ -34,7 +34,8 @@ type UseRuntimeTranscriptInteractionsArgs = {
 };
 
 type RuntimeTranscriptInteractions = {
-  session: AgentChatThreadSession | null;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
   pendingQuestions: {
     canSubmit: boolean;
     isSubmittingByRequestId: Record<string, boolean>;
@@ -49,18 +50,19 @@ type RuntimeTranscriptInteractions = {
 };
 
 export function useRuntimeTranscriptInteractions({
-  session,
+  liveSession,
   target,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
-  const matchedSessionIdentity = matchesAgentSessionIdentity(session, target)
-    ? toAgentSessionIdentity(session)
+  const matchedLiveSession = matchesAgentSessionIdentity(liveSession, target) ? liveSession : null;
+  const matchedSessionIdentity = matchedLiveSession
+    ? toAgentSessionIdentity(matchedLiveSession)
     : null;
   const canReplyToRuntimeRequest = isRuntimeReady && matchedSessionIdentity !== null;
   const pendingApprovalRequests: readonly AgentApprovalRequest[] =
-    session?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
+    matchedLiveSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
       sessionIdentity: matchedSessionIdentity,
@@ -70,7 +72,7 @@ export function useRuntimeTranscriptInteractions({
     });
 
   const pendingQuestionRequests: readonly AgentQuestionRequest[] =
-    session?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
+    matchedLiveSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const pendingQuestionRequestIds = useMemo(
     () => pendingQuestionRequests.map((request) => request.requestId),
     [pendingQuestionRequests],
@@ -84,7 +86,8 @@ export function useRuntimeTranscriptInteractions({
     });
 
   return {
-    session,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
     pendingQuestions: {
       canSubmit:
         canReplyToRuntimeRequest &&
