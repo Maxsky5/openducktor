@@ -32,7 +32,7 @@ import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-inp
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,

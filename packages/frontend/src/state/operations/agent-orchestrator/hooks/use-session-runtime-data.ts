@@ -2,7 +2,7 @@ import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import {
   agentSessionTodosQueryKeys,

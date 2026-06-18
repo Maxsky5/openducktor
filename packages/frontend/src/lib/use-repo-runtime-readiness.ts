@@ -4,7 +4,7 @@ import {
   deriveRepoRuntimeReadiness,
   type RepoRuntimeReadinessSnapshot,
   type RepoRuntimeReadinessTarget,
-} from "@/lib/repo-runtime-health";
+} from "@/lib/repo-runtime-readiness";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
 type UseRepoRuntimeReadinessArgs = {

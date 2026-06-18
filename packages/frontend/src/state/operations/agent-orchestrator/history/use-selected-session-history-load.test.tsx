@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";

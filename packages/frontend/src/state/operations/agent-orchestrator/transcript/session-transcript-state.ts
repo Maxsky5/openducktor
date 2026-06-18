@@ -1,4 +1,4 @@
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
 

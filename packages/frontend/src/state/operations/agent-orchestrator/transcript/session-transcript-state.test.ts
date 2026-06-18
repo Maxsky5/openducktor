@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentChatMessage,

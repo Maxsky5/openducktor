@@ -1,6 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
+import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 

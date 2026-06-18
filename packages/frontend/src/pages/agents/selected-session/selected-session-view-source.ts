@@ -8,7 +8,7 @@ import {
   type RepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
   resolvingRepoRuntimeReadinessTarget,
-} from "@/lib/repo-runtime-health";
+} from "@/lib/repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentSessionTranscriptSource,
