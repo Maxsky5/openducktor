@@ -7,11 +7,8 @@ import {
   createTaskCardFixture,
 } from "../agent-studio-test-utils";
 import {
+  projectSelectedSessionViewSource,
   resolveSelectedSessionViewSource,
-  selectedSessionActivityStateFromSource,
-  selectedSessionModelFromSource,
-  selectedSessionRuntimeTargetSourceFromViewSource,
-  selectedSessionTranscriptSourceFromViewSource,
 } from "./selected-session-view-source";
 
 const repoPath = "/repo";
@@ -40,13 +37,14 @@ describe("selected-session-view-source", () => {
     });
 
     expect(source.kind).toBe("loaded_session");
-    expect(selectedSessionActivityStateFromSource(source)).toBe("running");
-    expect(selectedSessionModelFromSource(source)).toBe(session.selectedModel);
-    expect(selectedSessionRuntimeTargetSourceFromViewSource(source)).toEqual({
+    const projection = projectSelectedSessionViewSource(source);
+    expect(projection.activityState).toBe("running");
+    expect(projection.selectedModel).toBe(session.selectedModel);
+    expect(projection.runtimeTargetSource).toEqual({
       kind: "selected_session",
       runtimeKind: "opencode",
     });
-    expect(selectedSessionTranscriptSourceFromViewSource(source)).toEqual({
+    expect(projection.transcriptSource).toEqual({
       kind: "loaded_session",
       session,
     });
@@ -80,13 +78,14 @@ describe("selected-session-view-source", () => {
     });
 
     expect(source.kind).toBe("selected_session");
-    expect(selectedSessionActivityStateFromSource(source)).toBe("waiting_input");
-    expect(selectedSessionModelFromSource(source)).toBe(summary.selectedModel);
-    expect(selectedSessionRuntimeTargetSourceFromViewSource(source)).toEqual({
+    const projection = projectSelectedSessionViewSource(source);
+    expect(projection.activityState).toBe("waiting_input");
+    expect(projection.selectedModel).toBe(summary.selectedModel);
+    expect(projection.runtimeTargetSource).toEqual({
       kind: "selected_session",
       runtimeKind: "codex",
     });
-    expect(selectedSessionTranscriptSourceFromViewSource(source)).toEqual({
+    expect(projection.transcriptSource).toEqual({
       kind: "selected_session",
       readModelLoadState,
     });
@@ -108,19 +107,21 @@ describe("selected-session-view-source", () => {
       readModelLoadState,
     });
 
-    expect(selectedSessionActivityStateFromSource(selectedTaskSource)).toBeNull();
-    expect(selectedSessionModelFromSource(selectedTaskSource)).toBeNull();
-    expect(selectedSessionRuntimeTargetSourceFromViewSource(selectedTaskSource)).toEqual({
+    const selectedTaskProjection = projectSelectedSessionViewSource(selectedTaskSource);
+    const inactiveProjection = projectSelectedSessionViewSource(inactiveSource);
+    expect(selectedTaskProjection.activityState).toBeNull();
+    expect(selectedTaskProjection.selectedModel).toBeNull();
+    expect(selectedTaskProjection.runtimeTargetSource).toEqual({
       kind: "selected_task",
     });
-    expect(selectedSessionTranscriptSourceFromViewSource(selectedTaskSource)).toEqual({
+    expect(selectedTaskProjection.transcriptSource).toEqual({
       kind: "selected_task",
       readModelLoadState,
     });
-    expect(selectedSessionRuntimeTargetSourceFromViewSource(inactiveSource)).toEqual({
+    expect(inactiveProjection.runtimeTargetSource).toEqual({
       kind: "inactive",
     });
-    expect(selectedSessionTranscriptSourceFromViewSource(inactiveSource)).toEqual({
+    expect(inactiveProjection.transcriptSource).toEqual({
       kind: "inactive",
     });
   });

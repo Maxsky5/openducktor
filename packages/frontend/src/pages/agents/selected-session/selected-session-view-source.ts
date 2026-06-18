@@ -25,6 +25,13 @@ export type SelectedSessionViewSource =
     }
   | { kind: "inactive" };
 
+export type SelectedSessionViewProjection = {
+  activityState: AgentSessionActivityState | null;
+  selectedModel: AgentSessionState["selectedModel"];
+  runtimeTargetSource: SelectedSessionRuntimeTargetSource;
+  transcriptSource: SelectedAgentSessionTranscriptSource;
+};
+
 export const resolveSelectedSessionViewSource = ({
   selectedSessionIdentity,
   session,
@@ -65,71 +72,52 @@ export const resolveSelectedSessionViewSource = ({
   return { kind: "inactive" };
 };
 
-export const selectedSessionActivityStateFromSource = (
+export const projectSelectedSessionViewSource = (
   source: SelectedSessionViewSource,
-): AgentSessionActivityState | null => {
+): SelectedSessionViewProjection => {
   if (source.kind === "loaded_session") {
-    return getAgentSessionActivityStateFromSession(source.session);
-  }
-
-  if (source.kind === "selected_session") {
-    return source.summary?.activityState ?? null;
-  }
-
-  return null;
-};
-
-export const selectedSessionModelFromSource = (
-  source: SelectedSessionViewSource,
-): AgentSessionState["selectedModel"] => {
-  if (source.kind === "loaded_session") {
-    return source.session.selectedModel;
-  }
-
-  if (source.kind === "selected_session") {
-    return source.summary?.selectedModel ?? null;
-  }
-
-  return null;
-};
-
-export const selectedSessionRuntimeTargetSourceFromViewSource = (
-  source: SelectedSessionViewSource,
-): SelectedSessionRuntimeTargetSource => {
-  if (source.kind === "loaded_session" || source.kind === "selected_session") {
     return {
-      kind: "selected_session",
-      runtimeKind: source.identity.runtimeKind,
+      activityState: getAgentSessionActivityStateFromSession(source.session),
+      selectedModel: source.session.selectedModel,
+      runtimeTargetSource: {
+        kind: "selected_session",
+        runtimeKind: source.identity.runtimeKind,
+      },
+      transcriptSource: { kind: "loaded_session", session: source.session },
     };
   }
 
-  if (source.kind === "selected_task") {
-    return { kind: "selected_task" };
-  }
-
-  return { kind: "inactive" };
-};
-
-export const selectedSessionTranscriptSourceFromViewSource = (
-  source: SelectedSessionViewSource,
-): SelectedAgentSessionTranscriptSource => {
-  if (source.kind === "loaded_session") {
-    return { kind: "loaded_session", session: source.session };
-  }
-
   if (source.kind === "selected_session") {
     return {
-      kind: "selected_session",
-      readModelLoadState: source.readModelLoadState,
+      activityState: source.summary?.activityState ?? null,
+      selectedModel: source.summary?.selectedModel ?? null,
+      runtimeTargetSource: {
+        kind: "selected_session",
+        runtimeKind: source.identity.runtimeKind,
+      },
+      transcriptSource: {
+        kind: "selected_session",
+        readModelLoadState: source.readModelLoadState,
+      },
     };
   }
 
   if (source.kind === "selected_task") {
     return {
-      kind: "selected_task",
-      readModelLoadState: source.readModelLoadState,
+      activityState: null,
+      selectedModel: null,
+      runtimeTargetSource: { kind: "selected_task" },
+      transcriptSource: {
+        kind: "selected_task",
+        readModelLoadState: source.readModelLoadState,
+      },
     };
   }
 
-  return { kind: "inactive" };
+  return {
+    activityState: null,
+    selectedModel: null,
+    runtimeTargetSource: { kind: "inactive" },
+    transcriptSource: { kind: "inactive" },
+  };
 };

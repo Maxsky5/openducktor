@@ -29,11 +29,8 @@ import {
 } from "../agents-page-selection";
 import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 import {
+  projectSelectedSessionViewSource,
   resolveSelectedSessionViewSource,
-  selectedSessionActivityStateFromSource,
-  selectedSessionModelFromSource,
-  selectedSessionRuntimeTargetSourceFromViewSource,
-  selectedSessionTranscriptSourceFromViewSource,
 } from "./selected-session-view-source";
 
 type UseAgentStudioSelectedSessionViewArgs = {
@@ -136,11 +133,14 @@ export function useAgentStudioSelectedSessionView({
       sessionReadModelLoadState,
     ],
   );
-  const selectedSessionActivityState =
-    selectedSessionActivityStateFromSource(selectedSessionViewSource);
-  const selectedSessionModel = selectedSessionModelFromSource(selectedSessionViewSource);
+  const selectedSessionViewProjection = useMemo(
+    () => projectSelectedSessionViewSource(selectedSessionViewSource),
+    [selectedSessionViewSource],
+  );
+  const selectedSessionActivityState = selectedSessionViewProjection.activityState;
+  const selectedSessionModel = selectedSessionViewProjection.selectedModel;
   const runtimeTarget = resolveSelectedSessionRuntimeTarget({
-    source: selectedSessionRuntimeTargetSourceFromViewSource(selectedSessionViewSource),
+    source: selectedSessionViewProjection.runtimeTargetSource,
     role: selection.role,
     repoSettings,
     isLoadingRepoSettings,
@@ -164,10 +164,10 @@ export function useAgentStudioSelectedSessionView({
 
   const transcriptState = useMemo(() => {
     return deriveSelectedAgentSessionTranscriptState({
-      source: selectedSessionTranscriptSourceFromViewSource(selectedSessionViewSource),
+      source: selectedSessionViewProjection.transcriptSource,
       repoReadinessState,
     });
-  }, [repoReadinessState, selectedSessionViewSource]);
+  }, [repoReadinessState, selectedSessionViewProjection.transcriptSource]);
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,
