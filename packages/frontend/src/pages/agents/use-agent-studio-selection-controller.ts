@@ -3,10 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import {
-  resolveSelectedSessionHistoryLoadTarget,
-  useSelectedSessionHistoryLoad,
-} from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
+import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   findAgentStudioSessionSummaryByKey,
@@ -229,10 +226,8 @@ export function useAgentStudioSelectionController({
     isLoadingRepoSettings,
   });
   useSelectedSessionHistoryLoad({
-    target: resolveSelectedSessionHistoryLoadTarget({
-      session: selectedSessionView.loadedSession,
-      repoReadinessState: selectedSessionView.runtimeReadiness.readinessState,
-    }),
+    session: selectedSessionView.loadedSession,
+    repoReadinessState: selectedSessionView.runtimeReadiness.readinessState,
   });
   const isActiveTaskReady = Boolean(activeWorkspaceId && selectedViewTaskId);
 

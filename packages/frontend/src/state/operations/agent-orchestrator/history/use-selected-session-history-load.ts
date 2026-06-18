@@ -26,11 +26,17 @@ export const resolveSelectedSessionHistoryLoadTarget = ({
 };
 
 export const useSelectedSessionHistoryLoad = ({
-  target,
+  session,
+  repoReadinessState,
 }: {
-  target: AgentSessionIdentity | null;
+  session: AgentSessionState | null;
+  repoReadinessState: RepoRuntimeReadinessState;
 }): void => {
   const { loadAgentSessionHistory } = useAgentOperationsContext();
+  const target = resolveSelectedSessionHistoryLoadTarget({
+    session,
+    repoReadinessState,
+  });
   const stableTarget = useStableAgentSessionIdentity(target);
 
   useEffect(() => {

@@ -400,7 +400,9 @@ Selected-session history loading is owned by
 `history/use-selected-session-history-load.ts` plus
 `AgentSessionState.historyLoadState`. That hook starts a history load when the
 selected session exists, its history has not been requested, and the runtime is
-ready. The selected-session view is passive: it returns selected session facts,
+ready. Callers pass the loaded session plus runtime-readiness state; they must
+not build a separate history-load target or duplicate the `historyLoadState`
+policy. The selected-session view is passive: it returns selected session facts,
 runtime readiness, runtime data, and transcript state, but it must not call
 runtime/session operations. Transcript state is display-only: it renders runtime
 waiting, session loading, visible, or failed from the current owner facts, but it

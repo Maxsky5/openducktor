@@ -45,10 +45,8 @@ const createProps = ({
   session?: AgentSessionState | null;
   repoReadinessState?: RepoRuntimeReadinessState;
 } = {}) => ({
-  target: resolveSelectedSessionHistoryLoadTarget({
-    session,
-    repoReadinessState,
-  }),
+  session,
+  repoReadinessState,
 });
 
 const createHistoryLoadWrapper = (
