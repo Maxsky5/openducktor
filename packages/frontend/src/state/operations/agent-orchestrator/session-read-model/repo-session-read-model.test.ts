@@ -13,11 +13,9 @@ import {
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
-import {
-  buildRepoSessionReadModel,
-  readRepoRuntimeSessionSnapshots,
-  type TaskSessionRecords,
-} from "./repo-session-read-model";
+import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
+import { buildRepoSessionReadModel } from "./repo-session-read-model";
+import type { TaskSessionRecords } from "./task-session-records";
 
 type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
 

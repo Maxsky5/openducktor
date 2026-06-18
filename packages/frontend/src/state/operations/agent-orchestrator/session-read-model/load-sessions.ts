@@ -5,10 +5,8 @@ import type { MutableRefObject } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
-import {
-  buildRepoSessionReadModel,
-  readRepoRuntimeSessionSnapshots,
-} from "./repo-session-read-model";
+import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
+import { buildRepoSessionReadModel } from "./repo-session-read-model";
 import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];

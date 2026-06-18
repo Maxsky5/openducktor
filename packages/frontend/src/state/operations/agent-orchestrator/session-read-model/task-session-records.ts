@@ -1,9 +1,25 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
-import type { TaskSessionRecords } from "./repo-session-read-model";
+import type { PersistedTaskSessionRecord } from "../support/persistence";
 
+export type TaskSessionRecords = {
+  id: string;
+  agentSessions: AgentSessionRecord[];
+};
 export type TaskSessionRecordsByTaskId = Record<string, AgentSessionRecord[]>;
+
+export const collectTaskSessionRecords = (
+  tasks: TaskSessionRecords[],
+): PersistedTaskSessionRecord[] => {
+  const records: PersistedTaskSessionRecord[] = [];
+  for (const task of tasks) {
+    for (const record of task.agentSessions) {
+      records.push({ taskId: task.id, record });
+    }
+  }
+  return records;
+};
 
 export const toTaskSessionRecords = (
   tasks: Pick<TaskCard, "id">[],

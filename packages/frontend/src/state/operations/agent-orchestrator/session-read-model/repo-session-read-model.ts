@@ -1,8 +1,7 @@
-import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRef } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -12,39 +11,19 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  fromPersistedSessionRecord,
-  type PersistedTaskSessionRecord,
-  toPersistedSessionIdentity,
-} from "../support/persistence";
+import { fromPersistedSessionRecord, toPersistedSessionIdentity } from "../support/persistence";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
+import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import {
-  type AgentSessionRuntimeSnapshot,
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
 } from "./session-runtime-snapshot";
-
-export type TaskSessionRecords = {
-  id: string;
-  agentSessions: AgentSessionRecord[];
-};
-
-export type RepoRuntimeSessionSnapshots = Map<string, AgentSessionRuntimeSnapshot>;
+import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-session-records";
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: AgentSessionRef[];
   removedSessionRefs: AgentSessionRef[];
-};
-
-const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): PersistedTaskSessionRecord[] => {
-  const records: PersistedTaskSessionRecord[] = [];
-  for (const task of tasks) {
-    for (const record of task.agentSessions) {
-      records.push({ taskId: task.id, record });
-    }
-  }
-  return records;
 };
 
 const toPersistedSessionView = ({
@@ -73,46 +52,6 @@ const toPersistedSessionView = ({
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
-
-export const readRepoRuntimeSessionSnapshots = async ({
-  repoPath,
-  tasks,
-  listSessionRuntimeSnapshots,
-}: {
-  repoPath: string;
-  tasks: TaskSessionRecords[];
-  listSessionRuntimeSnapshots: AgentEnginePort["listSessionRuntimeSnapshots"];
-}): Promise<RepoRuntimeSessionSnapshots> => {
-  const taskSessionRecords = collectTaskSessionRecords(tasks);
-  const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
-  for (const { record } of taskSessionRecords) {
-    const identity = toPersistedSessionIdentity(record);
-    const runtimeKind = identity.runtimeKind;
-    const directory = normalizeWorkingDirectory(identity.workingDirectory);
-    const directories = directoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
-    directories.add(directory);
-    directoriesByRuntimeKind.set(runtimeKind, directories);
-  }
-
-  const snapshotsBySessionKey = new Map<string, AgentSessionRuntimeSnapshot>();
-  await Promise.all(
-    Array.from(directoriesByRuntimeKind.entries()).map(async ([runtimeKind, directorySet]) => {
-      const directories = Array.from(directorySet).sort();
-      const snapshots = await listSessionRuntimeSnapshots({ repoPath, runtimeKind, directories });
-      for (const snapshot of snapshots) {
-        if (
-          snapshot.ref.runtimeKind !== runtimeKind ||
-          !directorySet.has(normalizeWorkingDirectory(snapshot.ref.workingDirectory))
-        ) {
-          continue;
-        }
-        snapshotsBySessionKey.set(agentSessionIdentityKey(snapshot.ref), snapshot);
-      }
-    }),
-  );
-
-  return snapshotsBySessionKey;
-};
 
 export const buildRepoSessionReadModel = ({
   repoPath,
