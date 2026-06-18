@@ -81,7 +81,7 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
     ).toEqual({ kind: "runtime", runtimeKind: "opencode" });
   });
 
-  test("does not block an inactive selection on repository settings", () => {
+  test("keeps inactive selections out of runtime targeting", () => {
     expect(
       resolveSelectedSessionRuntimeTarget({
         source: { kind: "inactive" },
@@ -89,6 +89,6 @@ describe("resolveSelectedSessionRuntimeTarget", () => {
         repoSettings: null,
         isLoadingRepoSettings: true,
       }),
-    ).toEqual({ kind: "all" });
+    ).toEqual({ kind: "inactive" });
   });
 });

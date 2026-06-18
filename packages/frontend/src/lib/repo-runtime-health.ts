@@ -199,7 +199,8 @@ export type RepoRuntimeReadinessSnapshot = {
 export type RepoRuntimeReadinessTarget =
   | { kind: "all" }
   | { kind: "runtime"; runtimeKind: RuntimeKind }
-  | { kind: "resolving" };
+  | { kind: "resolving" }
+  | { kind: "inactive" };
 
 export const allRepoRuntimeReadinessTarget = {
   kind: "all",
@@ -207,6 +208,10 @@ export const allRepoRuntimeReadinessTarget = {
 
 export const resolvingRepoRuntimeReadinessTarget = {
   kind: "resolving",
+} satisfies RepoRuntimeReadinessTarget;
+
+export const inactiveRepoRuntimeReadinessTarget = {
+  kind: "inactive",
 } satisfies RepoRuntimeReadinessTarget;
 
 export const repoRuntimeReadinessTargetForRuntime = (
@@ -258,6 +263,26 @@ export const deriveRepoRuntimeReadiness = ({
   isLoadingChecks,
   runtimeTarget = allRepoRuntimeReadinessTarget,
 }: DeriveRepoRuntimeReadinessArgs): RepoRuntimeReadinessSnapshot => {
+  if (runtimeTarget.kind === "inactive") {
+    if (!hasActiveWorkspace) {
+      return {
+        readinessState: "blocked",
+        isReady: false,
+        isRuntimeStarting: false,
+        blockedReason: "Select a repository to use agent chat.",
+        isLoadingChecks,
+      };
+    }
+
+    return {
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks,
+    };
+  }
+
   const runtimeKind = runtimeTarget.kind === "runtime" ? runtimeTarget.runtimeKind : null;
   const isResolvingRuntimeTarget = runtimeTarget.kind === "resolving";
   const targetRuntimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);

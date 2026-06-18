@@ -3,6 +3,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduck
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import {
   deriveRepoRuntimeReadiness,
+  inactiveRepoRuntimeReadinessTarget,
   isRepoRuntimeStarting,
   repoRuntimeReadinessTargetForRuntime,
   resolvingRepoRuntimeReadinessTarget,
@@ -129,5 +130,45 @@ describe("repo runtime health", () => {
     expect(readiness.readinessState).toBe("checking");
     expect(readiness.isReady).toBe(false);
     expect(readiness.blockedReason).toBe("Resolving selected agent runtime...");
+  });
+
+  test("treats inactive selections as having no runtime requirement", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: true,
+      runtimeTarget: inactiveRepoRuntimeReadinessTarget,
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(readiness).toEqual({
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks: true,
+    });
+  });
+
+  test("keeps inactive selections scoped to an active workspace", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: false,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: inactiveRepoRuntimeReadinessTarget,
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(readiness).toEqual({
+      readinessState: "blocked",
+      isReady: false,
+      isRuntimeStarting: false,
+      blockedReason: "Select a repository to use agent chat.",
+      isLoadingChecks: false,
+    });
   });
 });

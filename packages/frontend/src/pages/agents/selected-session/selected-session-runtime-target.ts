@@ -1,6 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
+  inactiveRepoRuntimeReadinessTarget,
   type RepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
   resolvingRepoRuntimeReadinessTarget,
@@ -24,6 +25,10 @@ export const resolveSelectedSessionRuntimeTarget = ({
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
 }): RepoRuntimeReadinessTarget => {
+  if (source.kind === "inactive") {
+    return inactiveRepoRuntimeReadinessTarget;
+  }
+
   if (source.kind === "selected_session") {
     return repoRuntimeReadinessTargetForRuntime(source.runtimeKind);
   }
