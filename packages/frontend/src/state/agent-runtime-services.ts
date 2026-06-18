@@ -7,6 +7,7 @@ import {
 } from "./operations/shared/runtime-catalog";
 import type { AgentRuntimeAdapter } from "./runtime-adapters/agent-runtime-adapter";
 import { createCodexAppServerRuntimeAdapter } from "./runtime-adapters/codex-app-server-runtime-adapter";
+import { hostRepoRuntimeResolver } from "./runtime-adapters/host-repo-runtime-resolver";
 import { createOpenCodeRuntimeAdapter } from "./runtime-adapters/opencode-runtime-adapter";
 
 type AgentRuntimeServices = {
@@ -69,8 +70,12 @@ const createAgentEngine = (
       getAdapter(input.runtimeKind).listAvailableSlashCommands(input),
     listAvailableSkills: (input) => getAdapter(input.runtimeKind).listAvailableSkills(input),
     searchFiles: (input) => getAdapter(input.runtimeKind).searchFiles(input),
-    listSessionRuntimeSnapshots: (input) =>
-      getAdapter(input.runtimeKind).listSessionRuntimeSnapshots(input),
+    listSessionRuntimeSnapshots: async (input) => {
+      if (!(await hostRepoRuntimeResolver.hasLiveRepoRuntime(input))) {
+        return [];
+      }
+      return getAdapter(input.runtimeKind).listSessionRuntimeSnapshots(input);
+    },
     readSessionRuntimeSnapshot: (input) =>
       getAdapter(input.runtimeKind).readSessionRuntimeSnapshot(input),
     loadSessionHistory: (input) => getAdapter(input.runtimeKind).loadSessionHistory(input),

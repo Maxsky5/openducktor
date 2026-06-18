@@ -1,8 +1,31 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { RuntimeKind } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
 import { createAgentRuntimeServices } from "./agent-runtime-services";
+import { host } from "./operations/shared/host";
+
+const createRuntimeSummary = (
+  overrides: Partial<RuntimeInstanceSummary> = {},
+): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/repo",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
+  startedAt: "2026-02-22T08:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+  ...overrides,
+});
 
 describe("agent runtime services", () => {
   test("exposes the shipped runtime definitions through the engine boundary", () => {
@@ -57,6 +80,7 @@ describe("agent runtime services", () => {
   });
 
   test("keeps runtime engine methods bound when passed as callbacks", async () => {
+    const originalRuntimeList = host.runtimeList;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalListAgentSessionRuntimeSnapshots =
@@ -69,6 +93,7 @@ describe("agent runtime services", () => {
     const listSessionRuntimeSnapshots = mock(async () => []);
 
     try {
+      host.runtimeList = mock(async () => [createRuntimeSummary()]);
       OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
       OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots = listSessionRuntimeSnapshots;
@@ -102,8 +127,39 @@ describe("agent runtime services", () => {
       expect(loadSessionTodos).toHaveBeenCalledTimes(1);
       expect(listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
+      host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots =
+        originalListAgentSessionRuntimeSnapshots;
+    }
+  });
+
+  test("returns no session runtime snapshots when the repo runtime is not live", async () => {
+    const originalRuntimeList = host.runtimeList;
+    const originalListAgentSessionRuntimeSnapshots =
+      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
+    const listSessionRuntimeSnapshots = mock(async () => {
+      throw new Error("adapter should not scan without a live runtime");
+    });
+
+    try {
+      host.runtimeList = mock(async () => []);
+      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots = listSessionRuntimeSnapshots;
+
+      const { agentEngine } = createAgentRuntimeServices();
+
+      await expect(
+        agentEngine.listSessionRuntimeSnapshots({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          directories: ["/repo/worktree"],
+        }),
+      ).resolves.toEqual([]);
+      expect(host.runtimeList).toHaveBeenCalledWith("/repo", "opencode");
+      expect(listSessionRuntimeSnapshots).not.toHaveBeenCalled();
+    } finally {
+      host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots =
         originalListAgentSessionRuntimeSnapshots;
     }
