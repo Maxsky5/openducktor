@@ -9,6 +9,7 @@ import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
   deriveRuntimeTranscriptState,
+  type RuntimeTranscriptStateSource,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   SESSION_HISTORY_STALE_TIME_MS,
@@ -86,15 +87,23 @@ export function useRuntimeTranscriptSessionHistory({
     });
   }, [historyQuery.data, source]);
   const transcriptState = useMemo(() => {
-    return deriveRuntimeTranscriptState({
-      hasVisibleTranscript: session !== null,
-      hasHistoryTarget: source.kind !== "empty",
-      historyFailureMessage:
-        source.kind === "history" && historyQuery.error
+    let transcriptSource: RuntimeTranscriptStateSource;
+    if (session !== null) {
+      transcriptSource = { kind: "visible" };
+    } else if (source.kind === "empty") {
+      transcriptSource = { kind: "empty", reason: source.reason };
+    } else {
+      transcriptSource = {
+        kind: "history",
+        failureMessage: historyQuery.error
           ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
           : null,
+      };
+    }
+
+    return deriveRuntimeTranscriptState({
+      source: transcriptSource,
       repoReadinessState,
-      ...(source.kind === "empty" ? { emptyReason: source.reason } : {}),
     });
   }, [historyQuery.error, repoReadinessState, session, source]);
 

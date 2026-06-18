@@ -250,9 +250,7 @@ describe("deriveSelectedAgentSessionTranscriptState for loaded sessions", () => 
 describe("deriveRuntimeTranscriptState", () => {
   test("stays empty without a transcript target", () => {
     const transcriptState = deriveRuntimeTranscriptState({
-      hasVisibleTranscript: false,
-      hasHistoryTarget: false,
-      historyFailureMessage: null,
+      source: { kind: "empty", reason: "inactive" },
       repoReadinessState: "ready",
     });
 
@@ -261,9 +259,7 @@ describe("deriveRuntimeTranscriptState", () => {
 
   test("waits for runtime readiness before surfacing history loading", () => {
     const transcriptState = deriveRuntimeTranscriptState({
-      hasVisibleTranscript: false,
-      hasHistoryTarget: true,
-      historyFailureMessage: null,
+      source: { kind: "history", failureMessage: null },
       repoReadinessState: "checking",
     });
 
@@ -272,9 +268,7 @@ describe("deriveRuntimeTranscriptState", () => {
 
   test("surfaces history loading once runtime is ready", () => {
     const transcriptState = deriveRuntimeTranscriptState({
-      hasVisibleTranscript: false,
-      hasHistoryTarget: true,
-      historyFailureMessage: null,
+      source: { kind: "history", failureMessage: null },
       repoReadinessState: "ready",
     });
 
@@ -283,9 +277,7 @@ describe("deriveRuntimeTranscriptState", () => {
 
   test("surfaces history failures through the transcript-state owner", () => {
     const transcriptState = deriveRuntimeTranscriptState({
-      hasVisibleTranscript: false,
-      hasHistoryTarget: true,
-      historyFailureMessage: "history unavailable",
+      source: { kind: "history", failureMessage: "history unavailable" },
       repoReadinessState: "ready",
     });
 
@@ -294,9 +286,7 @@ describe("deriveRuntimeTranscriptState", () => {
 
   test("shows the transcript when a live or history-loaded session exists", () => {
     const transcriptState = deriveRuntimeTranscriptState({
-      hasVisibleTranscript: true,
-      hasHistoryTarget: true,
-      historyFailureMessage: null,
+      source: { kind: "visible" },
       repoReadinessState: "ready",
     });
 

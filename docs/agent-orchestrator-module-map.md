@@ -368,11 +368,10 @@ derived from runtime readiness and history load state. History loading policy an
 runtime-data query gating live in their owner modules, not in the transcript
 state model. Page route/task switching is orchestration state and must not be
 stored in the transcript state model. Do not mirror runtime readiness on it.
-Readonly transcript surfaces pass direct facts into the transcript-state owner:
-whether a transcript is visible, whether a history source exists, why an empty
-source is empty, and whether the history read failed. They must not synthesize
-session-shaped history snapshots or maintain a separate transcript loading state
-machine.
+Readonly transcript surfaces pass exactly one transcript source into the
+transcript-state owner: visible transcript, history read, or empty reason. They
+must not pass parallel visibility/history booleans, synthesize session-shaped
+history snapshots, or maintain a separate transcript loading state machine.
 Readonly transcript history is owned by
 `readonly-transcript/use-runtime-transcript-session-history.ts`. That hook
 chooses exactly one source: matching live session, runtime history read, or empty

@@ -15,6 +15,11 @@ export type AgentSessionTranscriptState =
   | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
   | AgentSessionTranscriptNonEmptyState;
 
+export type RuntimeTranscriptStateSource =
+  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
+  | { kind: "history"; failureMessage: string | null }
+  | { kind: "visible" };
+
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
 
 export const isAgentSessionTranscriptLoading = (
@@ -37,26 +42,20 @@ const sessionlessAgentSessionTranscriptState: AgentSessionTranscriptState = {
 };
 
 export const deriveRuntimeTranscriptState = ({
-  hasVisibleTranscript,
-  hasHistoryTarget,
-  historyFailureMessage,
+  source,
   repoReadinessState,
-  emptyReason,
 }: {
-  hasVisibleTranscript: boolean;
-  hasHistoryTarget: boolean;
-  historyFailureMessage: string | null;
+  source: RuntimeTranscriptStateSource;
   repoReadinessState: RepoRuntimeReadinessState;
-  emptyReason?: AgentSessionTranscriptEmptyReason;
 }): AgentSessionTranscriptState => {
-  if (hasVisibleTranscript) {
+  if (source.kind === "visible") {
     return { kind: "visible" };
   }
 
-  if (!hasHistoryTarget) {
+  if (source.kind === "empty") {
     return {
       kind: "empty",
-      reason: emptyReason ?? "inactive",
+      reason: source.reason,
     };
   }
 
@@ -64,8 +63,8 @@ export const deriveRuntimeTranscriptState = ({
     return { kind: "runtime_waiting" };
   }
 
-  if (historyFailureMessage !== null) {
-    return { kind: "failed", message: historyFailureMessage };
+  if (source.failureMessage !== null) {
+    return { kind: "failed", message: source.failureMessage };
   }
 
   return { kind: "session_loading", reason: "history" };
@@ -109,14 +108,20 @@ const deriveLoadedSelectedSessionTranscriptState = ({
 }: {
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState =>
-  deriveRuntimeTranscriptState({
-    hasVisibleTranscript: hasRenderableSessionTranscript(session),
-    hasHistoryTarget: true,
-    historyFailureMessage:
-      session.historyLoadState === "failed" ? DEFAULT_TRANSCRIPT_FAILURE_MESSAGE : null,
+}): AgentSessionTranscriptState => {
+  const source: RuntimeTranscriptStateSource = hasRenderableSessionTranscript(session)
+    ? { kind: "visible" }
+    : {
+        kind: "history",
+        failureMessage:
+          session.historyLoadState === "failed" ? DEFAULT_TRANSCRIPT_FAILURE_MESSAGE : null,
+      };
+
+  return deriveRuntimeTranscriptState({
+    source,
     repoReadinessState,
   });
+};
 
 export const deriveSelectedAgentSessionTranscriptState = ({
   selectedSessionIdentity,
