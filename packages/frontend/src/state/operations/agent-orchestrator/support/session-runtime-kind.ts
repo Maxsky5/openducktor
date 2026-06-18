@@ -48,30 +48,16 @@ export const readFreshSessionRuntimeKind = (
     `Runtime kind is required to start ${role} sessions. Select an explicit runtime before starting a session.`,
   );
 
-export const readPersistedSelectedModelRuntimeKind = (
-  externalSessionId: string,
+export const readSelectedModelRuntimeKind = (
+  sessionDescription: string,
   sessionRuntimeKind: RuntimeKind,
   selectedModel: Pick<AgentModelSelection, "runtimeKind">,
 ): RuntimeKind =>
   requireRuntimeKindMatch(
     readRuntimeKind(
       selectedModel.runtimeKind,
-      `Persisted session '${externalSessionId}' selected model is missing runtime kind.`,
+      `${sessionDescription} selected model is missing runtime kind.`,
     ),
     sessionRuntimeKind,
-    `Persisted session '${externalSessionId}' selected model runtime kind does not match session runtime kind.`,
-  );
-
-export const readSessionSelectedModelRuntimeKindForPersistence = (
-  externalSessionId: string,
-  sessionRuntimeKind: RuntimeKind,
-  selectedModel: Pick<AgentModelSelection, "runtimeKind">,
-): RuntimeKind =>
-  requireRuntimeKindMatch(
-    readRuntimeKind(
-      selectedModel.runtimeKind,
-      `Session '${externalSessionId}' selected model is missing runtime kind.`,
-    ),
-    sessionRuntimeKind,
-    `Session '${externalSessionId}' selected model runtime kind does not match session runtime kind.`,
+    `${sessionDescription} selected model runtime kind does not match session runtime kind.`,
   );

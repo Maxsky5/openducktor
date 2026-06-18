@@ -4,9 +4,8 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { createSessionMessagesState } from "./messages";
 import { normalizePersistedSelection } from "./models";
 import {
-  readPersistedSelectedModelRuntimeKind,
   readPersistedSessionRuntimeKind,
-  readSessionSelectedModelRuntimeKindForPersistence,
+  readSelectedModelRuntimeKind,
 } from "./session-runtime-kind";
 import { isWorkflowAgentSession } from "./workflow-session";
 
@@ -24,8 +23,8 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     workingDirectory: session.workingDirectory,
     selectedModel: session.selectedModel
       ? {
-          runtimeKind: readSessionSelectedModelRuntimeKindForPersistence(
-            session.externalSessionId,
+          runtimeKind: readSelectedModelRuntimeKind(
+            `Session '${session.externalSessionId}'`,
             runtimeKind,
             session.selectedModel,
           ),
@@ -79,8 +78,8 @@ export const fromPersistedSessionRecord = ({
     selectedModel: record.selectedModel
       ? normalizePersistedSelection({
           ...record.selectedModel,
-          runtimeKind: readPersistedSelectedModelRuntimeKind(
-            identity.externalSessionId,
+          runtimeKind: readSelectedModelRuntimeKind(
+            `Persisted session '${identity.externalSessionId}'`,
             identity.runtimeKind,
             record.selectedModel,
           ),
