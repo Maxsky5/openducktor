@@ -52,7 +52,7 @@ export const createSessionDependenciesFixture = (
     loadAgentSessions: async () => {},
     loadAgentSessionHistory: async () => {},
     persistSessionRecord: async () => {},
-    observeAgentSession: async () => true,
+    observeAgentSession: async () => undefined,
     ...sessionOverrides,
   };
 };

@@ -89,7 +89,6 @@ const createLoaderHarness = ({
     },
     observeAgentSession: async (session) => {
       listenedSessions.push(session);
-      return true;
     },
     cleanupLocalSessions: (sessions) => {
       cleanedSessions.push(...sessions);

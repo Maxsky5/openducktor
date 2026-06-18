@@ -50,14 +50,10 @@ const createPrepareSend = (
       },
       sessionObserversRef,
       observeAgentSession: async (sessionRef) => {
-        const openedObserver = await sessionObserversRef.current.ensureObserver(
-          sessionRef,
-          async () => () => {},
-        );
-        if (openedObserver) {
+        await sessionObserversRef.current.ensureObserver(sessionRef, async () => {
           observedRefs.push(sessionRef);
-        }
-        return openedObserver;
+          return () => {};
+        });
       },
       ensureRuntime: async (...args) => {
         ensureRuntimeCalls.push(args);
@@ -132,12 +128,35 @@ describe("prepare session send", () => {
       currentWorkspaceRepoPathRef,
       sessionObserversRef,
       observeAgentSession: async (sessionRef) => {
-        const openedObserver = await sessionObserversRef.current.ensureObserver(
-          sessionRef,
-          async () => () => {},
-        );
+        await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
         currentWorkspaceRepoPathRef.current = "/tmp/other";
-        return openedObserver;
+      },
+    });
+
+    await expect(prepareSend(buildWorkflowSession({ status: "idle" }))).rejects.toThrow(
+      "Workspace changed while preparing session send.",
+    );
+    expect(
+      hasSessionObserverFixture(sessionObserversRef.current, {
+        externalSessionId: "session-1",
+      }),
+    ).toBe(false);
+  });
+
+  test("removes an existing observer when the workspace changes during preparation", async () => {
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const sessionObserversRef = createSessionObserversRefFixture();
+    const sessionRef = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo/worktree",
+    };
+    await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
+    const { prepareSend } = createPrepareSend({
+      currentWorkspaceRepoPathRef,
+      sessionObserversRef,
+      observeAgentSession: async () => {
+        currentWorkspaceRepoPathRef.current = "/tmp/other";
       },
     });
 

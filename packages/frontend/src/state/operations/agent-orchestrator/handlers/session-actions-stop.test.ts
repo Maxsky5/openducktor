@@ -316,7 +316,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       taskRef: { current: [] },
       sessionObserversRef,
       updateSession,
-      observeAgentSession: async () => true,
+      observeAgentSession: async () => undefined,
     });
 
     try {

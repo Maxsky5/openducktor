@@ -130,7 +130,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       );
       return nextSession;
     },
-    observeAgentSession: async () => true,
+    observeAgentSession: async () => undefined,
     resolveTaskWorktree: async () => null,
     ensureRuntime: async () => ({
       kind: "opencode",

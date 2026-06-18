@@ -24,7 +24,7 @@ export type SessionObservers = {
   ensureObserver: (
     session: AgentSessionIdentityLike,
     createObserver: SessionObserverFactory,
-  ) => Promise<boolean>;
+  ) => Promise<void>;
   remove: (session: AgentSessionIdentityLike) => void;
   clear: () => void;
 };
@@ -49,10 +49,10 @@ export const createSessionObservers = (): SessionObservers => {
       const sessionKey = agentSessionIdentityKey(session);
       const currentSlot = observerBySessionKey.get(sessionKey);
       if (currentSlot?.kind === "open") {
-        return Promise.resolve(false);
+        return Promise.resolve();
       }
       if (currentSlot?.kind === "pending") {
-        return currentSlot.promise.then(() => false);
+        return currentSlot.promise;
       }
 
       const pendingSlot: PendingSessionObserverSlot = {
@@ -61,23 +61,22 @@ export const createSessionObservers = (): SessionObservers => {
         promise: Promise.resolve(),
       };
       observerBySessionKey.set(sessionKey, pendingSlot);
-      const registration = (async (): Promise<boolean> => {
+      const registration = (async (): Promise<void> => {
         const unsubscribe = await createObserver();
         if (pendingSlot.cancelled || observerBySessionKey.get(sessionKey) !== pendingSlot) {
           unsubscribe();
-          return false;
+          return;
         }
         observerBySessionKey.set(sessionKey, {
           kind: "open",
           unsubscribe,
         });
-        return true;
       })().finally(() => {
         if (observerBySessionKey.get(sessionKey) === pendingSlot) {
           observerBySessionKey.delete(sessionKey);
         }
       });
-      pendingSlot.promise = registration.then(() => undefined);
+      pendingSlot.promise = registration;
       return registration;
     },
     remove: (session) => {

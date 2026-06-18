@@ -321,7 +321,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       observeAgentSession: async () => {
         lifecycleEvents.push("observer:started");
-        return true;
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -430,7 +429,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
       observeAgentSession: async (target) => {
         listenedSessionIds.push(target.externalSessionId);
-        return true;
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -673,7 +671,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       observeAgentSession: async () => {
         listenCalls += 1;
-        return true;
       },
       refreshTaskData: async () => {
         refreshCalls += 1;

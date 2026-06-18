@@ -242,7 +242,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     taskRef = { current: [] },
     repoEpochRef = { current: 1 },
     currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
-    observeAgentSession = async () => true,
+    observeAgentSession = async () => undefined,
     loadAgentSessions = async () => {},
     loadAgentSessionHistory = async () => undefined,
     persistSessionRecord = async () => {},

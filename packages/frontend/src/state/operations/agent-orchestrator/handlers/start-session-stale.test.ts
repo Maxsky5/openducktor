@@ -177,7 +177,6 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       currentWorkspaceRepoPathRef,
       observeAgentSession: async () => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
-        return true;
       },
     });
 

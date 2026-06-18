@@ -94,14 +94,12 @@ export const createPrepareSessionSend = ({
     ]);
     assertNotStale();
 
-    const openedObserver = await observeAgentSession(sessionRef);
-    if (openedObserver) {
-      removeObserverIfStale({
-        sessionRef,
-        sessionObservers: sessionObserversRef.current,
-        isStale,
-      });
-    }
+    await observeAgentSession(sessionRef);
+    removeObserverIfStale({
+      sessionRef,
+      sessionObservers: sessionObserversRef.current,
+      isStale,
+    });
 
     return {
       repoPath,

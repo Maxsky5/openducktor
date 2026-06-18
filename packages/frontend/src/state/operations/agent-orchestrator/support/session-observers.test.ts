@@ -32,17 +32,16 @@ describe("session observers", () => {
       return subscriptionCount === 1 ? () => calls.push("first") : () => calls.push("second");
     };
 
-    await expect(
-      Promise.all([
-        observers.ensureObserver(session, createObserver),
-        observers.ensureObserver(session, createObserver),
-      ]),
-    ).resolves.toEqual([true, false]);
+    await Promise.all([
+      observers.ensureObserver(session, createObserver),
+      observers.ensureObserver(session, createObserver),
+    ]);
 
     expect(subscriptionCount).toBe(1);
     expect(calls).toEqual([]);
     expect(observers.has(session)).toBe(true);
-    await expect(observers.ensureObserver(session, createObserver)).resolves.toBe(false);
+    await observers.ensureObserver(session, createObserver);
+    expect(subscriptionCount).toBe(1);
 
     observers.remove(session);
 
@@ -63,7 +62,7 @@ describe("session observers", () => {
     observers.remove(session);
     expect(observers.has(session)).toBe(false);
     resolveObserver(() => calls.push("pending"));
-    await expect(registration).resolves.toBe(false);
+    await registration;
 
     expect(calls).toEqual(["pending"]);
     expect(observers.has(session)).toBe(false);
@@ -85,8 +84,8 @@ describe("session observers", () => {
     });
     resolveFirstObserver(() => calls.push("first"));
 
-    await expect(firstRegistration).resolves.toBe(false);
-    await expect(secondRegistration).resolves.toBe(true);
+    await firstRegistration;
+    await secondRegistration;
     expect(observers.has(session)).toBe(true);
 
     observers.remove(session);
