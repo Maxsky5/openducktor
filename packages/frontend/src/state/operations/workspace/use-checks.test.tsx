@@ -902,7 +902,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("projects runtime health query failures as unhealthy runtime state", async () => {
+  test("does not invent runtime health when the runtime health query fails", async () => {
     repoHealthHandler = async () => {
       throw new Error("runtime health unreachable");
     };
@@ -915,26 +915,18 @@ describe("use-checks", () => {
     try {
       await harness.mount();
 
-      await harness.waitFor((value) => {
-        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth?.status === "error";
-      });
-
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
-        expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "runtime health unreachable",
-            failureKind: "error",
-          }),
-        }),
+      await harness.waitFor(
+        (value) =>
+          value.isLoadingChecks === false && checkRepoRuntimeHealthMock.mock.calls.length > 0,
       );
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeUndefined();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("prefers runtime health query error state over stale successful data", async () => {
+  test("keeps the last actual runtime health when a refresh fails", async () => {
     let shouldFailRefresh = false;
     repoHealthHandler = async () => {
       if (shouldFailRefresh) {
@@ -960,18 +952,16 @@ describe("use-checks", () => {
         await expect(value.refreshChecks()).rejects.toThrow("runtime health refresh failed");
       });
 
-      await harness.waitFor((value) => {
-        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth?.status === "error";
-      });
+      await harness.waitFor(
+        (value) =>
+          value.isLoadingChecks === false &&
+          value.activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds[0] === "healthy",
+      );
 
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
         expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "runtime health refresh failed",
-            failureKind: "error",
-          }),
+          status: "ready",
+          mcp: expect.objectContaining({ toolIds: ["healthy"] }),
         }),
       );
     } finally {

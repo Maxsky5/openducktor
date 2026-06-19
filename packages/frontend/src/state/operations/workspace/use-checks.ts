@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { errorMessage } from "@/lib/errors";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type {
   RepoRuntimeFailureKind,
@@ -27,7 +26,6 @@ import {
 import {
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
-  buildRuntimeHealthErrorMap,
   buildTaskStoreCheckErrorState,
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
@@ -212,27 +210,8 @@ export function useChecks({
       return {};
     }
 
-    if (runtimeHealthQuery.error && runtimeDefinitions.length > 0) {
-      const runtimeHealthError = errorMessage(runtimeHealthQuery.error);
-      const checkedAt =
-        runtimeHealthQuery.errorUpdatedAt > 0
-          ? new Date(runtimeHealthQuery.errorUpdatedAt).toISOString()
-          : new Date().toISOString();
-      return buildRuntimeHealthErrorMap(runtimeDefinitions, runtimeHealthError, checkedAt);
-    }
-
-    if (runtimeHealthQuery.data) {
-      return runtimeHealthQuery.data;
-    }
-
-    return {};
-  }, [
-    activeRepoPath,
-    runtimeDefinitions,
-    runtimeHealthQuery.data,
-    runtimeHealthQuery.error,
-    runtimeHealthQuery.errorUpdatedAt,
-  ]);
+    return runtimeHealthQuery.data ?? {};
+  }, [activeRepoPath, runtimeHealthQuery.data]);
   const runtimeCheckQueryFailure = runtimeCheckQuery.error
     ? classifyDiagnosticsQueryError(runtimeCheckQuery.error)
     : null;

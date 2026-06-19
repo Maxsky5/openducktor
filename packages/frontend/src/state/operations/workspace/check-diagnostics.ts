@@ -1,12 +1,7 @@
 import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
-import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { classifyRepoRuntimeHealth } from "@/lib/repo-runtime-health";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
@@ -96,42 +91,6 @@ export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boole
 
 export const hasTaskStoreCheckFailure = (taskStoreCheck: TaskStoreCheck | null): boolean => {
   return taskStoreCheck !== null && !isRepoStoreReady(taskStoreCheck);
-};
-
-export const buildRuntimeHealthErrorMap = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthError: string,
-  checkedAt: string,
-): RepoRuntimeHealthMap => {
-  return runtimeDefinitions.reduce<RepoRuntimeHealthMap>((runtimeHealthMap, definition) => {
-    runtimeHealthMap[definition.kind] = {
-      status: "error",
-      checkedAt,
-      runtime: {
-        status: "error",
-        stage: "startup_failed",
-        observation: null,
-        instance: null,
-        startedAt: null,
-        updatedAt: checkedAt,
-        elapsedMs: null,
-        attempts: null,
-        detail: runtimeHealthError,
-        failureKind: "error",
-        failureReason: null,
-      },
-      mcp: {
-        supported: true,
-        status: "error",
-        serverName: ODT_MCP_SERVER_NAME,
-        serverStatus: null,
-        toolIds: [],
-        detail: runtimeHealthError,
-        failureKind: "error",
-      },
-    } satisfies RepoRuntimeHealthCheck;
-    return runtimeHealthMap;
-  }, {});
 };
 
 const buildErrorToastDescription = (label: string, detail: string | null): string => {
