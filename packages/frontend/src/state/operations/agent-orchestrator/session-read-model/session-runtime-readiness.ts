@@ -35,9 +35,14 @@ const runtimeReadinessKeyPart = (
   }
 };
 
-export const sessionRuntimeReadinessKey = (runtimeHealthByRuntime: RepoRuntimeHealthMap): string =>
-  Object.keys(runtimeHealthByRuntime)
-    .sort()
+export const sessionRuntimeReadinessKey = ({
+  tasks,
+  runtimeHealthByRuntime,
+}: {
+  tasks: TaskSessionRecords;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+}): string =>
+  collectRuntimeKinds(tasks)
     .map((runtimeKind) =>
       runtimeReadinessKeyPart(runtimeKind, runtimeHealthByRuntime[runtimeKind] ?? null),
     )

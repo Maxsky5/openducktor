@@ -99,7 +99,37 @@ export const useRepoSessionReadModel = ({
     },
     queryClient,
   );
-  const runtimeReadinessKey = sessionRuntimeReadinessKey(runtimeHealthByRuntime);
+  const taskSessionRecords = useMemo(() => {
+    if (taskSessionRecordSnapshot.kind !== "ready") {
+      return null;
+    }
+
+    return toTaskSessionRecords(
+      taskSessionTargets,
+      Object.fromEntries(
+        taskSessionTargets.map((task, index) => [
+          task.id,
+          taskSessionRecordSnapshot.recordsByTaskIndex[index] ?? [],
+        ]),
+      ),
+    );
+  }, [taskSessionRecordSnapshot, taskSessionTargets]);
+  const runtimeReadinessKey = taskSessionRecords
+    ? sessionRuntimeReadinessKey({
+        tasks: taskSessionRecords,
+        runtimeHealthByRuntime,
+      })
+    : "";
+  const readModelLoadInput = useMemo(
+    () =>
+      taskSessionRecords
+        ? {
+            taskSessionRecords,
+            runtimeReadinessKey,
+          }
+        : null,
+    [runtimeReadinessKey, taskSessionRecords],
+  );
   const runtimeHealthByRuntimeRef = useRef(runtimeHealthByRuntime);
   runtimeHealthByRuntimeRef.current = runtimeHealthByRuntime;
 
@@ -121,10 +151,6 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
-      const runtimeHealthSnapshot = runtimeHealthByRuntimeRef.current;
-      if (sessionRuntimeReadinessKey(runtimeHealthSnapshot) !== runtimeReadinessKey) {
-        return;
-      }
       if (taskSessionRecordSnapshot.kind === "loading") {
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
         return;
@@ -140,25 +166,19 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
-      const taskSessionRecords = toTaskSessionRecords(
-        taskSessionTargets,
-        Object.fromEntries(
-          taskSessionTargets.map((task, index) => [
-            task.id,
-            taskSessionRecordSnapshot.recordsByTaskIndex[index] ?? [],
-          ]),
-        ),
-      );
+      if (!readModelLoadInput) {
+        return;
+      }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
         const didLoadSessionReadModel = await loadRepoSessionReadModel({
           repoPath: workspaceRepoPath,
-          taskSessionRecords,
+          taskSessionRecords: readModelLoadInput.taskSessionRecords,
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
-          runtimeHealthByRuntime: runtimeHealthSnapshot,
+          runtimeHealthByRuntime: runtimeHealthByRuntimeRef.current,
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -188,12 +208,11 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    runtimeReadinessKey,
+    readModelLoadInput,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,
     taskSessionRecordSnapshot,
-    taskSessionTargets,
     workspaceRepoPath,
   ]);
 

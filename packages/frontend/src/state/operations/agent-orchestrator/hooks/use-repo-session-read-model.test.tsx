@@ -131,6 +131,47 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("does not reload the repo session read model when an unused runtime changes readiness", async () => {
+    const state = createHarnessState();
+    const harness = createHookHarness(
+      useRepoSessionReadModel,
+      state.props(["task-1"], {
+        opencode: createRepoRuntimeHealthFixture(),
+        codex: createRepoRuntimeHealthFixture(),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((loadState) => loadState.kind === "ready");
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        state.props(["task-1"], {
+          opencode: createRepoRuntimeHealthFixture(),
+          codex: createRepoRuntimeHealthFixture(
+            {},
+            {
+              status: "checking",
+              runtime: {
+                status: "checking",
+                stage: "waiting_for_runtime",
+              },
+              mcp: {
+                status: "waiting_for_runtime",
+              },
+            },
+          ),
+        }),
+      );
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reloads the repo session read model when the task id set changes", async () => {
     const state = createHarnessState();
     const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));
