@@ -88,7 +88,7 @@ export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): Task
   taskStoreError: taskStoreCheckError,
 });
 
-export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
+export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
   return (
     runtimeCheck !== null && (!runtimeCheck.gitOk || !runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
   );
@@ -167,14 +167,36 @@ const buildDiagnosticsIssueCandidate = (
   };
 };
 
+export const getCliToolsCheckFailureDetail = (
+  runtimeCheck: RuntimeCheck | null,
+  runtimeCheckError: string | null,
+): string | null => {
+  if (runtimeCheckError) {
+    return runtimeCheckError;
+  }
+  if (!runtimeCheck) {
+    return null;
+  }
+  if (!runtimeCheck.gitOk) {
+    return runtimeCheck.errors[0] ?? "Git is unavailable.";
+  }
+  if (!runtimeCheck.ghOk) {
+    return runtimeCheck.ghAuthError ?? runtimeCheck.errors[0] ?? "GitHub CLI is unavailable.";
+  }
+  if (!runtimeCheck.ghAuthOk) {
+    return runtimeCheck.ghAuthError ?? "GitHub CLI authentication is unavailable.";
+  }
+  return null;
+};
+
 const getRuntimeCheckIssueCandidate = (
   runtimeCheck: RuntimeCheck | null,
   runtimeCheckError: string | null,
   runtimeCheckFailureKind: RepoRuntimeFailureKind,
 ): DiagnosticsIssueCandidate | null => {
-  const detail = runtimeCheckError ?? runtimeCheck?.errors[0] ?? runtimeCheck?.ghAuthError ?? null;
+  const detail = getCliToolsCheckFailureDetail(runtimeCheck, runtimeCheckError);
   const failureKind =
-    runtimeCheckFailureKind ?? (hasRuntimeCheckFailure(runtimeCheck) ? "error" : null);
+    runtimeCheckFailureKind ?? (hasCliToolCheckFailure(runtimeCheck) ? "error" : null);
   return buildDiagnosticsIssueCandidate(CLI_TOOLS_ISSUE_META, detail, failureKind);
 };
 

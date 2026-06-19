@@ -8,9 +8,11 @@ import { useAgentOperations } from "@/state/app-state-provider";
 import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   type AgentSessionTranscriptEmptyReason,
-  type AgentSessionTranscriptSource,
   type AgentSessionTranscriptState,
-  deriveAgentSessionTranscriptState,
+  emptyAgentSessionTranscriptState,
+  failedAgentSessionTranscriptState,
+  loadingAgentSessionTranscriptState,
+  visibleAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   SESSION_HISTORY_STALE_TIME_MS,
@@ -89,25 +91,22 @@ export function useRuntimeTranscriptSessionHistory({
     });
   }, [historyQuery.data, source]);
   const transcriptState = useMemo(() => {
-    let transcriptSource: AgentSessionTranscriptSource;
     if (session !== null) {
-      transcriptSource = { kind: "visible" };
-    } else if (source.kind === "empty") {
-      transcriptSource = { kind: "empty", reason: source.reason };
-    } else if (historyQuery.error && repoReadinessState === "ready") {
-      transcriptSource = {
-        kind: "failed",
-        message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
-      };
-    } else {
-      transcriptSource = {
-        kind: "pending",
-        reason: "history",
-      };
+      return visibleAgentSessionTranscriptState();
     }
 
-    return deriveAgentSessionTranscriptState({
-      source: transcriptSource,
+    if (source.kind === "empty") {
+      return emptyAgentSessionTranscriptState(source.reason);
+    }
+
+    if (historyQuery.error && repoReadinessState === "ready") {
+      return failedAgentSessionTranscriptState(
+        errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
+      );
+    }
+
+    return loadingAgentSessionTranscriptState({
+      reason: "history",
       repoReadinessState,
     });
   }, [historyQuery.error, repoReadinessState, session, source]);

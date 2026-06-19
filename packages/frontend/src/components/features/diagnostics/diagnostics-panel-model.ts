@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
-  buildDisabledRuntimeHealth,
   classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
   formatRepoRuntimeElapsed,
@@ -24,7 +23,8 @@ import {
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
 import {
-  hasRuntimeCheckFailure,
+  getCliToolsCheckFailureDetail,
+  hasCliToolCheckFailure,
   hasTaskStoreCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -357,23 +357,19 @@ export const buildDiagnosticsPanelModel = (
   const repoName = workspaceRepoPath?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
-  const runtimeEntries = runtimeDefinitions.map((definition) => {
-    const cliHealth =
-      runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null;
-    return {
-      definition,
-      cliHealth,
-      runtimeHealth:
-        runtimeHealthByRuntime[definition.kind] ??
-        (cliHealth?.enabled === false ? buildDisabledRuntimeHealth(definition) : undefined),
-    };
-  });
+  const runtimeEntries = runtimeDefinitions.map((definition) => ({
+    definition,
+    runtimeHealth: runtimeHealthByRuntime[definition.kind],
+  }));
   const isRuntimeHealthPending = runtimeEntries.some(
     ({ runtimeHealth }) => runtimeHealth === undefined,
   );
   const hasRuntimeHealthChecking = runtimeEntries.some(({ runtimeHealth }) =>
     isRuntimeHealthChecking(runtimeHealth),
   );
+  const cliToolsIssueDetail = getCliToolsCheckFailureDetail(runtimeCheck, null);
+  const cliToolsFailureKind =
+    runtimeCheckFailureKind ?? (hasCliToolCheckFailure(runtimeCheck) ? "error" : null);
 
   const criticalReasons: string[] = [];
   if (workspaceRepoPath) {
@@ -381,8 +377,8 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
-    if (hasRuntimeCheckFailure(runtimeCheck)) {
-      criticalReasons.push("Runtime CLI checks failing");
+    if (cliToolsIssueDetail) {
+      criticalReasons.push(cliToolsIssueDetail);
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
       if (
@@ -442,12 +438,12 @@ export const buildDiagnosticsPanelModel = (
     ...(activeWorkspace ? {} : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
-  const cliToolsHealthy = runtimeCheck === null ? null : !hasRuntimeCheckFailure(runtimeCheck);
+  const cliToolsHealthy = runtimeCheck === null ? null : !hasCliToolCheckFailure(runtimeCheck);
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",
     title: "CLI Tools",
-    badge: getFailureBadge(cliToolsHealthy, runtimeCheckFailureKind, {
+    badge: getFailureBadge(cliToolsHealthy, cliToolsFailureKind, {
       healthy: "Available",
       timeout: "Timed out",
       error: "Issue",
@@ -461,14 +457,14 @@ export const buildDiagnosticsPanelModel = (
       : [],
     errors:
       runtimeDefinitionsError != null
-        ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
+        ? [runtimeDefinitionsError, ...(cliToolsIssueDetail ? [cliToolsIssueDetail] : [])]
         : buildFailureMessages({
             label: "CLI tools",
-            detail: runtimeCheck?.errors[0] ?? null,
-            failureKind: runtimeCheckFailureKind,
+            detail: cliToolsIssueDetail,
+            failureKind: cliToolsFailureKind,
             availabilityVerb: "are",
           }),
-    ...(runtimeCheck ? {} : { emptyMessage: "Runtime checks are loading..." }),
+    ...(runtimeCheck ? {} : { emptyMessage: "CLI checks are loading..." }),
   };
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {

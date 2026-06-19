@@ -184,7 +184,7 @@ describe("DiagnosticsPanelSections", () => {
         ghAuthLogin: null,
         ghAuthError: "gh not found in PATH",
         runtimes: [{ kind: "opencode", ok: false, version: null }],
-        errors: ["opencode not found in PATH"],
+        errors: ["gh not found in PATH"],
       },
       taskStoreCheck: makeTaskStoreCheck({
         taskStoreOk: false,
@@ -227,7 +227,7 @@ describe("DiagnosticsPanelSections", () => {
 
     const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
 
-    expect(html).toContain("opencode not found in PATH");
+    expect(html).toContain("gh not found in PATH");
     expect(html).toContain("runtime failed");
     expect(html).not.toContain("server unavailable");
     expect(html).toContain("task store failed");

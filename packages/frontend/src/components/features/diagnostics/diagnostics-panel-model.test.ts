@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
   makeRepoHealth,
@@ -207,6 +208,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({ runtime: { instance: makeRuntimeDiagnosticInstance() } }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -497,9 +499,9 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["Runtime CLI checks failing", "runtime failed", "task store failed"]),
+      expect.arrayContaining(["gh not found in PATH", "runtime failed", "task store failed"]),
     );
-    expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
+    expect(model.sections[1]?.errors).toEqual(["gh not found in PATH"]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
     expect(taskStoreSection?.errors).toEqual(["task store failed"]);
@@ -788,9 +790,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
-    expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["Runtime CLI checks failing", "Timed out after 15000ms"]),
-    );
+    expect(model.criticalReasons).toEqual(expect.arrayContaining(["Timed out after 15000ms"]));
     expect(model.sections[1]?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
     expect(model.sections[4]?.badge).toEqual({ label: "Timed out", variant: "warning" });
@@ -883,7 +883,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.criticalReasons).toContain("Runtime CLI checks failing");
+    expect(model.criticalReasons).toContain("gh auth missing");
     expect(model.sections[1]?.badge).toEqual({ label: "Issue", variant: "danger" });
     expect(model.sections[1]?.errors).toEqual(["gh auth missing"]);
   });

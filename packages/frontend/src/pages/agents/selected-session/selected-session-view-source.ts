@@ -11,10 +11,12 @@ import {
 } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
-  type AgentSessionTranscriptSource,
   type AgentSessionTranscriptState,
-  deriveAgentSessionTranscriptState,
   deriveLoadedAgentSessionTranscriptState,
+  emptyAfterRuntimeReadyAgentSessionTranscriptState,
+  emptyAgentSessionTranscriptState,
+  failedAgentSessionTranscriptState,
+  loadingAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -145,20 +147,23 @@ export const deriveSelectedSessionTranscriptState = ({
     });
   }
 
-  let transcriptSource: AgentSessionTranscriptSource;
-
   if (source.kind === "inactive") {
-    transcriptSource = { kind: "empty", reason: "inactive" };
-  } else if (source.readModelLoadState.kind === "failed") {
-    transcriptSource = { kind: "failed", message: source.readModelLoadState.message };
-  } else if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
-    transcriptSource = { kind: "pending", reason: "preparing" };
-  } else {
-    transcriptSource = { kind: "runtime_gated_empty", reason: "sessionless" };
+    return emptyAgentSessionTranscriptState("inactive");
   }
 
-  return deriveAgentSessionTranscriptState({
-    source: transcriptSource,
+  if (source.readModelLoadState.kind === "failed") {
+    return failedAgentSessionTranscriptState(source.readModelLoadState.message);
+  }
+
+  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
+    return loadingAgentSessionTranscriptState({
+      reason: "preparing",
+      repoReadinessState,
+    });
+  }
+
+  return emptyAfterRuntimeReadyAgentSessionTranscriptState({
+    reason: "sessionless",
     repoReadinessState,
   });
 };
