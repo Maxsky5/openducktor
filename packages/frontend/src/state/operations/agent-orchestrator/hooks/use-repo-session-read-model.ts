@@ -16,7 +16,8 @@ import {
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
 import {
   deriveSessionRuntimeReadiness,
-  type SessionRuntimeReadiness,
+  fromStableSessionRuntimeReadinessInput,
+  toStableSessionRuntimeReadinessInput,
 } from "../session-read-model/session-runtime-readiness";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { createRepoStaleGuard } from "../support/core";
@@ -33,19 +34,6 @@ type UseRepoSessionReadModelArgs = {
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
   queryClient: QueryClient;
-};
-
-const toRuntimeReadinessForLoad = (
-  kind: SessionRuntimeReadiness["kind"] | null,
-  message: string | null,
-): SessionRuntimeReadiness | null => {
-  if (kind === null) {
-    return null;
-  }
-  if (kind === "blocked") {
-    return { kind, message: message ?? "Runtime is unavailable." };
-  }
-  return { kind };
 };
 
 export const useRepoSessionReadModel = ({
@@ -84,11 +72,15 @@ export const useRepoSessionReadModel = ({
           runtimeHealthByRuntime,
         })
       : null;
-  const runtimeReadinessKind = runtimeReadiness?.kind ?? null;
-  const runtimeReadinessMessage =
-    runtimeReadiness?.kind === "blocked" ? runtimeReadiness.message : null;
+  const stableRuntimeReadinessInput = toStableSessionRuntimeReadinessInput(runtimeReadiness);
+  const runtimeReadinessKind = stableRuntimeReadinessInput.kind;
+  const runtimeReadinessMessage = stableRuntimeReadinessInput.message;
   const runtimeReadinessForLoad = useMemo(
-    () => toRuntimeReadinessForLoad(runtimeReadinessKind, runtimeReadinessMessage),
+    () =>
+      fromStableSessionRuntimeReadinessInput({
+        kind: runtimeReadinessKind,
+        message: runtimeReadinessMessage,
+      }),
     [runtimeReadinessKind, runtimeReadinessMessage],
   );
 
