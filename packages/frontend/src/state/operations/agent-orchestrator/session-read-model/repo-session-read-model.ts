@@ -18,7 +18,7 @@ import {
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
 } from "./session-runtime-snapshot";
-import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-session-records";
+import type { TaskSessionRecords } from "./task-session-records";
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
@@ -60,16 +60,13 @@ export const buildRepoSessionReadModel = ({
   runtimeSnapshots,
 }: {
   repoPath: string;
-  tasks: TaskSessionRecords[];
+  tasks: TaskSessionRecords;
   currentSessionCollection?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
 }): RepoSessionReadModel => {
-  const taskSessionRecords = collectTaskSessionRecords(tasks);
-  const loadedTaskIds = new Set(tasks.map((task) => task.id));
+  const loadedTaskIds = new Set(tasks.taskIds);
   const persistedSessionKeys = new Set(
-    taskSessionRecords.map(({ record }) =>
-      agentSessionIdentityKey(toPersistedSessionIdentity(record)),
-    ),
+    tasks.records.map(({ record }) => agentSessionIdentityKey(toPersistedSessionIdentity(record))),
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   const carriedSessions: AgentSessionState[] = [];
@@ -92,7 +89,7 @@ export const buildRepoSessionReadModel = ({
   let sessionCollection = createAgentSessionCollection(carriedSessions);
   const liveSessionRefs: AgentSessionRef[] = [];
 
-  for (const { taskId, record } of taskSessionRecords) {
+  for (const { taskId, record } of tasks.records) {
     const identity = toPersistedSessionIdentity(record);
     const ref = toRuntimeSessionRef(repoPath, identity);
     const sessionKey = agentSessionIdentityKey(identity);

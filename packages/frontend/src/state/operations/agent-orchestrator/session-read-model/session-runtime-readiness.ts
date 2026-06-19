@@ -1,12 +1,8 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import {
-  describeRepoRuntimeStatus,
-  isRepoRuntimeReady,
-  isRepoRuntimeStartupPending,
-} from "@/lib/repo-runtime-health";
+import { classifyRepoRuntimeHealth, describeRepoRuntimeStatus } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { toPersistedSessionIdentity } from "../support/persistence";
-import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-session-records";
+import type { TaskSessionRecords } from "./task-session-records";
 
 type SessionRuntimeReadiness =
   | { kind: "ready" }
@@ -15,9 +11,9 @@ type SessionRuntimeReadiness =
 
 const READINESS_KEY_SEPARATOR = "\u001f";
 
-const collectRuntimeKinds = (tasks: TaskSessionRecords[]): RuntimeKind[] => {
+const collectRuntimeKinds = (tasks: TaskSessionRecords): RuntimeKind[] => {
   const runtimeKinds = new Set<RuntimeKind>();
-  for (const { record } of collectTaskSessionRecords(tasks)) {
+  for (const { record } of tasks.records) {
     runtimeKinds.add(toPersistedSessionIdentity(record).runtimeKind);
   }
   return Array.from(runtimeKinds).sort();
@@ -27,15 +23,16 @@ const runtimeReadinessKeyPart = (
   runtimeKind: string,
   runtimeHealth: RepoRuntimeHealthMap[string],
 ): string => {
-  if (isRepoRuntimeReady(runtimeHealth ?? null)) {
-    return `${runtimeKind}:ready`;
+  switch (classifyRepoRuntimeHealth(runtimeHealth)) {
+    case "ready":
+      return `${runtimeKind}:ready`;
+    case "unknown":
+    case "startup_pending":
+    case "checking":
+      return `${runtimeKind}:waiting`;
+    case "blocked":
+      return `${runtimeKind}:blocked`;
   }
-
-  if (!runtimeHealth || isRepoRuntimeStartupPending(runtimeHealth)) {
-    return `${runtimeKind}:waiting`;
-  }
-
-  return `${runtimeKind}:blocked`;
 };
 
 export const sessionRuntimeReadinessKey = (runtimeHealthByRuntime: RepoRuntimeHealthMap): string =>
@@ -50,24 +47,26 @@ export const deriveSessionRuntimeReadiness = ({
   tasks,
   runtimeHealthByRuntime,
 }: {
-  tasks: TaskSessionRecords[];
+  tasks: TaskSessionRecords;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
 }): SessionRuntimeReadiness => {
   for (const runtimeKind of collectRuntimeKinds(tasks)) {
     const runtimeHealth = runtimeHealthByRuntime[runtimeKind] ?? null;
-    if (isRepoRuntimeReady(runtimeHealth)) {
-      continue;
+    switch (classifyRepoRuntimeHealth(runtimeHealth)) {
+      case "ready":
+        continue;
+      case "unknown":
+      case "startup_pending":
+      case "checking":
+        return { kind: "waiting_for_runtime" };
+      case "blocked":
+        return {
+          kind: "blocked",
+          message:
+            describeRepoRuntimeStatus(runtimeKind, runtimeHealth) ??
+            `Runtime '${runtimeKind}' is not ready to load session snapshots.`,
+        };
     }
-    if (!runtimeHealth || isRepoRuntimeStartupPending(runtimeHealth)) {
-      return { kind: "waiting_for_runtime" };
-    }
-
-    return {
-      kind: "blocked",
-      message:
-        describeRepoRuntimeStatus(runtimeKind, runtimeHealth) ??
-        `Runtime '${runtimeKind}' is not ready to load session snapshots.`,
-    };
   }
 
   return { kind: "ready" };

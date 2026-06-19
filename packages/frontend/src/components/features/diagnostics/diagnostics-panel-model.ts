@@ -7,6 +7,7 @@ import type {
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
   buildDisabledRuntimeHealth,
+  classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
   formatRepoRuntimeElapsed,
   formatRepoRuntimeObservation,
@@ -14,7 +15,6 @@ import {
   getRepoRuntimeMcpActivity,
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
-  isRepoRuntimeStartupPending,
 } from "@/lib/repo-runtime-health";
 import {
   getRepoStoreCategoryLabel,
@@ -334,7 +334,8 @@ const buildMcpSectionErrors = (
 };
 
 const isRuntimeHealthChecking = (runtimeHealth: RuntimeHealthState): boolean => {
-  return runtimeHealth?.status === "checking" || isRepoRuntimeStartupPending(runtimeHealth ?? null);
+  const readiness = classifyRepoRuntimeHealth(runtimeHealth);
+  return readiness === "startup_pending" || readiness === "checking";
 };
 
 export const buildDiagnosticsPanelModel = (
@@ -384,7 +385,10 @@ export const buildDiagnosticsPanelModel = (
       criticalReasons.push("Runtime CLI checks failing");
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
-      if (runtimeHealth?.status === "error" && !isRepoRuntimeStartupPending(runtimeHealth)) {
+      if (
+        runtimeHealth?.status === "error" &&
+        classifyRepoRuntimeHealth(runtimeHealth) === "blocked"
+      ) {
         criticalReasons.push(
           describeRepoRuntimeStatus(definition.label, runtimeHealth) ??
             `${definition.label} runtime health has an issue.`,

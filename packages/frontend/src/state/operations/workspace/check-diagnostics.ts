@@ -1,5 +1,6 @@
 import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
+import { classifyRepoRuntimeHealth } from "@/lib/repo-runtime-health";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type {
   RepoRuntimeFailureKind,
@@ -208,22 +209,28 @@ const getRuntimeHealthIssueCandidates = (
       continue;
     }
 
-    const runtimeIssue = buildDiagnosticsIssueCandidate(
-      {
-        id: `diagnostics:runtime:${definition.kind}`,
-        label: `${definition.label} runtime`,
-        availabilityVerb: "is",
-      },
-      runtimeHealth.runtime.detail,
-      runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
-    );
+    const runtimeIssue =
+      classifyRepoRuntimeHealth(runtimeHealth) === "blocked"
+        ? buildDiagnosticsIssueCandidate(
+            {
+              id: `diagnostics:runtime:${definition.kind}`,
+              label: `${definition.label} runtime`,
+              availabilityVerb: "is",
+            },
+            runtimeHealth.runtime.detail,
+            runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
+          )
+        : null;
 
     if (runtimeIssue !== null) {
       issueCandidates.push(runtimeIssue);
       continue;
     }
 
-    if (!definition.capabilities.optionalSurfaces.supportsMcpStatus) {
+    if (
+      runtimeHealth.runtime.status !== "ready" ||
+      !definition.capabilities.optionalSurfaces.supportsMcpStatus
+    ) {
       continue;
     }
 

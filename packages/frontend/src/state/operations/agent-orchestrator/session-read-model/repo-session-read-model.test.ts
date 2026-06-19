@@ -34,12 +34,12 @@ const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSession
   ...overrides,
 });
 
-const createTask = (
+const createTaskSessionRecords = (
   agentSessions: AgentSessionRecord[],
   overrides: Partial<TaskSessionRecords> = {},
 ): TaskSessionRecords => ({
-  id: "task-1",
-  agentSessions,
+  taskIds: ["task-1"],
+  records: agentSessions.map((record) => ({ taskId: "task-1", record })),
   ...overrides,
 });
 
@@ -80,7 +80,7 @@ describe("repo session read model", () => {
     "codex",
   ] as const)("restores %s waiting-input sessions from live runtime snapshot", async (runtimeKind) => {
     const record = createRecord({ runtimeKind });
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const pendingQuestion = { requestId: `${runtimeKind}-question`, questions: [] };
     const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
@@ -117,7 +117,7 @@ describe("repo session read model", () => {
 
   test("ignores runtime snapshots outside the requested working directories", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
@@ -151,7 +151,7 @@ describe("repo session read model", () => {
 
   test("applies a later live runtime snapshot to a previously missing persisted session", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const firstRuntimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
@@ -199,7 +199,7 @@ describe("repo session read model", () => {
       externalSessionId: "external-2",
       startedAt: "2026-06-11T08:01:00.000Z",
     });
-    const tasks = [createTask([firstRecord, secondRecord])];
+    const tasks = createTaskSessionRecords([firstRecord, secondRecord]);
     const firstCurrentSession = {
       ...createAgentSessionFixture({
         externalSessionId: firstRecord.externalSessionId,
@@ -293,7 +293,7 @@ describe("repo session read model", () => {
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
-      tasks: [createTask([])],
+      tasks: createTaskSessionRecords([]),
       currentSessionCollection: createAgentSessionCollection([removedSession, otherTaskSession]),
       runtimeSnapshots: new Map(),
     });
@@ -314,7 +314,7 @@ describe("repo session read model", () => {
 
   test("surfaces idle status from initial runtime snapshot", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const idleRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
@@ -338,7 +338,7 @@ describe("repo session read model", () => {
 
   test("settles a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
@@ -374,7 +374,7 @@ describe("repo session read model", () => {
 
   test("settles unobserved mounted active state when runtime snapshot is missing", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -423,7 +423,7 @@ describe("repo session read model", () => {
 
   test("settles mounted live turn state without clearing transcript when runtime snapshot is missing", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -473,7 +473,7 @@ describe("repo session read model", () => {
 
   test("removes mounted state from a different runtime identity when records do not contain it", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -530,7 +530,7 @@ describe("repo session read model", () => {
 
   test("preserves mounted transcript and settles status for an equivalent normalized working directory", async () => {
     const record = createRecord({ workingDirectory: "/repo/worktree" });
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -577,7 +577,7 @@ describe("repo session read model", () => {
 
   test("uses the persisted selected model instead of stale mounted model state", async () => {
     const record = createRecord({ selectedModel: null });
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,
       taskId: "task-1",
@@ -610,7 +610,7 @@ describe("repo session read model", () => {
 
   test("applies runtime status and pending input without dropping mounted transcript state", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -670,7 +670,7 @@ describe("repo session read model", () => {
 
   test("lets idle runtime snapshot demote a mounted running session", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,
       taskId: "task-1",
@@ -706,7 +706,7 @@ describe("repo session read model", () => {
 
   test("keeps mounted idle state when runtime snapshot is missing", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const currentSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,
       taskId: "task-1",
@@ -735,7 +735,7 @@ describe("repo session read model", () => {
   });
 
   test("uses loaded empty task session records to surface unlisted local sessions", async () => {
-    const tasks = [createTask([])];
+    const tasks = createTaskSessionRecords([]);
     const currentSession = {
       ...createAgentSessionFixture({
         externalSessionId: "local-session",
@@ -782,7 +782,7 @@ describe("repo session read model", () => {
   });
 
   test("keeps local starting sessions while their persisted record is not visible yet", async () => {
-    const tasks = [createTask([])];
+    const tasks = createTaskSessionRecords([]);
     const currentSession = createAgentSessionFixture({
       externalSessionId: "starting-session",
       taskId: "task-1",
@@ -811,7 +811,7 @@ describe("repo session read model", () => {
 
   test("surfaces idle pending input and idle status from initial runtime snapshot", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const pendingQuestion = { requestId: "question-1", questions: [] };
     const idleRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
@@ -839,7 +839,7 @@ describe("repo session read model", () => {
 
   test("keeps pending input in runtime snapshot order", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const firstQuestion = { requestId: "question-1", questions: [] };
     const secondQuestion = { requestId: "question-2", questions: [] };
     const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
@@ -868,7 +868,7 @@ describe("repo session read model", () => {
 
   test("keeps pending input details from initial runtime snapshot", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     const question = {
       requestId: "question-1",
       questions: [
@@ -904,7 +904,7 @@ describe("repo session read model", () => {
 
   test("propagates runtime scan failures instead of committing a stale session model", async () => {
     const record = createRecord();
-    const tasks = [createTask([record])];
+    const tasks = createTaskSessionRecords([record]);
     await expect(
       readRepoRuntimeSessionSnapshots({
         repoPath: "/repo",

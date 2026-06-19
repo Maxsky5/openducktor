@@ -94,6 +94,48 @@ describe("check-diagnostics helpers", () => {
     expect(issues).toHaveLength(2);
   });
 
+  test("does not toast passive runtime startup observations", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeWorkspace: createActiveWorkspace("/repo"),
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: null,
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            observation: null,
+            instance: null,
+            startedAt: null,
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            detail: "Runtime has not been started yet.",
+            failureKind: "error",
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: null,
+            failureKind: null,
+          },
+        }),
+      },
+    });
+
+    expect(issues).toEqual([]);
+  });
+
   test("restores unhealthy cli and task-store payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),

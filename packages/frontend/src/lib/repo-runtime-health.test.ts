@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import {
+  classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
   getRepoRuntimeBadge,
   isRepoRuntimeStarting,
@@ -64,6 +65,7 @@ describe("repo runtime health", () => {
 
     expect(isRepoRuntimeStarting(runtimeHealth)).toBe(false);
     expect(isRepoRuntimeStartupPending(runtimeHealth)).toBe(true);
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("startup_pending");
   });
 
   test("projects not-started runtime health as startup pending", () => {
@@ -83,8 +85,30 @@ describe("repo runtime health", () => {
       label: "Starting",
       variant: "warning",
     });
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("startup_pending");
     expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe(
       "OpenCode runtime is starting.",
     );
+  });
+
+  test("keeps stale startup fields pending even when summary status is error", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "error",
+      runtime: {
+        status: "not_started",
+        stage: "idle",
+        detail: "Runtime has not been started yet.",
+        failureKind: "error",
+      },
+      mcp: {
+        status: "waiting_for_runtime",
+      },
+    });
+
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("startup_pending");
+    expect(getRepoRuntimeBadge(runtimeHealth)).toEqual({
+      label: "Starting",
+      variant: "warning",
+    });
   });
 });

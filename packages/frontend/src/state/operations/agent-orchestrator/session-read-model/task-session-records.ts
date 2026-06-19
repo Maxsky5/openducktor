@@ -4,31 +4,27 @@ import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
 
 export type TaskSessionRecords = {
-  id: string;
-  agentSessions: AgentSessionRecord[];
+  taskIds: string[];
+  records: PersistedTaskSessionRecord[];
 };
 export type TaskSessionRecordsByTaskId = Record<string, AgentSessionRecord[]>;
-
-export const collectTaskSessionRecords = (
-  tasks: TaskSessionRecords[],
-): PersistedTaskSessionRecord[] => {
-  const records: PersistedTaskSessionRecord[] = [];
-  for (const task of tasks) {
-    for (const record of task.agentSessions) {
-      records.push({ taskId: task.id, record });
-    }
-  }
-  return records;
-};
 
 export const toTaskSessionRecords = (
   tasks: Pick<TaskCard, "id">[],
   recordsByTaskId: TaskSessionRecordsByTaskId,
-): TaskSessionRecords[] =>
-  tasks.map((task) => ({
-    id: task.id,
-    agentSessions: recordsByTaskId[task.id] ?? [],
-  }));
+): TaskSessionRecords => {
+  const records: PersistedTaskSessionRecord[] = [];
+  for (const task of tasks) {
+    for (const record of recordsByTaskId[task.id] ?? []) {
+      records.push({ taskId: task.id, record });
+    }
+  }
+
+  return {
+    taskIds: tasks.map((task) => task.id),
+    records,
+  };
+};
 
 export const loadTaskSessionRecordsForTasks = async ({
   queryClient,
@@ -40,9 +36,9 @@ export const loadTaskSessionRecordsForTasks = async ({
   repoPath: string;
   tasks: Pick<TaskCard, "id">[];
   forceFresh?: boolean;
-}): Promise<TaskSessionRecords[]> => {
+}): Promise<TaskSessionRecords> => {
   if (tasks.length === 0) {
-    return [];
+    return { taskIds: [], records: [] };
   }
 
   const recordsByTaskId = await loadAgentSessionListsFromQuery(

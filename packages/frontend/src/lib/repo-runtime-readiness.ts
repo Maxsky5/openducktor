@@ -1,8 +1,8 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
+  classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
-  isRepoRuntimeReady,
-  isRepoRuntimeStartupPending,
+  type RepoRuntimeHealthReadiness,
 } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 
@@ -72,6 +72,16 @@ const findRuntimeDefinition = (
   return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
 };
 
+const findRuntimeDefinitionWithReadiness = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeHealthByRuntime: RepoRuntimeHealthMap,
+  readiness: RepoRuntimeHealthReadiness,
+): RuntimeDescriptor | null =>
+  runtimeDefinitions.find(
+    (definition) =>
+      classifyRepoRuntimeHealth(runtimeHealthByRuntime[definition.kind]) === readiness,
+  ) ?? null;
+
 const readyRepoRuntimeReadiness = (isLoadingChecks: boolean): RepoRuntimeReadinessSnapshot => ({
   state: "ready",
   message: null,
@@ -131,28 +141,26 @@ export const deriveRepoRuntimeReadiness = ({
     scopedRuntimeDefinitions.some(
       (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
     );
-  const healthyRuntimeDefinition =
-    scopedRuntimeDefinitions.find((definition) =>
-      isRepoRuntimeReady(runtimeHealthByRuntime[definition.kind] ?? null),
-    ) ?? null;
-  const checkingRuntimeDefinition =
-    scopedRuntimeDefinitions.find(
-      (definition) => runtimeHealthByRuntime[definition.kind]?.status === "checking",
-    ) ?? null;
-  const awaitingStartupRuntimeDefinition =
-    scopedRuntimeDefinitions.find((definition) =>
-      isRepoRuntimeStartupPending(runtimeHealthByRuntime[definition.kind] ?? null),
-    ) ?? null;
-  const blockedRuntimeDefinition =
-    scopedRuntimeDefinitions.find((definition) => {
-      const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-      return Boolean(
-        runtimeHealth &&
-          runtimeHealth.status !== "ready" &&
-          runtimeHealth.status !== "checking" &&
-          !isRepoRuntimeStartupPending(runtimeHealth),
-      );
-    }) ?? null;
+  const healthyRuntimeDefinition = findRuntimeDefinitionWithReadiness(
+    scopedRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    "ready",
+  );
+  const checkingRuntimeDefinition = findRuntimeDefinitionWithReadiness(
+    scopedRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    "checking",
+  );
+  const awaitingStartupRuntimeDefinition = findRuntimeDefinitionWithReadiness(
+    scopedRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    "startup_pending",
+  );
+  const blockedRuntimeDefinition = findRuntimeDefinitionWithReadiness(
+    scopedRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    "blocked",
+  );
   const blockedRuntimeHealth = blockedRuntimeDefinition
     ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
     : null;

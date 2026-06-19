@@ -4,7 +4,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { toPersistedSessionIdentity } from "../support/persistence";
 import type { AgentSessionRuntimeSnapshot } from "./session-runtime-snapshot";
-import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-session-records";
+import type { TaskSessionRecords } from "./task-session-records";
 
 export type RepoRuntimeSessionSnapshots = Map<string, AgentSessionRuntimeSnapshot>;
 
@@ -14,12 +14,11 @@ export const readRepoRuntimeSessionSnapshots = async ({
   listSessionRuntimeSnapshots,
 }: {
   repoPath: string;
-  tasks: TaskSessionRecords[];
+  tasks: TaskSessionRecords;
   listSessionRuntimeSnapshots: AgentEnginePort["listSessionRuntimeSnapshots"];
 }): Promise<RepoRuntimeSessionSnapshots> => {
-  const taskSessionRecords = collectTaskSessionRecords(tasks);
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
-  for (const { record } of taskSessionRecords) {
+  for (const { record } of tasks.records) {
     const identity = toPersistedSessionIdentity(record);
     const runtimeKind = identity.runtimeKind;
     const directory = normalizeWorkingDirectory(identity.workingDirectory);

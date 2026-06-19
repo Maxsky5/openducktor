@@ -7,6 +7,13 @@ type RuntimeHealthBadge = {
   variant: "success" | "warning" | "danger" | "secondary";
 };
 
+export type RepoRuntimeHealthReadiness =
+  | "unknown"
+  | "ready"
+  | "startup_pending"
+  | "checking"
+  | "blocked";
+
 export const formatRepoRuntimeElapsed = (elapsedMs: number | null): string | null => {
   if (elapsedMs === null) {
     return null;
@@ -105,25 +112,43 @@ export const isRepoRuntimeStartupPending = (
   return runtimeHealth.runtime.status === "not_started" || isRepoRuntimeStarting(runtimeHealth);
 };
 
+export const classifyRepoRuntimeHealth = (
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined,
+): RepoRuntimeHealthReadiness => {
+  if (!runtimeHealth) {
+    return "unknown";
+  }
+
+  if (isRepoRuntimeReady(runtimeHealth)) {
+    return "ready";
+  }
+
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return "startup_pending";
+  }
+
+  if (runtimeHealth.status === "checking") {
+    return "checking";
+  }
+
+  return "blocked";
+};
+
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
-  if (isRepoRuntimeStartupPending(runtimeHealth)) {
-    return { label: "Starting", variant: "warning" };
-  }
-
-  const runtimeStatus = runtimeHealth?.runtime.status;
-  switch (runtimeStatus) {
-    case "disabled":
-      return { label: "Disabled", variant: "secondary" };
+  switch (classifyRepoRuntimeHealth(runtimeHealth)) {
+    case "unknown":
+      return { label: "Checking", variant: "secondary" };
     case "ready":
       return { label: "Running", variant: "success" };
+    case "startup_pending":
     case "checking":
       return { label: "Starting", variant: "warning" };
-    case "error":
-      return { label: "Unavailable", variant: "danger" };
-    default:
-      return { label: "Checking", variant: "secondary" };
+    case "blocked":
+      return runtimeHealth?.runtime.status === "disabled"
+        ? { label: "Disabled", variant: "secondary" }
+        : { label: "Unavailable", variant: "danger" };
   }
 };
 
