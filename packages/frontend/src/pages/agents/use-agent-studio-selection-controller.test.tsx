@@ -535,6 +535,60 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("keeps sessionless selection loading while the configured runtime has not started yet", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [task],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: null,
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+      {
+        runtimeDefinitionsContext: {
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        },
+        checksStateContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              status: "not_started",
+              runtime: {
+                status: "not_started",
+                stage: "idle",
+                detail: "Runtime has not been started yet.",
+              },
+            }),
+            codex: createRepoRuntimeHealthFixture(),
+          },
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.runtimeReadiness).toMatchObject({
+        state: "checking",
+        message: "OpenCode runtime is starting...",
+      });
+      expect(latest.view.selectedSession.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not fall back to another ready runtime when the configured runtime is unavailable", async () => {
     const task = createTaskCardFixture({
       id: "task-1",
