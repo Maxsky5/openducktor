@@ -27,7 +27,7 @@ describe("createRuntimeOrchestratorService", () => {
       workingDirectory: "/canonical/repo",
     });
   });
-  test("returns an existing workspace runtime without entering startup", async () => {
+  test("delegates workspace runtime reuse to the registry", async () => {
     const runtime = createRuntime();
     const ensureCalls: unknown[] = [];
     const service = createRuntimeOrchestratorService({
@@ -36,7 +36,7 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: createRegistry([runtime], {
         ensureWorkspaceRuntime(input) {
           ensureCalls.push(input);
-          return Effect.dieMessage("existing runtime should not enter startup");
+          return Effect.succeed(runtime);
         },
       }),
       taskReader: createTaskStore(),
@@ -44,7 +44,13 @@ describe("createRuntimeOrchestratorService", () => {
     await expect(
       Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toEqual(runtime);
-    expect(ensureCalls).toEqual([]);
+    expect(ensureCalls).toEqual([
+      expect.objectContaining({
+        runtimeKind: "opencode",
+        repoPath: "/canonical/repo",
+        workingDirectory: "/canonical/repo",
+      }),
+    ]);
   });
   test("lists registered runtimes by kind and canonical repository", async () => {
     const runtime = createRuntime();
@@ -375,16 +381,16 @@ describe("createRuntimeOrchestratorService", () => {
       Effect.runPromise(service.runtimeList({ runtimeKind: "opencode" })),
     ).resolves.toEqual([]);
   });
-  test("uses runtime id lookup before stopping a registered runtime", async () => {
+  test("stops runtimes by id without loading runtime metadata", async () => {
     const runtime = createRuntime();
-    const idLookups: string[] = [];
+    const stopCalls: string[] = [];
     const registry = createRegistry([runtime], {
-      findRuntimeById(runtimeId) {
-        idLookups.push(runtimeId);
-        return Effect.succeed(runtime);
+      findRuntimeById() {
+        return Effect.dieMessage("runtimeStop should not load runtime metadata");
       },
-      listRuntimes() {
-        return Effect.dieMessage("unexpected full runtime list");
+      stopRuntime(runtimeId) {
+        stopCalls.push(runtimeId);
+        return Effect.succeed(true);
       },
     });
     const service = createRuntimeOrchestratorService({
@@ -398,6 +404,6 @@ describe("createRuntimeOrchestratorService", () => {
     ).resolves.toEqual({
       ok: true,
     });
-    expect(idLookups).toEqual([runtime.runtimeId]);
+    expect(stopCalls).toEqual([runtime.runtimeId]);
   });
 });

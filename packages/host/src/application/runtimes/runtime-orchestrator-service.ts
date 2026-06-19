@@ -1,10 +1,9 @@
 import {
-  type RepoRuntimeStartupStatus,
+  type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { runtimeWorkspaceKey } from "../../domain/runtime-workspace-key";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -15,16 +14,12 @@ import {
   ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
   buildFailedStartupStatus,
   buildHealthStatus,
-  buildIdleStartupStatus,
   buildReadyStartupStatus,
-  buildWaitingStartupStatus,
   describeRuntimeRoute,
   isoFromMillis,
   loadTargetSession,
-  type RuntimeOrchestratorError,
   type RuntimeOrchestratorLogger,
   type RuntimeOrchestratorService,
-  type RuntimeRepoInput,
   resolveRepoPath,
   resolveRuntimeDescriptor,
 } from "./runtime-orchestrator-model";
@@ -51,7 +46,35 @@ export const createRuntimeOrchestratorService = ({
   activeMcpProbeRetryDelayMs?: number;
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
-  const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
+  const ensureWorkspaceRuntime = ({
+    runtimeKind,
+    repoPath,
+    descriptor,
+  }: {
+    runtimeKind: string;
+    repoPath: string;
+    descriptor: RuntimeDescriptor;
+  }) =>
+    runtimeRegistry
+      .ensureWorkspaceRuntime({
+        runtimeKind,
+        repoPath,
+        workingDirectory: repoPath,
+        descriptor,
+      })
+      .pipe(
+        Effect.flatMap((runtime) =>
+          Effect.try({
+            try: () => runtimeInstanceSummarySchema.parse(runtime),
+            catch: (cause) =>
+              new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+                details: { runtimeKind, repoPath },
+              }),
+          }),
+        ),
+      );
   const runtimeList: RuntimeOrchestratorService["runtimeList"] = (input) =>
     Effect.gen(function* () {
       const { runtimeKind, repoPath } = input;
@@ -89,87 +112,26 @@ export const createRuntimeOrchestratorService = ({
       }
       return runtimeInstanceSummarySchema.parse(runtime);
     });
-  const runtimeStartupStatus = (
-    input: RuntimeRepoInput,
-  ): Effect.Effect<RepoRuntimeStartupStatus, RuntimeOrchestratorError> =>
-    Effect.gen(function* () {
-      const { runtimeKind, repoPath } = input;
-      yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-      const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      const runtime = yield* runtimeRegistry.findWorkspaceRuntime({
-        repoPath: canonicalRepoPath,
-        runtimeKind,
-      });
-      if (runtime) {
-        const readyStatus = buildReadyStartupStatus(runtime);
-        runtimeStartupStatuses.set(
-          runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath }),
-          readyStatus,
-        );
-        return readyStatus;
-      }
-      return (
-        runtimeStartupStatuses.get(
-          runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath }),
-        ) ??
-        buildIdleStartupStatus(
-          runtimeKind,
-          canonicalRepoPath,
-          isoFromMillis(yield* Clock.currentTimeMillis),
-        )
-      );
-    });
   const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = (input) =>
     Effect.gen(function* () {
       const { runtimeKind, repoPath } = input;
       const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      const statusKey = runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath });
-      const existingRuntime = yield* runtimeRegistry.findWorkspaceRuntime({
-        repoPath: canonicalRepoPath,
-        runtimeKind,
-      });
-      if (existingRuntime) {
-        const parsed = runtimeInstanceSummarySchema.parse(existingRuntime);
-        runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
-        return parsed;
-      }
-      const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
-      runtimeStartupStatuses.set(
-        statusKey,
-        buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
-      );
-      logger?.info(`Ensuring ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}`);
       const ensureResult = yield* Effect.either(
-        runtimeRegistry.ensureWorkspaceRuntime({
+        ensureWorkspaceRuntime({
           runtimeKind,
           repoPath: canonicalRepoPath,
-          workingDirectory: canonicalRepoPath,
           descriptor,
         }),
       );
       if (ensureResult._tag === "Right") {
-        const runtime = ensureResult.right;
-        const parsed = runtimeInstanceSummarySchema.parse(runtime);
+        const parsed = ensureResult.right;
         logger?.info(
           `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
         );
-        runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
         return parsed;
       }
       const message = errorMessage(ensureResult.left);
-      const failedAt = isoFromMillis(yield* Clock.currentTimeMillis);
-      runtimeStartupStatuses.set(
-        statusKey,
-        buildFailedStartupStatus(
-          runtimeKind,
-          canonicalRepoPath,
-          startedAt,
-          failedAt,
-          "error",
-          message,
-        ),
-      );
       logger?.error(
         `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
       );
@@ -197,13 +159,7 @@ export const createRuntimeOrchestratorService = ({
     runtimeStop(input) {
       return Effect.gen(function* () {
         const { runtimeId } = input;
-        const runtime = yield* runtimeRegistry.findRuntimeById(runtimeId);
         const ok = yield* runtimeRegistry.stopRuntime(runtimeId);
-        if (runtime) {
-          runtimeStartupStatuses.delete(
-            runtimeWorkspaceKey({ runtimeKind: runtime.kind, repoPath: runtime.repoPath }),
-          );
-        }
         return { ok };
       });
     },
@@ -211,12 +167,31 @@ export const createRuntimeOrchestratorService = ({
       return Effect.gen(function* () {
         const { runtimeKind, repoPath } = input;
         const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-        logger?.info(`Checking ${runtimeKind} repo runtime health for repository ${repoPath}`);
-        const runtimeResult = yield* Effect.either(runtimeEnsure(input));
+        const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+        const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
+        logger?.info(
+          `Checking ${runtimeKind} repo runtime health for repository ${canonicalRepoPath}`,
+        );
+        const runtimeResult = yield* Effect.either(
+          ensureWorkspaceRuntime({
+            runtimeKind,
+            repoPath: canonicalRepoPath,
+            descriptor,
+          }),
+        );
         if (runtimeResult._tag === "Left") {
+          const message = errorMessage(runtimeResult.left);
+          const failedAt = isoFromMillis(yield* Clock.currentTimeMillis);
           return yield* buildHealthStatus(
             descriptor,
-            yield* runtimeStartupStatus(input),
+            buildFailedStartupStatus(
+              runtimeKind,
+              canonicalRepoPath,
+              startedAt,
+              failedAt,
+              "error",
+              message,
+            ),
             runtimeRegistry,
           );
         }
