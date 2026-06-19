@@ -1,23 +1,19 @@
 import type { ReusablePrompt } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
-import {
-  type AgentChatComposerDraft,
-  draftHasMeaningfulContent,
-  draftHasSlashCommandSegment,
-  resolveDraftToUserMessageParts,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { SessionStartWorkflowResult } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   buildAgentStudioSessionActivityKey,
   useAgentStudioAsyncActivityTracker,
 } from "../use-agent-studio-async-activity";
+import { resolveAgentStudioSendDraftParts } from "./agent-studio-send-draft";
+import {
+  canResolveAgentStudioSendTargetSession,
+  resolveAgentStudioSendTargetSession,
+} from "./agent-studio-send-target";
 import type { AgentStudioSessionActionState } from "./agent-studio-session-action-state";
 
 type AgentStudioSendActionState = Pick<
@@ -86,49 +82,34 @@ export function useAgentStudioSendAction({
       ) {
         return false;
       }
-      if (!selectedSessionIdentity && !canStartNewSession) {
+      if (
+        !canResolveAgentStudioSendTargetSession({
+          selectedSessionIdentity,
+          canStartNewSession,
+        })
+      ) {
         return false;
       }
       if (isSessionModelCatalogLoading && selectedSessionModel === null) {
         return false;
       }
 
-      let reusablePromptMessageParts: AgentUserMessagePart[] | null;
-      try {
-        reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
-          draft,
-          reusablePrompts,
-        );
-      } catch {
-        return false;
-      }
-
-      if ((draft.attachments ?? []).length > 0) {
-        if (draftHasSlashCommandSegment(draft)) {
-          return false;
-        }
-
-        const attachmentErrors = validateComposerAttachments(
-          draft.attachments ?? [],
-          selectedModelDescriptor?.attachmentSupport,
-        );
-        if (Object.keys(attachmentErrors).length > 0) {
-          return false;
-        }
-      }
-
-      if (!draftHasMeaningfulContent(draft) || !taskId) {
+      const messagePartsResult = resolveAgentStudioSendDraftParts({
+        draft,
+        reusablePrompts,
+        selectedModelDescriptor,
+      });
+      if (!messagePartsResult || !taskId) {
         return false;
       }
       const activity = beginSendingActivity(activeComposerContextKey);
 
       try {
-        let targetSession: AgentSessionIdentity | null | undefined = selectedSessionIdentity;
-        if (!targetSession) {
-          const startedSession = await startSession();
-          targetSession = startedSession ? toAgentSessionIdentity(startedSession) : null;
-        }
-
+        const targetSession = await resolveAgentStudioSendTargetSession({
+          selectedSessionIdentity,
+          canStartNewSession,
+          startSession,
+        });
         if (!targetSession) {
           return false;
         }
@@ -140,19 +121,8 @@ export function useAgentStudioSendAction({
           session: targetSession,
         });
         activity.add(targetComposerContextKey);
-        await sendAgentMessage(
-          targetSession,
-          reusablePromptMessageParts ??
-            (await resolveDraftToUserMessageParts(draft, async (attachment) => {
-              if (attachment.file) {
-                return stageLocalAttachmentFile(attachment.file);
-              }
-              if (attachment.path) {
-                return attachment.path;
-              }
-              throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
-            })),
-        );
+        const messageParts = await messagePartsResult;
+        await sendAgentMessage(targetSession, messageParts);
         return true;
       } finally {
         activity.finish();
@@ -169,7 +139,7 @@ export function useAgentStudioSendAction({
       isStarting,
       isSessionModelCatalogLoading,
       role,
-      selectedModelDescriptor?.attachmentSupport,
+      selectedModelDescriptor,
       selectedSessionModel,
       sendAgentMessage,
       startSession,
