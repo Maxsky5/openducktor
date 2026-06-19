@@ -20,6 +20,7 @@ export type ChecksQueryDependencies = {
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
+const REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -130,10 +131,7 @@ export const repoRuntimeHealthQueryOptions = (
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    // Runtime health is live process state and also the automatic startup trigger.
-    // Keep it stale so app remounts re-enter the idempotent starter path instead
-    // of trusting a cached runtime from a previous browser or host lifetime.
-    staleTime: 0,
+    staleTime: REPO_RUNTIME_HEALTH_STALE_TIME_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

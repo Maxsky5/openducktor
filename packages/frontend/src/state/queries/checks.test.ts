@@ -87,7 +87,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     }
   });
 
-  test("does not reuse runtime health as fresh query data", async () => {
+  test("reuses recent runtime health instead of re-entering startup on every read", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -123,7 +123,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     try {
       await queryClient.fetchQuery(queryOptions);
       await queryClient.fetchQuery(queryOptions);
-      expect(calls).toBe(2);
+      expect(calls).toBe(1);
     } finally {
       queryClient.clear();
     }
@@ -141,7 +141,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     expect(queryOptions.refetchInterval).toBeUndefined();
   });
 
-  test("keeps runtime health stale so remounts re-enter the starter path", () => {
+  test("keeps runtime health explicit and manually refreshable without background refetching", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -150,7 +150,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(queryOptions.staleTime).toBe(0);
+    expect(queryOptions.staleTime).toBe(60_000);
     expect(queryOptions.refetchOnWindowFocus).toBe(false);
     expect(queryOptions.refetchOnReconnect).toBe(false);
   });
