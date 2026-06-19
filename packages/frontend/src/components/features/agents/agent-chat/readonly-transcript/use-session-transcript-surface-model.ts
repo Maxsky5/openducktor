@@ -2,8 +2,7 @@ import type { AgentSessionTodoItem } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
+import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
@@ -25,9 +24,6 @@ export function useSessionTranscriptSurfaceModel({
   target,
 }: UseSessionTranscriptSurfaceModelArgs) {
   const hasWorkspace = workspaceRepoPath !== null;
-  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const { replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const liveSession = useAgentSession(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
@@ -36,12 +32,6 @@ export function useSessionTranscriptSurfaceModel({
 
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
     runtimeTarget: repoRuntimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
   });
 

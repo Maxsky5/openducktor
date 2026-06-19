@@ -13,7 +13,6 @@ import {
   useAgentOperations,
   useAgentSession,
   useAgentSessionReadModelState,
-  useChecksState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { deriveAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
@@ -62,13 +61,8 @@ export function useAgentStudioSelectedSessionView({
   isLoadingRepoSettings,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
   const { readSessionTodos } = useAgentOperations();
-  const {
-    allRuntimeDefinitions: runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    loadRepoRuntimeCatalog,
-  } = useRuntimeAvailabilityContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
+  const { allRuntimeDefinitions: runtimeDefinitions, loadRepoRuntimeCatalog } =
+    useRuntimeAvailabilityContext();
   const selection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
       sessionSummaries,
@@ -124,12 +118,6 @@ export function useAgentStudioSelectedSessionView({
   const runtimeTarget = selectedSessionViewProjection.runtimeTarget;
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
     runtimeTarget,
   });
   const repoReadinessState = runtimeReadiness.state;
