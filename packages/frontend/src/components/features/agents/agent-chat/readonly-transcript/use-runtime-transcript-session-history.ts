@@ -8,6 +8,7 @@ import { useAgentOperations } from "@/state/app-state-provider";
 import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   type AgentSessionTranscriptEmptyReason,
+  type AgentSessionTranscriptSource,
   type AgentSessionTranscriptState,
   deriveAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
@@ -35,7 +36,7 @@ type RuntimeTranscriptSessionHistory = {
   transcriptState: AgentSessionTranscriptState;
 };
 
-type RuntimeTranscriptSource =
+type RuntimeTranscriptHistorySource =
   | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
   | { kind: "live"; session: AgentSessionState }
   | { kind: "history"; ref: ReturnType<typeof toRuntimeSessionRef> };
@@ -55,7 +56,7 @@ export function useRuntimeTranscriptSessionHistory({
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory } = useAgentOperations();
   const stableTarget = useStableAgentSessionIdentity(target);
-  const source = useMemo<RuntimeTranscriptSource>(() => {
+  const historySource = useMemo<RuntimeTranscriptHistorySource>(() => {
     if (!isOpen || stableTarget === null) {
       return { kind: "empty", reason: "inactive" };
     }
@@ -69,57 +70,43 @@ export function useRuntimeTranscriptSessionHistory({
   }, [isOpen, liveSession, repoPath, stableTarget]);
 
   const historyQuery = useQuery(
-    source.kind === "history" && repoReadinessState === "ready"
-      ? sessionHistoryQueryOptions(source.ref, readSessionHistory)
+    historySource.kind === "history" && repoReadinessState === "ready"
+      ? sessionHistoryQueryOptions(historySource.ref, readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
 
   const session = useMemo(() => {
-    if (source.kind === "live") {
-      return toAgentChatThreadSession(source.session);
+    if (historySource.kind === "live") {
+      return toAgentChatThreadSession(historySource.session);
     }
-    if (source.kind !== "history" || !historyQuery.data) {
+    if (historySource.kind !== "history" || !historyQuery.data) {
       return null;
     }
 
     return createReadonlyTranscriptSession({
-      ...toAgentSessionIdentity(source.ref),
+      ...toAgentSessionIdentity(historySource.ref),
       history: historyQuery.data,
     });
-  }, [historyQuery.data, source]);
-  const transcriptState = useMemo(() => {
+  }, [historyQuery.data, historySource]);
+  const transcriptSource = useMemo<AgentSessionTranscriptSource>(() => {
     if (session !== null) {
-      return deriveAgentSessionTranscriptState({
-        source: { kind: "visible" },
-        repoReadinessState,
-      });
+      return { kind: "visible" };
     }
-
-    if (source.kind === "empty") {
-      return deriveAgentSessionTranscriptState({
-        source: { kind: "empty", reason: source.reason },
-        repoReadinessState,
-      });
+    if (historySource.kind === "empty") {
+      return { kind: "empty", reason: historySource.reason };
     }
-
     if (historyQuery.error && repoReadinessState === "ready") {
-      return deriveAgentSessionTranscriptState({
-        source: {
-          kind: "failed",
-          message: errorMessageFromUnknown(
-            historyQuery.error,
-            "Failed to load transcript history.",
-          ),
-        },
-        repoReadinessState,
-      });
+      return {
+        kind: "failed",
+        message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
+      };
     }
-
-    return deriveAgentSessionTranscriptState({
-      source: { kind: "runtime_gated_loading", reason: "history" },
-      repoReadinessState,
-    });
-  }, [historyQuery.error, repoReadinessState, session, source]);
+    return { kind: "runtime_gated_loading", reason: "history" };
+  }, [historyQuery.error, historySource, repoReadinessState, session]);
+  const transcriptState = useMemo(
+    () => deriveAgentSessionTranscriptState({ source: transcriptSource, repoReadinessState }),
+    [repoReadinessState, transcriptSource],
+  );
 
   return {
     session,
