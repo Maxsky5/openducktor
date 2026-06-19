@@ -327,7 +327,6 @@ export function useAgentStudioOrchestrationController({
         sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
         selectedSession,
-        runtimeDefinitions,
         hasActiveGitConflict,
         documents: {
           specDoc,
@@ -355,7 +354,6 @@ export function useAgentStudioOrchestrationController({
       planDoc,
       qaDoc,
       roleLabelByRole,
-      runtimeDefinitions,
       selection.allSessionSummaries,
       selectedSession,
       specDoc,

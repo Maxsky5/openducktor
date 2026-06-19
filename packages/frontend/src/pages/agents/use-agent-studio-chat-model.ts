@@ -292,7 +292,6 @@ export function useAgentStudioChatModel({
     session: activeThreadSession,
     transcriptState: selectedSessionTranscriptState,
     chatSettings,
-    runtimeDefinitions: selectedSession.runtimeDefinitions,
     sessionAuxiliaryError: selectedSessionRuntimeData.error,
     runtimeReadiness,
     emptyState: surfaceState.emptyState,

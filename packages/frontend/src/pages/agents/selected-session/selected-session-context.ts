@@ -1,8 +1,4 @@
-import type {
-  RuntimeApprovalReplyOutcome,
-  RuntimeDescriptor,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -59,7 +55,6 @@ export type AgentStudioSelectedSessionContext = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
-  runtimeDefinitions: RuntimeDescriptor[];
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
   pendingInput: SelectedSessionPendingInputContext;
@@ -72,7 +67,6 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
-  runtimeDefinitions: RuntimeDescriptor[];
   hasActiveGitConflict: boolean;
   documents: AgentStudioDocumentsContext;
   sessionActions: {
@@ -109,7 +103,6 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionsForTask,
   allSessionSummaries,
   selectedSession,
-  runtimeDefinitions,
   hasActiveGitConflict,
   documents,
   sessionActions,
@@ -154,7 +147,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedTask,
     sessionsForTask,
     selectedSession,
-    runtimeDefinitions,
     workflow,
     documents: {
       activeDocument,

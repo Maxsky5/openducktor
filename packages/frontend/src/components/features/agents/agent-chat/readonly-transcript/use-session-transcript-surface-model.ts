@@ -71,7 +71,6 @@ export function useSessionTranscriptSurfaceModel({
     session: sessionHistory.session,
     transcriptState: sessionHistory.transcriptState,
     chatSettings,
-    runtimeDefinitions,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,
     runtimeReadiness,
     emptyState: transcriptSurfaceState.emptyState,

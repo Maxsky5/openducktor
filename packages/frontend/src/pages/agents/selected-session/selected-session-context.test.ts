@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
@@ -92,7 +91,6 @@ const createInput = (
       transcriptState:
         selectedSessionOverrides.transcriptState ?? createSelectedSessionTranscriptStateFixture(),
     },
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     hasActiveGitConflict: false,
     documents: {
       specDoc: createDoc("spec"),

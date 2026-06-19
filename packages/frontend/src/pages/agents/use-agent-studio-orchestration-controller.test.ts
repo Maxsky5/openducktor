@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -99,7 +98,6 @@ const baseArgs: BuildArgs = {
       runtimeReadiness: baseRuntimeReadiness,
       transcriptState: createSelectedSessionTranscriptStateFixture(),
     },
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     hasActiveGitConflict: false,
     documents: baseDocuments,
     sessionActions: baseSessionActions,
@@ -161,7 +159,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     expect(mapped.activeTabValue).toBe("task-1");
     expect(mapped.selectedSession.role).toBe("planner");
-    expect(mapped.selectedSession.runtimeDefinitions).toEqual([OPENCODE_RUNTIME_DESCRIPTOR]);
     expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });

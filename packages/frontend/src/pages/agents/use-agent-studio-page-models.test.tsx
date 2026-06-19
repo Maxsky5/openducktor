@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -191,7 +190,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     hasActiveGitConflict: false,
     transcriptState: createSelectedSessionTranscriptStateFixture(),
     sessionRuntimeData: emptyRuntimeData,
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
     allSessionSummaries,
     sessionsForTask,
@@ -307,7 +305,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
         runtimeReadiness,
         transcriptState: selectedSessionCore.transcriptState,
       },
-      runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
       documents,
       sessionActions: selectedSessionActions,
@@ -447,7 +444,6 @@ describe("useAgentStudioPageModels", () => {
           loadedSession: staleLoadedSession,
           sessionsForTask: summarizeSessions([selectedSession]),
           allSessionSummaries: summarizeSessions([selectedSession]),
-          runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         },
         modelSelection: {
           agentAccentColorsByProfileId: {
@@ -493,7 +489,6 @@ describe("useAgentStudioPageModels", () => {
             error: null,
           },
           sessionsForTask: [toAgentSessionSummary(codexSession)],
-          runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         },
         modelSelection: {
           selectedModelSelection: {
@@ -1045,7 +1040,6 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           loadedSession: approvalSession,
           sessionsForTask: summarizeSessions([approvalSession]),
-          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         },
       }),
     );

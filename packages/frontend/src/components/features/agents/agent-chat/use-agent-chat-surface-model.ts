@@ -1,8 +1,9 @@
-import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
+import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
@@ -32,7 +33,6 @@ type UseAgentChatSurfaceModelArgs = {
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
   chatSettings: ChatSettings;
-  runtimeDefinitions?: RuntimeDescriptor[];
   sessionAuxiliaryError: string | null;
   runtimeReadiness: RepoRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
@@ -53,7 +53,6 @@ export function useAgentChatSurfaceModel({
   session,
   transcriptState,
   chatSettings,
-  runtimeDefinitions = [],
   sessionAuxiliaryError,
   runtimeReadiness,
   emptyState,
@@ -68,6 +67,7 @@ export function useAgentChatSurfaceModel({
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const threadState = projectAgentChatThreadState({
     sessionKey,
     session,
