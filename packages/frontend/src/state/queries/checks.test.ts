@@ -87,7 +87,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     }
   });
 
-  test("keeps runtime health fresh until explicit refresh invalidates it", async () => {
+  test("does not reuse runtime health as fresh query data", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -123,14 +123,6 @@ describe("repoRuntimeHealthQueryOptions", () => {
     try {
       await queryClient.fetchQuery(queryOptions);
       await queryClient.fetchQuery(queryOptions);
-      expect(calls).toBe(1);
-
-      await queryClient.invalidateQueries({
-        queryKey: queryOptions.queryKey,
-        exact: true,
-        refetchType: "none",
-      });
-      await queryClient.fetchQuery(queryOptions);
       expect(calls).toBe(2);
     } finally {
       queryClient.clear();
@@ -149,7 +141,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     expect(queryOptions.refetchInterval).toBeUndefined();
   });
 
-  test("only refreshes runtime health from explicit cache invalidation", () => {
+  test("keeps runtime health stale so remounts re-enter the starter path", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -158,7 +150,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(queryOptions.staleTime).toBe(Infinity);
+    expect(queryOptions.staleTime).toBe(0);
     expect(queryOptions.refetchOnWindowFocus).toBe(false);
     expect(queryOptions.refetchOnReconnect).toBe(false);
   });

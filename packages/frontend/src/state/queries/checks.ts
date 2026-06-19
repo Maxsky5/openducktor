@@ -130,9 +130,10 @@ export const repoRuntimeHealthQueryOptions = (
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    // Runtime health is the automatic startup trigger. The first query starts the
-    // workspace runtimes; after that, only explicit refresh should re-enter it.
-    staleTime: Infinity,
+    // Runtime health is live process state and also the automatic startup trigger.
+    // Keep it stale so app remounts re-enter the idempotent starter path instead
+    // of trusting a cached runtime from a previous browser or host lifetime.
+    staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

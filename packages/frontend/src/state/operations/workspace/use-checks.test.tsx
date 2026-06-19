@@ -273,7 +273,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("keeps runtime health snapshots stable until an explicit refresh", async () => {
+  test("does not poll runtime health while mounted", async () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );

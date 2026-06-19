@@ -158,9 +158,10 @@ Owns:
 
 Invariant: `repoRuntimeHealth` is the only repository-load readiness path that
 may ensure a workspace runtime before probing runtime health or MCP status.
-App lifecycle and workspace selection must not start runtimes or manually
-refresh runtime health as a side effect; selecting a workspace only makes the
-runtime-health query eligible to run.
+App lifecycle and workspace selection must not start runtimes directly;
+selecting a workspace only makes the runtime-health query eligible to run.
+Runtime health is live process state, so app remounts may re-enter this
+idempotent query path, but it must not poll.
 
 Invariant: `not_started` is a passive runtime observation only. UI controlled by
 the automatic repository runtime-health path must treat it as a pending startup
