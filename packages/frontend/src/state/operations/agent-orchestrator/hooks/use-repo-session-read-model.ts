@@ -4,11 +4,11 @@ import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
-  deriveRepoRuntimeReadiness,
+  inactiveRepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntimeSet,
 } from "@/lib/repo-runtime-readiness";
+import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { useChecksStateContext, useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -48,9 +48,6 @@ export const useRepoSessionReadModel = ({
   clearSessionObservationState,
   queryClient,
 }: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
-  const { runtimeHealthByRuntime, isLoadingChecks } = useChecksStateContext();
-  const { allRuntimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeAvailabilityContext();
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const currentSessionReadModelLoadState = useMemo(
@@ -80,20 +77,19 @@ export const useRepoSessionReadModel = ({
       ),
     ).sort();
   }, [taskSessionRecordsState]);
-  const runtimeReadiness =
-    taskSessionRecordsState.kind === "ready"
-      ? deriveRepoRuntimeReadiness({
-          hasActiveWorkspace: workspaceRepoPath !== null,
-          runtimeDefinitions: allRuntimeDefinitions,
-          isLoadingRuntimeDefinitions,
-          runtimeDefinitionsError,
-          runtimeHealthByRuntime,
-          isLoadingChecks,
-          runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(requiredRuntimeKinds),
-        })
-      : null;
-  const runtimeReadinessState = runtimeReadiness?.state ?? null;
-  const runtimeReadinessMessage = runtimeReadiness?.message ?? "";
+  const runtimeTarget = useMemo(
+    () =>
+      taskSessionRecordsState.kind === "ready"
+        ? repoRuntimeReadinessTargetForRuntimeSet(requiredRuntimeKinds)
+        : inactiveRepoRuntimeReadinessTarget,
+    [requiredRuntimeKinds, taskSessionRecordsState.kind],
+  );
+  const runtimeReadiness = useRepoRuntimeReadiness({
+    hasWorkspace: workspaceRepoPath !== null,
+    runtimeTarget,
+  });
+  const runtimeReadinessState = runtimeReadiness.state;
+  const runtimeReadinessMessage = runtimeReadiness.message ?? "";
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -126,9 +122,6 @@ export const useRepoSessionReadModel = ({
             )}`,
           ),
         );
-        return;
-      }
-      if (runtimeReadinessState === null) {
         return;
       }
       if (runtimeReadinessState === "checking") {

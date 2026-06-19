@@ -381,12 +381,12 @@ Do not resolve live and persisted selections in separate branches.
 
 Invariant: `selected-session-view-projection.ts` owns selected-session
 projection. It walks the selected facts once and returns selected activity,
-selected model, runtime readiness target, and final transcript state. Runtime
-readiness-to-display helpers stay in the transcript-state module. History
-loading policy and runtime-data query gating live in their owner modules, not in
-the transcript state model. Page route/task switching is orchestration state and
-must not be stored in the transcript state model. Do not mirror runtime
-readiness on it.
+selected model, and final transcript state. It also owns the helper that derives
+the selected runtime-readiness target for the hook. Runtime readiness-to-display
+helpers stay in the transcript-state module. History loading policy and
+runtime-data query gating live in their owner modules, not in the transcript
+state model. Page route/task switching is orchestration state and must not be
+stored in the transcript state model. Do not mirror runtime readiness on it.
 Readonly transcript history is owned by
 `readonly-transcript/use-runtime-transcript-session-history.ts`. That hook
 chooses exactly one path: matching live session, runtime history read, or empty
@@ -441,9 +441,9 @@ loader props for the selected session. The selected-session view owner reads the
 runtime/check contexts directly when deriving `runtimeReadiness` and
 `sessionRuntimeData`.
 `selected-session-view-projection.ts` owns the selected-session projection:
-loaded session, selected session, selected task, or inactive. Runtime target,
-transcript state, selected activity, and selected model must derive there
-instead of rebuilding the same branch ladder in the hook.
+loaded session, selected session, selected task, or inactive. The runtime-target
+helper, transcript state, selected activity, and selected model must stay in
+that module instead of rebuilding the same branch ladder in the hook.
 `selected-session-context.ts` exposes transcript state as selected-session state,
 not as runtime state. Runtime context contains runtime definitions, readiness,
 and selected-session runtime data only.
@@ -840,11 +840,12 @@ changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
 `useTaskSessionRecords` is the only hook that fans out per-task session-record
-queries for repo startup. `useRepoSessionReadModel` consumes that result and owns
-only repo session projection/commit. Task reset pages must not call a session
-refresh command after reset. Reset operations invalidate the exact
-task-session-record query, and the repo read model reacts to that owned query
-data.
+queries for repo startup. `useRepoSessionReadModel` consumes that result, asks
+repo runtime readiness for the required persisted runtime set, and owns repo
+session projection/commit. It must not interpret runtime health directly. Task
+reset pages must not call a session refresh command after reset. Reset
+operations invalidate the exact task-session-record query, and the repo read
+model reacts to that owned query data.
 Local session projection during repo reads is owned by
 `repo-session-read-model.ts`. It carries sessions outside the loaded task set and
 local starting sessions whose persisted record is not visible yet; every other
