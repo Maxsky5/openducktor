@@ -75,24 +75,63 @@ describe("repoRuntimeHealthQueryOptions", () => {
     });
 
     try {
-      const result = await queryClient.fetchQuery(
-        repoRuntimeHealthQueryOptions("/repo", [OPENCODE_RUNTIME_DESCRIPTOR], async () => {
-          throw new Error("Timed out after 15000ms");
-        }),
-      );
+      await expect(
+        queryClient.fetchQuery(
+          repoRuntimeHealthQueryOptions("/repo", [OPENCODE_RUNTIME_DESCRIPTOR], async () => {
+            throw new Error("Timed out after 15000ms");
+          }),
+        ),
+      ).rejects.toThrow("Timed out after 15000ms");
+    } finally {
+      queryClient.clear();
+    }
+  });
 
-      expect(result.opencode).toEqual(
-        expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "Timed out after 15000ms",
-            failureKind: "error",
-          }),
-          mcp: expect.objectContaining({
-            failureKind: "error",
-          }),
-        }),
-      );
+  test("keeps runtime health fresh until explicit refresh invalidates it", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    let calls = 0;
+    const queryOptions = repoRuntimeHealthQueryOptions(
+      "/repo",
+      [OPENCODE_RUNTIME_DESCRIPTOR],
+      async () => {
+        calls += 1;
+        return {
+          status: "ready",
+          checkedAt: "2026-02-22T08:00:00.000Z",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+            observation: "observed_existing_runtime",
+            instance: null,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            detail: null,
+            failureKind: null,
+            failureReason: null,
+          },
+          mcp: null,
+        };
+      },
+    );
+
+    try {
+      await queryClient.fetchQuery(queryOptions);
+      await queryClient.fetchQuery(queryOptions);
+      expect(calls).toBe(1);
+
+      await queryClient.invalidateQueries({
+        queryKey: queryOptions.queryKey,
+        exact: true,
+        refetchType: "none",
+      });
+      await queryClient.fetchQuery(queryOptions);
+      expect(calls).toBe(2);
     } finally {
       queryClient.clear();
     }
@@ -110,7 +149,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     expect(queryOptions.refetchInterval).toBeUndefined();
   });
 
-  test("does not keep runtime health fresh after it starts or observes a runtime", () => {
+  test("only refreshes runtime health from explicit cache invalidation", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -119,6 +158,8 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(queryOptions.staleTime).toBe(0);
+    expect(queryOptions.staleTime).toBe(Infinity);
+    expect(queryOptions.refetchOnWindowFocus).toBe(false);
+    expect(queryOptions.refetchOnReconnect).toBe(false);
   });
 });

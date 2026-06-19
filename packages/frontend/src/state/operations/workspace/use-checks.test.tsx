@@ -928,7 +928,7 @@ describe("use-checks", () => {
       shouldFailRefresh = true;
 
       await harness.run(async (value) => {
-        await value.refreshChecks();
+        await expect(value.refreshChecks()).rejects.toThrow("runtime health refresh failed");
       });
 
       await harness.waitFor((value) => {

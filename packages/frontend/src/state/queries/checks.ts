@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
-import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -27,36 +26,6 @@ const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
   taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
 };
-
-const buildRuntimeHealthErrorCheck = (
-  runtimeHealthError: string,
-  checkedAt: string,
-): RepoRuntimeHealthCheck => ({
-  status: "error",
-  checkedAt,
-  runtime: {
-    status: "error",
-    stage: "startup_failed",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: checkedAt,
-    elapsedMs: null,
-    attempts: null,
-    detail: runtimeHealthError,
-    failureKind: "error",
-    failureReason: null,
-  },
-  mcp: {
-    supported: true,
-    status: "error",
-    serverName: ODT_MCP_SERVER_NAME,
-    serverStatus: null,
-    toolIds: [],
-    detail: runtimeHealthError,
-    failureKind: "error",
-  },
-});
 
 const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   runtimeKinds.toSorted();
@@ -153,24 +122,19 @@ export const repoRuntimeHealthQueryOptions = (
     ),
     queryFn: async (): Promise<RepoRuntimeHealthMap> => {
       const checks = await Promise.all(
-        runtimeDefinitions.map(async (definition) => {
-          let check: RepoRuntimeHealthCheck;
-
-          try {
-            check = await checkRepoRuntimeHealth(repoPath, definition.kind);
-          } catch (error) {
-            check = buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString());
-          }
-
-          return [definition.kind, check] as const;
-        }),
+        runtimeDefinitions.map(
+          async (definition) =>
+            [definition.kind, await checkRepoRuntimeHealth(repoPath, definition.kind)] as const,
+        ),
       );
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    // Runtime health is also the automatic startup trigger, so a mounted screen
-    // must always revalidate instead of trusting an old "not started" snapshot.
-    staleTime: 0,
+    // Runtime health is the automatic startup trigger. The first query starts the
+    // workspace runtimes; after that, only explicit refresh should re-enter it.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
 export const loadRuntimeCheckFromQuery = (
