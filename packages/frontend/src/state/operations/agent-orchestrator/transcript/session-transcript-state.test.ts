@@ -7,12 +7,8 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
-  deriveLoadedAgentSessionTranscriptState,
-  emptyAfterRuntimeReadyAgentSessionTranscriptState,
-  emptyAgentSessionTranscriptState,
-  failedAgentSessionTranscriptState,
-  loadingAgentSessionTranscriptState,
-  visibleAgentSessionTranscriptState,
+  deriveAgentSessionTranscriptState,
+  deriveLoadedAgentSessionTranscriptSource,
 } from "./session-transcript-state";
 
 type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
@@ -48,12 +44,12 @@ const deriveLoadedTranscriptStateForSession = ({
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
 }) =>
-  deriveLoadedAgentSessionTranscriptState({
-    session,
+  deriveAgentSessionTranscriptState({
+    source: deriveLoadedAgentSessionTranscriptSource(session),
     repoReadinessState,
   });
 
-describe("deriveLoadedAgentSessionTranscriptState", () => {
+describe("deriveLoadedAgentSessionTranscriptSource", () => {
   test("keeps a partial transcript visible while history has not loaded", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
@@ -233,16 +229,19 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
   });
 });
 
-describe("agent session transcript state helpers", () => {
+describe("deriveAgentSessionTranscriptState", () => {
   test("stays empty without a transcript target", () => {
-    const transcriptState = emptyAgentSessionTranscriptState("inactive");
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "empty", reason: "inactive" },
+      repoReadinessState: "checking",
+    });
 
     expect(transcriptState).toEqual({ kind: "empty", reason: "inactive" });
   });
 
   test("waits for runtime readiness before surfacing runtime-backed empty states", () => {
-    const transcriptState = emptyAfterRuntimeReadyAgentSessionTranscriptState({
-      reason: "sessionless",
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_empty", reason: "sessionless" },
       repoReadinessState: "checking",
     });
 
@@ -250,8 +249,8 @@ describe("agent session transcript state helpers", () => {
   });
 
   test("surfaces runtime-backed empty states after runtime readiness", () => {
-    const transcriptState = emptyAfterRuntimeReadyAgentSessionTranscriptState({
-      reason: "sessionless",
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_empty", reason: "sessionless" },
       repoReadinessState: "ready",
     });
 
@@ -259,8 +258,8 @@ describe("agent session transcript state helpers", () => {
   });
 
   test("waits for runtime readiness before surfacing history loading", () => {
-    const transcriptState = loadingAgentSessionTranscriptState({
-      reason: "history",
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_loading", reason: "history" },
       repoReadinessState: "checking",
     });
 
@@ -268,8 +267,8 @@ describe("agent session transcript state helpers", () => {
   });
 
   test("surfaces history loading once runtime is ready", () => {
-    const transcriptState = loadingAgentSessionTranscriptState({
-      reason: "history",
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_loading", reason: "history" },
       repoReadinessState: "ready",
     });
 
@@ -277,8 +276,8 @@ describe("agent session transcript state helpers", () => {
   });
 
   test("surfaces preparing loading once runtime is ready", () => {
-    const transcriptState = loadingAgentSessionTranscriptState({
-      reason: "preparing",
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_loading", reason: "preparing" },
       repoReadinessState: "ready",
     });
 
@@ -286,13 +285,19 @@ describe("agent session transcript state helpers", () => {
   });
 
   test("surfaces failures directly", () => {
-    const transcriptState = failedAgentSessionTranscriptState("read model unavailable");
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "failed", message: "read model unavailable" },
+      repoReadinessState: "checking",
+    });
 
     expect(transcriptState).toEqual({ kind: "failed", message: "read model unavailable" });
   });
 
   test("shows the transcript when a live or history-loaded session exists", () => {
-    const transcriptState = visibleAgentSessionTranscriptState();
+    const transcriptState = deriveAgentSessionTranscriptState({
+      source: { kind: "visible" },
+      repoReadinessState: "checking",
+    });
 
     expect(transcriptState).toEqual({ kind: "visible" });
   });

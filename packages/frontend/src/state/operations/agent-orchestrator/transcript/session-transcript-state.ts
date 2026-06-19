@@ -5,6 +5,13 @@ import { hasRenderableSessionTranscript } from "../support/session-transcript-co
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
 export type AgentSessionTranscriptLoadingReason = "preparing" | "history";
 
+export type AgentSessionTranscriptSource =
+  | { kind: "visible" }
+  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
+  | { kind: "runtime_gated_empty"; reason: AgentSessionTranscriptEmptyReason }
+  | { kind: "runtime_gated_loading"; reason: AgentSessionTranscriptLoadingReason }
+  | { kind: "failed"; message: string };
+
 type AgentSessionTranscriptNonEmptyState =
   | { kind: "runtime_waiting" }
   | { kind: "session_loading"; reason: AgentSessionTranscriptLoadingReason }
@@ -17,24 +24,6 @@ export type AgentSessionTranscriptState =
 
 const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
 
-export const visibleAgentSessionTranscriptState = (): AgentSessionTranscriptState => ({
-  kind: "visible",
-});
-
-export const emptyAgentSessionTranscriptState = (
-  reason: AgentSessionTranscriptEmptyReason,
-): AgentSessionTranscriptState => ({
-  kind: "empty",
-  reason,
-});
-
-export const failedAgentSessionTranscriptState = (
-  message: string,
-): AgentSessionTranscriptState => ({
-  kind: "failed",
-  message,
-});
-
 export const isAgentSessionTranscriptLoading = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean =>
@@ -44,51 +33,44 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-export const loadingAgentSessionTranscriptState = ({
-  reason,
-  repoReadinessState,
-}: {
-  reason: AgentSessionTranscriptLoadingReason;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  if (repoReadinessState !== "ready") {
-    return { kind: "runtime_waiting" };
-  }
-
-  return { kind: "session_loading", reason };
-};
-
-export const emptyAfterRuntimeReadyAgentSessionTranscriptState = ({
-  reason,
-  repoReadinessState,
-}: {
-  reason: AgentSessionTranscriptEmptyReason;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  if (repoReadinessState !== "ready") {
-    return { kind: "runtime_waiting" };
-  }
-
-  return emptyAgentSessionTranscriptState(reason);
-};
-
-export const deriveLoadedAgentSessionTranscriptState = ({
-  session,
-  repoReadinessState,
-}: {
-  session: AgentSessionState;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
+export const deriveLoadedAgentSessionTranscriptSource = (
+  session: AgentSessionState,
+): AgentSessionTranscriptSource => {
   if (hasRenderableSessionTranscript(session)) {
-    return visibleAgentSessionTranscriptState();
+    return { kind: "visible" };
   }
 
-  if (session.historyLoadState === "failed" && repoReadinessState === "ready") {
-    return failedAgentSessionTranscriptState(DEFAULT_TRANSCRIPT_FAILURE_MESSAGE);
+  if (session.historyLoadState === "failed") {
+    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
   }
 
-  return loadingAgentSessionTranscriptState({
+  return {
+    kind: "runtime_gated_loading",
     reason: "history",
-    repoReadinessState,
-  });
+  };
+};
+
+export const deriveAgentSessionTranscriptState = ({
+  source,
+  repoReadinessState,
+}: {
+  source: AgentSessionTranscriptSource;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState => {
+  switch (source.kind) {
+    case "visible":
+      return { kind: "visible" };
+    case "empty":
+      return { kind: "empty", reason: source.reason };
+    case "runtime_gated_empty":
+      return repoReadinessState === "ready"
+        ? { kind: "empty", reason: source.reason }
+        : { kind: "runtime_waiting" };
+    case "runtime_gated_loading":
+      return repoReadinessState === "ready"
+        ? { kind: "session_loading", reason: source.reason }
+        : { kind: "runtime_waiting" };
+    case "failed":
+      return { kind: "failed", message: source.message };
+  }
 };

@@ -12,11 +12,8 @@ import {
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentSessionTranscriptState,
-  deriveLoadedAgentSessionTranscriptState,
-  emptyAfterRuntimeReadyAgentSessionTranscriptState,
-  emptyAgentSessionTranscriptState,
-  failedAgentSessionTranscriptState,
-  loadingAgentSessionTranscriptState,
+  deriveAgentSessionTranscriptState,
+  deriveLoadedAgentSessionTranscriptSource,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -141,29 +138,35 @@ export const deriveSelectedSessionTranscriptState = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionTranscriptState => {
   if (source.kind === "loaded_session") {
-    return deriveLoadedAgentSessionTranscriptState({
-      session: source.session,
+    return deriveAgentSessionTranscriptState({
+      source: deriveLoadedAgentSessionTranscriptSource(source.session),
       repoReadinessState,
     });
   }
 
   if (source.kind === "inactive") {
-    return emptyAgentSessionTranscriptState("inactive");
-  }
-
-  if (source.readModelLoadState.kind === "failed") {
-    return failedAgentSessionTranscriptState(source.readModelLoadState.message);
-  }
-
-  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
-    return loadingAgentSessionTranscriptState({
-      reason: "preparing",
+    return deriveAgentSessionTranscriptState({
+      source: { kind: "empty", reason: "inactive" },
       repoReadinessState,
     });
   }
 
-  return emptyAfterRuntimeReadyAgentSessionTranscriptState({
-    reason: "sessionless",
+  if (source.readModelLoadState.kind === "failed") {
+    return deriveAgentSessionTranscriptState({
+      source: { kind: "failed", message: source.readModelLoadState.message },
+      repoReadinessState,
+    });
+  }
+
+  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
+    return deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_loading", reason: "preparing" },
+      repoReadinessState,
+    });
+  }
+
+  return deriveAgentSessionTranscriptState({
+    source: { kind: "runtime_gated_empty", reason: "sessionless" },
     repoReadinessState,
   });
 };

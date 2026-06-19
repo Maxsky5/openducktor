@@ -9,10 +9,7 @@ import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/suppo
 import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
-  emptyAgentSessionTranscriptState,
-  failedAgentSessionTranscriptState,
-  loadingAgentSessionTranscriptState,
-  visibleAgentSessionTranscriptState,
+  deriveAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   SESSION_HISTORY_STALE_TIME_MS,
@@ -92,21 +89,34 @@ export function useRuntimeTranscriptSessionHistory({
   }, [historyQuery.data, source]);
   const transcriptState = useMemo(() => {
     if (session !== null) {
-      return visibleAgentSessionTranscriptState();
+      return deriveAgentSessionTranscriptState({
+        source: { kind: "visible" },
+        repoReadinessState,
+      });
     }
 
     if (source.kind === "empty") {
-      return emptyAgentSessionTranscriptState(source.reason);
+      return deriveAgentSessionTranscriptState({
+        source: { kind: "empty", reason: source.reason },
+        repoReadinessState,
+      });
     }
 
     if (historyQuery.error && repoReadinessState === "ready") {
-      return failedAgentSessionTranscriptState(
-        errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
-      );
+      return deriveAgentSessionTranscriptState({
+        source: {
+          kind: "failed",
+          message: errorMessageFromUnknown(
+            historyQuery.error,
+            "Failed to load transcript history.",
+          ),
+        },
+        repoReadinessState,
+      });
     }
 
-    return loadingAgentSessionTranscriptState({
-      reason: "history",
+    return deriveAgentSessionTranscriptState({
+      source: { kind: "runtime_gated_loading", reason: "history" },
       repoReadinessState,
     });
   }, [historyQuery.error, repoReadinessState, session, source]);
