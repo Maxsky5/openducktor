@@ -27,6 +27,25 @@ describe("createRuntimeOrchestratorService", () => {
       workingDirectory: "/canonical/repo",
     });
   });
+  test("returns an existing workspace runtime without entering startup", async () => {
+    const runtime = createRuntime();
+    const ensureCalls: unknown[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime], {
+        ensureWorkspaceRuntime(input) {
+          ensureCalls.push(input);
+          return Effect.dieMessage("existing runtime should not enter startup");
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toEqual(runtime);
+    expect(ensureCalls).toEqual([]);
+  });
   test("lists registered runtimes by kind and canonical repository", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({

@@ -125,6 +125,15 @@ export const createRuntimeOrchestratorService = ({
       const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
       const statusKey = runtimeWorkspaceKey({ runtimeKind, repoPath: canonicalRepoPath });
+      const existingRuntime = yield* runtimeRegistry.findWorkspaceRuntime({
+        repoPath: canonicalRepoPath,
+        runtimeKind,
+      });
+      if (existingRuntime) {
+        const parsed = runtimeInstanceSummarySchema.parse(existingRuntime);
+        runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
+        return parsed;
+      }
       const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
       runtimeStartupStatuses.set(
         statusKey,
