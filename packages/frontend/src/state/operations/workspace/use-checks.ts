@@ -19,7 +19,6 @@ import {
   classifyDiagnosticsQueryError,
   loadRuntimeCheckFromQuery,
   loadTaskStoreCheckFromQuery,
-  repoRuntimeHealthQueryOptions,
   runtimeCheckQueryOptions,
   taskStoreCheckQueryOptions,
 } from "../../queries/checks";
@@ -30,6 +29,7 @@ import {
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
 import { type DiagnosticsToastApi, useDiagnosticsToasts } from "./use-check-diagnostics-effects";
+import { useRepoRuntimeHealth } from "./use-repo-runtime-health";
 
 type UseChecksArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -75,14 +75,12 @@ export function useChecks({
     ...taskStoreCheckQueryOptions(activeRepoPath ?? "__disabled__", taskStoreCheck),
     enabled: activeRepoPath !== null,
   });
-  const runtimeHealthQuery = useQuery({
-    ...repoRuntimeHealthQueryOptions(
-      activeRepoPath ?? "__disabled__",
+  const { activeRepoRuntimeHealthByRuntime, isLoadingRepoRuntimeHealth, refreshRepoRuntimeHealth } =
+    useRepoRuntimeHealth({
+      activeWorkspace,
       runtimeDefinitions,
       checkRepoRuntimeHealth,
-    ),
-    enabled: activeRepoPath !== null && runtimeDefinitions.length > 0,
-  });
+    });
 
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
@@ -124,28 +122,10 @@ export function useChecks({
 
     setIsManualLoadingChecks(true);
     try {
-      const refreshRuntimeHealth = async (): Promise<RepoRuntimeHealthMap> => {
-        if (runtimeDefinitions.length === 0) {
-          return {};
-        }
-
-        const queryOptions = repoRuntimeHealthQueryOptions(
-          activeRepoPath,
-          runtimeDefinitions,
-          checkRepoRuntimeHealth,
-        );
-        await queryClient.invalidateQueries({
-          queryKey: queryOptions.queryKey,
-          exact: true,
-          refetchType: "none",
-        });
-        return queryClient.fetchQuery(queryOptions);
-      };
-
       const [runtimeResult, taskStoreResult, runtimeHealthResult] = await Promise.allSettled([
         refreshRuntimeCheck(true),
         refreshTaskStoreCheckForRepo(activeRepoPath, true),
-        refreshRuntimeHealth(),
+        refreshRepoRuntimeHealth(),
       ]);
 
       if (runtimeResult.status === "rejected") {
@@ -169,14 +149,7 @@ export function useChecks({
     } finally {
       setIsManualLoadingChecks(false);
     }
-  }, [
-    activeRepoPath,
-    checkRepoRuntimeHealth,
-    queryClient,
-    refreshTaskStoreCheckForRepo,
-    refreshRuntimeCheck,
-    runtimeDefinitions,
-  ]);
+  }, [activeRepoPath, refreshTaskStoreCheckForRepo, refreshRuntimeCheck, refreshRepoRuntimeHealth]);
 
   const hasCachedTaskStoreCheck = useCallback(
     (repoPath: string): boolean => {
@@ -205,13 +178,6 @@ export function useChecks({
     });
   }, [activeRepoPath, queryClient]);
 
-  const activeRepoRuntimeHealthByRuntime = useMemo((): RepoRuntimeHealthMap => {
-    if (activeRepoPath === null) {
-      return {};
-    }
-
-    return runtimeHealthQuery.data ?? {};
-  }, [activeRepoPath, runtimeHealthQuery.data]);
   const runtimeCheckQueryFailure = runtimeCheckQuery.error
     ? classifyDiagnosticsQueryError(runtimeCheckQuery.error)
     : null;
@@ -279,9 +245,7 @@ export function useChecks({
   const isLoadingChecks =
     isManualLoadingChecks ||
     runtimeCheckQuery.isFetching ||
-    (activeRepoPath !== null &&
-      (taskStoreCheckQuery.isFetching ||
-        (runtimeDefinitions.length > 0 && runtimeHealthQuery.isFetching)));
+    (activeRepoPath !== null && (taskStoreCheckQuery.isFetching || isLoadingRepoRuntimeHealth));
 
   return {
     runtimeCheck: runtimeCheckState,

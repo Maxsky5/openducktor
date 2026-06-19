@@ -146,6 +146,7 @@ Files:
 
 - `packages/frontend/src/state/queries/checks.ts`
 - `packages/frontend/src/state/operations/workspace/use-checks.ts`
+- `packages/frontend/src/state/operations/workspace/use-repo-runtime-health.ts`
 - `packages/frontend/src/lib/repo-runtime-health.ts`
 - `packages/frontend/src/lib/repo-runtime-readiness.ts`
 - `packages/frontend/src/lib/use-repo-runtime-readiness.ts`
@@ -156,6 +157,8 @@ Owns:
 - reading runtime health for the active repository through TanStack Query
 - asking the host for `repoRuntimeHealth`
 - interpreting runtime health into runtime-starting, ready, blocked, and error readiness states
+
+`use-repo-runtime-health.ts` owns the frontend runtime-health query and refresh path. `use-checks.ts` composes that result with CLI and task-store diagnostics but must not re-own runtime startup.
 
 Invariant: `repoRuntimeHealth` is the only repository-load readiness path that
 may ensure a workspace runtime before probing runtime health or MCP status.
