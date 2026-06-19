@@ -22,11 +22,11 @@ non-interactive mode. Pending runtime input is session-owned; this folder must
 not merge parent-observed request copies into the transcript.
 Read-only transcripts do not load selected-session runtime data such as model
 catalogs or todos.
-`use-runtime-transcript-session-history.ts` owns the source decision. It chooses
-one path: matching live session, runtime history read, or empty reason. The hook
-is also the runtime boundary that adds the selected repository path and creates
-runtime refs for history queries. Do not add a separate history-source resolver
-or nullable live/history/empty field bundle.
+`use-runtime-transcript-session-history.ts` chooses one path: matching live
+session, runtime history read, or empty reason, then returns final transcript
+state. The hook is also the runtime boundary that adds the selected repository
+path and creates runtime refs for history queries. Do not add a separate
+history-source resolver or nullable live/history/empty field bundle.
 
 Session identity equality and stable identity keys are owned by
 `lib/agent-session-identity.ts`; React hooks use

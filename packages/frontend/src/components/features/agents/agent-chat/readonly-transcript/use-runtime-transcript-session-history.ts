@@ -1,7 +1,7 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentOperations } from "@/state/app-state-provider";
@@ -35,11 +35,6 @@ type RuntimeTranscriptSessionHistory = {
   transcriptState: AgentSessionTranscriptState;
 };
 
-type RuntimeTranscriptHistorySource =
-  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
-  | { kind: "live"; session: AgentSessionState }
-  | { kind: "history"; ref: ReturnType<typeof toRuntimeSessionRef> };
-
 const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
   queryKey: ["runtime-transcript-session-history", "skipped"] as const,
   staleTime: SESSION_HISTORY_STALE_TIME_MS,
@@ -55,44 +50,47 @@ export function useRuntimeTranscriptSessionHistory({
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory } = useAgentOperations();
   const stableTarget = useStableAgentSessionIdentity(target);
-  const historySource = useMemo<RuntimeTranscriptHistorySource>(() => {
-    if (!isOpen || stableTarget === null) {
-      return { kind: "empty", reason: "inactive" };
-    }
-    if (!repoPath) {
-      return { kind: "empty", reason: "unavailable" };
-    }
-    if (liveSession && matchesAgentSessionIdentity(liveSession, stableTarget)) {
-      return { kind: "live", session: liveSession };
-    }
-    return { kind: "history", ref: toRuntimeSessionRef(repoPath, stableTarget) };
-  }, [isOpen, liveSession, repoPath, stableTarget]);
+
+  const emptyReason: AgentSessionTranscriptEmptyReason | null =
+    !isOpen || stableTarget === null ? "inactive" : repoPath ? null : "unavailable";
+
+  const matchingLiveSession =
+    emptyReason === null &&
+    liveSession !== null &&
+    stableTarget !== null &&
+    matchesAgentSessionIdentity(liveSession, stableTarget)
+      ? liveSession
+      : null;
+  const shouldLoadHistory = emptyReason === null && matchingLiveSession === null;
 
   const historyQuery = useQuery(
-    historySource.kind === "history" && repoReadinessState === "ready"
-      ? sessionHistoryQueryOptions(historySource.ref, readSessionHistory)
+    shouldLoadHistory &&
+      repoPath !== null &&
+      stableTarget !== null &&
+      repoReadinessState === "ready"
+      ? sessionHistoryQueryOptions(toRuntimeSessionRef(repoPath, stableTarget), readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
 
   const session = useMemo(() => {
-    if (historySource.kind === "live") {
-      return toAgentChatThreadSession(historySource.session);
+    if (matchingLiveSession !== null) {
+      return toAgentChatThreadSession(matchingLiveSession);
     }
-    if (historySource.kind !== "history" || !historyQuery.data) {
+    if (!shouldLoadHistory || !historyQuery.data || repoPath === null || stableTarget === null) {
       return null;
     }
 
     return createReadonlyTranscriptSession({
-      ...toAgentSessionIdentity(historySource.ref),
+      ...stableTarget,
       history: historyQuery.data,
     });
-  }, [historyQuery.data, historySource]);
+  }, [historyQuery.data, matchingLiveSession, repoPath, shouldLoadHistory, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
     }
-    if (historySource.kind === "empty") {
-      return { kind: "empty", reason: historySource.reason };
+    if (emptyReason !== null) {
+      return { kind: "empty", reason: emptyReason };
     }
     if (historyQuery.error && repoReadinessState === "ready") {
       return {
@@ -104,7 +102,7 @@ export function useRuntimeTranscriptSessionHistory({
       reason: "history",
       repoReadinessState,
     });
-  }, [historyQuery.error, historySource, repoReadinessState, session]);
+  }, [emptyReason, historyQuery.error, repoReadinessState, session]);
 
   return {
     session,
