@@ -44,7 +44,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef,
-      loadAgentSessions: async () => {
+      refreshTaskSessionReadModel: async () => {
         loadCalls += 1;
         sessionsRef.current = createAgentSessionCollection([
           createBuildSessionFixture({

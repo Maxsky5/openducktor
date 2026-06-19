@@ -153,7 +153,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const loadAgentSessionsCalls: string[] = [];
+    const refreshTaskSessionReadModelCalls: string[] = [];
     const loadAgentSessionHistoryCalls: AgentSessionIdentity[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
@@ -195,8 +195,8 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadAgentSessions: async (taskId) => {
-        loadAgentSessionsCalls.push(taskId);
+      refreshTaskSessionReadModel: async (taskId) => {
+        refreshTaskSessionReadModelCalls.push(taskId);
         const sourceBuild = getSession(sessionsRef.current, "external-source-build");
         if (!sourceBuild) {
           throw new Error("Missing external-source-build session");
@@ -236,7 +236,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       expect(externalSessionId).toEqual(
         expect.objectContaining({ externalSessionId: "external-forked-from-loaded-source" }),
       );
-      expect(loadAgentSessionsCalls).toEqual(["task-1"]);
+      expect(refreshTaskSessionReadModelCalls).toEqual(["task-1"]);
       expect(loadAgentSessionHistoryCalls).toEqual([
         {
           externalSessionId: "external-source-build",

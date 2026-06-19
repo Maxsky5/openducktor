@@ -13,7 +13,7 @@ import {
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
-import { loadRepoAgentSessionsForTasks } from "../session-read-model/load-sessions";
+import { loadRepoSessionReadModelForTasks } from "../session-read-model/repo-session-read-model-loader";
 import { sessionRuntimeReadinessKey } from "../session-read-model/session-runtime-readiness";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -95,7 +95,7 @@ export const useRepoSessionReadModel = ({
       }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
-        const didLoadSessionReadModel = await loadRepoAgentSessionsForTasks({
+        const didLoadSessionReadModel = await loadRepoSessionReadModelForTasks({
           repoPath: workspaceRepoPath,
           tasks: taskSessionTargets,
           adapter: agentEngine,

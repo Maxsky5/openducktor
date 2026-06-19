@@ -41,7 +41,7 @@ const loadSessionForReuse = async ({
 }): Promise<AgentSessionState> => {
   const currentSession = deps.session.readSessionSnapshot(sourceSession);
   if (forceReload || !currentSession) {
-    await deps.session.loadAgentSessions(ctx.taskId);
+    await deps.session.refreshTaskSessionReadModel(ctx.taskId);
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 

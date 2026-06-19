@@ -33,7 +33,7 @@ type SessionActionsDependencies = {
   ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  refreshTaskSessionReadModel: (taskId: string) => Promise<void>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   refreshTaskData: (
     repoPath: string,
@@ -64,7 +64,7 @@ export const createAgentSessionActions = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
-  loadAgentSessions,
+  refreshTaskSessionReadModel,
   loadAgentSessionHistory,
   refreshTaskData,
   persistSessionRecord,
@@ -107,7 +107,7 @@ export const createAgentSessionActions = ({
       removeSession,
       readSessionSnapshot,
       sessionStartGateRef,
-      loadAgentSessions,
+      refreshTaskSessionReadModel,
       loadAgentSessionHistory,
       persistSessionRecord,
       observeAgentSession,
@@ -139,7 +139,7 @@ export const createAgentSessionActions = ({
     stopAuthoritativeSession,
     invalidateSessionStopQueries,
     refreshTaskData,
-    loadAgentSessions,
+    refreshTaskSessionReadModel,
   });
 
   const pendingInputActions = createPendingInputActions({

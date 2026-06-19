@@ -559,7 +559,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      loadAgentSessions: async () => {
+      refreshTaskSessionReadModel: async () => {
         callOrder.push("load-agent-sessions");
       },
       refreshTaskData: async () => {
@@ -601,7 +601,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalReleaseSession = adapter.releaseSession;
     let refreshTaskDataCalls = 0;
-    let loadAgentSessionsCalls = 0;
+    let refreshTaskSessionReadModelCalls = 0;
     let localReleaseCalls = 0;
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
 
@@ -619,8 +619,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
+      refreshTaskSessionReadModel: async () => {
+        refreshTaskSessionReadModelCalls += 1;
       },
       refreshTaskData: async () => {
         refreshTaskDataCalls += 1;
@@ -634,7 +634,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       await actions.stopAgentSession(getSession(sessionsRef));
       expect(localReleaseCalls).toBe(1);
       expect(refreshTaskDataCalls).toBe(1);
-      expect(loadAgentSessionsCalls).toBe(1);
+      expect(refreshTaskSessionReadModelCalls).toBe(1);
       expect(invalidationCalls).toEqual([
         {
           repoPath: "/tmp/repo",
@@ -651,7 +651,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const stopTargets: AgentSessionStopTarget[] = [];
     const refreshTaskDataCalls: string[] = [];
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
-    let loadAgentSessionsCalls = 0;
+    let refreshTaskSessionReadModelCalls = 0;
 
     const sessionsRef = createSessionsRef([buildSession()]);
 
@@ -666,8 +666,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
+      refreshTaskSessionReadModel: async () => {
+        refreshTaskSessionReadModelCalls += 1;
       },
       refreshTaskData: async (repoPath) => {
         refreshTaskDataCalls.push(repoPath);
@@ -687,7 +687,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(stopTargets).toEqual([]);
     expect(invalidationCalls).toEqual([]);
     expect(refreshTaskDataCalls).toEqual([]);
-    expect(loadAgentSessionsCalls).toBe(0);
+    expect(refreshTaskSessionReadModelCalls).toBe(0);
   });
 
   test("allows stopping a running session even when role is unavailable", async () => {

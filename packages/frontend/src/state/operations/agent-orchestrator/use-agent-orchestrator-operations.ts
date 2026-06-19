@@ -16,7 +16,7 @@ import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
-import { createLoadAgentSessions } from "./session-read-model/load-sessions";
+import { createRefreshTaskSessionReadModel } from "./session-read-model/repo-session-read-model-loader";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -131,9 +131,9 @@ export function useAgentOrchestratorOperations({
     queryClient,
     refreshTaskData,
   });
-  const loadAgentSessions = useMemo(
+  const refreshTaskSessionReadModel = useMemo(
     () =>
-      createLoadAgentSessions({
+      createRefreshTaskSessionReadModel({
         workspaceRepoPath,
         adapter: agentEngine,
         repoEpochRef,
@@ -226,7 +226,7 @@ export function useAgentOrchestratorOperations({
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
-        loadAgentSessions,
+        refreshTaskSessionReadModel,
         loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
         refreshTaskData,
         persistSessionRecord,
@@ -240,7 +240,7 @@ export function useAgentOrchestratorOperations({
       hostPort,
       invalidateSessionStopQueries,
       loadAgentSessionHistoryIntoStore,
-      loadAgentSessions,
+      refreshTaskSessionReadModel,
       observeAgentSession,
       persistSessionRecord,
       queryBackedPromptOverrides,
@@ -259,7 +259,7 @@ export function useAgentOrchestratorOperations({
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const readModelState = {
       sessionReadModelLoadState: currentSessionReadModelLoadState,
-      refreshTaskSessions: loadAgentSessions,
+      refreshTaskSessions: refreshTaskSessionReadModel,
     };
     const operations = createOrchestratorPublicOperations({
       agentEngine,
@@ -277,7 +277,7 @@ export function useAgentOrchestratorOperations({
     sessionStore,
     agentEngine,
     loadAgentSessionHistoryIntoStore,
-    loadAgentSessions,
+    refreshTaskSessionReadModel,
     sessionActions,
   ]);
 }

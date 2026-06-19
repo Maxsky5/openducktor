@@ -549,7 +549,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
   });
 
   test("returns the requested persisted session for the same role and loads it when missing from memory", async () => {
-    let loadAgentSessionsCalls = 0;
+    let refreshTaskSessionReadModelCalls = 0;
 
     setPersistedSessionListFixture("/tmp/repo", "task-1", [
       persistedSessionRecord({
@@ -588,8 +588,8 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     const sessionsRef = createSessionsRef();
     const { start } = createStartSessionTestHarness({
       sessionsRef,
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
+      refreshTaskSessionReadModel: async () => {
+        refreshTaskSessionReadModelCalls += 1;
         sessionsRef.current = createAgentSessionCollection([
           sessionFixture({
             externalSessionId: "external-build-newer",
@@ -612,7 +612,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     expect(externalSessionId).toEqual(
       expect.objectContaining({ externalSessionId: "external-build-newer" }),
     );
-    expect(loadAgentSessionsCalls).toBe(1);
+    expect(refreshTaskSessionReadModelCalls).toBe(1);
   });
 
   test("reuses persisted session when selected model differs", async () => {
@@ -622,7 +622,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       modelId: "claude-3-7-sonnet",
       profileId: "Hephaestus",
     };
-    let loadAgentSessionsCalls = 0;
+    let refreshTaskSessionReadModelCalls = 0;
     let startCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -669,8 +669,8 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         runtimeId: "runtime-claude",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
+      refreshTaskSessionReadModel: async () => {
+        refreshTaskSessionReadModelCalls += 1;
         sessionsRef.current = createAgentSessionCollection([
           sessionFixture({
             externalSessionId: "external-opencode",
@@ -699,7 +699,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-opencode" }));
-      expect(loadAgentSessionsCalls).toBe(1);
+      expect(refreshTaskSessionReadModelCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
@@ -707,7 +707,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
   });
 
   test("reuses the requested persisted session when runtime kind is only present on selected model", async () => {
-    let loadAgentSessionsCalls = 0;
+    let refreshTaskSessionReadModelCalls = 0;
     let startCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -750,8 +750,8 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         runtimeId: "runtime-claude",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
+      refreshTaskSessionReadModel: async () => {
+        refreshTaskSessionReadModelCalls += 1;
         sessionsRef.current = createAgentSessionCollection([
           sessionFixture({
             externalSessionId: "external-claude",
@@ -781,7 +781,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       expect(externalSessionId).toEqual(
         expect.objectContaining({ externalSessionId: "external-claude" }),
       );
-      expect(loadAgentSessionsCalls).toBe(1);
+      expect(refreshTaskSessionReadModelCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;

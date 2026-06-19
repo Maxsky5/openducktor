@@ -19,7 +19,10 @@ import {
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { host } from "../../host";
 import { createSessionMessagesState } from "../support/messages";
-import { createLoadAgentSessions, loadRepoAgentSessionsForTasks } from "./load-sessions";
+import {
+  createRefreshTaskSessionReadModel,
+  loadRepoSessionReadModelForTasks,
+} from "./repo-session-read-model-loader";
 
 const record: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -69,7 +72,7 @@ const createLoaderHarness = ({
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: Parameters<
-    typeof createLoadAgentSessions
+    typeof createRefreshTaskSessionReadModel
   >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
@@ -86,7 +89,7 @@ const createLoaderHarness = ({
       sessionRecordsByTaskId[task.id] ?? [],
     );
   }
-  const loadAgentSessions = createLoadAgentSessions({
+  const refreshTaskSessionReadModel = createRefreshTaskSessionReadModel({
     workspaceRepoPath: "/repo",
     adapter: {
       listSessionRuntimeSnapshots,
@@ -109,7 +112,7 @@ const createLoaderHarness = ({
   });
 
   return {
-    loadAgentSessions,
+    refreshTaskSessionReadModel,
     listenedSessions,
     cleanedSessions,
     getSession: (externalSessionId: string) =>
@@ -119,7 +122,7 @@ const createLoaderHarness = ({
   };
 };
 
-describe("createLoadAgentSessions", () => {
+describe("createRefreshTaskSessionReadModel", () => {
   let originalAgentSessionsList: typeof host.agentSessionsList;
 
   beforeEach(() => {
@@ -136,7 +139,7 @@ describe("createLoadAgentSessions", () => {
     let sessionCollection = emptyAgentSessionCollection();
     let runtimeSnapshotReads = 0;
 
-    await loadRepoAgentSessionsForTasks({
+    await loadRepoSessionReadModelForTasks({
       repoPath: "/repo",
       tasks: [taskFixture],
       adapter: {
@@ -195,7 +198,7 @@ describe("createLoadAgentSessions", () => {
       ],
     });
 
-    await harness.loadAgentSessions("task-1");
+    await harness.refreshTaskSessionReadModel("task-1");
 
     expect(harness.getSession("external-1")?.status).toBe("running");
     expect(harness.getSession("external-1")?.runtimeKind).toBe("opencode");
@@ -218,7 +221,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    const loading = harness.loadAgentSessions("task-1");
+    const loading = harness.refreshTaskSessionReadModel("task-1");
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
 
@@ -252,7 +255,7 @@ describe("createLoadAgentSessions", () => {
       sessionRecordsByTaskId: { [taskFixture.id]: [] },
     });
 
-    await harness.loadAgentSessions("task-1");
+    await harness.refreshTaskSessionReadModel("task-1");
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
     expect(harness.cleanedSessions).toEqual([
@@ -272,7 +275,7 @@ describe("createLoadAgentSessions", () => {
     let sessionCollection = emptyAgentSessionCollection();
     let runtimeSnapshotReads = 0;
 
-    const didLoadSessionReadModel = await loadRepoAgentSessionsForTasks({
+    const didLoadSessionReadModel = await loadRepoSessionReadModelForTasks({
       repoPath: "/repo",
       tasks: [taskFixture],
       adapter: {
@@ -331,7 +334,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    await harness.loadAgentSessions("task-1");
+    await harness.refreshTaskSessionReadModel("task-1");
 
     expect(runtimeSnapshotReads).toBe(0);
     expect(harness.getSession(record.externalSessionId)).toBeNull();
@@ -359,7 +362,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    await harness.loadAgentSessions("task-1");
+    await harness.refreshTaskSessionReadModel("task-1");
 
     expect(runtimeSnapshotReads).toBe(0);
     expect(harness.getSession(record.externalSessionId)).toBeNull();
@@ -392,7 +395,7 @@ describe("createLoadAgentSessions", () => {
       listSessionRuntimeSnapshots: async () => [],
     });
 
-    await harness.loadAgentSessions("task-1");
+    await harness.refreshTaskSessionReadModel("task-1");
 
     const session = harness.getSession(record.externalSessionId);
     if (!session) {

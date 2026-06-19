@@ -93,7 +93,7 @@ Must not own:
 
 Files:
 
-- `session-read-model/load-sessions.ts`
+- `session-read-model/repo-session-read-model-loader.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `session-read-model/session-runtime-snapshot.ts`
 - `hooks/use-repo-session-read-model.ts`
@@ -827,7 +827,7 @@ Repo startup session loading is keyed by task IDs only. Task title, status,
 document, or workflow metadata changes must not reload the repo session read
 model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces; orchestrator internals may reload the repo
-session read model after start/stop/reuse paths, but `loadAgentSessions` must not
+session read model after start/stop/reuse paths, but `refreshTaskSessionReadModel` must not
 be exposed through public app operation contexts.
 Local session projection during repo reads is owned by
 `repo-session-read-model.ts`. It carries sessions outside the loaded task set and
@@ -839,7 +839,7 @@ unlisted session ref whose observer state can be cleared.
 
 1. The app loads task IDs from the task store.
 2. `use-repo-session-read-model.ts` loads task session records for those
-   task IDs through `loadRepoAgentSessionsForTasks`.
+   task IDs through `loadRepoSessionReadModelForTasks`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
@@ -860,13 +860,13 @@ Use these compact tests as the first-line safety net:
 | --- | --- |
 | Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
 | Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
-| Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/load-sessions.test.ts` |
+| Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
-| Running-session history baseline after reload | `session-read-model/load-sessions.test.ts` |
+| Running-session history baseline after reload | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
-| User messages preserved while repo/session reads are in flight | `session-read-model/load-sessions.test.ts` |
-| Per-session history failure isolation | `session-read-model/load-sessions.test.ts` |
+| User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
+| Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `pages/agents/selected-session/selected-session-view-source.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |

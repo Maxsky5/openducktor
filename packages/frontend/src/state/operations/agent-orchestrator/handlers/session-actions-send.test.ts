@@ -226,7 +226,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
-      loadAgentSessions: async () => {
+      refreshTaskSessionReadModel: async () => {
         callOrder.push("load");
       },
     });

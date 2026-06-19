@@ -139,7 +139,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     }),
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     loadRepoPromptOverrides: async () => ({}),
-    loadAgentSessions: async () => {},
+    refreshTaskSessionReadModel: async () => {},
     loadAgentSessionHistory: async () => {},
     refreshTaskData: async () => {},
     persistSessionRecord: async () => {},

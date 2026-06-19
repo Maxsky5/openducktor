@@ -15,7 +15,7 @@ type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 type ClearSessionObservationState = (sessions: readonly AgentSessionRef[]) => void;
 
-type CreateLoadAgentSessionsArgs = {
+type CreateRefreshTaskSessionReadModelArgs = {
   workspaceRepoPath: string | null;
   adapter: SessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
@@ -27,7 +27,7 @@ type CreateLoadAgentSessionsArgs = {
   queryClient: QueryClient;
 };
 
-export const loadRepoAgentSessionsForTasks = async ({
+export const loadRepoSessionReadModelForTasks = async ({
   repoPath,
   tasks,
   adapter,
@@ -112,7 +112,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   return true;
 };
 
-export const createLoadAgentSessions = ({
+export const createRefreshTaskSessionReadModel = ({
   workspaceRepoPath,
   adapter,
   repoEpochRef,
@@ -122,7 +122,7 @@ export const createLoadAgentSessions = ({
   clearSessionObservationState,
   runtimeHealthByRuntime,
   queryClient,
-}: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
+}: CreateRefreshTaskSessionReadModelArgs): ((taskId: string) => Promise<void>) => {
   return async (taskId: string): Promise<void> => {
     if (!workspaceRepoPath || taskId.trim().length === 0) {
       return;
@@ -139,7 +139,7 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    await loadRepoAgentSessionsForTasks({
+    await loadRepoSessionReadModelForTasks({
       repoPath,
       tasks: [{ id: taskId }],
       adapter,
