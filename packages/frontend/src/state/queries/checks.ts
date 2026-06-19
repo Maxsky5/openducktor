@@ -20,7 +20,7 @@ export type ChecksQueryDependencies = {
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
-const REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
+const READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -88,6 +88,19 @@ export const checksQueryKeys = {
     ] as const,
 };
 
+export const repoRuntimeHealthStaleTime = (
+  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
+): number => {
+  const runtimeHealthEntries = Object.values(runtimeHealthByRuntime ?? {});
+  if (runtimeHealthEntries.length === 0) {
+    return 0;
+  }
+
+  return runtimeHealthEntries.every((runtimeHealth) => runtimeHealth?.status === "ready")
+    ? READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS
+    : 0;
+};
+
 export const runtimeCheckQueryOptions = (
   force = false,
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
@@ -131,7 +144,7 @@ export const repoRuntimeHealthQueryOptions = (
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    staleTime: REPO_RUNTIME_HEALTH_STALE_TIME_MS,
+    staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

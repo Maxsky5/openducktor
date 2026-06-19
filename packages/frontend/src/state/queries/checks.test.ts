@@ -5,7 +5,46 @@ import {
   classifyDiagnosticsQueryError,
   DiagnosticsQueryTimeoutError,
   repoRuntimeHealthQueryOptions,
+  repoRuntimeHealthStaleTime,
 } from "./checks";
+
+const readyRuntimeHealth = {
+  status: "ready",
+  checkedAt: "2026-02-22T08:00:00.000Z",
+  runtime: {
+    status: "ready",
+    stage: "runtime_ready",
+    observation: "observed_existing_runtime",
+    instance: null,
+    startedAt: "2026-02-22T08:00:00.000Z",
+    updatedAt: "2026-02-22T08:00:00.000Z",
+    elapsedMs: null,
+    attempts: null,
+    detail: null,
+    failureKind: null,
+    failureReason: null,
+  },
+  mcp: null,
+} as const;
+
+const notStartedRuntimeHealth = {
+  status: "not_started",
+  checkedAt: "2026-02-22T08:00:00.000Z",
+  runtime: {
+    status: "not_started",
+    stage: "idle",
+    observation: null,
+    instance: null,
+    startedAt: null,
+    updatedAt: "2026-02-22T08:00:00.000Z",
+    elapsedMs: null,
+    attempts: null,
+    detail: "Runtime has not been started yet.",
+    failureKind: null,
+    failureReason: null,
+  },
+  mcp: null,
+} as const;
 
 describe("classifyDiagnosticsQueryError", () => {
   test("keeps query timeout errors explicit", () => {
@@ -32,20 +71,16 @@ describe("classifyDiagnosticsQueryError", () => {
     try {
       const result = await queryClient.fetchQuery(
         repoRuntimeHealthQueryOptions("/repo", [OPENCODE_RUNTIME_DESCRIPTOR], async () => ({
+          ...readyRuntimeHealth,
           status: "error",
-          checkedAt: "2026-02-22T08:00:00.000Z",
           runtime: {
+            ...readyRuntimeHealth.runtime,
             status: "error",
             stage: "startup_failed",
             observation: null,
-            instance: null,
             startedAt: null,
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
             detail: "Process timed out while reading repository config",
             failureKind: "error",
-            failureReason: null,
           },
           mcp: {
             supported: true,
@@ -99,24 +134,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       [OPENCODE_RUNTIME_DESCRIPTOR],
       async () => {
         calls += 1;
-        return {
-          status: "ready",
-          checkedAt: "2026-02-22T08:00:00.000Z",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-            observation: "observed_existing_runtime",
-            instance: null,
-            startedAt: "2026-02-22T08:00:00.000Z",
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
-            detail: null,
-            failureKind: null,
-            failureReason: null,
-          },
-          mcp: null,
-        };
+        return readyRuntimeHealth;
       },
     );
 
@@ -124,6 +142,35 @@ describe("repoRuntimeHealthQueryOptions", () => {
       await queryClient.fetchQuery(queryOptions);
       await queryClient.fetchQuery(queryOptions);
       expect(calls).toBe(1);
+    } finally {
+      queryClient.clear();
+    }
+  });
+
+  test("refetches startup-pending runtime health instead of freezing a not-started snapshot", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    let calls = 0;
+    const queryOptions = repoRuntimeHealthQueryOptions(
+      "/repo",
+      [OPENCODE_RUNTIME_DESCRIPTOR],
+      async () => {
+        calls += 1;
+        return calls === 1 ? notStartedRuntimeHealth : readyRuntimeHealth;
+      },
+    );
+
+    try {
+      await expect(queryClient.fetchQuery(queryOptions)).resolves.toMatchObject({
+        opencode: { status: "not_started" },
+      });
+      await expect(queryClient.fetchQuery(queryOptions)).resolves.toMatchObject({
+        opencode: { status: "ready" },
+      });
+      expect(calls).toBe(2);
     } finally {
       queryClient.clear();
     }
@@ -141,7 +188,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     expect(queryOptions.refetchInterval).toBeUndefined();
   });
 
-  test("keeps runtime health explicit and manually refreshable without background refetching", () => {
+  test("keeps runtime health explicit without background refetching", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -150,8 +197,13 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(queryOptions.staleTime).toBe(60_000);
     expect(queryOptions.refetchOnWindowFocus).toBe(false);
     expect(queryOptions.refetchOnReconnect).toBe(false);
+  });
+
+  test("only ready runtime health is briefly reusable", () => {
+    expect(repoRuntimeHealthStaleTime(undefined)).toBe(0);
+    expect(repoRuntimeHealthStaleTime({ opencode: notStartedRuntimeHealth })).toBe(0);
+    expect(repoRuntimeHealthStaleTime({ opencode: readyRuntimeHealth })).toBe(60_000);
   });
 });
