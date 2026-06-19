@@ -108,6 +108,10 @@ export const isRepoRuntimeStartupPending = (
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return { label: "Starting", variant: "warning" };
+  }
+
   const runtimeStatus = runtimeHealth?.runtime.status;
   switch (runtimeStatus) {
     case "disabled":
@@ -118,8 +122,6 @@ export const getRepoRuntimeBadge = (
       return { label: "Starting", variant: "warning" };
     case "error":
       return { label: "Unavailable", variant: "danger" };
-    case "not_started":
-      return { label: "Not started", variant: "secondary" };
     default:
       return { label: "Checking", variant: "secondary" };
   }
@@ -189,8 +191,8 @@ export const describeRepoRuntimeStatus = (
     runtimeHealth.runtime.attempts === null ? "" : ` (${runtimeHealth.runtime.attempts} attempts)`;
   const elapsedSuffix = runtimeElapsed ? ` after ${runtimeElapsed}` : "";
 
-  if (runtimeHealth.runtime.status === "not_started") {
-    return runtimeHealth.runtime.detail ?? `${runtimeLabel} runtime has not been started yet.`;
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return `${runtimeLabel} runtime is starting${elapsedSuffix}${runtimeAttempts}.`;
   }
 
   if (runtimeHealth.runtime.status === "disabled") {

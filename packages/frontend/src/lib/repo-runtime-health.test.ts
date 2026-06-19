@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import { isRepoRuntimeStarting, isRepoRuntimeStartupPending } from "./repo-runtime-health";
+import {
+  describeRepoRuntimeStatus,
+  getRepoRuntimeBadge,
+  isRepoRuntimeStarting,
+  isRepoRuntimeStartupPending,
+} from "./repo-runtime-health";
 
 describe("repo runtime health", () => {
   test("reports startup stages as runtime starting", () => {
@@ -59,5 +64,27 @@ describe("repo runtime health", () => {
 
     expect(isRepoRuntimeStarting(runtimeHealth)).toBe(false);
     expect(isRepoRuntimeStartupPending(runtimeHealth)).toBe(true);
+  });
+
+  test("projects not-started runtime health as startup pending", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "not_started",
+      runtime: {
+        status: "not_started",
+        stage: "idle",
+        detail: "Runtime has not been started yet.",
+      },
+      mcp: {
+        status: "waiting_for_runtime",
+      },
+    });
+
+    expect(getRepoRuntimeBadge(runtimeHealth)).toEqual({
+      label: "Starting",
+      variant: "warning",
+    });
+    expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe(
+      "OpenCode runtime is starting.",
+    );
   });
 });
