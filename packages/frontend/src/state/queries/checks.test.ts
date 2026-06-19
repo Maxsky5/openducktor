@@ -109,4 +109,16 @@ describe("repoRuntimeHealthQueryOptions", () => {
 
     expect(queryOptions.refetchInterval).toBeUndefined();
   });
+
+  test("does not keep runtime health fresh after it starts or observes a runtime", () => {
+    const queryOptions = repoRuntimeHealthQueryOptions(
+      "/repo",
+      [OPENCODE_RUNTIME_DESCRIPTOR],
+      async () => {
+        throw new Error("not called");
+      },
+    );
+
+    expect(queryOptions.staleTime).toBe(0);
+  });
 });

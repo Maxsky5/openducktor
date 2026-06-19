@@ -21,7 +21,6 @@ export type ChecksQueryDependencies = {
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
-const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -169,7 +168,9 @@ export const repoRuntimeHealthQueryOptions = (
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    staleTime: RUNTIME_HEALTH_STALE_TIME_MS,
+    // Runtime health is also the automatic startup trigger, so a mounted screen
+    // must always revalidate instead of trusting an old "not started" snapshot.
+    staleTime: 0,
   });
 
 export const loadRuntimeCheckFromQuery = (
