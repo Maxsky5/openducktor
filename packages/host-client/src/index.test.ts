@@ -1398,7 +1398,7 @@ describe("HostClient", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
-      if (command === "repo_runtime_health") {
+      if (command === "repo_runtime_health" || command === "repo_runtime_health_status") {
         return {
           status: "ready",
           runtime: {
@@ -1451,6 +1451,7 @@ describe("HostClient", () => {
     const ensured = await client.runtimeEnsure("/repo", "opencode");
     const required = await client.runtimeRequire("/repo", "opencode");
     const repoRuntimeHealth = await client.repoRuntimeHealth("/repo", "opencode");
+    const repoRuntimeHealthStatus = await client.repoRuntimeHealthStatus("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
@@ -1470,6 +1471,8 @@ describe("HostClient", () => {
     );
     expect(required.runtimeId).toBe("runtime-main");
     expect(repoRuntimeHealth.mcp?.status).toBe("connected");
+    expect(repoRuntimeHealthStatus.runtime.stage).toBe("runtime_ready");
+    expect(repoRuntimeHealthStatus.mcp?.status).toBe("connected");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
@@ -1478,6 +1481,7 @@ describe("HostClient", () => {
       "runtime_ensure",
       "runtime_require",
       "repo_runtime_health",
+      "repo_runtime_health_status",
       "runtime_stop",
     ]);
     expect(calls[2]?.args).toEqual({
@@ -1489,6 +1493,10 @@ describe("HostClient", () => {
       runtimeKind: "opencode",
     });
     expect(calls[4]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[5]?.args).toEqual({
       repoPath: "/repo",
       runtimeKind: "opencode",
     });

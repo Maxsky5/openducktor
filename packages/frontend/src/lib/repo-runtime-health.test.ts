@@ -52,6 +52,31 @@ describe("repo runtime health", () => {
     ).toBe(false);
   });
 
+  test("keeps runtime running while MCP reconnecting keeps readiness pending", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "checking",
+      runtime: {
+        status: "ready",
+        stage: "runtime_ready",
+      },
+      mcp: {
+        status: "reconnecting",
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      },
+    });
+
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("checking");
+    expect(isRepoRuntimeHealthPendingReadiness(runtimeHealth)).toBe(true);
+    expect(getRepoRuntimeBadge(runtimeHealth)).toEqual({
+      label: "Running",
+      variant: "success",
+    });
+    expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe(
+      "Reconnecting OpenDucktor MCP for OpenCode.",
+    );
+  });
+
   test("does not report idle runtimes as starting just because MCP is waiting", () => {
     const runtimeHealth = createRepoRuntimeHealthFixture({
       status: "not_started",

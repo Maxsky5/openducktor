@@ -1,6 +1,8 @@
 import {
   type AgentSessionStopTarget,
   type RepoRuntimeHealthCheck,
+  type RepoRuntimeHealthState,
+  type RepoRuntimeMcpStatus,
   type RepoRuntimeStartupStatus,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
@@ -8,7 +10,7 @@ import {
   repoRuntimeHealthCheckSchema,
   repoRuntimeStartupStatusSchema,
 } from "@openducktor/contracts";
-import { Clock, Effect, Schedule } from "effect";
+import { Clock, Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
@@ -52,6 +54,9 @@ export type RuntimeOrchestratorService = {
   repoRuntimeHealth(
     input: RuntimeRepoInput,
   ): Effect.Effect<RepoRuntimeHealthCheck, RuntimeOrchestratorError>;
+  repoRuntimeHealthStatus(
+    input: RuntimeRepoInput,
+  ): Effect.Effect<RepoRuntimeHealthCheck, RuntimeOrchestratorError>;
 };
 export type RuntimeOrchestratorLogger = {
   info(message: string): void;
@@ -60,8 +65,6 @@ export type RuntimeOrchestratorLogger = {
 export const isoFromMillis = (millis: number): string => new Date(millis).toISOString();
 export const ACTIVE_MCP_PROBE_ATTEMPTS = 20;
 export const ACTIVE_MCP_PROBE_RETRY_DELAY_MS = 250;
-const activeMcpReadinessProbeSchedule = (attempts: number, retryDelayMs: number) =>
-  Schedule.addDelay(Schedule.recurs(Math.max(1, attempts) - 1), () => `${retryDelayMs} millis`);
 export type BuildHealthStatusOptions = {
   mcpProbeAttempts?: number;
   mcpProbeRetryDelayMs?: number;
@@ -235,6 +238,27 @@ export const buildFailedStartupStatus = (
     detail,
   });
 };
+const mcpStatusForProbe = (probe: RuntimeMcpStatusProbeResult): RepoRuntimeMcpStatus => {
+  if (!probe.supported) {
+    return "unsupported";
+  }
+  if (probe.connected) {
+    return "connected";
+  }
+  if (probe.failureKind === "timeout") {
+    return "reconnecting";
+  }
+  return "error";
+};
+const healthStatusForMcpProbe = (probe: RuntimeMcpStatusProbeResult): RepoRuntimeHealthState => {
+  if (probe.connected || !probe.supported) {
+    return "ready";
+  }
+  if (probe.failureKind === "timeout") {
+    return "checking";
+  }
+  return "error";
+};
 export const buildHealthStatus = (
   descriptor: RuntimeDescriptor,
   startupStatus: RepoRuntimeStartupStatus,
@@ -326,22 +350,22 @@ export const buildHealthStatus = (
       options.mcpProbeAttempts ?? 1,
       options.mcpProbeRetryDelayMs ?? ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
     ).pipe(
-      Effect.map((probe) =>
-        repoRuntimeHealthCheckSchema.parse({
-          status: probe.connected || !probe.supported ? "ready" : "error",
+      Effect.map((probe) => {
+        return repoRuntimeHealthCheckSchema.parse({
+          status: healthStatusForMcpProbe(probe),
           checkedAt,
           runtime: runtimeHealth,
           mcp: {
             supported: probe.supported,
-            status: !probe.supported ? "unsupported" : probe.connected ? "connected" : "error",
+            status: mcpStatusForProbe(probe),
             serverName: "openducktor",
             serverStatus: probe.serverStatus,
             toolIds: probe.connected ? probe.toolIds : [],
             detail: probe.detail,
             failureKind: probe.failureKind,
           },
-        }),
-      ),
+        });
+      }),
       Effect.catchAll((error) => {
         const detail = errorMessage(error);
         return Effect.succeed(
@@ -370,17 +394,25 @@ const probeMcpStatusWithRetry = (
   retryDelayMs: number,
 ) => {
   const totalAttempts = Math.max(1, attempts);
-  let lastProbe: RuntimeMcpStatusProbeResult | null = null;
-  const probeOnce = Effect.gen(function* () {
-    const probe = yield* runtimeRegistry.probeMcpStatus(input);
-    if (probe.connected || !probe.supported) {
-      return probe;
+  return Effect.gen(function* () {
+    let lastProbe: RuntimeMcpStatusProbeResult | null = null;
+    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      const probe = yield* runtimeRegistry.probeMcpStatus(input);
+      if (probe.connected || !probe.supported) {
+        return probe;
+      }
+      lastProbe = probe;
+      if (attempt < totalAttempts) {
+        yield* Clock.sleep(`${retryDelayMs} millis`);
+      }
     }
-    lastProbe = probe;
+    if (lastProbe) {
+      return lastProbe;
+    }
     return yield* Effect.fail(
       new HostOperationError({
         operation: "runtime_orchestrator.probe_mcp_status",
-        message: probe.detail ?? "Runtime MCP status is not ready.",
+        message: "Runtime MCP status is not ready.",
         details: {
           runtimeKind: input.runtimeKind,
           serverName: input.serverName,
@@ -388,8 +420,4 @@ const probeMcpStatusWithRetry = (
       }),
     );
   });
-  return probeOnce.pipe(
-    Effect.retry(activeMcpReadinessProbeSchedule(totalAttempts, retryDelayMs)),
-    Effect.catchAll((error) => (lastProbe ? Effect.succeed(lastProbe) : Effect.fail(error))),
-  );
 };

@@ -45,6 +45,7 @@ export const HOST_COMMAND_NAMES = [
   "qa_rejected",
   "repo_pull_request_sync",
   "repo_runtime_health",
+  "repo_runtime_health_status",
   "runtime_check",
   "runtime_definitions_list",
   "runtime_ensure",

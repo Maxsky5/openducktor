@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TaskStoreCheck } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
+  type TaskStoreCheck,
+} from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { act } from "react";
@@ -69,22 +73,49 @@ const createActiveWorkspace = (
   repoPath,
 });
 
+const createRuntime = (): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/repo",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4096",
+  },
+  startedAt: "2026-05-10T10:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
+
 type UseAppLifecycleArgs = Parameters<
   Awaited<typeof import("./use-app-lifecycle")>["useAppLifecycle"]
 >[0];
 
-type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, "activeWorkspace"> & {
-  activeWorkspace?: ActiveWorkspace | null;
-  activeRepo?: string | null;
-  refreshWorkspaces?: () => Promise<void>;
-  setEvents?: unknown;
-  setRunCompletionSignal?: unknown;
-};
+type DefaultedLifecycleArg =
+  | "activeWorkspace"
+  | "runtimeDefinitions"
+  | "refreshRepoRuntimeHealth"
+  | "startRepoRuntime";
+
+type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, DefaultedLifecycleArg> &
+  Partial<Pick<UseAppLifecycleArgs, DefaultedLifecycleArg>> & {
+    activeWorkspace?: ActiveWorkspace | null;
+    activeRepo?: string | null;
+    refreshWorkspaces?: () => Promise<void>;
+    refreshRuntimeCheck?: (force?: boolean) => Promise<unknown>;
+    setEvents?: unknown;
+    setRunCompletionSignal?: unknown;
+  };
 
 const normalizeHookArgs = (args: LegacyUseAppLifecycleArgs): UseAppLifecycleArgs => {
-  const { activeWorkspace, activeRepo, refreshWorkspaces, ...rest } = args;
+  const { activeWorkspace, activeRepo, refreshRuntimeCheck, refreshWorkspaces, ...rest } = args;
+  void refreshRuntimeCheck;
   void refreshWorkspaces;
   return {
+    runtimeDefinitions: [],
+    refreshRepoRuntimeHealth: mock(async () => ({})),
+    startRepoRuntime: mock(async () => createRuntime()),
     ...rest,
     activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
   };
@@ -160,6 +191,56 @@ afterEach(async () => {
 });
 
 describe("useAppLifecycle", () => {
+  test("starts repository runtimes outside diagnostics without blocking mount", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+    const runtimeStart = createDeferred<RuntimeInstanceSummary>();
+    const refreshRepoRuntimeHealth = mock(async () => ({}));
+    const startRepoRuntime = mock(async () => runtimeStart.promise);
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        refreshBranches: mock(async () => {}),
+        refreshRepoRuntimeHealth,
+        refreshTaskStoreCheckForRepo: mock(async () =>
+          makeTaskStoreCheck({
+            taskStoreOk: true,
+            taskStorePath: "/repo/.openducktor/task-stores/workspace/database.sqlite",
+            taskStoreError: null,
+          }),
+        ),
+        refreshTaskData: mock(async () => {}),
+        startRepoRuntime,
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+
+    try {
+      expect(startRepoRuntime).toHaveBeenCalledWith("/repo", "opencode");
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
+
+      runtimeStart.resolve(createRuntime());
+      await act(async () => {
+        await runtimeStart.promise;
+      });
+
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refreshes active repo task data when an external task event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
@@ -545,7 +626,7 @@ describe("useAppLifecycle", () => {
     }
   });
 
-  test("loads repo task and diagnostics checks when the active repo changes", async () => {
+  test("loads repo tasks and branches when the active repo changes", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
@@ -589,16 +670,7 @@ describe("useAppLifecycle", () => {
     };
 
     const taskLoadDeferred = createDeferred<void>();
-    const runtimeRepoCheckDeferred = createDeferred<unknown>();
     const branchesDeferred = createDeferred<void>();
-
-    let runtimeCheckCallCount = 0;
-    const refreshRuntimeCheck = mock(() => {
-      runtimeCheckCallCount += 1;
-      return runtimeCheckCallCount === 1
-        ? Promise.resolve({ runtimeOk: true })
-        : runtimeRepoCheckDeferred.promise;
-    });
 
     const baseArgs: HookArgs = {
       activeRepo: null,
@@ -606,7 +678,6 @@ describe("useAppLifecycle", () => {
       setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
-      refreshRuntimeCheck,
       refreshTaskStoreCheckForRepo: mock(async () =>
         makeTaskStoreCheck({
           taskStoreOk: true,
@@ -640,14 +711,10 @@ describe("useAppLifecycle", () => {
       expect(baseArgs.refreshTaskData).toHaveBeenCalledTimes(1);
 
       await activeHarness.run(async () => {
-        runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
         branchesDeferred.resolve();
       });
-
-      expect(refreshRuntimeCheck).toHaveBeenCalledTimes(2);
     } finally {
       taskLoadDeferred.resolve();
-      runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
       branchesDeferred.resolve();
       await disposeHarness();
     }
@@ -1014,16 +1081,7 @@ describe("useAppLifecycle", () => {
     type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskLoadDeferred = createDeferred<void>();
-    const runtimeRepoCheckDeferred = createDeferred<unknown>();
     const branchesDeferred = createDeferred<void>();
-
-    let runtimeCheckCallCount = 0;
-    const refreshRuntimeCheck = mock(() => {
-      runtimeCheckCallCount += 1;
-      return runtimeCheckCallCount === 1
-        ? Promise.resolve({ runtimeOk: true })
-        : runtimeRepoCheckDeferred.promise;
-    });
 
     const baseArgs: HookArgs = {
       activeRepo: null,
@@ -1031,7 +1089,6 @@ describe("useAppLifecycle", () => {
       setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
-      refreshRuntimeCheck,
       refreshTaskStoreCheckForRepo: mock(async () =>
         makeTaskStoreCheck({
           taskStoreOk: true,
@@ -1061,7 +1118,6 @@ describe("useAppLifecycle", () => {
 
       await harness.run(async () => {
         taskLoadDeferred.resolve();
-        runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
       });
 
       await act(async () => {
@@ -1071,11 +1127,9 @@ describe("useAppLifecycle", () => {
       expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
         forceFreshTaskList: false,
       });
-      expect(refreshRuntimeCheck).toHaveBeenCalledTimes(2);
       expect(baseArgs.refreshBranches).toHaveBeenCalledWith(false);
     } finally {
       taskLoadDeferred.resolve();
-      runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
       branchesDeferred.resolve();
       await harness.unmount();
     }
@@ -1086,16 +1140,7 @@ describe("useAppLifecycle", () => {
     type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskDeferred = createDeferred<void>();
-    const runtimeDeferred = createDeferred<unknown>();
     const branchesDeferred = createDeferred<void>();
-
-    let runtimeCheckCallCount = 0;
-    const refreshRuntimeCheck = mock(() => {
-      runtimeCheckCallCount += 1;
-      return runtimeCheckCallCount === 1
-        ? Promise.resolve({ runtimeOk: true })
-        : runtimeDeferred.promise;
-    });
 
     const baseArgs: HookArgs = {
       activeRepo: null,
@@ -1103,7 +1148,6 @@ describe("useAppLifecycle", () => {
       setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
-      refreshRuntimeCheck,
       refreshTaskStoreCheckForRepo: mock(async () =>
         makeTaskStoreCheck({
           taskStoreOk: true,
@@ -1140,7 +1184,6 @@ describe("useAppLifecycle", () => {
 
       await harness.run(async () => {
         taskDeferred.reject(new Error("tasks failed after deselect"));
-        runtimeDeferred.reject(new Error("runtime failed after deselect"));
         branchesDeferred.reject(new Error("branches failed after deselect"));
       });
 
@@ -1152,14 +1195,12 @@ describe("useAppLifecycle", () => {
         "Repository tasks unavailable",
         expect.anything(),
       );
-      expect(toastError).not.toHaveBeenCalledWith("Runtime checks unavailable", expect.anything());
       expect(toastError).not.toHaveBeenCalledWith(
         "Repository branches unavailable",
         expect.anything(),
       );
     } finally {
       taskDeferred.resolve();
-      runtimeDeferred.resolve({ runtimeOk: true });
       branchesDeferred.resolve();
       await harness.unmount();
     }

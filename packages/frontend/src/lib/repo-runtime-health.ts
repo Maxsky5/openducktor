@@ -144,18 +144,25 @@ export const isRepoRuntimeHealthPendingReadiness = (
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
-  switch (classifyRepoRuntimeHealth(runtimeHealth)) {
-    case "unknown":
-      return { label: "Checking", variant: "secondary" };
+  if (!runtimeHealth) {
+    return { label: "Checking", variant: "secondary" };
+  }
+
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return { label: "Starting", variant: "warning" };
+  }
+
+  switch (runtimeHealth.runtime.status) {
     case "ready":
       return { label: "Running", variant: "success" };
-    case "startup_pending":
     case "checking":
       return { label: "Starting", variant: "warning" };
-    case "blocked":
-      return runtimeHealth?.runtime.status === "disabled"
-        ? { label: "Disabled", variant: "secondary" }
-        : { label: "Unavailable", variant: "danger" };
+    case "disabled":
+      return { label: "Disabled", variant: "secondary" };
+    case "not_started":
+      return { label: "Starting", variant: "warning" };
+    case "error":
+      return { label: "Unavailable", variant: "danger" };
   }
 };
 

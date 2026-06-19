@@ -612,6 +612,36 @@ describe("createRuntimeRegistry", () => {
       globalThis.fetch = originalFetch;
     }
   });
+  test("reports OpenCode MCP fetch timeouts as reconnecting probe results", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    }) as unknown as typeof fetch;
+    try {
+      const registry = createRuntimeRegistry();
+      const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
+
+      await expect(
+        Effect.runPromise(
+          probeMcpStatus({
+            runtimeKind: "opencode",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            workingDirectory: "/repo/worktree",
+            serverName: "openducktor",
+          }),
+        ),
+      ).resolves.toEqual({
+        supported: true,
+        connected: false,
+        serverStatus: null,
+        toolIds: [],
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
   test("reports Codex MCP status for host-managed stdio runtimes", async () => {
     const registry = createRuntimeRegistry();
     const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");

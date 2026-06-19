@@ -46,6 +46,20 @@ const notStartedRuntimeHealth = {
   mcp: null,
 } as const;
 
+const reconnectingRuntimeHealth = {
+  ...readyRuntimeHealth,
+  status: "checking",
+  mcp: {
+    supported: true,
+    status: "reconnecting",
+    serverName: "openducktor",
+    serverStatus: null,
+    toolIds: [] as string[],
+    detail: "The operation was aborted due to timeout",
+    failureKind: "timeout",
+  },
+} as const;
+
 describe("classifyDiagnosticsQueryError", () => {
   test("keeps query timeout errors explicit", () => {
     expect(classifyDiagnosticsQueryError(new DiagnosticsQueryTimeoutError(15_000))).toEqual({
@@ -204,6 +218,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
   test("only ready runtime health is briefly reusable", () => {
     expect(repoRuntimeHealthStaleTime(undefined)).toBe(0);
     expect(repoRuntimeHealthStaleTime({ opencode: notStartedRuntimeHealth })).toBe(0);
+    expect(repoRuntimeHealthStaleTime({ opencode: reconnectingRuntimeHealth })).toBe(0);
     expect(repoRuntimeHealthStaleTime({ opencode: readyRuntimeHealth })).toBe(60_000);
   });
 });

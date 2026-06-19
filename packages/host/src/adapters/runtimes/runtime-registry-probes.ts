@@ -1,6 +1,7 @@
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
+  errorMessage,
   HostOperationError,
   HostValidationError,
   toHostOperationError,
@@ -16,6 +17,15 @@ const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
 const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
+const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
+const TIMEOUT_ERROR_CODES = new Set([
+  "ABORT_ERR",
+  "ETIMEDOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+]);
+const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
 
 type RuntimeSessionRouteInput = {
   runtimeKind: string;
@@ -94,6 +104,56 @@ const readStringProperty = (value: Record<string, unknown>, property: string): s
   const raw = value[property];
   return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
 };
+
+const readStringField = (value: unknown, field: "code" | "name"): string | null => {
+  if (!value || typeof value !== "object" || !(field in value)) {
+    return null;
+  }
+  const raw = (value as Record<string, unknown>)[field];
+  return typeof raw === "string" ? raw : null;
+};
+
+const readFailureKind = (value: unknown): string | null => {
+  if (!value || typeof value !== "object" || !("details" in value)) {
+    return null;
+  }
+  const details = (value as { details?: unknown }).details;
+  if (!details || typeof details !== "object" || !("failureKind" in details)) {
+    return null;
+  }
+  const failureKind = (details as { failureKind?: unknown }).failureKind;
+  return typeof failureKind === "string" ? failureKind : null;
+};
+
+const readCause = (value: unknown): unknown | null =>
+  value && typeof value === "object" && "cause" in value
+    ? ((value as { cause?: unknown }).cause ?? null)
+    : null;
+
+const isTimeoutError = (cause: unknown): boolean => {
+  if (readFailureKind(cause) === "timeout") {
+    return true;
+  }
+  const name = readStringField(cause, "name");
+  if (name && TIMEOUT_ERROR_NAMES.has(name)) {
+    return true;
+  }
+  const code = readStringField(cause, "code");
+  if (code && TIMEOUT_ERROR_CODES.has(code)) {
+    return true;
+  }
+  const nestedCause = readCause(cause);
+  return nestedCause !== null && nestedCause !== cause && isTimeoutError(nestedCause);
+};
+
+const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => ({
+  supported: true,
+  connected: false,
+  serverStatus: null,
+  toolIds: [],
+  detail,
+  failureKind: "timeout",
+});
 
 const parseToolIds = (payload: unknown) => {
   if (!Array.isArray(payload)) {
@@ -253,6 +313,7 @@ const fetchOpenCodeJson = (
           path: routePath,
           workingDirectory,
           url: url.toString(),
+          ...(isTimeoutError(cause) ? { failureKind: "timeout" as const } : {}),
         }),
     });
     const body = yield* Effect.tryPromise({
@@ -261,13 +322,20 @@ const fetchOpenCodeJson = (
     });
     if (!response.ok) {
       const detail = body.trim();
+      const timedOut = TIMEOUT_RESPONSE_STATUSES.has(response.status);
       return yield* Effect.fail(
         new HostOperationError({
           operation: `runtimeRegistry.fetchOpenCodeJson.${operation}`,
           message: detail
             ? `OpenCode ${operation} failed with status ${response.status}: ${detail}`
             : `OpenCode ${operation} failed with status ${response.status}`,
-          details: { status: response.status, detail, path: routePath, workingDirectory },
+          details: {
+            status: response.status,
+            detail,
+            path: routePath,
+            workingDirectory,
+            ...(timedOut ? { failureKind: "timeout" as const } : {}),
+          },
         }),
       );
     }
@@ -363,7 +431,13 @@ export const probeOpenCodeMcpStatus = ({
       detail: null,
       failureKind: null,
     };
-  });
+  }).pipe(
+    Effect.catchAll((error) =>
+      isTimeoutError(error)
+        ? Effect.succeed(timeoutMcpProbeResult(errorMessage(error)))
+        : Effect.fail(error),
+    ),
+  );
 
 export const probeCodexMcpStatus = ({
   runtimeRoute,

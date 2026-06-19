@@ -168,6 +168,77 @@ describe("createRuntimeOrchestratorService", () => {
       },
     });
   });
+  test("repo runtime health status does not start missing workspace runtimes", async () => {
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        ensureWorkspaceRuntime() {
+          return Effect.dieMessage("status-only runtime health must not start runtimes");
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      status: "not_started",
+      runtime: {
+        status: "not_started",
+        stage: "idle",
+      },
+      mcp: {
+        status: "waiting_for_runtime",
+      },
+    });
+  });
+  test("repo runtime health status reports in-flight runtime ensure", async () => {
+    const runtime = createRuntime();
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        ensureWorkspaceRuntime() {
+          return Effect.promise(
+            () =>
+              new Promise((resolve) => {
+                setTimeout(() => resolve(runtime), 20);
+              }),
+          );
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    const ensurePromise = Effect.runPromise(
+      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      runtime: {
+        stage: "waiting_for_runtime",
+        status: "checking",
+      },
+    });
+    await expect(ensurePromise).resolves.toEqual(runtime);
+    await expect(
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      runtime: {
+        stage: "idle",
+        status: "not_started",
+      },
+    });
+  });
   test("active runtime health ensures a workspace runtime before probing MCP", async () => {
     const probeCalls: unknown[] = [];
     const service = createRuntimeOrchestratorService({
@@ -258,8 +329,52 @@ describe("createRuntimeOrchestratorService", () => {
         },
       }),
       taskReader: createTaskStore(),
-      activeMcpProbeRetryDelayMs: 1,
+      activeMcpProbeRetryDelayMs: 0,
     });
+    await expect(
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toMatchObject({
+      status: "ready",
+      mcp: {
+        supported: true,
+        status: "connected",
+        toolIds: ["odt_read_task"],
+      },
+    });
+    expect(probeCalls).toHaveLength(2);
+  });
+  test("active runtime health retries timeout MCP probes before publishing readiness", async () => {
+    const probeCalls: unknown[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        probeMcpStatus(input) {
+          probeCalls.push(input);
+          if (probeCalls.length === 1) {
+            return Effect.succeed({
+              supported: true,
+              connected: false,
+              serverStatus: null,
+              toolIds: [],
+              detail: "The operation was aborted due to timeout",
+              failureKind: "timeout",
+            });
+          }
+          return Effect.succeed({
+            supported: true,
+            connected: true,
+            serverStatus: "connected",
+            toolIds: ["odt_read_task"],
+            detail: null,
+            failureKind: null,
+          });
+        },
+      }),
+      taskReader: createTaskStore(),
+      activeMcpProbeRetryDelayMs: 0,
+    });
+
     await expect(
       Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toMatchObject({
@@ -324,6 +439,46 @@ describe("createRuntimeOrchestratorService", () => {
         toolIds: ["odt_read_task", "odt_set_spec"],
       },
     });
+  });
+  test("keeps exhausted MCP timeout probes pending for a ready workspace runtime", async () => {
+    const runtime = createRuntime();
+    let probeCalls = 0;
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime], {
+        probeMcpStatus() {
+          probeCalls += 1;
+          return Effect.succeed({
+            supported: true,
+            connected: false,
+            serverStatus: null,
+            toolIds: [],
+            detail: "The operation was aborted due to timeout",
+            failureKind: "timeout",
+          });
+        },
+      }),
+      taskReader: createTaskStore(),
+      activeMcpProbeRetryDelayMs: 0,
+    });
+
+    await expect(
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toMatchObject({
+      status: "checking",
+      runtime: {
+        status: "ready",
+        stage: "runtime_ready",
+      },
+      mcp: {
+        supported: true,
+        status: "reconnecting",
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      },
+    });
+    expect(probeCalls).toBe(20);
   });
   test("reports MCP probe failures as runtime health errors", async () => {
     const runtime = createRuntime();

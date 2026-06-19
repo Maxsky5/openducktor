@@ -61,4 +61,8 @@ export const createRuntimeOrchestratorCommandHandlers = (
     runtimeOrchestratorService.repoRuntimeHealth(
       parseRuntimeRepoInput(args, "repo_runtime_health"),
     ),
+  repo_runtime_health_status: (args) =>
+    runtimeOrchestratorService.repoRuntimeHealthStatus(
+      parseRuntimeRepoInput(args, "repo_runtime_health_status"),
+    ),
 });

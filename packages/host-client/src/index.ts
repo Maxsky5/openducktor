@@ -77,6 +77,7 @@ const AGENT_METHODS = [
   "runtimeEnsure",
   "runtimeRequire",
   "repoRuntimeHealth",
+  "repoRuntimeHealthStatus",
   "codexAppServerRequest",
   "codexAppServerRespond",
   "codexAppServerNotifications",

@@ -143,6 +143,37 @@ const createRecordingService = () => {
           }),
       });
     },
+    repoRuntimeHealthStatus(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "repoRuntimeHealthStatus", input });
+          return {
+            status: "not_started",
+            checkedAt: "2026-05-10T10:00:00.000Z",
+            runtime: {
+              status: "not_started",
+              stage: "idle",
+              observation: null,
+              instance: null,
+              startedAt: null,
+              updatedAt: "2026-05-10T10:00:00.000Z",
+              elapsedMs: null,
+              attempts: null,
+              detail: "Runtime has not been started yet.",
+              failureKind: null,
+              failureReason: null,
+            },
+            mcp: null,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
   });
   return { calls, service };
 };
@@ -181,6 +212,12 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
         repoPath: "/repo",
       }),
     ).resolves.toMatchObject({ status: "not_started" });
+    await expect(
+      router.invoke("repo_runtime_health_status", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
+    ).resolves.toMatchObject({ status: "not_started" });
     expect(calls).toEqual([
       {
         method: "agentSessionStop",
@@ -207,6 +244,10 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
       { method: "runtimeStop", input: { runtimeId: "runtime-1" } },
       {
         method: "repoRuntimeHealth",
+        input: { runtimeKind: "opencode", repoPath: "/repo" },
+      },
+      {
+        method: "repoRuntimeHealthStatus",
         input: { runtimeKind: "opencode", repoPath: "/repo" },
       },
     ]);

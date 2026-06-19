@@ -47,7 +47,10 @@ import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
+  const { agentEngine, runtimeCatalogOperations, startRepoRuntime } = useMemo(
+    () => createAgentRuntimeServices(),
+    [],
+  );
   const checkRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>
       runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
@@ -68,7 +71,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
               <WorkspaceStateProvider>
                 <DelegationStateProvider>
                   <AgentStudioStateProvider agentEngine={agentEngine}>
-                    <AppLifecycleStateProvider>
+                    <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
                       <AutopilotProvider>{children}</AutopilotProvider>
                     </AppLifecycleStateProvider>
                   </AgentStudioStateProvider>

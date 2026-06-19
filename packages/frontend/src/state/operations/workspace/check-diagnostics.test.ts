@@ -136,6 +136,39 @@ describe("check-diagnostics helpers", () => {
     expect(issues).toEqual([]);
   });
 
+  test("does not toast transient MCP timeout observations", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeWorkspace: createActiveWorkspace("/repo"),
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: null,
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+          },
+          mcp: {
+            supported: true,
+            status: "reconnecting",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "The operation was aborted due to timeout",
+            failureKind: "timeout",
+          },
+        }),
+      },
+    });
+
+    expect(issues).toEqual([]);
+  });
+
   test("restores unhealthy cli and task-store payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),

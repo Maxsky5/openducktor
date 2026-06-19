@@ -232,19 +232,19 @@ describe("runtime-catalog", () => {
     });
   });
 
-  test("delegates repo runtime health to the host command that starts missing runtimes", async () => {
-    const repoRuntimeHealth = mock(async () => healthyRepoRuntimeHealthFixture);
-    const originalRepoRuntimeHealth = host.repoRuntimeHealth;
-    host.repoRuntimeHealth = repoRuntimeHealth;
+  test("delegates repo runtime health to the status-only host command", async () => {
+    const repoRuntimeHealthStatus = mock(async () => healthyRepoRuntimeHealthFixture);
+    const originalRepoRuntimeHealthStatus = host.repoRuntimeHealthStatus;
+    host.repoRuntimeHealthStatus = repoRuntimeHealthStatus;
 
     try {
       const operations = createOperations(createAdapter());
       const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
-      expect(repoRuntimeHealth).toHaveBeenCalledWith("/tmp/repo", "opencode");
+      expect(repoRuntimeHealthStatus).toHaveBeenCalledWith("/tmp/repo", "opencode");
       expect(result).toEqual(healthyRepoRuntimeHealthFixture);
     } finally {
-      host.repoRuntimeHealth = originalRepoRuntimeHealth;
+      host.repoRuntimeHealthStatus = originalRepoRuntimeHealthStatus;
     }
   });
 });

@@ -1,6 +1,7 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
+import { host } from "./operations/shared/host";
 import {
   createHostRuntimeCatalogOperations,
   type RuntimeCatalogOperations,
@@ -12,6 +13,7 @@ import { createOpenCodeRuntimeAdapter } from "./runtime-adapters/opencode-runtim
 type AgentRuntimeServices = {
   agentEngine: AgentEnginePort;
   runtimeCatalogOperations: RuntimeCatalogOperations;
+  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
 };
 
 export const createAgentRuntimeServices = (): AgentRuntimeServices => {
@@ -44,6 +46,7 @@ export const createAgentRuntimeServices = (): AgentRuntimeServices => {
   return {
     agentEngine: createAgentEngine(getAdapter, runtimeKinds),
     runtimeCatalogOperations: createHostRuntimeCatalogOperations(getAdapter),
+    startRepoRuntime: (repoPath, runtimeKind) => host.runtimeEnsure(repoPath, runtimeKind),
   };
 };
 

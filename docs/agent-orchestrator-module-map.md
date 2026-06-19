@@ -160,12 +160,10 @@ Owns:
 
 `use-repo-runtime-health.ts` owns the frontend runtime-health query and refresh path. `RepoRuntimeHealthContext` is the only frontend context that exposes runtime health. `use-checks.ts` may consume that result for diagnostics toasts and manual diagnostics refresh, but `ChecksStateContext` must not expose runtime health or become a second runtime readiness surface.
 
-Invariant: `repoRuntimeHealth` is the only repository-load readiness path that
-may ensure a workspace runtime before probing runtime health or MCP status.
-App lifecycle and workspace selection must not start runtimes directly;
-selecting a workspace only makes the runtime-health query eligible to run.
-Runtime health is live process state, so app remounts may re-enter this
-idempotent query path, but it must not poll.
+Invariant: app lifecycle owns repository-runtime startup through the explicit
+runtime ensure path. Runtime diagnostics must read status-only health and must
+not start missing runtimes. Runtime health is live process state, so app remounts
+may refresh it, but it must not poll.
 
 Invariant: `not_started` is a passive runtime observation only. UI controlled by
 the automatic repository runtime-health path must treat it as a pending startup

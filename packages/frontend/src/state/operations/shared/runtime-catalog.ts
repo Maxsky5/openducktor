@@ -39,5 +39,5 @@ export const createHostRuntimeCatalogOperations = (
       query,
     }),
   checkRepoRuntimeHealth: async (repoPath, runtimeKind) =>
-    host.repoRuntimeHealth(repoPath, runtimeKind),
+    host.repoRuntimeHealthStatus(repoPath, runtimeKind),
 });
