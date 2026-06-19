@@ -6,6 +6,7 @@ import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import { host } from "../../shared/host";
 import {
   BUILD_SELECTION,
+  sessionFixture as baseSessionFixture,
   continuationTarget,
   createAgentSessionCollection,
   createSessionsRef,
@@ -13,10 +14,17 @@ import {
   getSession,
   PLANNER_SELECTION,
   persistedSessionRecord,
-  sessionFixture,
   setPersistedSessionListFixture,
   taskFixture,
 } from "./start-session.test-helpers";
+
+const sessionFixture = (
+  overrides: Parameters<typeof baseSessionFixture>[0],
+): ReturnType<typeof baseSessionFixture> =>
+  baseSessionFixture({
+    historyLoadState: "loaded",
+    ...overrides,
+  });
 
 describe("agent-orchestrator/handlers/start-session reuse", () => {
   beforeEach(async () => {

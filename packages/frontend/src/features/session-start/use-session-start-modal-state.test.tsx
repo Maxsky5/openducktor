@@ -2,8 +2,11 @@ import { describe, expect, mock, test } from "bun:test";
 import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createChecksStateContextValue,
   createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -136,6 +139,17 @@ const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   supportedStartModes: ["fork"],
 });
 
+const SESSION_START_TEST_RUNTIME_DEFINITIONS: RuntimeDescriptor[] = [
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  ALTERNATE_RUNTIME_DESCRIPTOR,
+  REUSE_RUNTIME_DESCRIPTOR,
+  FORK_RUNTIME_DESCRIPTOR,
+  FRESH_RUNTIME_DESCRIPTOR,
+  REUSE_ONLY_RUNTIME_DESCRIPTOR,
+  FORK_ONLY_RUNTIME_DESCRIPTOR,
+];
+
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
@@ -168,8 +182,32 @@ const createRepoSettings = (
   },
 });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSessionStartModalState, initialProps);
+const createReadyRuntimeHealthMap = (
+  runtimeDefinitions: RuntimeDescriptor[],
+): RepoRuntimeHealthMap => {
+  const definitionsByKind = new Map<RuntimeKind, RuntimeDescriptor>();
+  for (const definition of [...SESSION_START_TEST_RUNTIME_DEFINITIONS, ...runtimeDefinitions]) {
+    definitionsByKind.set(definition.kind, definition);
+  }
+
+  return Object.fromEntries(
+    Array.from(definitionsByKind.values()).map((definition) => [
+      definition.kind,
+      createRepoRuntimeHealthFixture({ status: "ready" }),
+    ]),
+  ) as RepoRuntimeHealthMap;
+};
+
+const createHookHarness = (
+  initialProps: HookArgs,
+  options?: Parameters<typeof createSharedHookHarness>[2],
+) =>
+  createSharedHookHarness(useSessionStartModalState, initialProps, {
+    checksStateContext: createChecksStateContextValue({
+      runtimeHealthByRuntime: createReadyRuntimeHealthMap(initialProps.runtimeDefinitions),
+    }),
+    ...options,
+  });
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
@@ -229,6 +267,57 @@ const createExistingSessionWithModel = ({
 });
 
 describe("useSessionStartModalState", () => {
+  test("waits for runtime readiness before loading the modal catalog", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const checksStateContextRef = {
+      current: createChecksStateContextValue({
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture({
+            status: "not_started",
+            runtime: {
+              status: "not_started",
+              stage: "idle",
+              detail: "Runtime has not been started yet.",
+            },
+          }),
+        },
+      }),
+    };
+    const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
+      loadCatalog,
+    });
+    const harness = createHookHarness(props, { checksStateContextRef });
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        initialStartMode: "fresh",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(loadCatalog).not.toHaveBeenCalled();
+    expect(harness.getLatest().isCatalogLoading).toBe(true);
+
+    checksStateContextRef.current = createChecksStateContextValue({
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
+    });
+    await harness.update(props);
+
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+  });
+
   test("initializes selection from repo role defaults", async () => {
     const harness = createHookHarness(createBaseProps());
 

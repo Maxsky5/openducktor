@@ -14,7 +14,11 @@ import {
 } from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -22,6 +26,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import { parsePersistedTaskTabs } from "../agents/agent-studio-task-tabs-storage";
 import {
   createAgentSessionSummaryFixture,
+  createChecksStateContextValue,
   createDeferred,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -133,22 +138,26 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RuntimeDefinitionsContext.Provider,
-          {
-            value: {
-              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-              availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              isLoadingRuntimeDefinitions: false,
-              runtimeDefinitionsError: null,
-              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-              loadRepoRuntimeCatalog: async () => createModalCatalog(),
-              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-              loadRepoRuntimeSkills: async () => ({ skills: [] }),
-              loadRepoRuntimeFileSearch: async () => [],
+          ChecksStateContext.Provider,
+          { value: createChecksStateContextValue() },
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            {
+              value: {
+                runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+                isLoadingRuntimeDefinitions: false,
+                runtimeDefinitionsError: null,
+                refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                loadRepoRuntimeCatalog: async () => createModalCatalog(),
+                loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+                loadRepoRuntimeSkills: async () => ({ skills: [] }),
+                loadRepoRuntimeFileSearch: async () => [],
+              },
             },
-          },
-          children,
+            children,
+          ),
         ),
       ),
     );

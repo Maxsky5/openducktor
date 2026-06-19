@@ -34,7 +34,10 @@ import {
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoRuntimeHealthFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type {
@@ -321,7 +324,9 @@ const createChecksStateValue = (): ChecksStateContextValue => ({
   ),
   runtimeCheckFailureKind: null,
   taskStoreCheckFailureKind: null,
-  runtimeHealthByRuntime: {},
+  runtimeHealthByRuntime: {
+    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+  },
   isLoadingChecks: false,
   refreshChecks: async () => {},
 });

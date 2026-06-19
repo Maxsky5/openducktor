@@ -10,6 +10,11 @@ import {
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import {
+  deriveRepoRuntimeReadiness,
+  repoRuntimeReadinessTargetForRuntime,
+} from "@/lib/repo-runtime-readiness";
+import { useChecksStateContext } from "@/state/app-state-contexts";
+import {
   RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
   runtimeCatalogQueryKeys,
@@ -52,6 +57,7 @@ export function useSessionStartModalRuntimeState({
   workspaceRepoPath,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
   const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
+  const { runtimeHealthByRuntime, isLoadingChecks } = useChecksStateContext();
 
   const eligibleRuntimeDefinitions = useMemo(
     () => filterRuntimeDefinitionsForStartMode(runtimeDefinitions, selectedStartMode),
@@ -79,6 +85,15 @@ export function useSessionStartModalRuntimeState({
         : null,
     [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
+  const selectedRuntimeReadiness = deriveRepoRuntimeReadiness({
+    hasActiveWorkspace: workspaceRepoPath !== null,
+    runtimeDefinitions: eligibleRuntimeDefinitions,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
+    runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedRuntimeKind),
+  });
 
   const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
     setRequestedRuntimeKindState(runtimeKind);
@@ -97,8 +112,10 @@ export function useSessionStartModalRuntimeState({
     };
   }, [selectedRuntimeKind, workspaceRepoPath]);
 
+  const canLoadCatalog = selectedRuntimeReadiness.state === "ready";
+  const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
   const catalogQuery = useQuery(
-    !usesInitialCatalog && selectedRepoRuntimeRef && isOpen
+    !usesInitialCatalog && selectedRepoRuntimeRef && isOpen && canLoadCatalog
       ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalog)
       : skippedSessionStartCatalogQueryOptions(selectedRepoRuntimeRef),
   );
@@ -106,7 +123,7 @@ export function useSessionStartModalRuntimeState({
   const catalog = usesInitialCatalog ? initialCatalog : (catalogQuery.data ?? null);
   const isCatalogLoading =
     !usesInitialCatalog && isOpen && workspaceRepoPath !== null && selectedRuntimeKind !== null
-      ? catalogQuery.isLoading
+      ? isWaitingForRuntime || catalogQuery.isLoading
       : false;
 
   return {

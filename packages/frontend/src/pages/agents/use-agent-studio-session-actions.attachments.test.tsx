@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -13,10 +13,16 @@ import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { hostClient } from "@/lib/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
+  createChecksStateContextValue,
+  createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -100,27 +106,25 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RuntimeDefinitionsContext.Provider,
-          {
-            value: {
-              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-              availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              isLoadingRuntimeDefinitions: false,
-              runtimeDefinitionsError: null,
-              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-              loadRepoRuntimeCatalog: async () => ({
-                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                models: [],
-                defaultModelsByProvider: {},
-                profiles: [],
+          ChecksStateContext.Provider,
+          { value: createChecksStateContextValue() },
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            {
+              value: createRuntimeDefinitionsContextValue({
+                runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                loadRepoRuntimeCatalog: async () => ({
+                  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                  models: [],
+                  defaultModelsByProvider: {},
+                  profiles: [],
+                }),
               }),
-              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-              loadRepoRuntimeSkills: async () => ({ skills: [] }),
-              loadRepoRuntimeFileSearch: async () => [],
             },
-          },
-          children,
+            children,
+          ),
         ),
       ),
     );

@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeDescriptor,
-} from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -18,14 +14,23 @@ import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-ses
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoRuntimeHealthFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createChecksStateContextValue,
   createDeferred,
+  createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -193,6 +198,62 @@ const QUEUED_RUNTIME_DESCRIPTOR = {
   },
 } as const;
 
+const TEST_RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR];
+
+const createTestChecksStateContextValue = () =>
+  createChecksStateContextValue({
+    runtimeHealthByRuntime: {
+      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    },
+  });
+
+const createTestRuntimeDefinitionsContextValue = () =>
+  createRuntimeDefinitionsContextValue({
+    runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
+    availableRuntimeDefinitions: TEST_RUNTIME_DEFINITIONS,
+    refreshRuntimeDefinitions: async () => TEST_RUNTIME_DEFINITIONS,
+    loadRepoRuntimeCatalog: async () => ({
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["default"],
+          contextWindow: 200_000,
+          outputLimit: 8_192,
+        },
+      ],
+      defaultModelsByProvider: {
+        openai: "gpt-5",
+      },
+      profiles: [
+        {
+          name: "spec",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "planner",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "build",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "qa",
+          mode: "primary",
+          hidden: false,
+        },
+      ],
+    }),
+  });
+
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -221,64 +282,13 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RuntimeDefinitionsContext.Provider,
-          {
-            value: {
-              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-              availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              isLoadingRuntimeDefinitions: false,
-              runtimeDefinitionsError: null,
-              refreshRuntimeDefinitions: async () => [
-                OPENCODE_RUNTIME_DESCRIPTOR,
-                QUEUED_RUNTIME_DESCRIPTOR,
-              ],
-              loadRepoRuntimeCatalog: async () => ({
-                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                models: [
-                  {
-                    id: "openai/gpt-5",
-                    providerId: "openai",
-                    providerName: "OpenAI",
-                    modelId: "gpt-5",
-                    modelName: "GPT-5",
-                    variants: ["default"],
-                    contextWindow: 200_000,
-                    outputLimit: 8_192,
-                  },
-                ],
-                defaultModelsByProvider: {
-                  openai: "gpt-5",
-                },
-                profiles: [
-                  {
-                    name: "spec",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "planner",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "build",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "qa",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                ],
-              }),
-              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-              loadRepoRuntimeSkills: async () => ({ skills: [] }),
-              loadRepoRuntimeFileSearch: async () => [],
-            },
-          },
-          children,
+          ChecksStateContext.Provider,
+          { value: createTestChecksStateContextValue() },
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            { value: createTestRuntimeDefinitionsContextValue() },
+            children,
+          ),
         ),
       ),
     );
@@ -324,7 +334,7 @@ const createBaseArgs = (): HookArgs => {
     role: "spec",
     launchActionId: "spec_initial",
     selectedSession: createSelectedSessionState(),
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
+    runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
     selectedModelDescriptor: null,
     sessionsForTask: [],
     selectedTask: createTask(),

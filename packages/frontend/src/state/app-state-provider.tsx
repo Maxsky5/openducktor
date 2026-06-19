@@ -22,6 +22,7 @@ import type {
 import { createAgentRuntimeServices } from "./agent-runtime-services";
 import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
 import {
+  ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
@@ -29,7 +30,6 @@ import {
   useAgentOperationsContext,
   useAgentSessionReadModelStateContext,
   useAgentSessionsContext,
-  useChecksStateContext,
   useRequiredContext,
   useWorkspaceBranchStateContext,
   useWorkspacePresenceContext,
@@ -91,7 +91,8 @@ export const useWorkspacePresence = (): WorkspacePresenceContextValue =>
 export const useActiveWorkspace = (): ActiveWorkspace | null =>
   useActiveWorkspaceContext().activeWorkspace;
 
-export const useChecksState = (): ChecksStateContextValue => useChecksStateContext();
+export const useChecksState = (): ChecksStateContextValue =>
+  useRequiredContext(ChecksStateContext, "useChecksState");
 
 export const useTasksState = (): TasksStateContextValue =>
   useRequiredContext(TasksStateContext, "useTasksState");
