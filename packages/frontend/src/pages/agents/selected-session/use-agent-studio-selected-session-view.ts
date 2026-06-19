@@ -24,10 +24,7 @@ import {
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
-import {
-  projectSelectedSessionViewSource,
-  resolveSelectedSessionViewSource,
-} from "./selected-session-view-source";
+import { deriveSelectedSessionViewProjection } from "./selected-session-view-source";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
@@ -99,32 +96,28 @@ export function useAgentStudioSelectedSessionView({
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-  const selectedSessionViewSource = useMemo(
+  const selectedSessionViewProjection = useMemo(
     () =>
-      resolveSelectedSessionViewSource({
+      deriveSelectedSessionViewProjection({
         selectedSessionIdentity,
         session,
         sessionSummary: selection.sessionSummary,
         selectedTask,
         readModelLoadState: sessionReadModelLoadState,
-      }),
-    [
-      selectedSessionIdentity,
-      selectedTask,
-      session,
-      selection.sessionSummary,
-      sessionReadModelLoadState,
-    ],
-  );
-  const selectedSessionViewProjection = useMemo(
-    () =>
-      projectSelectedSessionViewSource({
-        source: selectedSessionViewSource,
         role: selection.role,
         repoSettings,
         isLoadingRepoSettings,
       }),
-    [isLoadingRepoSettings, repoSettings, selectedSessionViewSource, selection.role],
+    [
+      isLoadingRepoSettings,
+      repoSettings,
+      selectedSessionIdentity,
+      selectedTask,
+      session,
+      selection.role,
+      selection.sessionSummary,
+      sessionReadModelLoadState,
+    ],
   );
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;

@@ -18,24 +18,6 @@ import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-export type SelectedSessionViewSource =
-  | {
-      kind: "loaded_session";
-      identity: AgentSessionIdentity;
-      session: AgentSessionState;
-    }
-  | {
-      kind: "selected_session";
-      identity: AgentSessionIdentity;
-      summary: AgentSessionSummary | null;
-      readModelLoadState: AgentSessionReadModelLoadState;
-    }
-  | {
-      kind: "selected_task";
-      readModelLoadState: AgentSessionReadModelLoadState;
-    }
-  | { kind: "inactive" };
-
 export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
@@ -43,79 +25,47 @@ export type SelectedSessionViewProjection = {
   transcriptSource: AgentSessionTranscriptSource;
 };
 
-export const resolveSelectedSessionViewSource = ({
+export const deriveSelectedSessionViewProjection = ({
   selectedSessionIdentity,
   session,
   sessionSummary,
   selectedTask,
   readModelLoadState,
+  role,
+  repoSettings,
+  isLoadingRepoSettings,
 }: {
   selectedSessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   sessionSummary: AgentSessionSummary | null;
   selectedTask: TaskCard | null;
   readModelLoadState: AgentSessionReadModelLoadState;
-}): SelectedSessionViewSource => {
+  role: AgentRole;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+}): SelectedSessionViewProjection => {
   if (selectedSessionIdentity && session) {
     return {
-      kind: "loaded_session",
-      identity: selectedSessionIdentity,
-      session,
+      activityState: getAgentSessionActivityStateFromSession(session),
+      selectedModel: session.selectedModel,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind),
+      transcriptSource: deriveLoadedAgentSessionTranscriptSource(session),
     };
   }
 
   if (selectedSessionIdentity) {
     return {
-      kind: "selected_session",
-      identity: selectedSessionIdentity,
-      summary: sessionSummary,
-      readModelLoadState,
-    };
-  }
-
-  if (selectedTask) {
-    return {
-      kind: "selected_task",
-      readModelLoadState,
-    };
-  }
-
-  return { kind: "inactive" };
-};
-
-export const projectSelectedSessionViewSource = ({
-  source,
-  role,
-  repoSettings,
-  isLoadingRepoSettings,
-}: {
-  source: SelectedSessionViewSource;
-  role: AgentRole;
-  repoSettings: RepoSettingsInput | null;
-  isLoadingRepoSettings: boolean;
-}): SelectedSessionViewProjection => {
-  if (source.kind === "loaded_session") {
-    return {
-      activityState: getAgentSessionActivityStateFromSession(source.session),
-      selectedModel: source.session.selectedModel,
-      runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
-      transcriptSource: deriveLoadedAgentSessionTranscriptSource(source.session),
-    };
-  }
-
-  if (source.kind === "selected_session") {
-    return {
-      activityState: source.summary?.activityState ?? null,
-      selectedModel: source.summary?.selectedModel ?? null,
-      runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
+      activityState: sessionSummary?.activityState ?? null,
+      selectedModel: sessionSummary?.selectedModel ?? null,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind),
       transcriptSource:
-        source.readModelLoadState.kind === "failed"
-          ? { kind: "failed", message: source.readModelLoadState.message }
+        readModelLoadState.kind === "failed"
+          ? { kind: "failed", message: readModelLoadState.message }
           : { kind: "runtime_gated_loading", reason: "preparing" },
     };
   }
 
-  if (source.kind === "selected_task") {
+  if (selectedTask) {
     return {
       activityState: null,
       selectedModel: null,
@@ -125,9 +75,9 @@ export const projectSelectedSessionViewSource = ({
             resolveConfiguredAgentRuntimeKind(repoSettings, role),
           ),
       transcriptSource:
-        source.readModelLoadState.kind === "failed"
-          ? { kind: "failed", message: source.readModelLoadState.message }
-          : source.readModelLoadState.kind === "loading"
+        readModelLoadState.kind === "failed"
+          ? { kind: "failed", message: readModelLoadState.message }
+          : readModelLoadState.kind === "loading"
             ? { kind: "runtime_gated_loading", reason: "preparing" }
             : { kind: "runtime_gated_empty", reason: "sessionless" },
     };
