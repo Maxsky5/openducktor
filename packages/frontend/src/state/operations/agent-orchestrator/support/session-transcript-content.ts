@@ -14,4 +14,4 @@ export const hasRenderableSessionTranscript = (session: SessionTranscriptContent
   getSessionMessageCount(session) > 0 || hasLoadedSessionHistory(session);
 
 export const needsInitialSessionHistoryLoad = (session: SessionTranscriptContent): boolean =>
-  session.historyLoadState === "not_requested" && !hasRenderableSessionTranscript(session);
+  session.historyLoadState === "not_requested";

@@ -40,7 +40,7 @@ describe("agent-orchestrator/support/session-transcript-content", () => {
     ).toBe(true);
   });
 
-  test("requests initial history only for cold unrequested sessions", () => {
+  test("requests initial history for every unrequested session", () => {
     expect(
       needsInitialSessionHistoryLoad(
         createAgentSessionFixture({ historyLoadState: "not_requested", messages: [] }),
@@ -67,6 +67,6 @@ describe("agent-orchestrator/support/session-transcript-content", () => {
           ],
         }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

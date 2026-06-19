@@ -183,11 +183,12 @@ describe("useSelectedSessionHistoryLoad", () => {
     }
   });
 
-  test("does not load when the selected session transcript is already visible", async () => {
+  test("loads baseline history when a live Codex message arrives before hydration", async () => {
     const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
         session: createSession({
+          runtimeKind: "codex",
           messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId, [
             {
               id: "live-kickoff",
@@ -204,7 +205,11 @@ describe("useSelectedSessionHistoryLoad", () => {
     try {
       await harness.mount();
 
-      expect(loadSessionHistory).not.toHaveBeenCalled();
+      expect(loadSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: selectedSessionIdentity.externalSessionId,
+        runtimeKind: "codex",
+        workingDirectory: selectedSessionIdentity.workingDirectory,
+      });
     } finally {
       await harness.unmount();
     }

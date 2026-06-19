@@ -884,7 +884,7 @@ Use these compact tests as the first-line safety net:
 | Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
-| Running-session history baseline after reload | `session-read-model/repo-session-read-model-loader.test.ts` |
+| Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
 | User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
