@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  deriveRepoRuntimeReadiness,
+  repoRuntimeReadinessTargetForRuntime,
+} from "@/lib/repo-runtime-readiness";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import { buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
 import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 
@@ -200,5 +206,46 @@ describe("projectAgentChatThreadState", () => {
       description: "Runtime unavailable",
     });
     expect(hidden.transcriptNotice?.kind).toBe("runtime_waiting");
+  });
+
+  test("does not turn automatic not-started runtime readiness into a blocked transcript notice", () => {
+    const runtimeReadiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeHealthByRuntime: {
+        codex: createRepoRuntimeHealthFixture({
+          status: "error",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            detail: "Runtime has not been started yet.",
+          },
+          mcp: {
+            status: "waiting_for_runtime",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime("codex"),
+    });
+
+    const state = projectAgentChatThreadState({
+      sessionKey: "session-1|codex|%2Frepo%2Fworktree",
+      session: null,
+      transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
+      runtimeReadiness: {
+        ...runtimeReadiness,
+        refreshChecks: async () => {},
+      },
+    });
+
+    expect(runtimeReadiness.state).toBe("checking");
+    expect(state.transcriptNotice).toMatchObject({
+      kind: "runtime_waiting",
+      severity: "loading",
+      title: "Runtime is starting",
+    });
   });
 });

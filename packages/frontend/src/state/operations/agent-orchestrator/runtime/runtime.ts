@@ -12,10 +12,6 @@ import { appQueryClient } from "@/lib/query-client";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
-import {
-  ensureRuntimeAndInvalidateReadinessQueries,
-  type RepoRuntimeReady,
-} from "../../shared/runtime-readiness-publication";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
@@ -49,7 +45,6 @@ type EnsureRuntimeDependencies = {
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
   hostClient?: RuntimeStartupHost;
-  queryClient?: Pick<QueryClient, "invalidateQueries">;
   repoConfigLoader?: RepoConfigLoader;
 };
 
@@ -59,7 +54,7 @@ type RuntimeStartupHost = {
     taskId: string,
     runtimeKind: RuntimeKind,
   ): Promise<BuildSessionBootstrap>;
-  runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RepoRuntimeReady>;
+  runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<{ workingDirectory: string }>;
   taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null>;
 };
 
@@ -170,7 +165,6 @@ export const requireConfiguredRuntimeKind = (
 export const createEnsureRuntime = ({
   refreshTaskData,
   hostClient = host,
-  queryClient = appQueryClient,
   repoConfigLoader = defaultRepoConfigLoader,
 }: EnsureRuntimeDependencies): EnsureRuntime => {
   return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
@@ -196,13 +190,7 @@ export const createEnsureRuntime = ({
 
     if (role === "build") {
       if (targetWorkingDirectory) {
-        await ensureRuntimeAndInvalidateReadinessQueries({
-          repoPath,
-          runtimeKind,
-          queryClient,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-        });
+        await hostClient.runtimeEnsure(repoPath, runtimeKind);
         return toRuntimeInfo(targetWorkingDirectory);
       }
 
@@ -230,23 +218,11 @@ export const createEnsureRuntime = ({
       if (!workingDirectory) {
         throw new Error(MISSING_BUILD_TARGET_ERROR);
       }
-      await ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        queryClient,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-      });
+      await hostClient.runtimeEnsure(repoPath, runtimeKind);
       return toRuntimeInfo(workingDirectory);
     }
 
-    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
-      repoPath,
-      runtimeKind,
-      queryClient,
-      ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-        hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-    });
+    const runtime = await hostClient.runtimeEnsure(repoPath, runtimeKind);
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
     return toRuntimeInfo(workingDirectory);
   };

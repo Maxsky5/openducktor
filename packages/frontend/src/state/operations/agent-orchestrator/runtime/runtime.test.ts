@@ -213,24 +213,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(repoRuntimeEnsureCalls).toBe(1);
   });
 
-  test("invalidates runtime readiness through the injected query client", async () => {
-    const invalidateQueries = mock(async () => undefined);
-
-    const ensureRuntime = createEnsureRuntime({
-      hostClient: runtimeHost,
-      queryClient: { invalidateQueries },
-      repoConfigLoader,
-      refreshTaskData: async () => {},
-    });
-
-    await ensureRuntime("/tmp/repo", "task-1", "build", {
-      workspaceId: "workspace-1",
-      targetWorkingDirectory: "/tmp/repo/conflict-worktree",
-    });
-
-    expect(invalidateQueries).toHaveBeenCalledTimes(1);
-  });
-
   test("uses task worktree for qa when builder worktree exists", async () => {
     let continuationCalls = 0;
     let repoRuntimeEnsureCalls = 0;
