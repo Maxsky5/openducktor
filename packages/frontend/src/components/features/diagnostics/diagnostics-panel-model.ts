@@ -23,8 +23,6 @@ import {
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
 import {
-  buildTimeoutToastDescription,
-  hasDiagnosticsRetryingState,
   hasRuntimeCheckFailure,
   hasTaskStoreCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
@@ -104,13 +102,11 @@ const buildFailureMessages = ({
   availabilityVerb?: "is" | "are";
 }): string[] => {
   if (failureKind === "timeout") {
-    return [
-      buildTimeoutToastDescription(
-        label,
-        detail,
-        availabilityVerb ? { availabilityVerb } : undefined,
-      ),
-    ];
+    const verb = availabilityVerb ?? "is";
+    const message = detail
+      ? `${label} ${verb} not yet available. Latest detail: ${detail}`
+      : `${label} ${verb} not yet available.`;
+    return [message];
   }
 
   return detail ? [detail] : [];
@@ -121,7 +117,7 @@ const getRepoStoreFailureBadge = (
   failureKind: RepoRuntimeFailureKind,
 ): DiagnosticsSectionModel["badge"] => {
   if (failureKind === "timeout") {
-    return { label: "Retrying", variant: "warning" };
+    return { label: "Timed out", variant: "warning" };
   }
   const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
   if (repoStoreHealth === null) {
@@ -382,7 +378,7 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
-    if (hasRuntimeCheckFailure(runtimeCheck) && runtimeCheckFailureKind !== "timeout") {
+    if (hasRuntimeCheckFailure(runtimeCheck)) {
       criticalReasons.push("Runtime CLI checks failing");
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
@@ -393,11 +389,7 @@ export const buildDiagnosticsPanelModel = (
         );
       }
     }
-    if (
-      repoStoreHealth &&
-      hasTaskStoreCheckFailure(taskStoreCheck) &&
-      taskStoreCheckFailureKind !== "timeout"
-    ) {
+    if (repoStoreHealth && hasTaskStoreCheckFailure(taskStoreCheck)) {
       criticalReasons.push(getRepoStoreDetail(repoStoreHealth));
     }
   }
@@ -415,13 +407,7 @@ export const buildDiagnosticsPanelModel = (
       taskStoreCheck === null ||
       isRuntimeHealthPending ||
       hasCheckingRuntimeHealth ||
-      hasNotStartedRuntimeHealth ||
-      hasDiagnosticsRetryingState({
-        runtimeDefinitions,
-        runtimeCheckFailureKind,
-        taskStoreCheckFailureKind,
-        runtimeHealthByRuntime,
-      }));
+      hasNotStartedRuntimeHealth);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",
@@ -458,7 +444,7 @@ export const buildDiagnosticsPanelModel = (
     title: "CLI Tools",
     badge: getFailureBadge(cliToolsHealthy, runtimeCheckFailureKind, {
       healthy: "Available",
-      timeout: "Retrying",
+      timeout: "Timed out",
       error: "Issue",
       checking: "Checking",
     }),

@@ -49,7 +49,7 @@ type DeriveRepoRuntimeReadinessArgs = {
 };
 
 const isRepoRuntimeAwaitingStartup = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean =>
-  runtimeHealth?.runtime.status === "not_started";
+  runtimeHealth?.status === "not_started";
 
 const getBlockedRuntimeReason = (
   runtimeLabel: string,

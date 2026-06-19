@@ -736,16 +736,18 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(true);
-    expect(model.summaryState.label).toBe("Checking...");
-    expect(model.criticalReasons).toEqual([]);
-    expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.criticalReasons).toEqual(
+      expect.arrayContaining(["Runtime CLI checks failing", "Timed out after 15000ms"]),
+    );
+    expect(model.sections[1]?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
-    expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.sections[4]?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(model.sections[4]?.errors[0]).toContain("Task store is not yet available");
   });
 
-  test("keeps hard failures ahead of retrying summary state", () => {
+  test("keeps hard failures ahead of timeout summary state", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -796,7 +798,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(true);
+    expect(model.isSummaryChecking).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
   });

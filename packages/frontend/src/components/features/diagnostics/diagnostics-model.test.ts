@@ -37,7 +37,7 @@ describe("buildDiagnosticsSummary", () => {
     expect(summary.label).toBe("Healthy");
   });
 
-  test("keeps critical issues ahead of retrying state", () => {
+  test("keeps critical issues ahead of checking state", () => {
     const summary = buildDiagnosticsSummary({
       hasActiveWorkspace: true,
       isChecking: true,

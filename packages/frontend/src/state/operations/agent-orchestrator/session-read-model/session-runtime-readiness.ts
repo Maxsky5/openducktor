@@ -32,7 +32,7 @@ export const deriveSessionRuntimeReadiness = ({
     if (
       !runtimeHealth ||
       runtimeHealth.status === "checking" ||
-      runtimeHealth.runtime.status === "not_started"
+      runtimeHealth.status === "not_started"
     ) {
       return { kind: "waiting_for_runtime" };
     }

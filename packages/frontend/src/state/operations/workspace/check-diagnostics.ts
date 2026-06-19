@@ -19,12 +19,6 @@ export type DiagnosticsToastIssue = {
   severity: DiagnosticsToastSeverity;
 };
 
-export type DiagnosticsRetryPlan = {
-  retryRuntimeCheck: boolean;
-  retryTaskStoreCheck: boolean;
-  retryRuntimeHealth: boolean;
-};
-
 type DiagnosticsIssueMeta = {
   id: string;
   label: string;
@@ -46,17 +40,6 @@ type BuildDiagnosticsToastIssuesArgs = {
   taskStoreCheckError: string | null;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
-};
-
-type BuildDiagnosticsRetryPlanArgs = {
-  activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeCheckFetching: boolean;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheckFetching: boolean;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  runtimeHealthFetching: boolean;
 };
 
 const CLI_TOOLS_ISSUE_META: DiagnosticsIssueMeta = {
@@ -148,24 +131,6 @@ export const buildRuntimeHealthErrorMap = (
     } satisfies RepoRuntimeHealthCheck;
     return runtimeHealthMap;
   }, {});
-};
-
-type TimeoutMessageOptions = {
-  availabilityVerb?: AvailabilityVerb;
-};
-
-export const buildTimeoutToastDescription = (
-  label: string,
-  detail: string | null,
-  options?: TimeoutMessageOptions,
-): string => {
-  const availabilityVerb = options?.availabilityVerb ?? "is";
-
-  if (!detail) {
-    return `${label} ${availabilityVerb} not yet available. Retrying automatically.`;
-  }
-
-  return `${label} ${availabilityVerb} not yet available. Retrying automatically. Latest detail: ${detail}`;
 };
 
 const buildErrorToastDescription = (label: string, detail: string | null): string => {
@@ -305,68 +270,4 @@ export const buildDiagnosticsToastIssues = ({
     }
     return issues;
   }, []);
-};
-
-const hasRuntimeHealthTimeoutIssue = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap,
-): boolean => {
-  return runtimeDefinitions.some((definition) => {
-    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-    if (!runtimeHealth) {
-      return false;
-    }
-
-    return (
-      (runtimeHealth.runtime.status !== "error" &&
-        runtimeHealth.runtime.failureKind === "timeout") ||
-      (definition.capabilities.optionalSurfaces.supportsMcpStatus &&
-        runtimeHealth.mcp?.status !== "error" &&
-        runtimeHealth.mcp?.failureKind === "timeout")
-    );
-  });
-};
-
-export const hasDiagnosticsRetryingState = ({
-  runtimeDefinitions,
-  runtimeCheckFailureKind,
-  taskStoreCheckFailureKind,
-  runtimeHealthByRuntime,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-}): boolean => {
-  return (
-    runtimeCheckFailureKind === "timeout" ||
-    taskStoreCheckFailureKind === "timeout" ||
-    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime)
-  );
-};
-
-export const buildDiagnosticsRetryPlan = ({
-  activeWorkspace,
-  runtimeDefinitions,
-  runtimeCheckFailureKind,
-  runtimeCheckFetching,
-  taskStoreCheckFailureKind,
-  taskStoreCheckFetching,
-  runtimeHealthByRuntime,
-  runtimeHealthFetching,
-}: BuildDiagnosticsRetryPlanArgs): DiagnosticsRetryPlan => {
-  const retryRuntimeCheck = runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching;
-  const retryTaskStoreCheck =
-    activeWorkspace !== null && taskStoreCheckFailureKind === "timeout" && !taskStoreCheckFetching;
-  const retryRuntimeHealth =
-    activeWorkspace !== null &&
-    runtimeDefinitions.length > 0 &&
-    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
-    !runtimeHealthFetching;
-
-  return {
-    retryRuntimeCheck,
-    retryTaskStoreCheck,
-    retryRuntimeHealth,
-  };
 };

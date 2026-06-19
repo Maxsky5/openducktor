@@ -26,18 +26,13 @@ import {
   taskStoreCheckQueryOptions,
 } from "../../queries/checks";
 import {
-  buildDiagnosticsRetryPlan,
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildRuntimeHealthErrorMap,
   buildTaskStoreCheckErrorState,
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
-import {
-  type DiagnosticsToastApi,
-  useDiagnosticsRetryScheduler,
-  useDiagnosticsToasts,
-} from "./use-check-diagnostics-effects";
+import { type DiagnosticsToastApi, useDiagnosticsToasts } from "./use-check-diagnostics-effects";
 
 type UseChecksArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -316,38 +311,7 @@ export function useChecks({
     ],
   );
 
-  const diagnosticsRetryPlan = useMemo(
-    () =>
-      buildDiagnosticsRetryPlan({
-        activeWorkspace,
-        runtimeDefinitions,
-        runtimeCheckFailureKind,
-        runtimeCheckFetching: runtimeCheckQuery.isFetching,
-        taskStoreCheckFailureKind,
-        taskStoreCheckFetching: taskStoreCheckQuery.isFetching,
-        runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
-        runtimeHealthFetching: runtimeHealthQuery.isFetching,
-      }),
-    [
-      activeWorkspace,
-      activeRepoRuntimeHealthByRuntime,
-      taskStoreCheckFailureKind,
-      taskStoreCheckQuery.isFetching,
-      runtimeCheckFailureKind,
-      runtimeCheckQuery.isFetching,
-      runtimeDefinitions,
-      runtimeHealthQuery.isFetching,
-    ],
-  );
-
   useDiagnosticsToasts(diagnosticsToastIssues, toastApi);
-  useDiagnosticsRetryScheduler({
-    activeWorkspace,
-    retryPlan: diagnosticsRetryPlan,
-    refreshRuntimeCheck,
-    refreshTaskStoreCheckForRepo,
-    refreshRepoRuntimeHealthForRepo,
-  });
 
   const isLoadingChecks =
     isManualLoadingChecks ||

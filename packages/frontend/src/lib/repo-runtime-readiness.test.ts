@@ -76,6 +76,30 @@ describe("repo runtime readiness", () => {
     expect(readiness.message).toBe("Codex runtime is starting...");
   });
 
+  test("uses the health summary status as the startup source of truth", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime("codex"),
+      runtimeHealthByRuntime: {
+        codex: createRepoRuntimeHealthFixture({
+          status: "not_started",
+          runtime: {
+            status: "error",
+            stage: "idle",
+            detail: "Runtime has not been started yet.",
+          },
+        }),
+      },
+    });
+
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toBe("Codex runtime is starting...");
+  });
+
   test("keeps readiness checking while the target runtime is still resolving", () => {
     const readiness = deriveRepoRuntimeReadiness({
       hasActiveWorkspace: true,
