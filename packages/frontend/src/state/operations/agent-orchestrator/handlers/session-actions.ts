@@ -4,6 +4,7 @@ import type { SessionStartGate } from "@/features/session-start/session-start-ga
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
+import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { SessionTurnState } from "../support/session-turn-state";
@@ -33,7 +34,7 @@ type SessionActionsDependencies = {
   ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  refreshTaskSessionReadModel: (taskId: string) => Promise<void>;
+  loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   refreshTaskData: (
     repoPath: string,
@@ -64,7 +65,7 @@ export const createAgentSessionActions = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
-  refreshTaskSessionReadModel,
+  loadSourceSession,
   loadAgentSessionHistory,
   refreshTaskData,
   persistSessionRecord,
@@ -107,7 +108,7 @@ export const createAgentSessionActions = ({
       removeSession,
       readSessionSnapshot,
       sessionStartGateRef,
-      refreshTaskSessionReadModel,
+      loadSourceSession,
       loadAgentSessionHistory,
       persistSessionRecord,
       observeAgentSession,

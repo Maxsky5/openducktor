@@ -1,81 +1,15 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
-import type { QueryClient } from "@tanstack/react-query";
-import type { MutableRefObject } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
-import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
 import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
-import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 type ClearSessionObservationState = (sessions: readonly AgentSessionRef[]) => void;
-
-type CreateRefreshTaskSessionReadModelArgs = {
-  workspaceRepoPath: string | null;
-  adapter: SessionLoaderAdapter;
-  repoEpochRef: MutableRefObject<number>;
-  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  commitSessionCollection: CommitSessionCollection;
-  observeAgentSession: ObserveAgentSession;
-  clearSessionObservationState: ClearSessionObservationState;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  queryClient: QueryClient;
-};
-
-export const loadRepoSessionReadModelForTasks = async ({
-  repoPath,
-  tasks,
-  adapter,
-  commitSessionCollection,
-  observeAgentSession,
-  clearSessionObservationState,
-  runtimeHealthByRuntime,
-  queryClient,
-  isStaleRepoOperation,
-  forceFresh,
-}: {
-  repoPath: string;
-  tasks: Pick<TaskCard, "id">[];
-  adapter: SessionLoaderAdapter;
-  commitSessionCollection: CommitSessionCollection;
-  observeAgentSession: ObserveAgentSession;
-  clearSessionObservationState: ClearSessionObservationState;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  queryClient: QueryClient;
-  isStaleRepoOperation: () => boolean;
-  forceFresh?: boolean;
-}): Promise<boolean> => {
-  if (isStaleRepoOperation()) {
-    return false;
-  }
-
-  const taskSessionRecords = await loadTaskSessionRecordsForTasks({
-    queryClient,
-    repoPath,
-    tasks,
-    ...(forceFresh === undefined ? {} : { forceFresh }),
-  });
-  if (isStaleRepoOperation()) {
-    return false;
-  }
-
-  return loadRepoSessionReadModel({
-    repoPath,
-    taskSessionRecords,
-    adapter,
-    commitSessionCollection,
-    observeAgentSession,
-    clearSessionObservationState,
-    runtimeHealthByRuntime,
-    isStaleRepoOperation,
-  });
-};
 
 export const loadRepoSessionReadModel = async ({
   repoPath,
@@ -145,46 +79,4 @@ export const loadRepoSessionReadModel = async ({
     }),
   );
   return true;
-};
-
-export const createRefreshTaskSessionReadModel = ({
-  workspaceRepoPath,
-  adapter,
-  repoEpochRef,
-  currentWorkspaceRepoPathRef,
-  commitSessionCollection,
-  observeAgentSession,
-  clearSessionObservationState,
-  runtimeHealthByRuntime,
-  queryClient,
-}: CreateRefreshTaskSessionReadModelArgs): ((taskId: string) => Promise<void>) => {
-  return async (taskId: string): Promise<void> => {
-    if (!workspaceRepoPath || taskId.trim().length === 0) {
-      return;
-    }
-
-    const repoPath = workspaceRepoPath;
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-    });
-
-    if (isStaleRepoOperation()) {
-      return;
-    }
-
-    await loadRepoSessionReadModelForTasks({
-      repoPath,
-      tasks: [{ id: taskId }],
-      adapter,
-      commitSessionCollection,
-      observeAgentSession,
-      clearSessionObservationState,
-      runtimeHealthByRuntime,
-      queryClient,
-      isStaleRepoOperation,
-      forceFresh: true,
-    });
-  };
 };

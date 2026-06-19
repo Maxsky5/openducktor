@@ -196,7 +196,7 @@ export const toStartSessionDependencies = (
         deps.readSessionSnapshot ??
         ((identity) => getAgentSession(deps.sessionsRef.current, identity)),
       sessionStartGateRef: deps.sessionStartGateRef ?? { current: createSessionStartGate() },
-      refreshTaskSessionReadModel: deps.refreshTaskSessionReadModel,
+      loadSourceSession: deps.loadSourceSession,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => undefined),
       persistSessionRecord: deps.persistSessionRecord,
       observeAgentSession: deps.observeAgentSession,
@@ -243,7 +243,8 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     repoEpochRef = { current: 1 },
     currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
     observeAgentSession = async () => undefined,
-    refreshTaskSessionReadModel = async () => {},
+    loadSourceSession = async ({ sourceSession }) =>
+      getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => undefined,
     persistSessionRecord = async () => {},
     resolveTaskWorktree = async () => ({
@@ -284,7 +285,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
-      refreshTaskSessionReadModel,
+      loadSourceSession,
       loadAgentSessionHistory,
       persistSessionRecord,
       resolveTaskWorktree,

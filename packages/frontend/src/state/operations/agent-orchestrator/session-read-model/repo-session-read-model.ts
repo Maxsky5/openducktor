@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -11,7 +10,7 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { fromPersistedSessionRecord, toPersistedSessionIdentity } from "../support/persistence";
+import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import {
@@ -28,30 +27,6 @@ export type RepoSessionReadModel = {
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
-
-const toPersistedSessionView = ({
-  taskId,
-  record,
-  current,
-}: {
-  taskId: string;
-  record: AgentSessionRecord;
-  current: AgentSessionState | undefined;
-}): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord({ taskId, record });
-  if (!current) {
-    return persisted;
-  }
-  return {
-    ...current,
-    taskId: persisted.taskId,
-    runtimeKind: persisted.runtimeKind,
-    role: persisted.role,
-    startedAt: persisted.startedAt,
-    workingDirectory: persisted.workingDirectory,
-    selectedModel: persisted.selectedModel,
-  };
-};
 
 export const buildRepoSessionReadModel = ({
   repoPath,

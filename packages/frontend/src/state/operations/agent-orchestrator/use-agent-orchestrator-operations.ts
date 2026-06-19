@@ -16,7 +16,7 @@ import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
-import { createRefreshTaskSessionReadModel } from "./session-read-model/repo-session-read-model-loader";
+import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -131,27 +131,23 @@ export function useAgentOrchestratorOperations({
     queryClient,
     refreshTaskData,
   });
-  const refreshTaskSessionReadModel = useMemo(
+  const loadSourceSession = useMemo(
     () =>
-      createRefreshTaskSessionReadModel({
+      createLoadSourceSession({
         workspaceRepoPath,
         adapter: agentEngine,
         repoEpochRef,
         currentWorkspaceRepoPathRef,
         commitSessionCollection: sessionStore.commitSessionCollection,
         observeAgentSession,
-        clearSessionObservationState,
-        runtimeHealthByRuntime,
         queryClient,
       }),
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
-      clearSessionObservationState,
       queryClient,
       repoEpochRef,
-      runtimeHealthByRuntime,
       sessionStore,
       workspaceRepoPath,
     ],
@@ -226,7 +222,7 @@ export function useAgentOrchestratorOperations({
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
-        refreshTaskSessionReadModel,
+        loadSourceSession,
         loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
         refreshTaskData,
         persistSessionRecord,
@@ -240,7 +236,7 @@ export function useAgentOrchestratorOperations({
       hostPort,
       invalidateSessionStopQueries,
       loadAgentSessionHistoryIntoStore,
-      refreshTaskSessionReadModel,
+      loadSourceSession,
       observeAgentSession,
       persistSessionRecord,
       queryBackedPromptOverrides,

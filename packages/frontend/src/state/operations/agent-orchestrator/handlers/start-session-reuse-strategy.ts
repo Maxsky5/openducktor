@@ -31,21 +31,22 @@ const loadSessionForReuse = async ({
   deps,
   sourceSession,
   mode,
-  forceReload = false,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
   sourceSession: AgentSessionIdentity;
   mode: "reuse" | "fork";
-  forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  const currentSession = deps.session.readSessionSnapshot(sourceSession);
-  if (forceReload || !currentSession) {
-    await deps.session.refreshTaskSessionReadModel(ctx.taskId);
+  let loadedSession = deps.session.readSessionSnapshot(sourceSession);
+  if (!loadedSession) {
+    loadedSession = await deps.session.loadSourceSession({
+      taskId: ctx.taskId,
+      role: ctx.role,
+      sourceSession,
+    });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const loadedSession = deps.session.readSessionSnapshot(sourceSession);
   if (!loadedSession) {
     throw unavailableSourceSessionError(ctx, sourceSession);
   }
@@ -118,20 +119,17 @@ const ensureLoadedSourceSession = async ({
   deps,
   sourceSession,
   mode,
-  forceReload = false,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
   sourceSession: AgentSessionIdentity;
   mode: "reuse" | "fork";
-  forceReload?: boolean;
 }): Promise<AgentSessionState> => {
   const loadedSession = await loadSessionForReuse({
     ctx,
     deps,
     sourceSession,
     mode,
-    forceReload,
   });
   if (!matchesLoadedSourceSession(loadedSession, ctx, sourceSession)) {
     throw unavailableSourceSessionError(ctx, sourceSession);
@@ -163,7 +161,6 @@ export const resolveLoadedSourceSession = async ({
     deps,
     sourceSession,
     mode: "fork",
-    forceReload: existingSourceSession !== null,
   });
 };
 

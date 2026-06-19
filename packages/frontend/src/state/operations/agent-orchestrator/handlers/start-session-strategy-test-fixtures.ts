@@ -49,7 +49,8 @@ export const createSessionDependenciesFixture = (
     },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionStartGateRef: { current: createSessionStartGate() },
-    refreshTaskSessionReadModel: async () => {},
+    loadSourceSession: async ({ sourceSession }) =>
+      getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => {},
     persistSessionRecord: async () => {},
     observeAgentSession: async () => undefined,

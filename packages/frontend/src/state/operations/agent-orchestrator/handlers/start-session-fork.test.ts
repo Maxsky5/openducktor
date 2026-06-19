@@ -4,7 +4,6 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { createSessionMessagesState } from "../support/messages";
 import {
   BUILD_SELECTION,
   createSessionsRef,
@@ -149,11 +148,11 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     }
   });
 
-  test("loads a stopped source session before forking so inherited history is available immediately", async () => {
+  test("loads stopped source session history before forking so inherited history is available immediately", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const refreshTaskSessionReadModelCalls: string[] = [];
+    const loadSourceSessionCalls: string[] = [];
     const loadAgentSessionHistoryCalls: AgentSessionIdentity[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
@@ -195,17 +194,9 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      refreshTaskSessionReadModel: async (taskId) => {
-        refreshTaskSessionReadModelCalls.push(taskId);
-        const sourceBuild = getSession(sessionsRef.current, "external-source-build");
-        if (!sourceBuild) {
-          throw new Error("Missing external-source-build session");
-        }
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, {
-          ...sourceBuild,
-          status: "idle",
-          messages: createSessionMessagesState(sourceBuild.externalSessionId),
-        });
+      loadSourceSession: async ({ taskId }) => {
+        loadSourceSessionCalls.push(taskId);
+        return null;
       },
       loadAgentSessionHistory: async (session) => {
         loadAgentSessionHistoryCalls.push(session);
@@ -236,7 +227,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       expect(externalSessionId).toEqual(
         expect.objectContaining({ externalSessionId: "external-forked-from-loaded-source" }),
       );
-      expect(refreshTaskSessionReadModelCalls).toEqual(["task-1"]);
+      expect(loadSourceSessionCalls).toEqual([]);
       expect(loadAgentSessionHistoryCalls).toEqual([
         {
           externalSessionId: "external-source-build",

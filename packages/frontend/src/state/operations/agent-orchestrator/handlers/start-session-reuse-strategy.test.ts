@@ -44,13 +44,13 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef,
-      refreshTaskSessionReadModel: async () => {
+      loadSourceSession: async () => {
         loadCalls += 1;
-        sessionsRef.current = createAgentSessionCollection([
-          createBuildSessionFixture({
-            externalSessionId: "ext-build",
-          }),
-        ]);
+        const session = createBuildSessionFixture({
+          externalSessionId: "ext-build",
+        });
+        sessionsRef.current = createAgentSessionCollection([session]);
+        return session;
       },
     });
     await expect(

@@ -94,6 +94,7 @@ Must not own:
 Files:
 
 - `session-read-model/repo-session-read-model-loader.ts`
+- `session-read-model/source-session-loader.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `session-read-model/session-runtime-snapshot.ts`
 - `hooks/use-repo-session-read-model.ts`
@@ -125,6 +126,10 @@ The per-task session-list query is the only frontend cache for persisted session
 records. Do not add a separate bulk session-record cache; startup read-model
 loads, Kanban history summaries, and session upserts must observe the same
 per-task query keys.
+Start/reuse preparation that needs a missing source session must use
+`source-session-loader.ts` to load that exact persisted record and read that
+exact runtime snapshot. It must not reload the repo or task read model to recover
+one source session.
 
 Must not own:
 
@@ -826,10 +831,9 @@ session history has one frontend read boundary.
 Repo startup session loading is keyed by task IDs only. Task title, status,
 document, or workflow metadata changes must not reload the repo session read
 model. Task-session query invalidation/refresh owns persisted session-record
-changes for UI history surfaces; orchestrator internals may reload the repo
-session read model for explicit start/reuse preparation, but
-`refreshTaskSessionReadModel` must not be exposed through public app operation
-contexts.
+changes for UI history surfaces. Orchestrator internals must not reload the repo
+session read model for explicit start/reuse preparation; they may load exactly
+one source session through `source-session-loader.ts`.
 `useRepoSessionReadModel` consumes the per-task session-record queries directly;
 task reset pages must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
@@ -843,8 +847,8 @@ unlisted session ref whose observer state can be cleared.
 ## Startup Flow
 
 1. The app loads task IDs from the task store.
-2. `use-repo-session-read-model.ts` loads task session records for those
-   task IDs through `loadRepoSessionReadModelForTasks`.
+2. `use-repo-session-read-model.ts` reads per-task session records through the
+   shared task-session query keys.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
@@ -921,7 +925,7 @@ Use these compact tests as the first-line safety net:
 - Do not add parent-session pending-input overlays for subagents. Child sessions
   own pending requests; parent rows only link to child session ids.
 - Do not make operations context carry read-model state or task-session refresh.
-  Read-model load state and explicit task-session refresh live in the read-model
-  context.
+  Read-model load state lives in the read-model context; exact source-session
+  recovery lives in `source-session-loader.ts`.
 - Do not split selected-session identity between a summary branch and a persisted
   record branch. Build one candidate list and resolve once.

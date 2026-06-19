@@ -87,3 +87,26 @@ export const fromPersistedSessionRecord = ({
       : null,
   };
 };
+
+export const toPersistedSessionView = ({
+  taskId,
+  record,
+  current,
+}: PersistedTaskSessionRecord & {
+  current?: AgentSessionState | undefined;
+}): AgentSessionState => {
+  const persisted = fromPersistedSessionRecord({ taskId, record });
+  if (!current) {
+    return persisted;
+  }
+
+  return {
+    ...current,
+    taskId: persisted.taskId,
+    runtimeKind: persisted.runtimeKind,
+    role: persisted.role,
+    startedAt: persisted.startedAt,
+    workingDirectory: persisted.workingDirectory,
+    selectedModel: persisted.selectedModel,
+  };
+};

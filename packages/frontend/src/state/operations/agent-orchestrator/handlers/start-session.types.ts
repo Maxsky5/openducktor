@@ -9,6 +9,7 @@ import type { SessionStartGate } from "@/features/session-start/session-start-ga
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
 export type { StartAgentSessionInput, StartAgentSessionResult };
@@ -18,7 +19,7 @@ export type SessionDependencies = {
   removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
-  refreshTaskSessionReadModel: (taskId: string) => Promise<void>;
+  loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   observeAgentSession: ObserveAgentSession;
