@@ -681,27 +681,6 @@ describe("createElectronHostCommandRouter", () => {
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toEqual([]);
     await expect(
-      router.invoke("runtime_startup_status", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      runtimeKind: "opencode",
-      repoPath: "/repo",
-      stage: "idle",
-      runtime: null,
-    });
-    await expect(
-      router.invoke("repo_runtime_health_status", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      status: "not_started",
-      runtime: { status: "not_started", stage: "idle" },
-      mcp: { status: "waiting_for_runtime" },
-    });
-    await expect(
       router.invoke("repo_runtime_health", {
         runtimeKind: "opencode",
         repoPath: "/repo",

@@ -10,13 +10,11 @@ import {
   type PullRequest,
   pullRequestSchema,
   type RepoRuntimeHealthCheck,
-  type RepoRuntimeStartupStatus,
   type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   type RuntimeKind,
   repoRuntimeHealthCheckSchema,
-  repoRuntimeStartupStatusSchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
   runtimeInstanceSummarySchema,
@@ -225,36 +223,12 @@ const runtimeRequire = async (
   return runtimeInstanceSummarySchema.parse(payload);
 };
 
-const runtimeStartupStatus = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeStartupStatus> => {
-  const payload = await invokeFn("runtime_startup_status", {
-    repoPath,
-    runtimeKind,
-  });
-  return repoRuntimeStartupStatusSchema.parse(payload);
-};
-
 const repoRuntimeHealth = async (
   invokeFn: InvokeFn,
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RepoRuntimeHealthCheck> => {
   const payload = await invokeFn("repo_runtime_health", {
-    repoPath,
-    runtimeKind,
-  });
-  return repoRuntimeHealthCheckSchema.parse(payload);
-};
-
-const repoRuntimeHealthStatus = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeHealthCheck> => {
-  const payload = await invokeFn("repo_runtime_health_status", {
     repoPath,
     runtimeKind,
   });
@@ -571,25 +545,11 @@ export class HostAgentClient {
     return runtimeRequire(this.invokeFn, repoPath, runtimeKind);
   }
 
-  async runtimeStartupStatus(
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<RepoRuntimeStartupStatus> {
-    return runtimeStartupStatus(this.invokeFn, repoPath, runtimeKind);
-  }
-
   async repoRuntimeHealth(
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> {
     return repoRuntimeHealth(this.invokeFn, repoPath, runtimeKind);
-  }
-
-  async repoRuntimeHealthStatus(
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<RepoRuntimeHealthCheck> {
-    return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
   }
 
   async codexAppServerRequest(

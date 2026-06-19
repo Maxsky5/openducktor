@@ -21,8 +21,10 @@ import {
   describeRuntimeRoute,
   isoFromMillis,
   loadTargetSession,
+  type RuntimeOrchestratorError,
   type RuntimeOrchestratorLogger,
   type RuntimeOrchestratorService,
+  type RuntimeRepoInput,
   resolveRepoPath,
   resolveRuntimeDescriptor,
 } from "./runtime-orchestrator-model";
@@ -87,7 +89,9 @@ export const createRuntimeOrchestratorService = ({
       }
       return runtimeInstanceSummarySchema.parse(runtime);
     });
-  const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = (input) =>
+  const runtimeStartupStatus = (
+    input: RuntimeRepoInput,
+  ): Effect.Effect<RepoRuntimeStartupStatus, RuntimeOrchestratorError> =>
     Effect.gen(function* () {
       const { runtimeKind, repoPath } = input;
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
@@ -194,7 +198,6 @@ export const createRuntimeOrchestratorService = ({
         return { ok };
       });
     },
-    runtimeStartupStatus,
     repoRuntimeHealth(input) {
       return Effect.gen(function* () {
         const { runtimeKind, repoPath } = input;
@@ -222,17 +225,6 @@ export const createRuntimeOrchestratorService = ({
           `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
         );
         return health;
-      });
-    },
-    repoRuntimeHealthStatus(input) {
-      return Effect.gen(function* () {
-        const { runtimeKind } = input;
-        const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-        return yield* buildHealthStatus(
-          descriptor,
-          yield* runtimeStartupStatus(input),
-          runtimeRegistry,
-        );
       });
     },
   };

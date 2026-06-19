@@ -12,6 +12,7 @@ import {
   taskStatusSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
+import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
@@ -200,51 +201,10 @@ export const parseTaskDirectMergeInput = (value: unknown) => {
 };
 
 export const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {
-  const role = session.role.trim();
-  if (!role) {
-    throw invalidInput("Agent session role is required", "role");
+  const compacted = compactAgentSessionRecord(session);
+  if (compacted.success) {
+    return compacted.session;
   }
 
-  const externalSessionId = session.externalSessionId.trim();
-  if (!externalSessionId) {
-    throw invalidInput("Agent session externalSessionId is required", "externalSessionId");
-  }
-
-  const startedAt = session.startedAt.trim();
-  if (!startedAt) {
-    throw invalidInput("Agent session startedAt is required", "startedAt");
-  }
-
-  const runtimeKind = session.runtimeKind.trim();
-  if (!runtimeKind) {
-    throw invalidInput("Agent session runtimeKind is required", "runtimeKind");
-  }
-
-  const workingDirectory = session.workingDirectory.trim();
-  if (!workingDirectory) {
-    throw invalidInput("Agent session workingDirectory is required", "workingDirectory");
-  }
-
-  if (session.selectedModel !== null && !session.selectedModel.runtimeKind.trim()) {
-    throw invalidInput(
-      "Agent session selectedModel.runtimeKind is required",
-      "selectedModel.runtimeKind",
-    );
-  }
-
-  return agentSessionRecordSchema.parse({
-    ...session,
-    externalSessionId,
-    role,
-    startedAt,
-    runtimeKind,
-    workingDirectory,
-    selectedModel:
-      session.selectedModel === null
-        ? null
-        : {
-            ...session.selectedModel,
-            runtimeKind: session.selectedModel.runtimeKind.trim(),
-          },
-  });
+  throw invalidInput(compacted.error.message, compacted.error.field);
 };

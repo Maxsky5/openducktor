@@ -49,13 +49,7 @@ export type RuntimeOrchestratorService = {
     },
     RuntimeOrchestratorError
   >;
-  runtimeStartupStatus(
-    input: RuntimeRepoInput,
-  ): Effect.Effect<RepoRuntimeStartupStatus, RuntimeOrchestratorError>;
   repoRuntimeHealth(
-    input: RuntimeRepoInput,
-  ): Effect.Effect<RepoRuntimeHealthCheck, RuntimeOrchestratorError>;
-  repoRuntimeHealthStatus(
     input: RuntimeRepoInput,
   ): Effect.Effect<RepoRuntimeHealthCheck, RuntimeOrchestratorError>;
 };

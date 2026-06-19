@@ -56,17 +56,9 @@ export const createRuntimeOrchestratorCommandHandlers = (
   runtime_require: (args) =>
     runtimeOrchestratorService.runtimeRequire(parseRuntimeRepoInput(args, "runtime_require")),
   runtime_list: (args) => runtimeOrchestratorService.runtimeList(parseRuntimeListInput(args)),
-  runtime_startup_status: (args) =>
-    runtimeOrchestratorService.runtimeStartupStatus(
-      parseRuntimeRepoInput(args, "runtime_startup_status"),
-    ),
   runtime_stop: (args) => runtimeOrchestratorService.runtimeStop(parseRuntimeStopInput(args)),
   repo_runtime_health: (args) =>
     runtimeOrchestratorService.repoRuntimeHealth(
       parseRuntimeRepoInput(args, "repo_runtime_health"),
-    ),
-  repo_runtime_health_status: (args) =>
-    runtimeOrchestratorService.repoRuntimeHealthStatus(
-      parseRuntimeRepoInput(args, "repo_runtime_health_status"),
     ),
 });

@@ -344,7 +344,7 @@ Host integration work includes:
 - adding the runtime definition to the host-visible runtime registry so default runtime config and startup validation know about it,
 - implementing runtime startup and registering it in the host registry with the correct default startup config,
 - ensuring runtime config defaults are derived from the same runtime definition set used by the host registry,
-- making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
+- making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `repo_runtime_health`, and `build_start` understand it where applicable,
 - implementing host-managed or external provisioning correctly,
 - preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
