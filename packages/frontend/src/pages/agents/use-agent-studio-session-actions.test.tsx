@@ -17,6 +17,7 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -30,6 +31,7 @@ import {
   createAgentSessionFixture,
   createChecksStateContextValue,
   createDeferred,
+  createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -255,6 +257,7 @@ const createTestRuntimeDefinitionsContextValue = () =>
   });
 
 const createHookHarness = (initialProps: HookArgs) => {
+  const checksStateContextValue = createTestChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -282,12 +285,21 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          ChecksStateContext.Provider,
-          { value: createTestChecksStateContextValue() },
+          RepoRuntimeHealthContext.Provider,
+          {
+            value: createRepoRuntimeHealthContextValue({
+              runtimeHealthByRuntime: checksStateContextValue.runtimeHealthByRuntime,
+              refreshRepoRuntimeHealth: async () => checksStateContextValue.runtimeHealthByRuntime,
+            }),
+          },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            { value: createTestRuntimeDefinitionsContextValue() },
-            children,
+            ChecksStateContext.Provider,
+            { value: checksStateContextValue },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: createTestRuntimeDefinitionsContextValue() },
+              children,
+            ),
           ),
         ),
       ),

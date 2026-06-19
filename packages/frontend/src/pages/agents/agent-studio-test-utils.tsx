@@ -18,6 +18,7 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
@@ -45,6 +46,9 @@ type RuntimeDefinitionsContextValue = NonNullable<
 type ChecksStateContextValue = NonNullable<
   ComponentProps<typeof ChecksStateContext.Provider>["value"]
 >;
+type RepoRuntimeHealthContextValue = NonNullable<
+  ComponentProps<typeof RepoRuntimeHealthContext.Provider>["value"]
+>;
 
 type HookHarnessOptions = {
   queryClient?: QueryClient;
@@ -52,6 +56,8 @@ type HookHarnessOptions = {
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
   checksStateContext?: ChecksStateContextValue;
   checksStateContextRef?: { current: ChecksStateContextValue };
+  repoRuntimeHealthContext?: RepoRuntimeHealthContextValue;
+  repoRuntimeHealthContextRef?: { current: RepoRuntimeHealthContextValue };
   wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
@@ -187,6 +193,21 @@ export const createChecksStateContextValue = (
   ...overrides,
 });
 
+export const createRepoRuntimeHealthContextValue = (
+  overrides: Partial<RepoRuntimeHealthContextValue> = {},
+): RepoRuntimeHealthContextValue => {
+  const runtimeHealthByRuntime = overrides.runtimeHealthByRuntime ?? {
+    opencode: createSharedRepoRuntimeHealthFixture(),
+  };
+
+  return {
+    runtimeHealthByRuntime,
+    isLoadingRepoRuntimeHealth: false,
+    refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
+    ...overrides,
+  };
+};
+
 const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
     gitOk: true,
@@ -238,6 +259,25 @@ export const createHookHarness = <Props, State>(
   const checksStateContextRef = options?.checksStateContextRef ?? {
     current: options?.checksStateContext ?? createChecksStateContextValue(),
   };
+  const ownsRepoRuntimeHealthContext =
+    !options?.repoRuntimeHealthContextRef && !options?.repoRuntimeHealthContext;
+  const repoRuntimeHealthContextRef = options?.repoRuntimeHealthContextRef ?? {
+    current: options?.repoRuntimeHealthContext ?? createRepoRuntimeHealthContextValue(),
+  };
+  const currentRepoRuntimeHealthContext = (): RepoRuntimeHealthContextValue => {
+    if (!ownsRepoRuntimeHealthContext) {
+      return repoRuntimeHealthContextRef.current;
+    }
+
+    return createRepoRuntimeHealthContextValue({
+      runtimeHealthByRuntime: checksStateContextRef.current.runtimeHealthByRuntime,
+      isLoadingRepoRuntimeHealth: checksStateContextRef.current.isLoadingChecks,
+      refreshRepoRuntimeHealth: async () => {
+        await checksStateContextRef.current.refreshChecks();
+        return checksStateContextRef.current.runtimeHealthByRuntime;
+      },
+    });
+  };
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
     if (options?.queryClient) {
@@ -260,12 +300,16 @@ export const createHookHarness = <Props, State>(
       { value: checksOperationsContext },
       renderQueryProvider(
         createElement(
-          ChecksStateContext.Provider,
-          { value: checksStateContextRef.current },
+          RepoRuntimeHealthContext.Provider,
+          { value: currentRepoRuntimeHealthContext() },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            { value: runtimeDefinitionsContextRef.current },
-            renderOwnerProviders(children),
+            ChecksStateContext.Provider,
+            { value: checksStateContextRef.current },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: runtimeDefinitionsContextRef.current },
+              renderOwnerProviders(children),
+            ),
           ),
         ),
       ),

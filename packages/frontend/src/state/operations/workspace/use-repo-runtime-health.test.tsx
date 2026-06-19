@@ -126,4 +126,64 @@ describe("useRepoRuntimeHealth", () => {
       await harness.unmount();
     }
   });
+
+  test("does not invent runtime health when the runtime health query fails", async () => {
+    repoHealthHandler = async () => {
+      throw new Error("runtime health unreachable");
+    };
+    const harness = createHarness({});
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.isLoadingRepoRuntimeHealth === false &&
+          checkRepoRuntimeHealth.mock.calls.length > 0,
+      );
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeUndefined();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the last actual runtime health when a refresh fails", async () => {
+    let shouldFailRefresh = false;
+    repoHealthHandler = async () => {
+      if (shouldFailRefresh) {
+        throw new Error("runtime health refresh failed");
+      }
+
+      return createRepoRuntimeHealthFixture({
+        mcp: { toolIds: ["healthy"] },
+      });
+    };
+    const harness = createHarness({});
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
+      );
+
+      shouldFailRefresh = true;
+      await harness.run(async (state) => {
+        await expect(state.refreshRepoRuntimeHealth()).rejects.toThrow(
+          "runtime health refresh failed",
+        );
+      });
+      await harness.waitFor((state) => state.isLoadingRepoRuntimeHealth === false);
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          status: "ready",
+          mcp: expect.objectContaining({
+            toolIds: ["healthy"],
+          }),
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

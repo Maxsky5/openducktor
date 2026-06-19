@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import { buildChecksRuntimeHealthByRuntime } from "./checks-runtime-health";
+import { buildRepoRuntimeHealthByRuntime } from "./repo-runtime-health-state";
 
-describe("buildChecksRuntimeHealthByRuntime", () => {
+describe("buildRepoRuntimeHealthByRuntime", () => {
   test("does not synthesize disabled runtime health while runtime settings are loading", () => {
-    const runtimeHealthByRuntime = buildChecksRuntimeHealthByRuntime({
-      activeRuntimeHealthByRuntime: {},
+    const runtimeHealthByRuntime = buildRepoRuntimeHealthByRuntime({
+      checkedRuntimeHealthByRuntime: {},
       allRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       availableRuntimeDefinitions: [],
       isLoadingRuntimeDefinitions: true,
@@ -17,8 +17,8 @@ describe("buildChecksRuntimeHealthByRuntime", () => {
   });
 
   test("does not synthesize disabled runtime health when runtime settings failed to load", () => {
-    const runtimeHealthByRuntime = buildChecksRuntimeHealthByRuntime({
-      activeRuntimeHealthByRuntime: {},
+    const runtimeHealthByRuntime = buildRepoRuntimeHealthByRuntime({
+      checkedRuntimeHealthByRuntime: {},
       allRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       availableRuntimeDefinitions: [],
       isLoadingRuntimeDefinitions: false,
@@ -30,8 +30,8 @@ describe("buildChecksRuntimeHealthByRuntime", () => {
 
   test("marks unavailable definitions disabled after runtime settings settle", () => {
     const opencodeHealth = createRepoRuntimeHealthFixture({ status: "ready" });
-    const runtimeHealthByRuntime = buildChecksRuntimeHealthByRuntime({
-      activeRuntimeHealthByRuntime: { opencode: opencodeHealth },
+    const runtimeHealthByRuntime = buildRepoRuntimeHealthByRuntime({
+      checkedRuntimeHealthByRuntime: { opencode: opencodeHealth },
       allRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,

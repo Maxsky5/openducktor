@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
-  ChecksStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
@@ -16,7 +16,7 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
-import type { ChecksStateContextValue } from "@/types/state-slices";
+import type { RepoRuntimeHealthContextValue } from "@/types/state-slices";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const makeRepoHealth = (
@@ -44,16 +44,12 @@ const createRuntimeDefinitionsValue = (
   loadRepoRuntimeFileSearch: async () => [],
 });
 
-const createChecksStateValue = (
+const createRepoRuntimeHealthValue = (
   runtimeHealthByRuntime: RepoRuntimeHealthMap,
-): ChecksStateContextValue => ({
-  runtimeCheck: null,
-  taskStoreCheck: null,
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
+): RepoRuntimeHealthContextValue => ({
   runtimeHealthByRuntime,
-  isLoadingChecks: false,
-  refreshChecks: async () => {},
+  isLoadingRepoRuntimeHealth: false,
+  refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
 });
 
 type HookArgs = Parameters<typeof useRepoRuntimeReadiness>[0];
@@ -72,8 +68,8 @@ const mountReadinessHook = async ({
       RuntimeDefinitionsContext.Provider,
       { value: createRuntimeDefinitionsValue(runtimeDefinitions) },
       createElement(
-        ChecksStateContext.Provider,
-        { value: createChecksStateValue(runtimeHealthByRuntime) },
+        RepoRuntimeHealthContext.Provider,
+        { value: createRepoRuntimeHealthValue(runtimeHealthByRuntime) },
         children,
       ),
     );
@@ -90,7 +86,7 @@ const mountReadinessHook = async ({
 };
 
 describe("useRepoRuntimeReadiness", () => {
-  test("derives readiness from runtime definitions and checks contexts", async () => {
+  test("derives readiness from runtime definitions and repo runtime health context", async () => {
     const harness = await mountReadinessHook({
       args: { hasWorkspace: true },
       runtimeHealthByRuntime: {
@@ -122,21 +118,28 @@ describe("useRepoRuntimeReadiness", () => {
     }
   });
 
-  test("keeps refresh action owned by checks context", async () => {
+  test("refreshes the repo runtime health owner", async () => {
     let refreshCount = 0;
-    const checksValue = {
-      ...createChecksStateValue({
+    const repoRuntimeHealthValue = {
+      ...createRepoRuntimeHealthValue({
         opencode: makeRepoHealth(),
       }),
-      refreshChecks: async () => {
+      refreshRepoRuntimeHealth: async () => {
         refreshCount += 1;
+        return {
+          opencode: makeRepoHealth(),
+        };
       },
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement =>
       createElement(
         RuntimeDefinitionsContext.Provider,
         { value: createRuntimeDefinitionsValue([OPENCODE_RUNTIME_DESCRIPTOR]) },
-        createElement(ChecksStateContext.Provider, { value: checksValue }, children),
+        createElement(
+          RepoRuntimeHealthContext.Provider,
+          { value: repoRuntimeHealthValue },
+          children,
+        ),
       );
 
     const harness = createSharedHookHarness(

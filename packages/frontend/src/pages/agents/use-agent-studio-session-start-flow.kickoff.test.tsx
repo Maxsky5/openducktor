@@ -7,12 +7,14 @@ import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createChecksStateContextValue,
+  createRepoRuntimeHealthContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -47,6 +49,7 @@ const createRunSessionStartWorkflow = (
   });
 
 const createHookHarness = (initialProps: HookArgs) => {
+  const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -74,49 +77,58 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          ChecksStateContext.Provider,
-          { value: createChecksStateContextValue() },
+          RepoRuntimeHealthContext.Provider,
+          {
+            value: createRepoRuntimeHealthContextValue({
+              runtimeHealthByRuntime: checksStateContextValue.runtimeHealthByRuntime,
+              refreshRepoRuntimeHealth: async () => checksStateContextValue.runtimeHealthByRuntime,
+            }),
+          },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            {
-              value: {
-                runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-                isLoadingRuntimeDefinitions: false,
-                runtimeDefinitionsError: null,
-                refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                loadRepoRuntimeCatalog: async () => ({
-                  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                  models: [
-                    {
-                      id: "openai/gpt-5",
-                      providerId: "openai",
-                      providerName: "OpenAI",
-                      modelId: "gpt-5",
-                      modelName: "GPT-5",
-                      variants: ["default"],
-                      contextWindow: 200_000,
-                      outputLimit: 8_192,
+            ChecksStateContext.Provider,
+            { value: checksStateContextValue },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              {
+                value: {
+                  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                  availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+                  isLoadingRuntimeDefinitions: false,
+                  runtimeDefinitionsError: null,
+                  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                  loadRepoRuntimeCatalog: async () => ({
+                    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                    models: [
+                      {
+                        id: "openai/gpt-5",
+                        providerId: "openai",
+                        providerName: "OpenAI",
+                        modelId: "gpt-5",
+                        modelName: "GPT-5",
+                        variants: ["default"],
+                        contextWindow: 200_000,
+                        outputLimit: 8_192,
+                      },
+                    ],
+                    defaultModelsByProvider: {
+                      openai: "gpt-5",
                     },
-                  ],
-                  defaultModelsByProvider: {
-                    openai: "gpt-5",
-                  },
-                  profiles: [
-                    {
-                      name: "spec",
-                      mode: "primary" as const,
-                      hidden: false,
-                    },
-                  ],
-                }),
-                loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-                loadRepoRuntimeSkills: async () => ({ skills: [] }),
-                loadRepoRuntimeFileSearch: async () => [],
+                    profiles: [
+                      {
+                        name: "spec",
+                        mode: "primary" as const,
+                        hidden: false,
+                      },
+                    ],
+                  }),
+                  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+                  loadRepoRuntimeSkills: async () => ({ skills: [] }),
+                  loadRepoRuntimeFileSearch: async () => [],
+                },
               },
-            },
-            children,
+              children,
+            ),
           ),
         ),
       ),

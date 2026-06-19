@@ -1,10 +1,14 @@
+import { useCallback } from "react";
 import {
   allRepoRuntimeReadinessTarget,
   deriveRepoRuntimeReadiness,
   type RepoRuntimeReadinessSnapshot,
   type RepoRuntimeReadinessTarget,
 } from "@/lib/repo-runtime-readiness";
-import { useChecksStateContext, useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import {
+  useRepoRuntimeHealthContext,
+  useRuntimeAvailabilityContext,
+} from "@/state/app-state-contexts";
 
 type UseRepoRuntimeReadinessArgs = {
   hasWorkspace: boolean;
@@ -21,14 +25,18 @@ export function useRepoRuntimeReadiness({
 }: UseRepoRuntimeReadinessArgs): RepoRuntimeReadiness {
   const { allRuntimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeAvailabilityContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksStateContext();
+  const { runtimeHealthByRuntime, isLoadingRepoRuntimeHealth, refreshRepoRuntimeHealth } =
+    useRepoRuntimeHealthContext();
+  const refreshChecks = useCallback(async (): Promise<void> => {
+    await refreshRepoRuntimeHealth();
+  }, [refreshRepoRuntimeHealth]);
   const readiness = deriveRepoRuntimeReadiness({
     hasActiveWorkspace: hasWorkspace,
     runtimeDefinitions: allRuntimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
     runtimeHealthByRuntime,
-    isLoadingChecks,
+    isLoadingChecks: isLoadingRepoRuntimeHealth,
     runtimeTarget,
   });
 

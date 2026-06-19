@@ -24,6 +24,7 @@ import {
   AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
   SpecStateContext,
   TasksStateContext,
@@ -445,6 +446,7 @@ const renderPage = async (
   const sessionStore = createAgentSessionsStore("/repo");
   sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
   const queryClient = createQueryClient();
+  const checksStateValue = createChecksStateValue();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
@@ -477,44 +479,52 @@ const renderPage = async (
         <WorkspaceStateContext.Provider value={createWorkspaceStateValue(renderState)}>
           <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchStateValue()}>
             <WorkspacePresenceContext.Provider value={createWorkspacePresenceValue()}>
-              <ChecksStateContext.Provider value={createChecksStateValue()}>
-                <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
-                  <DelegationStateContext.Provider value={delegationStateValue}>
-                    <SpecStateContext.Provider value={specStateValue}>
-                      <AgentSessionsContext.Provider value={sessionStore}>
-                        <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
-                          <AgentSessionReadModelStateContext.Provider
-                            value={{
-                              sessionReadModelLoadState:
-                                readyAgentSessionReadModelLoadState("/repo"),
-                            }}
-                          >
-                            <RuntimeDefinitionsContext.Provider
+              <RepoRuntimeHealthContext.Provider
+                value={{
+                  runtimeHealthByRuntime: checksStateValue.runtimeHealthByRuntime,
+                  isLoadingRepoRuntimeHealth: false,
+                  refreshRepoRuntimeHealth: async () => checksStateValue.runtimeHealthByRuntime,
+                }}
+              >
+                <ChecksStateContext.Provider value={checksStateValue}>
+                  <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
+                    <DelegationStateContext.Provider value={delegationStateValue}>
+                      <SpecStateContext.Provider value={specStateValue}>
+                        <AgentSessionsContext.Provider value={sessionStore}>
+                          <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
+                            <AgentSessionReadModelStateContext.Provider
                               value={{
-                                runtimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-                                isLoadingRuntimeDefinitions: false,
-                                runtimeDefinitionsError: null,
-                                refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-                                loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
-                                loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-                                loadRepoRuntimeSkills: async () => ({ skills: [] }),
-                                loadRepoRuntimeFileSearch: async () => [],
+                                sessionReadModelLoadState:
+                                  readyAgentSessionReadModelLoadState("/repo"),
                               }}
                             >
-                              <MemoryRouter initialEntries={["/"]}>
-                                <LocationProbe />
-                                <KanbanModelsProbe />
-                              </MemoryRouter>
-                            </RuntimeDefinitionsContext.Provider>
-                          </AgentSessionReadModelStateContext.Provider>
-                        </AgentOperationsContext.Provider>
-                      </AgentSessionsContext.Provider>
-                    </SpecStateContext.Provider>
-                  </DelegationStateContext.Provider>
-                </TasksStateContext.Provider>
-              </ChecksStateContext.Provider>
+                              <RuntimeDefinitionsContext.Provider
+                                value={{
+                                  runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                  availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+                                  isLoadingRuntimeDefinitions: false,
+                                  runtimeDefinitionsError: null,
+                                  refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+                                  loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+                                  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+                                  loadRepoRuntimeSkills: async () => ({ skills: [] }),
+                                  loadRepoRuntimeFileSearch: async () => [],
+                                }}
+                              >
+                                <MemoryRouter initialEntries={["/"]}>
+                                  <LocationProbe />
+                                  <KanbanModelsProbe />
+                                </MemoryRouter>
+                              </RuntimeDefinitionsContext.Provider>
+                            </AgentSessionReadModelStateContext.Provider>
+                          </AgentOperationsContext.Provider>
+                        </AgentSessionsContext.Provider>
+                      </SpecStateContext.Provider>
+                    </DelegationStateContext.Provider>
+                  </TasksStateContext.Provider>
+                </ChecksStateContext.Provider>
+              </RepoRuntimeHealthContext.Provider>
             </WorkspacePresenceContext.Provider>
           </WorkspaceBranchStateContext.Provider>
         </WorkspaceStateContext.Provider>

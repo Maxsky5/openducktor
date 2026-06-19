@@ -13,8 +13,8 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentSessionTranscriptState,
   deriveLoadedAgentSessionTranscriptState,
-  deriveRuntimeBoundTranscriptEmptyState,
-  deriveRuntimeBoundTranscriptLoadingState,
+  derivePendingSelectedSessionTranscriptState,
+  deriveSessionlessTaskTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -83,13 +83,10 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: sessionSummary?.activityState ?? null,
       selectedModel: sessionSummary?.selectedModel ?? null,
-      transcriptState:
-        readModelLoadState.kind === "failed"
-          ? { kind: "failed", message: readModelLoadState.message }
-          : deriveRuntimeBoundTranscriptLoadingState({
-              reason: "preparing",
-              repoReadinessState,
-            }),
+      transcriptState: derivePendingSelectedSessionTranscriptState({
+        readModelLoadState,
+        repoReadinessState,
+      }),
     };
   }
 
@@ -97,18 +94,10 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: null,
       selectedModel: null,
-      transcriptState:
-        readModelLoadState.kind === "failed"
-          ? { kind: "failed", message: readModelLoadState.message }
-          : readModelLoadState.kind === "loading"
-            ? deriveRuntimeBoundTranscriptLoadingState({
-                reason: "preparing",
-                repoReadinessState,
-              })
-            : deriveRuntimeBoundTranscriptEmptyState({
-                reason: "sessionless",
-                repoReadinessState,
-              }),
+      transcriptState: deriveSessionlessTaskTranscriptState({
+        readModelLoadState,
+        repoReadinessState,
+      }),
     };
   }
 

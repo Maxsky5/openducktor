@@ -7,9 +7,16 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
+  failedAgentSessionReadModelLoadState,
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+} from "@/types/agent-session-read-model";
+import {
   deriveLoadedAgentSessionTranscriptState,
+  derivePendingSelectedSessionTranscriptState,
   deriveRuntimeBoundTranscriptEmptyState,
   deriveRuntimeBoundTranscriptLoadingState,
+  deriveSessionlessTaskTranscriptState,
 } from "./session-transcript-state";
 
 type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
@@ -274,5 +281,70 @@ describe("runtime-bound transcript state", () => {
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+});
+
+describe("read-model-bound transcript state", () => {
+  test("keeps selected sessions waiting on runtime readiness before preparing", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      repoReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("shows selected-session preparation once runtime is ready", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("surfaces selected-session read-model failures", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: failedAgentSessionReadModelLoadState("/tmp/repo", "Session read failed"),
+      repoReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "failed", message: "Session read failed" });
+  });
+
+  test("keeps sessionless tasks waiting on runtime while the read model loads", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
+      repoReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("shows sessionless task preparation while the ready runtime read model loads", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("shows sessionless empty state after the read model is ready", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
+  test("surfaces sessionless task read-model failures", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: failedAgentSessionReadModelLoadState("/tmp/repo", "Session list failed"),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "failed", message: "Session list failed" });
   });
 });

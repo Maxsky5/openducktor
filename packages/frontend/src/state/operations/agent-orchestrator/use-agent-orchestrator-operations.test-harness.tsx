@@ -9,7 +9,11 @@ import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
-import { ChecksStateContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksStateContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -101,6 +105,12 @@ const createChecksStateContextValue = (runtimeHealthByRuntime: RepoRuntimeHealth
   refreshChecks: async () => undefined,
 });
 
+const createRepoRuntimeHealthContextValue = (runtimeHealthByRuntime: RepoRuntimeHealthMap) => ({
+  runtimeHealthByRuntime,
+  isLoadingRepoRuntimeHealth: false,
+  refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
+});
+
 const createRuntimeDefinitionsContextValue = () => {
   const runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
   return {
@@ -158,9 +168,13 @@ export const createHookHarness = (args: {
       RuntimeDefinitionsContext.Provider,
       { value: createRuntimeDefinitionsContextValue() },
       createElement(
-        ChecksStateContext.Provider,
-        { value: createChecksStateContextValue(currentArgs.runtimeHealthByRuntime) },
-        children,
+        RepoRuntimeHealthContext.Provider,
+        { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },
+        createElement(
+          ChecksStateContext.Provider,
+          { value: createChecksStateContextValue(currentArgs.runtimeHealthByRuntime) },
+          children,
+        ),
       ),
     );
 

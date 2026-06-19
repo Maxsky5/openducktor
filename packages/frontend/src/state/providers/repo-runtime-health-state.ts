@@ -2,22 +2,22 @@ import type { RuntimeDescriptor } from "@openducktor/contracts";
 import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
-export type BuildChecksRuntimeHealthInput = {
-  activeRuntimeHealthByRuntime: RepoRuntimeHealthMap;
+export type BuildRepoRuntimeHealthInput = {
+  checkedRuntimeHealthByRuntime: RepoRuntimeHealthMap;
   allRuntimeDefinitions: RuntimeDescriptor[];
   availableRuntimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
 };
 
-export const buildChecksRuntimeHealthByRuntime = ({
-  activeRuntimeHealthByRuntime,
+export const buildRepoRuntimeHealthByRuntime = ({
+  checkedRuntimeHealthByRuntime,
   allRuntimeDefinitions,
   availableRuntimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
-}: BuildChecksRuntimeHealthInput): RepoRuntimeHealthMap => {
-  const runtimeHealthByRuntime = { ...activeRuntimeHealthByRuntime };
+}: BuildRepoRuntimeHealthInput): RepoRuntimeHealthMap => {
+  const runtimeHealthByRuntime = { ...checkedRuntimeHealthByRuntime };
   if (isLoadingRuntimeDefinitions || runtimeDefinitionsError) {
     return runtimeHealthByRuntime;
   }

@@ -13,7 +13,11 @@ import {
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { ChecksStateContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ChecksStateContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -85,19 +89,27 @@ const createHarnessState = () => {
         loadRepoRuntimeFileSearch: async () => [],
       }}
     >
-      <ChecksStateContext.Provider
+      <RepoRuntimeHealthContext.Provider
         value={{
-          runtimeCheck: null,
-          taskStoreCheck: null,
-          runtimeCheckFailureKind: null,
-          taskStoreCheckFailureKind: null,
           runtimeHealthByRuntime,
-          isLoadingChecks: false,
-          refreshChecks: async () => undefined,
+          isLoadingRepoRuntimeHealth: false,
+          refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
         }}
       >
-        {children}
-      </ChecksStateContext.Provider>
+        <ChecksStateContext.Provider
+          value={{
+            runtimeCheck: null,
+            taskStoreCheck: null,
+            runtimeCheckFailureKind: null,
+            taskStoreCheckFailureKind: null,
+            runtimeHealthByRuntime,
+            isLoadingChecks: false,
+            refreshChecks: async () => undefined,
+          }}
+        >
+          {children}
+        </ChecksStateContext.Provider>
+      </RepoRuntimeHealthContext.Provider>
     </RuntimeDefinitionsContext.Provider>
   );
   const setRuntimeHealth = (nextRuntimeHealthByRuntime = readyRuntimeHealthByRuntime) => {

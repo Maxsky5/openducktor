@@ -1,5 +1,6 @@
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
@@ -66,3 +67,41 @@ export const deriveLoadedAgentSessionTranscriptState = ({
     repoReadinessState,
   });
 };
+
+const deriveReadModelFailureTranscriptState = (
+  readModelLoadState: AgentSessionReadModelLoadState,
+): AgentSessionTranscriptState | null =>
+  readModelLoadState.kind === "failed"
+    ? { kind: "failed", message: readModelLoadState.message }
+    : null;
+
+export const derivePendingSelectedSessionTranscriptState = ({
+  readModelLoadState,
+  repoReadinessState,
+}: {
+  readModelLoadState: AgentSessionReadModelLoadState;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState =>
+  deriveReadModelFailureTranscriptState(readModelLoadState) ??
+  deriveRuntimeBoundTranscriptLoadingState({
+    reason: "preparing",
+    repoReadinessState,
+  });
+
+export const deriveSessionlessTaskTranscriptState = ({
+  readModelLoadState,
+  repoReadinessState,
+}: {
+  readModelLoadState: AgentSessionReadModelLoadState;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState =>
+  deriveReadModelFailureTranscriptState(readModelLoadState) ??
+  (readModelLoadState.kind === "loading"
+    ? deriveRuntimeBoundTranscriptLoadingState({
+        reason: "preparing",
+        repoReadinessState,
+      })
+    : deriveRuntimeBoundTranscriptEmptyState({
+        reason: "sessionless",
+        repoReadinessState,
+      }));

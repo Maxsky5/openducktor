@@ -16,12 +16,14 @@ import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
+  RepoRuntimeHealthContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
+  createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -79,6 +81,7 @@ const localSessionIdentity = (externalSessionId: string) =>
   toAgentSessionIdentity(createAgentSessionFixture({ externalSessionId }));
 
 const createHookHarness = (initialProps: HookArgs) => {
+  const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -106,24 +109,33 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          ChecksStateContext.Provider,
-          { value: createChecksStateContextValue() },
+          RepoRuntimeHealthContext.Provider,
+          {
+            value: createRepoRuntimeHealthContextValue({
+              runtimeHealthByRuntime: checksStateContextValue.runtimeHealthByRuntime,
+              refreshRepoRuntimeHealth: async () => checksStateContextValue.runtimeHealthByRuntime,
+            }),
+          },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            {
-              value: createRuntimeDefinitionsContextValue({
-                runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                loadRepoRuntimeCatalog: async () => ({
-                  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                  models: [],
-                  defaultModelsByProvider: {},
-                  profiles: [],
+            ChecksStateContext.Provider,
+            { value: checksStateContextValue },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              {
+                value: createRuntimeDefinitionsContextValue({
+                  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                  availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                  loadRepoRuntimeCatalog: async () => ({
+                    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                    models: [],
+                    defaultModelsByProvider: {},
+                    profiles: [],
+                  }),
                 }),
-              }),
-            },
-            children,
+              },
+              children,
+            ),
           ),
         ),
       ),

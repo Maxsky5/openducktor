@@ -41,6 +41,7 @@ import { AppRuntimeProvider } from "./providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "./providers/delegation-state-provider";
+import { RepoRuntimeHealthProvider } from "./providers/repo-runtime-health-provider";
 import { SpecStateProvider } from "./providers/spec-state-provider";
 import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
@@ -61,19 +62,21 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
       <SpecStateProvider>
-        <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
-          <TasksStateProvider>
-            <WorkspaceStateProvider>
-              <DelegationStateProvider>
-                <AgentStudioStateProvider agentEngine={agentEngine}>
-                  <AppLifecycleStateProvider>
-                    <AutopilotProvider>{children}</AutopilotProvider>
-                  </AppLifecycleStateProvider>
-                </AgentStudioStateProvider>
-              </DelegationStateProvider>
-            </WorkspaceStateProvider>
-          </TasksStateProvider>
-        </ChecksStateProvider>
+        <RepoRuntimeHealthProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
+          <ChecksStateProvider>
+            <TasksStateProvider>
+              <WorkspaceStateProvider>
+                <DelegationStateProvider>
+                  <AgentStudioStateProvider agentEngine={agentEngine}>
+                    <AppLifecycleStateProvider>
+                      <AutopilotProvider>{children}</AutopilotProvider>
+                    </AppLifecycleStateProvider>
+                  </AgentStudioStateProvider>
+                </DelegationStateProvider>
+              </WorkspaceStateProvider>
+            </TasksStateProvider>
+          </ChecksStateProvider>
+        </RepoRuntimeHealthProvider>
       </SpecStateProvider>
     </AppRuntimeProvider>
   );

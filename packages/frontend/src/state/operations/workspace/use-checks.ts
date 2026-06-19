@@ -1,17 +1,8 @@
-import type {
-  RuntimeCheck,
-  RuntimeDescriptor,
-  RuntimeKind,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type ChecksQueryDependencies,
@@ -29,15 +20,13 @@ import {
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
 import { type DiagnosticsToastApi, useDiagnosticsToasts } from "./use-check-diagnostics-effects";
-import { useRepoRuntimeHealth } from "./use-repo-runtime-health";
 
 type UseChecksArgs = {
   activeWorkspace: ActiveWorkspace | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  checkRepoRuntimeHealth: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<RepoRuntimeHealthCheck>;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  isLoadingRepoRuntimeHealth: boolean;
+  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
   toastApi?: DiagnosticsToastApi;
@@ -48,7 +37,7 @@ type UseChecksResult = {
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   activeTaskStoreCheck: TaskStoreCheck | null;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  activeRepoRuntimeHealthByRuntime: RepoRuntimeHealthMap;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
@@ -62,7 +51,9 @@ type UseChecksResult = {
 export function useChecks({
   activeWorkspace,
   runtimeDefinitions,
-  checkRepoRuntimeHealth,
+  runtimeHealthByRuntime,
+  isLoadingRepoRuntimeHealth,
+  refreshRepoRuntimeHealth,
   runtimeCheck,
   taskStoreCheck,
   toastApi,
@@ -75,12 +66,6 @@ export function useChecks({
     ...taskStoreCheckQueryOptions(activeRepoPath ?? "__disabled__", taskStoreCheck),
     enabled: activeRepoPath !== null,
   });
-  const { activeRepoRuntimeHealthByRuntime, isLoadingRepoRuntimeHealth, refreshRepoRuntimeHealth } =
-    useRepoRuntimeHealth({
-      activeWorkspace,
-      runtimeDefinitions,
-      checkRepoRuntimeHealth,
-    });
 
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
@@ -225,12 +210,12 @@ export function useChecks({
         taskStoreCheck: rawTaskStoreCheck,
         taskStoreCheckError,
         taskStoreCheckFailureKind,
-        runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
+        runtimeHealthByRuntime,
       }),
     [
       activeWorkspace,
       rawTaskStoreCheck,
-      activeRepoRuntimeHealthByRuntime,
+      runtimeHealthByRuntime,
       taskStoreCheckError,
       taskStoreCheckFailureKind,
       runtimeCheckState,
@@ -252,7 +237,7 @@ export function useChecks({
     runtimeCheckFailureKind,
     activeTaskStoreCheck: rawTaskStoreCheck,
     taskStoreCheckFailureKind,
-    activeRepoRuntimeHealthByRuntime,
+    runtimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks: setIsManualLoadingChecks,
     refreshRuntimeCheck,
