@@ -204,12 +204,6 @@ export const deriveRepoRuntimeReadiness = ({
   if (runtimeKind && !targetRuntimeDefinition) {
     return blockedRepoRuntimeReadiness(toMissingRuntimeMessage(runtimeKind), isLoadingChecks);
   }
-  if (isRequiredRuntimeSet && blockedRuntime) {
-    return blockedRepoRuntimeReadiness(
-      describeRuntimeEntry(blockedRuntime) ?? "No configured runtime is ready for agent chat.",
-      isLoadingChecks,
-    );
-  }
   if (isRequiredRuntimeSet && scopedRuntimeEntries.every((entry) => entry.readiness === "ready")) {
     return readyRepoRuntimeReadiness(isLoadingChecks);
   }
@@ -231,7 +225,7 @@ export const deriveRepoRuntimeReadiness = ({
   if (isLoadingChecks || isRuntimeHealthPending) {
     return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
   }
-  if (isRequiredRuntimeSet && unknownRuntime) {
+  if (unknownRuntime) {
     return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
   }
   if (blockedRuntime) {

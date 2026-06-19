@@ -116,12 +116,10 @@ export function useAgentStudioSelectedSessionView({
         sessionSummary: selection.sessionSummary,
         selectedTask,
         readModelLoadState: sessionReadModelLoadState,
-        runtimeTarget,
         repoReadinessState,
       }),
     [
       repoReadinessState,
-      runtimeTarget,
       selectedSessionIdentity,
       selectedTask,
       session,

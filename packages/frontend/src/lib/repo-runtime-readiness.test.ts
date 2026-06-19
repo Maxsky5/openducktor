@@ -162,6 +162,34 @@ describe("repo runtime readiness", () => {
     expect(readiness.message).toBe("Codex startup failed.");
   });
 
+  test("keeps required runtime-set readiness loading while stale blocked health is refreshing", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: true,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(["opencode", "codex"]),
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+        codex: createRepoRuntimeHealthFixture({
+          status: "error",
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            detail: "Runtime has not been started yet.",
+          },
+        }),
+      },
+    });
+
+    expect(readiness).toEqual({
+      state: "checking",
+      message: "Checking runtime health...",
+      isLoadingChecks: true,
+    });
+  });
+
   test("uses the health summary status as the startup source of truth", () => {
     const readiness = deriveRepoRuntimeReadiness({
       hasActiveWorkspace: true,

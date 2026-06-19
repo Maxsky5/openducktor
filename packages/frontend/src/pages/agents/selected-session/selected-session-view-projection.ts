@@ -24,7 +24,6 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
-  runtimeTarget: RepoRuntimeReadinessTarget;
   transcriptState: AgentSessionTranscriptState;
 };
 
@@ -60,7 +59,6 @@ export const deriveSelectedSessionViewProjection = ({
   sessionSummary,
   selectedTask,
   readModelLoadState,
-  runtimeTarget,
   repoReadinessState,
 }: {
   selectedSessionIdentity: AgentSessionIdentity | null;
@@ -68,14 +66,12 @@ export const deriveSelectedSessionViewProjection = ({
   sessionSummary: AgentSessionSummary | null;
   selectedTask: TaskCard | null;
   readModelLoadState: AgentSessionReadModelLoadState;
-  runtimeTarget: RepoRuntimeReadinessTarget;
   repoReadinessState: RepoRuntimeReadinessState;
 }): SelectedSessionViewProjection => {
   if (selectedSessionIdentity && session) {
     return {
       activityState: getAgentSessionActivityStateFromSession(session),
       selectedModel: session.selectedModel,
-      runtimeTarget,
       transcriptState: deriveLoadedAgentSessionTranscriptState({
         session,
         repoReadinessState,
@@ -87,7 +83,6 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: sessionSummary?.activityState ?? null,
       selectedModel: sessionSummary?.selectedModel ?? null,
-      runtimeTarget,
       transcriptState:
         readModelLoadState.kind === "failed"
           ? { kind: "failed", message: readModelLoadState.message }
@@ -102,7 +97,6 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: null,
       selectedModel: null,
-      runtimeTarget,
       transcriptState:
         readModelLoadState.kind === "failed"
           ? { kind: "failed", message: readModelLoadState.message }
@@ -121,7 +115,6 @@ export const deriveSelectedSessionViewProjection = ({
   return {
     activityState: null,
     selectedModel: null,
-    runtimeTarget,
     transcriptState: { kind: "empty", reason: "inactive" },
   };
 };

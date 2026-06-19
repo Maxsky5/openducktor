@@ -42,29 +42,13 @@ const repoSettings = {
 } satisfies RepoSettingsInput;
 
 type ProjectionInput = Parameters<typeof deriveSelectedSessionViewProjection>[0];
-type RuntimeTargetInput = Parameters<typeof deriveSelectedSessionRuntimeTarget>[0];
 
-type ProjectOverrides = Partial<ProjectionInput> &
-  Partial<Pick<RuntimeTargetInput, "role" | "repoSettings" | "isLoadingRepoSettings">>;
+type ProjectOverrides = Partial<ProjectionInput>;
 
 const project = (overrides: ProjectOverrides = {}) => {
-  const {
-    role = "build",
-    repoSettings: runtimeRepoSettings = repoSettings,
-    isLoadingRepoSettings = false,
-    ...projectionOverrides
-  } = overrides;
+  const projectionOverrides = overrides;
   const selectedSessionIdentity = projectionOverrides.selectedSessionIdentity ?? null;
   const selectedTask = projectionOverrides.selectedTask ?? null;
-  const runtimeTarget =
-    projectionOverrides.runtimeTarget ??
-    deriveSelectedSessionRuntimeTarget({
-      selectedSessionIdentity,
-      selectedTask,
-      role,
-      repoSettings: runtimeRepoSettings,
-      isLoadingRepoSettings,
-    });
 
   return deriveSelectedSessionViewProjection({
     session: null,
@@ -74,7 +58,6 @@ const project = (overrides: ProjectOverrides = {}) => {
     ...projectionOverrides,
     selectedSessionIdentity,
     selectedTask,
-    runtimeTarget,
   });
 };
 
@@ -101,7 +84,6 @@ describe("selected-session-view-projection", () => {
 
     expect(projection.activityState).toBe("running");
     expect(projection.selectedModel).toBe(session.selectedModel);
-    expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "opencode" });
     expect(projection.transcriptState).toEqual({ kind: "visible" });
   });
 
@@ -133,31 +115,60 @@ describe("selected-session-view-projection", () => {
 
     expect(projection.activityState).toBe("waiting_input");
     expect(projection.selectedModel).toBe(summary.selectedModel);
-    expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "codex" });
     expect(projection.transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
   });
 
   test("uses repository settings as the runtime target for sessionless selected tasks", () => {
+    const selectedTask = createTaskCardFixture();
+    const runtimeTarget = deriveSelectedSessionRuntimeTarget({
+      selectedSessionIdentity: null,
+      selectedTask,
+      role: "build",
+      repoSettings,
+      isLoadingRepoSettings: false,
+    });
     const selectedTaskProjection = project({
-      selectedTask: createTaskCardFixture(),
+      selectedTask,
     });
 
-    expect(selectedTaskProjection.activityState).toBeNull();
-    expect(selectedTaskProjection.selectedModel).toBeNull();
-    expect(selectedTaskProjection.runtimeTarget).toEqual({
+    expect(runtimeTarget).toEqual({
       kind: "runtime",
       runtimeKind: "codex",
+    });
+    expect(selectedTaskProjection.activityState).toBeNull();
+    expect(selectedTaskProjection.selectedModel).toBeNull();
+  });
+
+  test("uses selected session runtime as the runtime target", () => {
+    const summary = createAgentSessionSummaryFixture({
+      externalSessionId: "session-4",
+      runtimeKind: "opencode",
+    });
+
+    expect(
+      deriveSelectedSessionRuntimeTarget({
+        selectedSessionIdentity: toAgentSessionIdentity(summary),
+        selectedTask: createTaskCardFixture(),
+        role: "build",
+        repoSettings,
+        isLoadingRepoSettings: false,
+      }),
+    ).toEqual({
+      kind: "runtime",
+      runtimeKind: "opencode",
     });
   });
 
   test("keeps sessionless selected tasks resolving while repository settings load", () => {
-    const selectedTaskProjection = project({
-      selectedTask: createTaskCardFixture(),
-      repoSettings: null,
-      isLoadingRepoSettings: true,
-    });
-
-    expect(selectedTaskProjection.runtimeTarget).toEqual({ kind: "resolving" });
+    expect(
+      deriveSelectedSessionRuntimeTarget({
+        selectedSessionIdentity: null,
+        selectedTask: createTaskCardFixture(),
+        role: "build",
+        repoSettings: null,
+        isLoadingRepoSettings: true,
+      }),
+    ).toEqual({ kind: "resolving" });
   });
 
   test("distinguishes sessionless selected tasks from inactive selections", () => {
@@ -175,9 +186,6 @@ describe("selected-session-view-projection", () => {
       reason: "sessionless",
     });
     expect(waitingSelectedTaskProjection.transcriptState).toEqual({ kind: "runtime_waiting" });
-    expect(inactiveProjection.runtimeTarget).toEqual({
-      kind: "inactive",
-    });
     expect(inactiveProjection.transcriptState).toEqual({ kind: "empty", reason: "inactive" });
   });
 
