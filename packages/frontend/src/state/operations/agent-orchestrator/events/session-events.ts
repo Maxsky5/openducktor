@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
+  closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
   type QueuedSessionEvent,
@@ -160,6 +161,14 @@ export const listenToAgentSessionEvents = async (
   let queuedEvents: QueuedSessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+  const clearQueuedEvents = (): void => {
+    queuedEvents = [];
+    if (batchTimeoutId !== null) {
+      clearTimeout(batchTimeoutId);
+      batchTimeoutId = null;
+    }
+  };
+
   const flushQueuedEvents = (): void => {
     if (batchTimeoutId !== null) {
       clearTimeout(batchTimeoutId);
@@ -171,7 +180,7 @@ export const listenToAgentSessionEvents = async (
     }
 
     if (!isObservedSessionMounted(context)) {
-      queuedEvents = [];
+      clearQueuedEvents();
       return;
     }
 
@@ -209,13 +218,16 @@ export const listenToAgentSessionEvents = async (
 
   const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
     if (!isObservedSessionMounted(context)) {
-      queuedEvents = [];
+      clearQueuedEvents();
       return;
     }
 
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);
+      if (closesQueuedSessionEvents(event)) {
+        clearQueuedEvents();
+      }
       return;
     }
 

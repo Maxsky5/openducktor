@@ -15,6 +15,91 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
+  test("drops deferred stream events when an immediate idle event closes the turn", async () => {
+    const originalDateNow = Date.now;
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+    let unsubscribe: (() => void) | null = null;
+
+    try {
+      unsubscribe = await listenToAgentSessionEvents({
+        adapter,
+        repoPath: "/tmp/repo",
+        externalSessionId: "session-1",
+        sessionsRef,
+        updateSession,
+        eventBatchWindowMs: 0,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: async () => {},
+      });
+
+      const handleEvent = handlers[0];
+      if (!handleEvent) {
+        throw new Error("Expected session event handler to be registered");
+      }
+
+      Date.now = () => 1_000;
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Visible draft",
+          completed: false,
+        },
+      });
+
+      Date.now = () => 1_050;
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.050Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Stale deferred draft",
+          completed: false,
+        },
+      });
+
+      handleEvent({
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+      });
+
+      expect(getSession(sessionsRef).status).toBe("idle");
+      expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
+        "Visible draft",
+      ]);
+
+      Date.now = () => 2_000;
+      unsubscribe();
+      unsubscribe = null;
+
+      expect(getSession(sessionsRef).status).toBe("idle");
+      expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
+        "Visible draft",
+      ]);
+    } finally {
+      unsubscribe?.();
+      Date.now = originalDateNow;
+    }
+  });
+
   test("preserves explicit history load state when live transcript changes", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
