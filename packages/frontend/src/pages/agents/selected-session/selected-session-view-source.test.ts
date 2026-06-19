@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { deriveAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
@@ -12,7 +13,6 @@ import {
   createTaskCardFixture,
 } from "../agent-studio-test-utils";
 import {
-  deriveSelectedSessionTranscriptState,
   projectSelectedSessionViewSource,
   resolveSelectedSessionViewSource,
 } from "./selected-session-view-source";
@@ -50,6 +50,18 @@ const project = (source: ReturnType<typeof resolveSelectedSessionViewSource>) =>
     isLoadingRepoSettings: false,
   });
 
+const deriveTranscriptState = ({
+  source,
+  repoReadinessState,
+}: {
+  source: ReturnType<typeof resolveSelectedSessionViewSource>;
+  repoReadinessState: "checking" | "ready";
+}) =>
+  deriveAgentSessionTranscriptState({
+    source: project(source).transcriptSource,
+    repoReadinessState,
+  });
+
 describe("selected-session-view-source", () => {
   test("uses the loaded session as the selected-session source when available", () => {
     const session = createAgentSessionFixture({
@@ -78,7 +90,7 @@ describe("selected-session-view-source", () => {
     expect(projection.selectedModel).toBe(session.selectedModel);
     expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "opencode" });
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source,
         repoReadinessState: "ready",
       }),
@@ -118,7 +130,7 @@ describe("selected-session-view-source", () => {
     expect(projection.selectedModel).toBe(summary.selectedModel);
     expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "codex" });
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source,
         repoReadinessState: "ready",
       }),
@@ -178,13 +190,13 @@ describe("selected-session-view-source", () => {
     });
 
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source: selectedTaskSource,
         repoReadinessState: "ready",
       }),
     ).toEqual({ kind: "empty", reason: "sessionless" });
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source: selectedTaskSource,
         repoReadinessState: "checking",
       }),
@@ -193,7 +205,7 @@ describe("selected-session-view-source", () => {
       kind: "inactive",
     });
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source: inactiveSource,
         repoReadinessState: "ready",
       }),
@@ -210,13 +222,13 @@ describe("selected-session-view-source", () => {
     });
 
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source,
         repoReadinessState: "checking",
       }),
     ).toEqual({ kind: "runtime_waiting" });
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source,
         repoReadinessState: "ready",
       }),
@@ -237,7 +249,7 @@ describe("selected-session-view-source", () => {
     });
 
     expect(
-      deriveSelectedSessionTranscriptState({
+      deriveTranscriptState({
         source,
         repoReadinessState: "ready",
       }),

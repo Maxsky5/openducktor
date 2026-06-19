@@ -4,15 +4,13 @@ import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-act
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
   inactiveRepoRuntimeReadinessTarget,
-  type RepoRuntimeReadinessState,
   type RepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
   resolvingRepoRuntimeReadinessTarget,
 } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
-  type AgentSessionTranscriptState,
-  deriveAgentSessionTranscriptState,
+  type AgentSessionTranscriptSource,
   deriveLoadedAgentSessionTranscriptSource,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -42,6 +40,7 @@ export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
   runtimeTarget: RepoRuntimeReadinessTarget;
+  transcriptSource: AgentSessionTranscriptSource;
 };
 
 export const resolveSelectedSessionViewSource = ({
@@ -100,6 +99,7 @@ export const projectSelectedSessionViewSource = ({
       activityState: getAgentSessionActivityStateFromSession(source.session),
       selectedModel: source.session.selectedModel,
       runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
+      transcriptSource: deriveLoadedAgentSessionTranscriptSource(source.session),
     };
   }
 
@@ -108,6 +108,10 @@ export const projectSelectedSessionViewSource = ({
       activityState: source.summary?.activityState ?? null,
       selectedModel: source.summary?.selectedModel ?? null,
       runtimeTarget: repoRuntimeReadinessTargetForRuntime(source.identity.runtimeKind),
+      transcriptSource:
+        source.readModelLoadState.kind === "failed"
+          ? { kind: "failed", message: source.readModelLoadState.message }
+          : { kind: "runtime_gated_loading", reason: "preparing" },
     };
   }
 
@@ -120,6 +124,12 @@ export const projectSelectedSessionViewSource = ({
         : repoRuntimeReadinessTargetForRuntime(
             resolveConfiguredAgentRuntimeKind(repoSettings, role),
           ),
+      transcriptSource:
+        source.readModelLoadState.kind === "failed"
+          ? { kind: "failed", message: source.readModelLoadState.message }
+          : source.readModelLoadState.kind === "loading"
+            ? { kind: "runtime_gated_loading", reason: "preparing" }
+            : { kind: "runtime_gated_empty", reason: "sessionless" },
     };
   }
 
@@ -127,46 +137,6 @@ export const projectSelectedSessionViewSource = ({
     activityState: null,
     selectedModel: null,
     runtimeTarget: inactiveRepoRuntimeReadinessTarget,
+    transcriptSource: { kind: "empty", reason: "inactive" },
   };
-};
-
-export const deriveSelectedSessionTranscriptState = ({
-  source,
-  repoReadinessState,
-}: {
-  source: SelectedSessionViewSource;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  if (source.kind === "loaded_session") {
-    return deriveAgentSessionTranscriptState({
-      source: deriveLoadedAgentSessionTranscriptSource(source.session),
-      repoReadinessState,
-    });
-  }
-
-  if (source.kind === "inactive") {
-    return deriveAgentSessionTranscriptState({
-      source: { kind: "empty", reason: "inactive" },
-      repoReadinessState,
-    });
-  }
-
-  if (source.readModelLoadState.kind === "failed") {
-    return deriveAgentSessionTranscriptState({
-      source: { kind: "failed", message: source.readModelLoadState.message },
-      repoReadinessState,
-    });
-  }
-
-  if (source.kind === "selected_session" || source.readModelLoadState.kind === "loading") {
-    return deriveAgentSessionTranscriptState({
-      source: { kind: "runtime_gated_loading", reason: "preparing" },
-      repoReadinessState,
-    });
-  }
-
-  return deriveAgentSessionTranscriptState({
-    source: { kind: "runtime_gated_empty", reason: "sessionless" },
-    repoReadinessState,
-  });
 };

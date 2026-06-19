@@ -16,6 +16,7 @@ import {
   useChecksState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
+import { deriveAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -24,7 +25,6 @@ import {
 } from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
-  deriveSelectedSessionTranscriptState,
   projectSelectedSessionViewSource,
   resolveSelectedSessionViewSource,
 } from "./selected-session-view-source";
@@ -147,11 +147,11 @@ export function useAgentStudioSelectedSessionView({
       : firstLaunchAction(selection.role);
 
   const transcriptState = useMemo(() => {
-    return deriveSelectedSessionTranscriptState({
-      source: selectedSessionViewSource,
+    return deriveAgentSessionTranscriptState({
+      source: selectedSessionViewProjection.transcriptSource,
       repoReadinessState,
     });
-  }, [repoReadinessState, selectedSessionViewSource]);
+  }, [repoReadinessState, selectedSessionViewProjection.transcriptSource]);
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,

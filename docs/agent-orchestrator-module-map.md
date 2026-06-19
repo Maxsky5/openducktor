@@ -368,12 +368,14 @@ Owns:
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
 
-Invariant: `selected-session-view-source.ts` owns selected-session display state
-derived from the selected source, runtime readiness, and history load state.
-History loading policy and runtime-data query gating live in their owner
-modules, not in the transcript state model. Page route/task switching is
-orchestration state and must not be stored in the transcript state model. Do not
-mirror runtime readiness on it.
+Invariant: `selected-session-view-source.ts` owns selected-session source
+projection. It walks the selected source once and returns selected activity,
+selected model, runtime readiness target, and transcript source. Runtime
+readiness-to-display projection stays in the transcript-state module. History
+loading policy and runtime-data query gating live in their owner modules, not in
+the transcript state model. Page route/task switching is orchestration state and
+must not be stored in the transcript state model. Do not mirror runtime
+readiness on it.
 Readonly transcript surfaces pass exactly one transcript source into the
 transcript-state owner: visible transcript, history read, or empty reason. They
 must not pass parallel visibility/history booleans, synthesize session-shaped
@@ -416,7 +418,7 @@ view may expose that display fallback only as `selectedSessionModel`; do not wra
 it in a session-shaped selected-view projection.
 Selected-session view-source receives exactly one selected source: inactive,
 selected task, selected session, or loaded session. Runtime readiness target,
-transcript state, selected activity, and selected model all derive from that one
+transcript source, selected activity, and selected model all derive from that one
 source. Do not pass parallel task, identity, and session facts through separate
 boundaries and make them infer the source again.
 Outside those boundaries, selected-session existence is the selected session
@@ -434,7 +436,7 @@ runtime/check contexts directly when deriving `runtimeReadiness` and
 `sessionRuntimeData`.
 `selected-session-view-source.ts` owns the selected-session source projection:
 loaded session, selected session, selected task, or inactive. Runtime target,
-transcript state, selected activity, and selected model must derive from that one
+transcript source, selected activity, and selected model must derive from that one
 source instead of rebuilding the same branch ladder in the hook.
 `selected-session-context.ts` exposes transcript state as selected-session state,
 not as runtime state. Runtime context contains runtime definitions, readiness,
@@ -444,8 +446,8 @@ session messages and `historyLoadState` only; do not pass transcript loading
 state through the shell to suppress historical tool completions.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
-loading and error fields; selected-session view-source is the only place that
-interprets read-model load state against runtime readiness and route selection.
+loading and error fields; selected-session view-source is the only selected
+session layer that interprets read-model load state into a transcript source.
 Expose that value only through `AgentSessionReadModelStateContext`; do not put it
 back on aggregate agent state or operations values.
 `useAgentOrchestratorOperations` returns explicit owned buckets only:
@@ -456,7 +458,7 @@ Do not reintroduce `useAgentState` or `AgentStateContextValue`; consumers must
 read sessions and operations through the dedicated hooks/contexts.
 Page shell, route, and selection-controller modules must not accept or forward
 `sessionReadModelLoadState`; the selected-session view owner reads it directly
-from the context when deriving transcript state.
+from the context when deriving transcript source.
 The exposed read-model load state must be current for the active repository and
 the current read-model inputs; while either input is not ready, expose a loading
 state instead of an empty/ready state.
