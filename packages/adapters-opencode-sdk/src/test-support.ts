@@ -60,8 +60,6 @@ export class OpencodeSdkAdapter extends BaseOpencodeSdkAdapter {
   constructor(options: ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0] = {}) {
     super({
       repoRuntimeResolver: {
-        ensureRepoRuntime: async ({ repoPath, runtimeKind }) =>
-          createDefaultRuntimeSummary(repoPath, runtimeKind),
         requireRepoRuntime: async ({ repoPath, runtimeKind }) =>
           createDefaultRuntimeSummary(repoPath, runtimeKind),
       },

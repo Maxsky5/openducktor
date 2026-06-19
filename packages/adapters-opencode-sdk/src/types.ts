@@ -95,7 +95,6 @@ export type ClientFactory = (input: {
 }) => OpencodeClient;
 
 export type RepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 

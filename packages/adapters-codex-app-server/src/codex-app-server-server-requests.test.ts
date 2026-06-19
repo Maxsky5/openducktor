@@ -16,7 +16,7 @@ describe("handleCodexServerRequest", () => {
       },
       systemPrompt: "Use the repo rules.",
       role: null,
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       repoPath: "/repo",
       threadId: "thread-unknown-role",
       workingDirectory: "/repo",
@@ -49,7 +49,7 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(false);
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       29,
       expect.objectContaining({
         approved: false,
@@ -78,7 +78,7 @@ describe("handleCodexServerRequest", () => {
       },
       systemPrompt: "Use the repo rules.",
       role: null,
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       repoPath: "/repo",
       threadId: "thread-unknown-role",
       workingDirectory: "/repo",

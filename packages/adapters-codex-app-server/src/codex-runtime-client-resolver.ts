@@ -50,7 +50,6 @@ export class CodexRuntimeClientResolver {
   async resolve(
     input: RuntimeClientInput,
     action: string,
-    options: { requireLive?: boolean } = {},
   ): Promise<{
     runtimeId: string;
     client: CodexAppServerClient;
@@ -70,9 +69,7 @@ export class CodexRuntimeClientResolver {
       repoPath: requestedRuntimeRef.repoPath,
       runtimeKind: requestedRuntimeRef.runtimeKind,
     };
-    const runtime = options.requireLive
-      ? await resolver.requireRepoRuntime(runtimeRef)
-      : await resolver.ensureRepoRuntime(runtimeRef);
+    const runtime = await resolver.requireRepoRuntime(runtimeRef);
 
     const { runtimeId } = resolveCodexRuntimeClientInput(
       runtime,

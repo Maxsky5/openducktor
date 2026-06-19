@@ -58,7 +58,6 @@ export type CodexAppServerStreamEvent = {
 };
 
 export type CodexRepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 

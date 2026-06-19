@@ -25,7 +25,7 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
 });
 
 export const codexSessionRef = (
-  externalSessionId = "thread/start-runtime-ensure",
+  externalSessionId = "thread/start-runtime-live",
 ): AgentSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
@@ -34,7 +34,7 @@ export const codexSessionRef = (
 });
 
 export const codexSessionRuntimeRef = (
-  externalSessionId = "thread/start-runtime-ensure",
+  externalSessionId = "thread/start-runtime-live",
   overrides: Partial<AgentSessionRuntimeRef> = {},
 ): AgentSessionRuntimeRef => ({
   externalSessionId,
@@ -315,7 +315,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         return {
           data: [
             {
-              id: "thread/start-runtime-ensure",
+              id: "thread/start-runtime-live",
               cwd: "/repo",
               createdAt: 1_778_112_000,
               preview: "Live Codex session",
@@ -399,7 +399,6 @@ export const createAdapterWithTransport = (
 ) =>
   new CodexAppServerAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
@@ -423,12 +422,6 @@ export const createHarness = (
     transports.set(runtimeId, transport);
     return transport;
   });
-  const ensureRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
-    ...makeRuntimeSummary("runtime-ensure"),
-    repoPath,
-    kind: runtimeKind,
-    runtimeId: "runtime-ensure",
-  }));
   const requireRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
     ...makeRuntimeSummary("runtime-live"),
     repoPath,
@@ -441,7 +434,6 @@ export const createHarness = (
 
   const adapter = new CodexAppServerAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime,
       requireRepoRuntime,
     },
     transportFactory,
@@ -455,7 +447,6 @@ export const createHarness = (
     adapter,
     transports,
     transportFactory,
-    ensureRepoRuntime,
     requireRepoRuntime,
     drainServerRequests,
     drainNotifications,

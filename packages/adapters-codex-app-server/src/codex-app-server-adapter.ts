@@ -127,13 +127,7 @@ export class CodexAppServerAdapter
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(
-      input,
-      "list available models",
-      {
-        requireLive: true,
-      },
-    );
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "list available models");
     return toCatalog(await this.models.list(client, runtimeId));
   }
 
@@ -169,9 +163,7 @@ export class CodexAppServerAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
 
@@ -192,9 +184,7 @@ export class CodexAppServerAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
 
@@ -250,9 +240,7 @@ export class CodexAppServerAdapter
   }
 
   async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
-    const { client } = await this.runtimeClients.resolve(input, "list available skills", {
-      requireLive: true,
-    });
+    const { client } = await this.runtimeClients.resolve(input, "list available skills");
     return toCodexSkillCatalog(
       await client.skillsList({
         cwd: input.workingDirectory,
@@ -262,9 +250,7 @@ export class CodexAppServerAdapter
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {
-    const { client } = await this.runtimeClients.resolve(input, "search files", {
-      requireLive: true,
-    });
+    const { client } = await this.runtimeClients.resolve(input, "search files");
     return searchCodexFiles(client, {
       query: input.query,
       workingDirectory: input.workingDirectory,
@@ -336,9 +322,7 @@ export class CodexAppServerAdapter
   private async ensureSessionState(
     input: AgentSessionRef | AgentSessionRuntimeRef,
   ): Promise<AgentSessionSummary> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
     this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? (input.model ?? undefined) : undefined;
     if (model) {

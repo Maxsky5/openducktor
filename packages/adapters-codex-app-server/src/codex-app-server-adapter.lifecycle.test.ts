@@ -37,8 +37,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(adapter.listRuntimeDefinitions()).toEqual([adapter.getRuntimeDefinition()]);
   });
 
-  test("starts a session through the ensured runtime id", async () => {
-    const { adapter, transports, ensureRepoRuntime, requireRepoRuntime } = createHarness();
+  test("starts a session through the live runtime id", async () => {
+    const { adapter, transports, requireRepoRuntime } = createHarness();
 
     const summary = await adapter.startSession({
       repoPath: "/repo",
@@ -50,19 +50,18 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    expect(summary.externalSessionId).toBe("thread/start-runtime-ensure");
+    expect(summary.externalSessionId).toBe("thread/start-runtime-live");
     expect(summary.runtimeKind).toBe("codex");
     expect(summary.workingDirectory).toBe("/repo");
     expect(summary.title).toBe("BUILD task-1");
-    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
-    expect(transports.has("runtime-ensure")).toBe(true);
-    expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(transports.has("runtime-live")).toBe(true);
+    expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
       "thread/name/set",
     ]);
-    expect(transports.get("runtime-ensure")?.calls[1]).toEqual({
+    expect(transports.get("runtime-live")?.calls[1]).toEqual({
       method: "thread/start",
       params: {
         cwd: "/repo",
@@ -71,17 +70,17 @@ describe("CodexAppServerAdapter lifecycle", () => {
         effort: "medium",
       },
     });
-    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+    expect(transports.get("runtime-live")?.calls[2]).toEqual({
       method: "thread/name/set",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         name: "BUILD task-1",
       },
     });
   });
 
   test("keeps started sessions addressable when thread naming fails", async () => {
-    const transport = new NameFailingTransport("runtime-ensure", false);
+    const transport = new NameFailingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
 
     await expect(
@@ -96,7 +95,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     ).rejects.toThrow("name failed");
 
-    expect(localSessions(adapter).has("thread/start-runtime-ensure")).toBe(true);
+    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
     expect(transport.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
@@ -118,23 +117,22 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
     await adapter.sendUserMessage(
       codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
         role: "spec",
         parts: [{ kind: "text", text: "Continue" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     );
-    const transport = transports.get("runtime-ensure");
+    const transport = transports.get("runtime-live");
     expect(transport?.calls.filter((call) => call.method === "model/list")).toHaveLength(1);
   });
 
   test("lists models through the required live runtime id", async () => {
-    const { adapter, transports, ensureRepoRuntime, requireRepoRuntime } = createHarness();
+    const { adapter, transports, requireRepoRuntime } = createHarness();
 
     const catalog = await adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" });
 
     expect(catalog.runtime?.kind).toBe("codex");
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
@@ -198,7 +196,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
-  test("sends user parts through turn/start on the ensured runtime id", async () => {
+  test("sends user parts through turn/start on the live runtime id", async () => {
     const { adapter, transports } = createHarness();
 
     await adapter.startSession({
@@ -213,23 +211,23 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
     await adapter.sendUserMessage(
       codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
         role: "spec",
         parts: [{ kind: "text", text: "Hello Codex" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     );
 
-    expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
+    expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
       "thread/name/set",
       "turn/start",
     ]);
-    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         input: [{ type: "text", text: "Hello Codex" }],
         model: "gpt-5",
         effort: "medium",
@@ -251,22 +249,22 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     adapter.updateSessionModel({
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
       model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
     });
 
     await adapter.sendUserMessage(
       codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
         role: "spec",
         parts: [{ kind: "text", text: "Use deeper reasoning" }],
       }),
     );
 
-    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         input: [{ type: "text", text: "Use deeper reasoning" }],
         model: "gpt-5",
         effort: "high",
@@ -277,7 +275,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
     });
     const assistantMessage = history.find(
       (message) => message.role === "assistant" && message.messageId === "msg-1",
@@ -289,8 +287,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
-  test("starts a Codex repo runtime when hydrating a saved session", async () => {
-    const { adapter, ensureRepoRuntime, requireRepoRuntime, transports } = createHarness();
+  test("hydrates a saved session through the live runtime id", async () => {
+    const { adapter, requireRepoRuntime, transports } = createHarness();
 
     await expect(
       adapter.loadSessionHistory({
@@ -330,9 +328,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       },
     ]);
 
-    expect(ensureRepoRuntime).toHaveBeenCalledTimes(2);
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
-    expect(transports.has("runtime-ensure")).toBe(true);
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
+    expect(transports.has("runtime-live")).toBe(true);
   });
 
   test("allows event subscription for a known session", async () => {
@@ -349,7 +346,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     const unsubscribe = await adapter.subscribeEvents(
-      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      codexSessionRuntimeRef("thread/start-runtime-live"),
       () => {},
     );
 
@@ -417,7 +414,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("fails clearly when a live runtime is missing", async () => {
     const adapter = new CodexAppServerAdapter({
       repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
         requireRepoRuntime: async () => {
           throw new Error("No live repo runtime found for repo '/repo' and runtime 'codex'.");
         },
@@ -433,14 +429,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("starts a session in the requested build worktree through the repo runtime", async () => {
-    const transport = new RecordingTransport("runtime-ensure", false);
+    const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
       repoRuntimeResolver: {
-        ensureRepoRuntime: async () => ({
-          ...makeRuntimeSummary("runtime-ensure"),
+        requireRepoRuntime: async () => ({
+          ...makeRuntimeSummary("runtime-live"),
           workingDirectory: "/repo",
         }),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
       },
       transportFactory: () => transport,
       drainServerRequests: async () => [],
@@ -457,9 +452,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
-    ).resolves.toEqual(
-      expect.objectContaining({ externalSessionId: "thread/start-runtime-ensure" }),
-    );
+    ).resolves.toEqual(expect.objectContaining({ externalSessionId: "thread/start-runtime-live" }));
 
     expect(transport.calls[1]).toEqual({
       method: "thread/start",
@@ -473,7 +466,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transport.calls[2]).toEqual({
       method: "thread/name/set",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         name: "BUILD task-1",
       },
     });

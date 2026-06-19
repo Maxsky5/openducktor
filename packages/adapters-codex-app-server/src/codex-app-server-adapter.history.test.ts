@@ -20,7 +20,7 @@ describe("CodexAppServerAdapter history loading", () => {
       {
         method: "thread/tokenUsage/updated",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-1",
           tokenUsage: {
             total: { totalTokens: 42_000 },
@@ -35,12 +35,12 @@ describe("CodexAppServerAdapter history loading", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
     });
 
     expect(history).toEqual([
       {
-        messageId: "codex-system-prompt:thread/start-runtime-ensure",
+        messageId: "codex-system-prompt:thread/start-runtime-live",
         role: "system",
         timestamp: "2026-05-07T00:00:00.000Z",
         text: "System prompt:\n\nUse the repo rules.",
@@ -202,14 +202,14 @@ describe("CodexAppServerAdapter history loading", () => {
       }),
     ]);
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/turns/list"),
     ).toBe(true);
     await expect(
       adapter.loadSessionDiff({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toEqual([
       {
@@ -239,7 +239,7 @@ describe("CodexAppServerAdapter history loading", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       },
       () => {},
     );
@@ -248,11 +248,11 @@ describe("CodexAppServerAdapter history loading", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
     });
 
     expect(history[0]).toEqual({
-      messageId: "codex-system-prompt:thread/start-runtime-ensure",
+      messageId: "codex-system-prompt:thread/start-runtime-live",
       role: "system",
       timestamp: "2026-05-07T00:00:00.000Z",
       text: "System prompt:\n\nUse the repo rules.",
@@ -507,13 +507,13 @@ describe("CodexAppServerAdapter history loading", () => {
     });
 
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/resume"),
     ).toBe(false);
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/read"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/read"),
     ).toBe(true);
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/turns/list"),
     ).toBe(true);
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({

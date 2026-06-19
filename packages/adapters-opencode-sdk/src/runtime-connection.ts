@@ -20,7 +20,6 @@ export type ResolveOpencodeRuntimeClientInputRequest = {
   repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
   input: OpencodeRuntimeResolutionInput;
   action: string;
-  requireLive?: boolean;
 };
 
 const requireOpencodeRuntimeEndpoint = (
@@ -70,7 +69,6 @@ export const resolveOpencodeRuntimeClientInput = async ({
   repoRuntimeResolver,
   input,
   action,
-  requireLive = false,
 }: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
   if (!repoRuntimeResolver) {
     throw new Error(
@@ -79,9 +77,7 @@ export const resolveOpencodeRuntimeClientInput = async ({
   }
 
   const runtimeRef = requireRepoRuntimeRef(input, action);
-  const runtime = requireLive
-    ? await repoRuntimeResolver.requireRepoRuntime(runtimeRef)
-    : await repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
+  const runtime = await repoRuntimeResolver.requireRepoRuntime(runtimeRef);
 
   return {
     ...toOpencodeRuntimeClientInput({

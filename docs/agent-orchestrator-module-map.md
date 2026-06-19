@@ -842,8 +842,8 @@ unlisted session ref whose observer state can be cleared.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
 6. Live sessions are observed by route ref. The session observer asks the runtime
-   adapter to subscribe; the adapter owns any runtime-side state preparation
-   needed before events can flow.
+   adapter to subscribe; the adapter requires an already-live repo runtime route
+   and may prepare only session-local adapter state before events can flow.
 7. Initial history is loaded from materialized session state for requested
    sessions and live sessions whose history has not been requested. Each history
    load receives transient runtime prompt context through the shared history

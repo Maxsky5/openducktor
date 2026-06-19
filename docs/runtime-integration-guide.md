@@ -78,7 +78,7 @@ It is live runtime-instance metadata only:
 
 `runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
 
-The host keeps this payload at runtime-registry and adapter boundaries. Higher-level orchestration must carry durable request coordinates instead: `runtimeKind`, repository path, working directory, and session id when a session exists. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind` and the build worktree `workingDirectory` at that boundary. The live route belongs to the running runtime instance and is resolved again through the runtime registry when adapter operations need it.
+The host keeps this payload at runtime-registry and adapter boundaries. Higher-level orchestration must carry durable request coordinates instead: `runtimeKind`, repository path, working directory, and session id when a session exists. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind` and the build worktree `workingDirectory` at that boundary. The live route belongs to the running runtime instance and is resolved again through the runtime registry when adapter operations need it. Runtime adapters require that live route; runtime startup stays in `runtimeEnsure`, `repoRuntimeHealth`, or build startup orchestration.
 
 ### `RuntimeRoute`
 

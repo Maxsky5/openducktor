@@ -89,9 +89,6 @@ export const listCodexSessionRuntimeSnapshots = async (
   const { client, runtimeId } = await deps.runtimeClients.resolve(
     input,
     "list session runtime snapshots",
-    {
-      requireLive: true,
-    },
   );
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
   const remoteSnapshots = [...inventory.threadsById.values()]
@@ -114,9 +111,6 @@ export const readCodexSessionRuntimeSnapshot = async (
   const { client, runtimeId } = await deps.runtimeClients.resolve(
     input,
     "read session runtime snapshot",
-    {
-      requireLive: true,
-    },
   );
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
   if (!inventory.loadedIds.has(input.externalSessionId)) {
