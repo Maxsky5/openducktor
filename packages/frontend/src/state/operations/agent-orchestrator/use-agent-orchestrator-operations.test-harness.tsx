@@ -95,12 +95,11 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
 type ActiveWorkspace = ReturnType<typeof createDefaultActiveWorkspace>;
 type OrchestratorHookState = ReturnType<typeof useAgentOrchestratorOperations>;
 
-const createChecksStateContextValue = (runtimeHealthByRuntime: RepoRuntimeHealthMap) => ({
+const createChecksStateContextValue = () => ({
   runtimeCheck: null,
   taskStoreCheck: null,
   runtimeCheckFailureKind: null,
   taskStoreCheckFailureKind: null,
-  runtimeHealthByRuntime,
   isLoadingChecks: false,
   refreshChecks: async () => undefined,
 });
@@ -172,7 +171,7 @@ export const createHookHarness = (args: {
         { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },
         createElement(
           ChecksStateContext.Provider,
-          { value: createChecksStateContextValue(currentArgs.runtimeHealthByRuntime) },
+          { value: createChecksStateContextValue() },
           children,
         ),
       ),

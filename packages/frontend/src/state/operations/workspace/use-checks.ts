@@ -37,7 +37,6 @@ type UseChecksResult = {
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   activeTaskStoreCheck: TaskStoreCheck | null;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
@@ -237,7 +236,6 @@ export function useChecks({
     runtimeCheckFailureKind,
     activeTaskStoreCheck: rawTaskStoreCheck,
     taskStoreCheckFailureKind,
-    runtimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks: setIsManualLoadingChecks,
     refreshRuntimeCheck,

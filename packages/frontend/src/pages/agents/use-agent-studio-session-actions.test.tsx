@@ -22,10 +22,7 @@ import {
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import {
-  createRepoRuntimeHealthFixture,
-  createSettingsSnapshotFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -202,13 +199,6 @@ const QUEUED_RUNTIME_DESCRIPTOR = {
 
 const TEST_RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR];
 
-const createTestChecksStateContextValue = () =>
-  createChecksStateContextValue({
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
-    },
-  });
-
 const createTestRuntimeDefinitionsContextValue = () =>
   createRuntimeDefinitionsContextValue({
     runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
@@ -257,7 +247,7 @@ const createTestRuntimeDefinitionsContextValue = () =>
   });
 
 const createHookHarness = (initialProps: HookArgs) => {
-  const checksStateContextValue = createTestChecksStateContextValue();
+  const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -287,10 +277,7 @@ const createHookHarness = (initialProps: HookArgs) => {
         createElement(
           RepoRuntimeHealthContext.Provider,
           {
-            value: createRepoRuntimeHealthContextValue({
-              runtimeHealthByRuntime: checksStateContextValue.runtimeHealthByRuntime,
-              refreshRepoRuntimeHealth: async () => checksStateContextValue.runtimeHealthByRuntime,
-            }),
+            value: createRepoRuntimeHealthContextValue(),
           },
           createElement(
             ChecksStateContext.Provider,

@@ -185,9 +185,6 @@ export const createChecksStateContextValue = (
   taskStoreCheck: null,
   runtimeCheckFailureKind: null,
   taskStoreCheckFailureKind: null,
-  runtimeHealthByRuntime: {
-    opencode: createSharedRepoRuntimeHealthFixture(),
-  },
   isLoadingChecks: false,
   refreshChecks: async () => undefined,
   ...overrides,
@@ -259,24 +256,8 @@ export const createHookHarness = <Props, State>(
   const checksStateContextRef = options?.checksStateContextRef ?? {
     current: options?.checksStateContext ?? createChecksStateContextValue(),
   };
-  const ownsRepoRuntimeHealthContext =
-    !options?.repoRuntimeHealthContextRef && !options?.repoRuntimeHealthContext;
   const repoRuntimeHealthContextRef = options?.repoRuntimeHealthContextRef ?? {
     current: options?.repoRuntimeHealthContext ?? createRepoRuntimeHealthContextValue(),
-  };
-  const currentRepoRuntimeHealthContext = (): RepoRuntimeHealthContextValue => {
-    if (!ownsRepoRuntimeHealthContext) {
-      return repoRuntimeHealthContextRef.current;
-    }
-
-    return createRepoRuntimeHealthContextValue({
-      runtimeHealthByRuntime: checksStateContextRef.current.runtimeHealthByRuntime,
-      isLoadingRepoRuntimeHealth: checksStateContextRef.current.isLoadingChecks,
-      refreshRepoRuntimeHealth: async () => {
-        await checksStateContextRef.current.refreshChecks();
-        return checksStateContextRef.current.runtimeHealthByRuntime;
-      },
-    });
   };
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
@@ -301,7 +282,7 @@ export const createHookHarness = <Props, State>(
       renderQueryProvider(
         createElement(
           RepoRuntimeHealthContext.Provider,
-          { value: currentRepoRuntimeHealthContext() },
+          { value: repoRuntimeHealthContextRef.current },
           createElement(
             ChecksStateContext.Provider,
             { value: checksStateContextRef.current },

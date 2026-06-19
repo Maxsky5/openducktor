@@ -154,10 +154,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
         createElement(
           RepoRuntimeHealthContext.Provider,
           {
-            value: createRepoRuntimeHealthContextValue({
-              runtimeHealthByRuntime: checksStateContextValue.runtimeHealthByRuntime,
-              refreshRepoRuntimeHealth: async () => checksStateContextValue.runtimeHealthByRuntime,
-            }),
+            value: createRepoRuntimeHealthContextValue(),
           },
           createElement(
             ChecksStateContext.Provider,

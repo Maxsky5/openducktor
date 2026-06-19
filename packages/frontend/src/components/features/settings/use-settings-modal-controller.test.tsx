@@ -139,7 +139,6 @@ const createHookHarness = (
     taskStoreCheck: null,
     runtimeCheckFailureKind: null,
     taskStoreCheckFailureKind: null,
-    runtimeHealthByRuntime: {},
     isLoadingChecks: false,
     refreshChecks,
   } satisfies React.ComponentProps<typeof ChecksStateContext.Provider>["value"];

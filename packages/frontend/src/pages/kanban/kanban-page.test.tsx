@@ -325,9 +325,6 @@ const createChecksStateValue = (): ChecksStateContextValue => ({
   ),
   runtimeCheckFailureKind: null,
   taskStoreCheckFailureKind: null,
-  runtimeHealthByRuntime: {
-    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
-  },
   isLoadingChecks: false,
   refreshChecks: async () => {},
 });
@@ -481,9 +478,13 @@ const renderPage = async (
             <WorkspacePresenceContext.Provider value={createWorkspacePresenceValue()}>
               <RepoRuntimeHealthContext.Provider
                 value={{
-                  runtimeHealthByRuntime: checksStateValue.runtimeHealthByRuntime,
+                  runtimeHealthByRuntime: {
+                    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+                  },
                   isLoadingRepoRuntimeHealth: false,
-                  refreshRepoRuntimeHealth: async () => checksStateValue.runtimeHealthByRuntime,
+                  refreshRepoRuntimeHealth: async () => ({
+                    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+                  }),
                 }}
               >
                 <ChecksStateContext.Provider value={checksStateValue}>

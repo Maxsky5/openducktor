@@ -70,7 +70,6 @@ describe("app-state-context-values", () => {
       taskStoreCheck: null,
       runtimeCheckFailureKind: null,
       taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {},
       isLoadingChecks: false,
       refreshChecks: async () => {},
     };

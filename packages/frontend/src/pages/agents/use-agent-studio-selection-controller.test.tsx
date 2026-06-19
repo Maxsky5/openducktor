@@ -28,6 +28,7 @@ import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/sta
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
+  createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
@@ -63,6 +64,7 @@ type TestContextOverrides = {
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
   checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
+  repoRuntimeHealthContext?: Partial<ReturnType<typeof createRepoRuntimeHealthContextValue>>;
 };
 const emptyCatalog = {
   providers: [],
@@ -146,6 +148,9 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   const checksStateContextRef = {
     current: createChecksStateContextValue(contextOverrides.checksStateContext),
   };
+  const repoRuntimeHealthContextRef = {
+    current: createRepoRuntimeHealthContextValue(contextOverrides.repoRuntimeHealthContext),
+  };
   const agentOperationsValue = (): AgentOperationsContextValue => ({
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
@@ -178,6 +183,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     wrapper,
     runtimeDefinitionsContextRef,
     checksStateContextRef,
+    repoRuntimeHealthContextRef,
   });
 
   return {
@@ -192,6 +198,11 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
       if ("checksStateContext" in nextContextOverrides) {
         checksStateContextRef.current = createChecksStateContextValue(
           nextContextOverrides.checksStateContext,
+        );
+      }
+      if ("repoRuntimeHealthContext" in nextContextOverrides) {
+        repoRuntimeHealthContextRef.current = createRepoRuntimeHealthContextValue(
+          nextContextOverrides.repoRuntimeHealthContext,
         );
       }
       syncSessionLookup(nextProps.sessions);
@@ -355,7 +366,7 @@ describe("useAgentStudioSelectionController", () => {
       }),
       {
         sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture({
               status: "checking",
@@ -407,7 +418,7 @@ describe("useAgentStudioSelectionController", () => {
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
           availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         },
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture(),
             codex: createRepoRuntimeHealthFixture({
@@ -461,7 +472,7 @@ describe("useAgentStudioSelectionController", () => {
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
           availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         },
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture(),
             codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
@@ -508,7 +519,7 @@ describe("useAgentStudioSelectionController", () => {
         runtimeDefinitionsContext: {
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         },
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture({
               status: "checking",
@@ -555,7 +566,7 @@ describe("useAgentStudioSelectionController", () => {
         runtimeDefinitionsContext: {
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         },
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture({
               status: "not_started",
@@ -656,7 +667,7 @@ describe("useAgentStudioSelectionController", () => {
         runtimeDefinitionsContext: {
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         },
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture(),
             codex: createRepoRuntimeHealthFixture(),
@@ -802,7 +813,7 @@ describe("useAgentStudioSelectionController", () => {
       }),
       {
         loadSessionHistory,
-        checksStateContext: {
+        repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture({
               runtime: { status: "checking" },

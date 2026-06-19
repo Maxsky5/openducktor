@@ -8,6 +8,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createChecksStateContextValue,
   createDeferred,
+  createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -215,15 +216,17 @@ const createHookHarness = (
         availableRuntimeDefinitions: runtimeDefinitions,
       }),
   };
-  const checksStateContext =
-    options?.checksStateContext ??
-    createChecksStateContextValue({
+  const checksStateContext = options?.checksStateContext ?? createChecksStateContextValue();
+  const repoRuntimeHealthContext =
+    options?.repoRuntimeHealthContext ??
+    createRepoRuntimeHealthContextValue({
       runtimeHealthByRuntime: createReadyRuntimeHealthMap(runtimeDefinitions),
     });
   const harness = createSharedHookHarness(useSessionStartModalState, hookProps, {
     ...options,
     runtimeDefinitionsContextRef,
     checksStateContext,
+    repoRuntimeHealthContext,
   });
   return {
     ...harness,
@@ -298,8 +301,8 @@ const createExistingSessionWithModel = ({
 describe("useSessionStartModalState", () => {
   test("waits for runtime readiness before loading the modal catalog", async () => {
     const loadCatalog = mock(async () => CATALOG);
-    const checksStateContextRef = {
-      current: createChecksStateContextValue({
+    const repoRuntimeHealthContextRef = {
+      current: createRepoRuntimeHealthContextValue({
         runtimeHealthByRuntime: {
           opencode: createRepoRuntimeHealthFixture({
             status: "not_started",
@@ -315,7 +318,7 @@ describe("useSessionStartModalState", () => {
     const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
       loadCatalog,
     });
-    const harness = createHookHarness(props, { checksStateContextRef });
+    const harness = createHookHarness(props, { repoRuntimeHealthContextRef });
 
     await harness.mount();
 
@@ -334,7 +337,7 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).not.toHaveBeenCalled();
     expect(harness.getLatest().isCatalogLoading).toBe(true);
 
-    checksStateContextRef.current = createChecksStateContextValue({
+    repoRuntimeHealthContextRef.current = createRepoRuntimeHealthContextValue({
       runtimeHealthByRuntime: {
         opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
       },

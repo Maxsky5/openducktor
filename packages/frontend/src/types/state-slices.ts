@@ -108,7 +108,6 @@ export type ChecksStateContextValue = {
   taskStoreCheck: TaskStoreCheck | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
 };

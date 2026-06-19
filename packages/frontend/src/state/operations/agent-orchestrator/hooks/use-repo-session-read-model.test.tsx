@@ -102,7 +102,6 @@ const createHarnessState = () => {
             taskStoreCheck: null,
             runtimeCheckFailureKind: null,
             taskStoreCheckFailureKind: null,
-            runtimeHealthByRuntime,
             isLoadingChecks: false,
             refreshChecks: async () => undefined,
           }}

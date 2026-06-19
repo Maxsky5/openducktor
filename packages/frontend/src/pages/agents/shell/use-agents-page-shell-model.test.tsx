@@ -155,7 +155,6 @@ let workspaceState: Pick<
   branches: [],
 };
 let checksState = {
-  runtimeHealthByRuntime: {},
   isLoadingChecks: false,
   refreshChecks: async () => undefined,
 };
@@ -524,7 +523,6 @@ beforeEach(async () => {
     branches: [],
   };
   checksState = {
-    runtimeHealthByRuntime: {},
     isLoadingChecks: false,
     refreshChecks: async () => undefined,
   };

@@ -10,7 +10,10 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import {
+  useRepoRuntimeHealthContext,
+  useRuntimeAvailabilityContext,
+} from "@/state/app-state-contexts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
@@ -27,10 +30,10 @@ export function DiagnosticsPanel(): ReactElement {
     taskStoreCheck,
     runtimeCheckFailureKind,
     taskStoreCheckFailureKind,
-    runtimeHealthByRuntime,
     refreshChecks,
     isLoadingChecks,
   } = useChecksState();
+  const { runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
   const [isOpen, setOpen] = useState(false);
   const autoOpenedByRepoRef = useRef<Set<string> | null>(null);
   if (autoOpenedByRepoRef.current === null) {
