@@ -1,9 +1,10 @@
-import type {
-  AgentPendingApprovalRequest,
-  AgentPendingQuestionRequest,
-  AgentSessionRef,
-  AgentSessionRuntimeSnapshot,
-  ReadSessionRuntimeSnapshotInput,
+import {
+  type AgentPendingApprovalRequest,
+  type AgentPendingQuestionRequest,
+  type AgentSessionRef,
+  type AgentSessionRuntimeSnapshot,
+  classifyAgentSessionActivity,
+  type ReadSessionRuntimeSnapshotInput,
 } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
@@ -50,13 +51,11 @@ export const toRuntimeSnapshot = (
   pendingApprovals: AgentPendingApprovalRequest[],
   pendingQuestions: AgentPendingQuestionRequest[],
 ): AgentSessionRuntimeSnapshot => {
-  const liveStatus = session.liveStatus;
-  const classification =
-    pendingQuestions.length > 0
-      ? "waiting_for_question"
-      : pendingApprovals.length > 0
-        ? "waiting_for_permission"
-        : (liveStatus?.classification ?? "idle");
+  const classification = classifyAgentSessionActivity({
+    runtimeActivity: session.liveStatus?.classification ?? "idle",
+    pendingApprovals,
+    pendingQuestions,
+  });
   return {
     availability: "runtime",
     classification,

@@ -8,10 +8,7 @@ import type {
   AgentPendingQuestionRequest,
 } from "../types/agent-orchestrator";
 
-export type AgentSessionRuntimeActivity = Extract<
-  AgentSessionActivity,
-  "retrying" | "running" | "idle"
->;
+export type AgentSessionRuntimeActivity = AgentSessionActivity;
 
 export type AgentSessionActivityInput = {
   runtimeActivity: AgentSessionRuntimeActivity;

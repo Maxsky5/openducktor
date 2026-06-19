@@ -62,6 +62,17 @@ describe("agent-session-runtime-snapshot", () => {
     expect(agentSessionStatusFromActivity(classification)).toBe("idle");
   });
 
+  test("keeps runtime-reported waiting activity when no pending payload is present", () => {
+    const classification = classifyAgentSessionActivity({
+      runtimeActivity: "waiting_for_permission",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+
+    expect(classification).toBe("waiting_for_permission");
+    expect(agentSessionStatusFromActivity(classification)).toBe("idle");
+  });
+
   test("builds runtime snapshot source from a runtime snapshot source", () => {
     const snapshot = toAgentSessionRuntimeSnapshot({
       ref: {

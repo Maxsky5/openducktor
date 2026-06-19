@@ -48,6 +48,26 @@ describe("toRuntimeSnapshot", () => {
       title: "Codex",
     });
   });
+
+  test("keeps runtime-reported waiting activity behind the shared classifier", () => {
+    const session = createSession({ classification: "waiting_for_permission" });
+
+    expect(toRuntimeSnapshot(session, [], [])).toMatchObject({
+      availability: "runtime",
+      classification: "waiting_for_permission",
+    });
+  });
+
+  test("classifies pending questions before runtime-reported waiting activity", () => {
+    const session = createSession({ classification: "waiting_for_permission" });
+
+    expect(
+      toRuntimeSnapshot(session, [], [{ requestId: "question-1", questions: [] }]),
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "waiting_for_question",
+    });
+  });
 });
 
 describe("resolveCodexRuntimeSnapshotSource", () => {
