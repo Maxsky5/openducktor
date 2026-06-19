@@ -3,7 +3,7 @@ import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient, UseQueryResult } from "@tanstack/react-query";
 import { useQueries } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
@@ -17,7 +17,7 @@ import {
 } from "@/types/agent-session-read-model";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
-import { sessionRuntimeReadinessKey } from "../session-read-model/session-runtime-readiness";
+import { deriveSessionRuntimeReadiness } from "../session-read-model/session-runtime-readiness";
 import { toTaskSessionRecords } from "../session-read-model/task-session-records";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -114,24 +114,15 @@ export const useRepoSessionReadModel = ({
       ),
     );
   }, [taskSessionRecordSnapshot, taskSessionTargets]);
-  const runtimeReadinessKey = taskSessionRecords
-    ? sessionRuntimeReadinessKey({
+  const runtimeReadiness = taskSessionRecords
+    ? deriveSessionRuntimeReadiness({
         tasks: taskSessionRecords,
         runtimeHealthByRuntime,
       })
-    : "";
-  const readModelLoadInput = useMemo(
-    () =>
-      taskSessionRecords
-        ? {
-            taskSessionRecords,
-            runtimeReadinessKey,
-          }
-        : null,
-    [runtimeReadinessKey, taskSessionRecords],
-  );
-  const runtimeHealthByRuntimeRef = useRef(runtimeHealthByRuntime);
-  runtimeHealthByRuntimeRef.current = runtimeHealthByRuntime;
+    : null;
+  const runtimeReadinessKind = runtimeReadiness?.kind ?? null;
+  const runtimeReadinessMessage =
+    runtimeReadiness?.kind === "blocked" ? runtimeReadiness.message : "";
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -166,19 +157,23 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
-      if (!readModelLoadInput) {
+      if (taskSessionRecords === null || runtimeReadinessKind === null) {
         return;
       }
+      const runtimeReadiness =
+        runtimeReadinessKind === "blocked"
+          ? { kind: "blocked" as const, message: runtimeReadinessMessage }
+          : { kind: runtimeReadinessKind };
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
         const didLoadSessionReadModel = await loadRepoSessionReadModel({
           repoPath: workspaceRepoPath,
-          taskSessionRecords: readModelLoadInput.taskSessionRecords,
+          taskSessionRecords,
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
-          runtimeHealthByRuntime: runtimeHealthByRuntimeRef.current,
+          runtimeReadiness,
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -208,10 +203,12 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    readModelLoadInput,
+    runtimeReadinessKind,
+    runtimeReadinessMessage,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,
+    taskSessionRecords,
     taskSessionRecordSnapshot,
     workspaceRepoPath,
   ]);

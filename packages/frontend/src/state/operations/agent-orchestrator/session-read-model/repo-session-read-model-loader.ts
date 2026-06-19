@@ -1,10 +1,9 @@
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
-import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
+import type { SessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
@@ -18,7 +17,7 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection,
   observeAgentSession,
   clearSessionObservationState,
-  runtimeHealthByRuntime,
+  runtimeReadiness,
   isStaleRepoOperation,
 }: {
   repoPath: string;
@@ -27,16 +26,12 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  runtimeReadiness: SessionRuntimeReadiness;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {
   if (isStaleRepoOperation()) {
     return false;
   }
-  const runtimeReadiness = deriveSessionRuntimeReadiness({
-    tasks: taskSessionRecords,
-    runtimeHealthByRuntime,
-  });
   if (runtimeReadiness.kind === "waiting_for_runtime") {
     return false;
   }

@@ -1,15 +1,17 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { classifyRepoRuntimeHealth, describeRepoRuntimeStatus } from "@/lib/repo-runtime-health";
+import {
+  classifyRepoRuntimeHealth,
+  describeRepoRuntimeStatus,
+  type RepoRuntimeHealthReadiness,
+} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { toPersistedSessionIdentity } from "../support/persistence";
 import type { TaskSessionRecords } from "./task-session-records";
 
-type SessionRuntimeReadiness =
+export type SessionRuntimeReadiness =
   | { kind: "ready" }
   | { kind: "waiting_for_runtime" }
   | { kind: "blocked"; message: string };
-
-const READINESS_KEY_SEPARATOR = "\u001f";
 
 const collectRuntimeKinds = (tasks: TaskSessionRecords): RuntimeKind[] => {
   const runtimeKinds = new Set<RuntimeKind>();
@@ -19,34 +21,20 @@ const collectRuntimeKinds = (tasks: TaskSessionRecords): RuntimeKind[] => {
   return Array.from(runtimeKinds).sort();
 };
 
-const runtimeReadinessKeyPart = (
-  runtimeKind: string,
-  runtimeHealth: RepoRuntimeHealthMap[string],
-): string => {
-  switch (classifyRepoRuntimeHealth(runtimeHealth)) {
+const toSessionRuntimeReadinessKind = (
+  readiness: RepoRuntimeHealthReadiness,
+): "ready" | "waiting" | "blocked" => {
+  switch (readiness) {
     case "ready":
-      return `${runtimeKind}:ready`;
+      return "ready";
+    case "blocked":
+      return "blocked";
     case "unknown":
     case "startup_pending":
     case "checking":
-      return `${runtimeKind}:waiting`;
-    case "blocked":
-      return `${runtimeKind}:blocked`;
+      return "waiting";
   }
 };
-
-export const sessionRuntimeReadinessKey = ({
-  tasks,
-  runtimeHealthByRuntime,
-}: {
-  tasks: TaskSessionRecords;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-}): string =>
-  collectRuntimeKinds(tasks)
-    .map((runtimeKind) =>
-      runtimeReadinessKeyPart(runtimeKind, runtimeHealthByRuntime[runtimeKind] ?? null),
-    )
-    .join(READINESS_KEY_SEPARATOR);
 
 export const deriveSessionRuntimeReadiness = ({
   tasks,
@@ -57,12 +45,10 @@ export const deriveSessionRuntimeReadiness = ({
 }): SessionRuntimeReadiness => {
   for (const runtimeKind of collectRuntimeKinds(tasks)) {
     const runtimeHealth = runtimeHealthByRuntime[runtimeKind] ?? null;
-    switch (classifyRepoRuntimeHealth(runtimeHealth)) {
+    switch (toSessionRuntimeReadinessKind(classifyRepoRuntimeHealth(runtimeHealth))) {
       case "ready":
         continue;
-      case "unknown":
-      case "startup_pending":
-      case "checking":
+      case "waiting":
         return { kind: "waiting_for_runtime" };
       case "blocked":
         return {

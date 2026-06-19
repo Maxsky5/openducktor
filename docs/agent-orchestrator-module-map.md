@@ -376,23 +376,19 @@ Do not resolve live and persisted selections in separate branches.
 
 Invariant: `selected-session-view-projection.ts` owns selected-session
 projection. It walks the selected facts once and returns selected activity,
-selected model, runtime readiness target, and transcript source. Runtime
-readiness-to-display projection stays in the transcript-state module. History
+selected model, runtime readiness target, and final transcript state. Runtime
+readiness-to-display helpers stay in the transcript-state module. History
 loading policy and runtime-data query gating live in their owner modules, not in
 the transcript state model. Page route/task switching is orchestration state and
 must not be stored in the transcript state model. Do not mirror runtime
 readiness on it.
-Readonly transcript surfaces pass exactly one transcript source into the
-transcript-state owner: visible transcript, history read, or empty reason. They
-must not pass parallel visibility/history booleans, synthesize session-shaped
-history snapshots, or maintain a separate transcript loading state machine.
 Readonly transcript history is owned by
 `readonly-transcript/use-runtime-transcript-session-history.ts`. That hook
-chooses exactly one source: matching live session, runtime history read, or empty
-reason. It also owns the query enablement boundary because it has the complete
-facts: open state, target identity, repo path, live session, and runtime
-readiness. Do not recreate a separate source resolver or source-shaped state
-machine.
+chooses exactly one path: matching live session, runtime history read, or empty
+reason, and returns final transcript state for that path. It also owns the query
+enablement boundary because it has the complete facts: open state, target
+identity, repo path, live session, and runtime readiness. Do not recreate a
+separate source resolver or source-shaped state machine.
 Readonly transcript presentation state is derived in
 `readonly-transcript/runtime-transcript-surface-state.ts`; hooks must not inline
 empty/loading/error policy. Displayed-session working state stays with the hook
@@ -424,8 +420,8 @@ view may expose that display fallback only as `selectedSessionModel`; do not wra
 it in a session-shaped selected-view projection.
 Selected-session view projection receives selected facts once: inactive,
 selected task, selected session, or loaded session. Runtime readiness target,
-transcript source, selected activity, and selected model all derive there. Do
-not split that work into separate source-resolution and projection APIs.
+transcript state, selected activity, and selected model all derive there. Do not
+split that work into separate source-resolution and projection APIs.
 Outside those boundaries, selected-session existence is the selected session
 identity itself; pass `selectedSessionIdentity` and derive booleans locally only
 when a branch truly needs them. Likewise, pass `selectedSessionModel` instead of
@@ -441,7 +437,7 @@ runtime/check contexts directly when deriving `runtimeReadiness` and
 `sessionRuntimeData`.
 `selected-session-view-projection.ts` owns the selected-session projection:
 loaded session, selected session, selected task, or inactive. Runtime target,
-transcript source, selected activity, and selected model must derive there
+transcript state, selected activity, and selected model must derive there
 instead of rebuilding the same branch ladder in the hook.
 `selected-session-context.ts` exposes transcript state as selected-session state,
 not as runtime state. Runtime context contains runtime definitions, readiness,
@@ -452,7 +448,7 @@ state through the shell to suppress historical tool completions.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
 loading and error fields; selected-session view projection is the only selected
-session layer that interprets read-model load state into a transcript source.
+session layer that interprets read-model load state into transcript state.
 Expose that value only through `AgentSessionReadModelStateContext`; do not put it
 back on aggregate agent state or operations values.
 `useAgentOrchestratorOperations` returns explicit owned buckets only:
@@ -463,7 +459,7 @@ Do not reintroduce `useAgentState` or `AgentStateContextValue`; consumers must
 read sessions and operations through the dedicated hooks/contexts.
 Page shell, route, and selection-controller modules must not accept or forward
 `sessionReadModelLoadState`; the selected-session view owner reads it directly
-from the context when deriving transcript source.
+from the context when deriving transcript state.
 The exposed read-model load state must be current for the active repository and
 the current read-model inputs; while either input is not ready, expose a loading
 state instead of an empty/ready state.
@@ -479,11 +475,11 @@ records as the session existence source. Missing records remove non-starting
 local sessions for those tasks and report the removed refs to the observer owner.
 Only local `starting` sessions may remain without a visible record while session
 registration catches up.
-The transcript-state module owns the generic transcript-source projection:
-empty, runtime-gated empty, pending, failed, or visible. Selected-session and
-read-only transcript surfaces choose a source, then delegate runtime-waiting,
-loading, failure, and visible-state projection to that module. Do not add
-parallel selected-session or read-only transcript state machines.
+The transcript-state module owns the generic runtime-bound transcript helpers:
+runtime-bound empty, runtime-bound loading, loaded session, failed, and visible.
+Selected-session and read-only transcript surfaces return final transcript state
+through those helpers. Do not add parallel selected-session or read-only
+transcript state machines.
 
 Invariant: subagent waiting badges are derived from child session summaries.
 Selected-session state must not maintain parent-owned pending-input projections.

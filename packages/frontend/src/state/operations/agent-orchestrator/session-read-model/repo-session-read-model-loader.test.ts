@@ -16,6 +16,7 @@ import {
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { createSessionMessagesState } from "../support/messages";
 import { loadRepoSessionReadModel } from "./repo-session-read-model-loader";
+import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
 
 const record: AgentSessionRecord = {
@@ -80,7 +81,10 @@ const loadReadModel = async ({
     commitSessionCollection: collection.commitSessionCollection,
     observeAgentSession,
     clearSessionObservationState,
-    runtimeHealthByRuntime,
+    runtimeReadiness: deriveSessionRuntimeReadiness({
+      tasks: taskSessionRecords,
+      runtimeHealthByRuntime,
+    }),
     isStaleRepoOperation: () => false,
   });
 
