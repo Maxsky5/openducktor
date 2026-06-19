@@ -1,6 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
-import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildChecksStateValue } from "../app-state-context-values";
 import {
@@ -11,6 +10,7 @@ import {
   useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations/workspace/use-checks";
+import { buildChecksRuntimeHealthByRuntime } from "./checks-runtime-health";
 
 type ChecksStateProviderProps = PropsWithChildren<{
   checkRepoRuntimeHealth: (
@@ -24,7 +24,12 @@ export function ChecksStateProvider({
   children,
 }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { allRuntimeDefinitions, availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
+  const {
+    allRuntimeDefinitions,
+    availableRuntimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+  } = useRuntimeAvailabilityContext();
   const {
     runtimeCheck,
     runtimeCheckFailureKind,
@@ -44,18 +49,23 @@ export function ChecksStateProvider({
     runtimeDefinitions: availableRuntimeDefinitions,
     checkRepoRuntimeHealth,
   });
-  const runtimeHealthByRuntime = useMemo(() => {
-    const next = { ...activeRepoRuntimeHealthByRuntime };
-    const availableRuntimeKinds = new Set(
-      availableRuntimeDefinitions.map((definition) => definition.kind),
-    );
-    for (const definition of allRuntimeDefinitions) {
-      if (!availableRuntimeKinds.has(definition.kind)) {
-        next[definition.kind] = buildDisabledRuntimeHealth(definition);
-      }
-    }
-    return next;
-  }, [activeRepoRuntimeHealthByRuntime, allRuntimeDefinitions, availableRuntimeDefinitions]);
+  const runtimeHealthByRuntime = useMemo(
+    () =>
+      buildChecksRuntimeHealthByRuntime({
+        activeRuntimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
+        allRuntimeDefinitions,
+        availableRuntimeDefinitions,
+        isLoadingRuntimeDefinitions,
+        runtimeDefinitionsError,
+      }),
+    [
+      activeRepoRuntimeHealthByRuntime,
+      allRuntimeDefinitions,
+      availableRuntimeDefinitions,
+      isLoadingRuntimeDefinitions,
+      runtimeDefinitionsError,
+    ],
+  );
 
   const checksStateValue = useMemo(
     () =>

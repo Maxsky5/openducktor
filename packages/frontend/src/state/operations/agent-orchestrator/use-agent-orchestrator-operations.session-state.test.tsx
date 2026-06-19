@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./support/session-transcript-content";
 import {
   acceptedUserMessageForInput,
@@ -796,6 +797,9 @@ describe("use-agent-orchestrator-operations session state", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,
     });
@@ -874,6 +878,9 @@ describe("use-agent-orchestrator-operations session state", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
+      runtimeHealthByRuntime: {
+        codex: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,
     });

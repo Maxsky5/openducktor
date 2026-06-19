@@ -91,6 +91,20 @@ export const isRepoRuntimeStarting = (runtimeHealth: RepoRuntimeHealthCheck | nu
   );
 };
 
+export const isRepoRuntimeStartupPending = (
+  runtimeHealth: RepoRuntimeHealthCheck | null,
+): boolean => {
+  if (!runtimeHealth) {
+    return false;
+  }
+
+  if (runtimeHealth.status === "not_started") {
+    return true;
+  }
+
+  return runtimeHealth.runtime.status === "not_started" || isRepoRuntimeStarting(runtimeHealth);
+};
+
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {

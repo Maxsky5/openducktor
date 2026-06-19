@@ -14,6 +14,7 @@ import {
   getRepoRuntimeMcpActivity,
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
+  isRepoRuntimeStartupPending,
 } from "@/lib/repo-runtime-health";
 import {
   getRepoStoreCategoryLabel,
@@ -332,6 +333,10 @@ const buildMcpSectionErrors = (
   });
 };
 
+const isRuntimeHealthChecking = (runtimeHealth: RuntimeHealthState): boolean => {
+  return runtimeHealth?.status === "checking" || isRepoRuntimeStartupPending(runtimeHealth ?? null);
+};
+
 export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
@@ -365,11 +370,8 @@ export const buildDiagnosticsPanelModel = (
   const isRuntimeHealthPending = runtimeEntries.some(
     ({ runtimeHealth }) => runtimeHealth === undefined,
   );
-  const hasCheckingRuntimeHealth = runtimeEntries.some(
-    ({ runtimeHealth }) => runtimeHealth?.status === "checking",
-  );
-  const hasNotStartedRuntimeHealth = runtimeEntries.some(
-    ({ runtimeHealth }) => runtimeHealth?.status === "not_started",
+  const hasRuntimeHealthChecking = runtimeEntries.some(({ runtimeHealth }) =>
+    isRuntimeHealthChecking(runtimeHealth),
   );
 
   const criticalReasons: string[] = [];
@@ -382,7 +384,7 @@ export const buildDiagnosticsPanelModel = (
       criticalReasons.push("Runtime CLI checks failing");
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
-      if (runtimeHealth?.status === "error") {
+      if (runtimeHealth?.status === "error" && !isRepoRuntimeStartupPending(runtimeHealth)) {
         criticalReasons.push(
           describeRepoRuntimeStatus(definition.label, runtimeHealth) ??
             `${definition.label} runtime health has an issue.`,
@@ -406,8 +408,7 @@ export const buildDiagnosticsPanelModel = (
       runtimeCheck === null ||
       taskStoreCheck === null ||
       isRuntimeHealthPending ||
-      hasCheckingRuntimeHealth ||
-      hasNotStartedRuntimeHealth);
+      hasRuntimeHealthChecking);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",

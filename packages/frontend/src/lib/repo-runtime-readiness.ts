@@ -1,5 +1,9 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { describeRepoRuntimeStatus, isRepoRuntimeReady } from "@/lib/repo-runtime-health";
+import {
+  describeRepoRuntimeStatus,
+  isRepoRuntimeReady,
+  isRepoRuntimeStartupPending,
+} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 
 export type RepoRuntimeReadinessState = "ready" | "checking" | "blocked";
@@ -47,9 +51,6 @@ type DeriveRepoRuntimeReadinessArgs = {
   isLoadingChecks: boolean;
   runtimeTarget?: RepoRuntimeReadinessTarget;
 };
-
-const isRepoRuntimeAwaitingStartup = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean =>
-  runtimeHealth?.status === "not_started";
 
 const getBlockedRuntimeReason = (
   runtimeLabel: string,
@@ -140,7 +141,7 @@ export const deriveRepoRuntimeReadiness = ({
     ) ?? null;
   const awaitingStartupRuntimeDefinition =
     scopedRuntimeDefinitions.find((definition) =>
-      isRepoRuntimeAwaitingStartup(runtimeHealthByRuntime[definition.kind] ?? null),
+      isRepoRuntimeStartupPending(runtimeHealthByRuntime[definition.kind] ?? null),
     ) ?? null;
   const blockedRuntimeDefinition =
     scopedRuntimeDefinitions.find((definition) => {
@@ -149,7 +150,7 @@ export const deriveRepoRuntimeReadiness = ({
         runtimeHealth &&
           runtimeHealth.status !== "ready" &&
           runtimeHealth.status !== "checking" &&
-          !isRepoRuntimeAwaitingStartup(runtimeHealth),
+          !isRepoRuntimeStartupPending(runtimeHealth),
       );
     }) ?? null;
   const blockedRuntimeHealth = blockedRuntimeDefinition

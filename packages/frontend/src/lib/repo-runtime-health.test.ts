@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import { isRepoRuntimeStarting } from "./repo-runtime-health";
+import { isRepoRuntimeStarting, isRepoRuntimeStartupPending } from "./repo-runtime-health";
 
 describe("repo runtime health", () => {
   test("reports startup stages as runtime starting", () => {
@@ -46,19 +46,18 @@ describe("repo runtime health", () => {
   });
 
   test("does not report idle runtimes as starting just because MCP is waiting", () => {
-    expect(
-      isRepoRuntimeStarting(
-        createRepoRuntimeHealthFixture({
-          status: "not_started",
-          runtime: {
-            status: "not_started",
-            stage: "idle",
-          },
-          mcp: {
-            status: "waiting_for_runtime",
-          },
-        }),
-      ),
-    ).toBe(false);
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "not_started",
+      runtime: {
+        status: "not_started",
+        stage: "idle",
+      },
+      mcp: {
+        status: "waiting_for_runtime",
+      },
+    });
+
+    expect(isRepoRuntimeStarting(runtimeHealth)).toBe(false);
+    expect(isRepoRuntimeStartupPending(runtimeHealth)).toBe(true);
   });
 });

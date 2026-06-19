@@ -1,5 +1,9 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { describeRepoRuntimeStatus, isRepoRuntimeReady } from "@/lib/repo-runtime-health";
+import {
+  describeRepoRuntimeStatus,
+  isRepoRuntimeReady,
+  isRepoRuntimeStartupPending,
+} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { toPersistedSessionIdentity } from "../support/persistence";
 import { collectTaskSessionRecords, type TaskSessionRecords } from "./task-session-records";
@@ -29,11 +33,7 @@ export const deriveSessionRuntimeReadiness = ({
     if (isRepoRuntimeReady(runtimeHealth)) {
       continue;
     }
-    if (
-      !runtimeHealth ||
-      runtimeHealth.status === "checking" ||
-      runtimeHealth.status === "not_started"
-    ) {
+    if (!runtimeHealth || isRepoRuntimeStartupPending(runtimeHealth)) {
       return { kind: "waiting_for_runtime" };
     }
 

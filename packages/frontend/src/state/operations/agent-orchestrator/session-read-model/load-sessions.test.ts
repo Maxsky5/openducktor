@@ -337,6 +337,34 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession(record.externalSessionId)).toBeNull();
   });
 
+  test("uses runtime startup fields when health summary is stale before scanning snapshots", async () => {
+    let runtimeSnapshotReads = 0;
+    const harness = createLoaderHarness({
+      listSessionRuntimeSnapshots: async () => {
+        runtimeSnapshotReads += 1;
+        return [];
+      },
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({
+          status: "error",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            detail: "Runtime has not been started yet.",
+          },
+          mcp: {
+            status: "waiting_for_runtime",
+          },
+        }),
+      },
+    });
+
+    await harness.loadAgentSessions("task-1");
+
+    expect(runtimeSnapshotReads).toBe(0);
+    expect(harness.getSession(record.externalSessionId)).toBeNull();
+  });
+
   test("settles mounted live state without clearing transcript when runtime snapshot is missing during repo reloads", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({

@@ -138,13 +138,15 @@ describe("createCodexAppServerRuntimeAdapter", () => {
         }),
       ).resolves.toMatchObject({ runtime: { kind: "codex" } });
 
-      expect(runtimeEnsureCalls).toEqual([["/repo", "codex"]]);
-      expect(runtimeRequireCalls).toEqual([["/repo", "codex"]]);
+      expect(runtimeEnsureCalls).toEqual([]);
+      expect(runtimeRequireCalls).toEqual([
+        ["/repo", "codex"],
+        ["/repo", "codex"],
+      ]);
       expect(codexRequestCalls.map(([runtimeId, method]) => [runtimeId, method])).toEqual([
-        ["runtime-codex-ensure", "model/list"],
-        ["runtime-codex-ensure", "thread/start"],
-        ["runtime-codex-ensure", "thread/name/set"],
         ["runtime-codex-live", "model/list"],
+        ["runtime-codex-live", "thread/start"],
+        ["runtime-codex-live", "thread/name/set"],
       ]);
       expect(codexRequestCalls[2]?.[2]).toEqual({
         threadId: "thread-codex",
