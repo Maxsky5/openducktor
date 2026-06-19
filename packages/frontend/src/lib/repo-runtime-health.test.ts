@@ -4,6 +4,7 @@ import {
   classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
   getRepoRuntimeBadge,
+  isRepoRuntimeHealthPendingReadiness,
   isRepoRuntimeStarting,
   isRepoRuntimeStartupPending,
 } from "./repo-runtime-health";
@@ -86,6 +87,7 @@ describe("repo runtime health", () => {
       variant: "warning",
     });
     expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("startup_pending");
+    expect(isRepoRuntimeHealthPendingReadiness(runtimeHealth)).toBe(true);
     expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe(
       "OpenCode runtime is starting.",
     );

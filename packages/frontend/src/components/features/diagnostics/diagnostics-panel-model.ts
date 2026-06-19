@@ -14,6 +14,7 @@ import {
   getRepoRuntimeMcpActivity,
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
+  isRepoRuntimeHealthPendingReadiness,
 } from "@/lib/repo-runtime-health";
 import {
   getRepoStoreCategoryLabel,
@@ -333,11 +334,6 @@ const buildMcpSectionErrors = (
   });
 };
 
-const isRuntimeHealthChecking = (runtimeHealth: RuntimeHealthState): boolean => {
-  const readiness = classifyRepoRuntimeHealth(runtimeHealth);
-  return readiness === "startup_pending" || readiness === "checking";
-};
-
 export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
@@ -365,7 +361,7 @@ export const buildDiagnosticsPanelModel = (
     ({ runtimeHealth }) => runtimeHealth === undefined,
   );
   const hasRuntimeHealthChecking = runtimeEntries.some(({ runtimeHealth }) =>
-    isRuntimeHealthChecking(runtimeHealth),
+    isRepoRuntimeHealthPendingReadiness(runtimeHealth),
   );
   const cliToolsIssueDetail = getCliToolsCheckFailureDetail(runtimeCheck, null);
   const cliToolsFailureKind =

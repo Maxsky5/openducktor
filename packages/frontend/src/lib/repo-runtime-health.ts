@@ -134,6 +134,13 @@ export const classifyRepoRuntimeHealth = (
   return "blocked";
 };
 
+export const isRepoRuntimeHealthPendingReadiness = (
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined,
+): boolean => {
+  const readiness = classifyRepoRuntimeHealth(runtimeHealth);
+  return readiness === "startup_pending" || readiness === "checking";
+};
+
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {

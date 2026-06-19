@@ -52,14 +52,10 @@ type DeriveRepoRuntimeReadinessArgs = {
   runtimeTarget?: RepoRuntimeReadinessTarget;
 };
 
-const getBlockedRuntimeReason = (
-  runtimeLabel: string,
-  runtimeHealth: RepoRuntimeHealthCheck | null,
-): string | null => {
-  if (!runtimeHealth) {
-    return null;
-  }
-  return describeRepoRuntimeStatus(runtimeLabel, runtimeHealth);
+type RuntimeReadinessEntry = {
+  definition: RuntimeDescriptor;
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined;
+  readiness: RepoRuntimeHealthReadiness;
 };
 
 const findRuntimeDefinition = (
@@ -72,15 +68,27 @@ const findRuntimeDefinition = (
   return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
 };
 
-const findRuntimeDefinitionWithReadiness = (
+const toRuntimeReadinessEntries = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeHealthByRuntime: RepoRuntimeHealthMap,
+): RuntimeReadinessEntry[] =>
+  runtimeDefinitions.map((definition) => {
+    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+    return {
+      definition,
+      runtimeHealth,
+      readiness: classifyRepoRuntimeHealth(runtimeHealth),
+    };
+  });
+
+const findRuntimeEntryWithReadiness = (
+  runtimeEntries: RuntimeReadinessEntry[],
   readiness: RepoRuntimeHealthReadiness,
-): RuntimeDescriptor | null =>
-  runtimeDefinitions.find(
-    (definition) =>
-      classifyRepoRuntimeHealth(runtimeHealthByRuntime[definition.kind]) === readiness,
-  ) ?? null;
+): RuntimeReadinessEntry | null =>
+  runtimeEntries.find((entry) => entry.readiness === readiness) ?? null;
+
+const describeRuntimeEntry = (entry: RuntimeReadinessEntry): string | null =>
+  describeRepoRuntimeStatus(entry.definition.label, entry.runtimeHealth ?? null);
 
 const readyRepoRuntimeReadiness = (isLoadingChecks: boolean): RepoRuntimeReadinessSnapshot => ({
   state: "ready",
@@ -135,35 +143,21 @@ export const deriveRepoRuntimeReadiness = ({
     : runtimeKind
       ? []
       : runtimeDefinitions;
+  const scopedRuntimeEntries = toRuntimeReadinessEntries(
+    scopedRuntimeDefinitions,
+    runtimeHealthByRuntime,
+  );
   const isRuntimeHealthPending =
     hasActiveWorkspace &&
-    scopedRuntimeDefinitions.length > 0 &&
-    scopedRuntimeDefinitions.some(
-      (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
-    );
-  const healthyRuntimeDefinition = findRuntimeDefinitionWithReadiness(
-    scopedRuntimeDefinitions,
-    runtimeHealthByRuntime,
-    "ready",
-  );
-  const checkingRuntimeDefinition = findRuntimeDefinitionWithReadiness(
-    scopedRuntimeDefinitions,
-    runtimeHealthByRuntime,
-    "checking",
-  );
-  const awaitingStartupRuntimeDefinition = findRuntimeDefinitionWithReadiness(
-    scopedRuntimeDefinitions,
-    runtimeHealthByRuntime,
+    scopedRuntimeEntries.length > 0 &&
+    scopedRuntimeEntries.some((entry) => entry.runtimeHealth === undefined);
+  const healthyRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "ready");
+  const checkingRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "checking");
+  const awaitingStartupRuntime = findRuntimeEntryWithReadiness(
+    scopedRuntimeEntries,
     "startup_pending",
   );
-  const blockedRuntimeDefinition = findRuntimeDefinitionWithReadiness(
-    scopedRuntimeDefinitions,
-    runtimeHealthByRuntime,
-    "blocked",
-  );
-  const blockedRuntimeHealth = blockedRuntimeDefinition
-    ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
-    : null;
+  const blockedRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "blocked");
 
   if (runtimeDefinitionsError) {
     return blockedRepoRuntimeReadiness(runtimeDefinitionsError, isLoadingChecks);
@@ -180,31 +174,27 @@ export const deriveRepoRuntimeReadiness = ({
       isLoadingChecks,
     );
   }
-  if (healthyRuntimeDefinition) {
+  if (healthyRuntime) {
     return readyRepoRuntimeReadiness(isLoadingChecks);
   }
-  if (checkingRuntimeDefinition) {
+  if (checkingRuntime) {
     return checkingRepoRuntimeReadiness(
-      getBlockedRuntimeReason(
-        checkingRuntimeDefinition.label,
-        runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
-      ) ?? "Checking runtime health...",
+      describeRuntimeEntry(checkingRuntime) ?? "Checking runtime health...",
       isLoadingChecks,
     );
   }
-  if (awaitingStartupRuntimeDefinition) {
+  if (awaitingStartupRuntime) {
     return checkingRepoRuntimeReadiness(
-      `${awaitingStartupRuntimeDefinition.label} runtime is starting...`,
+      `${awaitingStartupRuntime.definition.label} runtime is starting...`,
       isLoadingChecks,
     );
   }
   if (isLoadingChecks || isRuntimeHealthPending) {
     return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
   }
-  if (blockedRuntimeDefinition) {
+  if (blockedRuntime) {
     return blockedRepoRuntimeReadiness(
-      getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
-        "No configured runtime is ready for agent chat.",
+      describeRuntimeEntry(blockedRuntime) ?? "No configured runtime is ready for agent chat.",
       isLoadingChecks,
     );
   }
