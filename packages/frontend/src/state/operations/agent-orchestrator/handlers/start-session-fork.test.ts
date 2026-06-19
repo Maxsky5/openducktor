@@ -3,7 +3,7 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   BUILD_SELECTION,
   createSessionsRef,
@@ -23,6 +23,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       sessionFixture({
         externalSessionId: "external-source-build",
         startedAt: "2026-02-22T08:10:00.000Z",
+        historyLoadState: "loaded",
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -204,10 +205,12 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         if (!sourceBuild) {
           throw new Error("Missing external-source-build session");
         }
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+        const loadedSourceBuild: AgentSessionState = {
           ...sourceBuild,
           historyLoadState: "loaded",
-        });
+        };
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, loadedSourceBuild);
+        return loadedSourceBuild;
       },
     });
 
@@ -271,6 +274,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       sessionFixture({
         externalSessionId: "external-source-build",
         startedAt: "2026-02-22T08:10:00.000Z",
+        historyLoadState: "loaded",
         selectedModel: BUILD_SELECTION,
       }),
     ]);
@@ -338,6 +342,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         externalSessionId: "external-source-build",
         startedAt: "2026-02-22T08:10:00.000Z",
         contextUsage: null,
+        historyLoadState: "loaded",
         selectedModel: BUILD_SELECTION,
       }),
     ]);
@@ -408,6 +413,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         externalSessionId: "external-source-build",
         startedAt: "2026-02-22T08:10:00.000Z",
         contextUsage: null,
+        historyLoadState: "loaded",
         selectedModel: BUILD_SELECTION,
       }),
     ]);

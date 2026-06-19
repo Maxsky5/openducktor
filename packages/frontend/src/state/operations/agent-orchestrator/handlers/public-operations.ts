@@ -10,7 +10,7 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSession } from "@/types/agent-session-start";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 
@@ -38,7 +38,7 @@ type SessionActions = {
 type CreatePublicOperationsArgs = {
   agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory">;
   sessionActions: SessionActions;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
 };
 
 const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {

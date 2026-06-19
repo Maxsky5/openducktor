@@ -26,7 +26,7 @@ const readSessionHistoryRef: {
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
   readSessionTodos: async () => [],
-  loadAgentSessionHistory: async () => undefined,
+  loadAgentSessionHistory: async () => null,
   startAgentSession: async () => ({
     externalSessionId: "session-started",
     runtimeKind: "opencode",

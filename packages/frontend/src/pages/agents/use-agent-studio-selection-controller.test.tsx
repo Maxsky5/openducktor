@@ -44,9 +44,9 @@ const sessionReadModelLoadStateRef: { current: AgentSessionReadModelLoadState } 
   current: unavailableAgentSessionReadModelLoadState,
 };
 const loadSessionHistoryRef: {
-  current: (session: AgentSessionIdentity) => Promise<void>;
+  current: AgentOperationsContextValue["loadAgentSessionHistory"];
 } = {
-  current: async () => undefined,
+  current: async () => null,
 };
 const readSessionTodosRef: {
   current: AgentOperationsContextValue["readSessionTodos"];
@@ -59,7 +59,7 @@ let sessionStore = createAgentSessionsStore(null);
 type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
-  loadSessionHistory?: (session: AgentSessionIdentity) => Promise<void>;
+  loadSessionHistory?: AgentOperationsContextValue["loadAgentSessionHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
   checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
@@ -133,7 +133,7 @@ const applyTestContextOverrides = (
   sessionReadModelLoadStateRef.current =
     contextOverrides.sessionReadModelLoadState ??
     defaultSessionReadModelLoadState(hookArgs.workspaceRepoPath);
-  loadSessionHistoryRef.current = contextOverrides.loadSessionHistory ?? (async () => undefined);
+  loadSessionHistoryRef.current = contextOverrides.loadSessionHistory ?? (async () => null);
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
 };
 
@@ -719,7 +719,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("loads selected session history through the session history state owner", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
     });
@@ -748,7 +748,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("does not load selected session history when live messages are already visible", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("session-live", [
@@ -782,7 +782,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("waits for runtime readiness before loading selected session history", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const task = createTaskCardFixture({
       id: "task-1",
       title: "task-1",

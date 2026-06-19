@@ -51,7 +51,7 @@ export const createSessionDependenciesFixture = (
     sessionStartGateRef: { current: createSessionStartGate() },
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
-    loadAgentSessionHistory: async () => {},
+    loadAgentSessionHistory: async () => null,
     persistSessionRecord: async () => {},
     observeAgentSession: async () => undefined,
     ...sessionOverrides,

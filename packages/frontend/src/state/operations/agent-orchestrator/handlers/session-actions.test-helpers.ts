@@ -141,7 +141,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     loadRepoPromptOverrides: async () => ({}),
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
-    loadAgentSessionHistory: async () => {},
+    loadAgentSessionHistory: async () => null,
     refreshTaskData: async () => {},
     persistSessionRecord: async () => {},
     stopAuthoritativeSession: async () => {},

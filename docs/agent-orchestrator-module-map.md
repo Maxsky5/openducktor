@@ -186,7 +186,7 @@ Files:
 
 Owns:
 
-- claiming, applying, failing, and releasing session history load state
+- marking, applying, failing, and resetting session history load state
 - resolving the selected-session history-load target from selected session,
   history state, and runtime readiness
 - building transient runtime prompt context through the shared prompt helper and
@@ -198,8 +198,9 @@ Owns:
 
 Invariant: history loading is explicit and singular. The selected-session
 history-load owner or a session action asks to load one concrete session route;
-this command owner claims, applies, fails, or releases that concrete load. The
-repo projection never bulk-loads transcripts.
+this command owner marks, applies, fails, or resets that concrete load and
+returns the loaded session to awaited callers. The repo projection never
+bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they

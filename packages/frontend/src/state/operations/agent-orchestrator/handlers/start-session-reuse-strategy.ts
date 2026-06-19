@@ -69,11 +69,10 @@ const loadSourceSessionWithHistory = async ({
     return loadedSession;
   }
 
-  await deps.session.loadAgentSessionHistory(sourceSession);
+  const historyLoadedSession = await deps.session.loadAgentSessionHistory(sourceSession);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const historyLoadedSession = deps.session.readSessionSnapshot(sourceSession);
-  if (!historyLoadedSession) {
+  if (!historyLoadedSession || !hasLoadedSessionHistory(historyLoadedSession)) {
     throw new Error(
       `Failed to load session "${sourceSession.externalSessionId}" after loading history.`,
     );

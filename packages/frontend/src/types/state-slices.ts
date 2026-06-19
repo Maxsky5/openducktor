@@ -25,7 +25,7 @@ import type {
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { AgentSessionIdentity } from "./agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
@@ -164,7 +164,7 @@ export type AgentOperationsContextValue = {
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;

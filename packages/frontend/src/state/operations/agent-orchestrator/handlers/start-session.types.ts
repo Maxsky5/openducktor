@@ -20,7 +20,7 @@ export type SessionDependencies = {
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadSourceSession: LoadSourceSession;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   observeAgentSession: ObserveAgentSession;
 };

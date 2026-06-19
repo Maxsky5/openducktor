@@ -47,7 +47,7 @@ const createProps = ({
 });
 
 const createHistoryLoadWrapper = (
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>,
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>,
 ) => {
   const operations: AgentOperationsContextValue = {
     readSessionTodos: async () => [],
@@ -75,7 +75,7 @@ const createHistoryLoadWrapper = (
 
 const createHistoryLoadHarness = (
   props: ReturnType<typeof createProps>,
-  loadSessionHistory: (session: AgentSessionIdentity) => Promise<void>,
+  loadSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>,
 ) =>
   createHookHarness(useSelectedSessionHistoryLoad, props, {
     wrapper: createHistoryLoadWrapper(loadSessionHistory),
@@ -83,7 +83,7 @@ const createHistoryLoadHarness = (
 
 describe("useSelectedSessionHistoryLoad", () => {
   test("loads the selected session history when the runtime is ready", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
 
     try {
@@ -96,7 +96,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   });
 
   test("does not restart history loading for unrelated selected-session changes", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
 
     try {
@@ -120,7 +120,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   });
 
   test("waits for runtime readiness before loading selected session history", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({ repoReadinessState: "checking" }),
       loadSessionHistory,
@@ -140,7 +140,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   });
 
   test("does not load when selected history was already requested", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
         session: createSession({ historyLoadState: "loading" }),
@@ -158,7 +158,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   });
 
   test("uses the selected session state as the history load identity", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
         session: createSession({
@@ -184,7 +184,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   });
 
   test("does not load when the selected session transcript is already visible", async () => {
-    const loadSessionHistory = mock(async () => undefined);
+    const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
         session: createSession({

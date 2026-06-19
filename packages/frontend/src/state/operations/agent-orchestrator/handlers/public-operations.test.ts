@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "../support/messages";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
 const BUILD_SELECTION = {
@@ -47,7 +49,7 @@ const createPublicOperations = (
   createOrchestratorPublicOperations({
     agentEngine: createAgentEngine(),
     sessionActions: createSessionActions(),
-    loadAgentSessionHistory: async () => undefined,
+    loadAgentSessionHistory: async () => null,
     ...overrides,
   });
 
@@ -186,7 +188,22 @@ describe("agent-orchestrator-public-operations", () => {
   });
 
   test("exposes store-backed session history loading as a command", async () => {
-    const loadAgentSessionHistory = mock(async () => undefined);
+    const loadedSession: AgentSessionState = {
+      externalSessionId: SESSION_IDENTITY.externalSessionId,
+      taskId: "task-1",
+      role: "build",
+      status: "idle",
+      startedAt: "2026-06-12T08:00:00.000Z",
+      runtimeKind: SESSION_IDENTITY.runtimeKind,
+      workingDirectory: SESSION_IDENTITY.workingDirectory,
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState(SESSION_IDENTITY.externalSessionId),
+      contextUsage: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+    };
+    const loadAgentSessionHistory = mock(async () => loadedSession);
     const operations = createPublicOperations({
       loadAgentSessionHistory,
     });
@@ -194,6 +211,6 @@ describe("agent-orchestrator-public-operations", () => {
     const result = await operations.loadAgentSessionHistory(SESSION_IDENTITY);
 
     expect(loadAgentSessionHistory).toHaveBeenCalledWith(SESSION_IDENTITY);
-    expect(result).toBeUndefined();
+    expect(result).toBe(loadedSession);
   });
 });

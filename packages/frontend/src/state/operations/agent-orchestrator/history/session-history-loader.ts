@@ -34,10 +34,7 @@ type CreateLoadAgentSessionHistoryArgs = {
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
-const canStartSessionHistoryLoad = (session: AgentSessionState): boolean =>
-  session.historyLoadState === "not_requested" || session.historyLoadState === "failed";
-
-const claimSessionHistoryLoad = ({
+const markSessionHistoryLoading = ({
   identity,
   readSessionSnapshot,
   updateSession,
@@ -47,31 +44,39 @@ const claimSessionHistoryLoad = ({
   updateSession: UpdateSession;
 }): AgentSessionState | null => {
   const currentSession = readSessionSnapshot(identity);
-  if (!currentSession || !canStartSessionHistoryLoad(currentSession)) {
+  if (!currentSession) {
     return null;
   }
 
-  const claimedSession = updateSession(currentSession, (current) =>
-    canStartSessionHistoryLoad(current) ? { ...current, historyLoadState: "loading" } : current,
-  );
+  if (currentSession.historyLoadState === "loaded") {
+    return currentSession;
+  }
 
-  return claimedSession?.historyLoadState === "loading" ? claimedSession : null;
+  return updateSession(identity, (current) =>
+    current.historyLoadState === "loaded" ? current : { ...current, historyLoadState: "loading" },
+  );
 };
 
-const settleClaimedSessionHistoryLoad = (
-  session: AgentSessionState,
+const resetLoadingSessionHistory = (
+  identity: AgentSessionIdentity,
   updateSession: UpdateSession,
-  historyLoadState: Extract<AgentSessionState["historyLoadState"], "not_requested" | "failed">,
-): void => {
-  updateSession(session, (current) =>
+): AgentSessionState | null =>
+  updateSession(identity, (current) =>
     current.historyLoadState === "loading"
       ? {
           ...current,
-          historyLoadState,
+          historyLoadState: "not_requested",
         }
       : current,
   );
-};
+
+const failSessionHistoryLoad = (
+  identity: AgentSessionIdentity,
+  updateSession: UpdateSession,
+): AgentSessionState | null =>
+  updateSession(identity, (current) =>
+    current.historyLoadState === "loaded" ? current : { ...current, historyLoadState: "failed" },
+  );
 
 const buildSessionHistorySystemPromptContext = async ({
   workspaceId,
@@ -124,33 +129,38 @@ export const loadSessionHistoryIntoStore = async ({
   identity: AgentSessionIdentity;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
-}): Promise<void> => {
+}): Promise<AgentSessionState | null> => {
   if (isStaleRepoOperation()) {
-    return;
+    return null;
   }
 
-  const claimedSession = claimSessionHistoryLoad({
+  const loadingSession = markSessionHistoryLoading({
     identity,
     readSessionSnapshot,
     updateSession,
   });
-  if (!claimedSession) {
-    return;
+  if (!loadingSession) {
+    return null;
   }
 
-  const finishStaleHistoryLoad = (): void => {
-    settleClaimedSessionHistoryLoad(claimedSession, updateSession, "not_requested");
+  if (loadingSession.historyLoadState === "loaded") {
+    return loadingSession;
+  }
+
+  const finishStaleHistoryLoad = (): null => {
+    resetLoadingSessionHistory(identity, updateSession);
+    return null;
   };
 
   try {
-    const systemPromptContext = await loadSystemPromptContext?.(claimedSession);
+    const systemPromptContext = await loadSystemPromptContext?.(loadingSession);
 
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
 
     const history = await adapter.loadSessionHistory({
-      ...toRuntimeSessionRef(repoPath, claimedSession),
+      ...toRuntimeSessionRef(repoPath, loadingSession),
       ...(systemPromptContext ? { systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
@@ -159,13 +169,13 @@ export const loadSessionHistoryIntoStore = async ({
       return finishStaleHistoryLoad();
     }
 
-    updateSession(claimedSession, (current) => applyLoadedSessionHistory(current, history));
+    return updateSession(identity, (current) => applyLoadedSessionHistory(current, history));
   } catch {
     if (isStaleRepoOperation()) {
-      finishStaleHistoryLoad();
-      return;
+      return finishStaleHistoryLoad();
     }
-    settleClaimedSessionHistoryLoad(claimedSession, updateSession, "failed");
+    const failedSession = failSessionHistoryLoad(identity, updateSession);
+    return failedSession?.historyLoadState === "loaded" ? failedSession : null;
   }
 };
 
@@ -181,8 +191,8 @@ export const createLoadAgentSessionHistory = ({
   loadRepoPromptOverrides,
 }: CreateLoadAgentSessionHistoryArgs): ((
   sessionIdentity: AgentSessionIdentity,
-) => Promise<void>) => {
-  return async (sessionIdentity: AgentSessionIdentity): Promise<void> => {
+) => Promise<AgentSessionState | null>) => {
+  return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
     if (!workspaceRepoPath || !workspaceId) {
       throw new Error("Cannot load agent session history without an active workspace.");
     }
@@ -194,7 +204,7 @@ export const createLoadAgentSessionHistory = ({
       currentWorkspaceRepoPathRef,
     });
     if (isStaleRepoOperation()) {
-      return;
+      return null;
     }
 
     if (!readSessionSnapshot(sessionIdentity)) {
