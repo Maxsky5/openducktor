@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import {
+  type AgentSessionRecord,
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
@@ -8,7 +13,7 @@ import {
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { ChecksStateContext } from "@/state/app-state-contexts";
+import { ChecksStateContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -61,19 +66,39 @@ const createHarnessState = () => {
     queryClient,
   });
   const wrapper = ({ children }: PropsWithChildren) => (
-    <ChecksStateContext.Provider
+    <RuntimeDefinitionsContext.Provider
       value={{
-        runtimeCheck: null,
-        taskStoreCheck: null,
-        runtimeCheckFailureKind: null,
-        taskStoreCheckFailureKind: null,
-        runtimeHealthByRuntime,
-        isLoadingChecks: false,
-        refreshChecks: async () => undefined,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        refreshRuntimeDefinitions: async () => [
+          OPENCODE_RUNTIME_DESCRIPTOR,
+          CODEX_RUNTIME_DESCRIPTOR,
+        ],
+        loadRepoRuntimeCatalog: async () => {
+          throw new Error("Test runtime catalog loader was not configured.");
+        },
+        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+        loadRepoRuntimeSkills: async () => ({ skills: [] }),
+        loadRepoRuntimeFileSearch: async () => [],
       }}
     >
-      {children}
-    </ChecksStateContext.Provider>
+      <ChecksStateContext.Provider
+        value={{
+          runtimeCheck: null,
+          taskStoreCheck: null,
+          runtimeCheckFailureKind: null,
+          taskStoreCheckFailureKind: null,
+          runtimeHealthByRuntime,
+          isLoadingChecks: false,
+          refreshChecks: async () => undefined,
+        }}
+      >
+        {children}
+      </ChecksStateContext.Provider>
+    </RuntimeDefinitionsContext.Provider>
   );
   const setRuntimeHealth = (nextRuntimeHealthByRuntime = readyRuntimeHealthByRuntime) => {
     runtimeHealthByRuntime = nextRuntimeHealthByRuntime;

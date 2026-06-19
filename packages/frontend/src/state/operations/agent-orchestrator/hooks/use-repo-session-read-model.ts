@@ -3,8 +3,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import {
+  deriveRepoRuntimeReadiness,
+  repoRuntimeReadinessTargetForRuntimeSet,
+} from "@/lib/repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { useChecksStateContext } from "@/state/app-state-contexts";
+import { useChecksStateContext, useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -14,9 +18,9 @@ import {
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
-import { deriveSessionRuntimeReadiness } from "../session-read-model/session-runtime-readiness";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { createRepoStaleGuard } from "../support/core";
+import { toPersistedSessionIdentity } from "../support/persistence";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
 type UseRepoSessionReadModelArgs = {
@@ -44,7 +48,9 @@ export const useRepoSessionReadModel = ({
   clearSessionObservationState,
   queryClient,
 }: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
-  const { runtimeHealthByRuntime } = useChecksStateContext();
+  const { runtimeHealthByRuntime, isLoadingChecks } = useChecksStateContext();
+  const { allRuntimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
+    useRuntimeAvailabilityContext();
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const currentSessionReadModelLoadState = useMemo(
@@ -61,16 +67,33 @@ export const useRepoSessionReadModel = ({
     enabled: !isLoadingTasks,
     queryClient,
   });
+  const requiredRuntimeKinds = useMemo(() => {
+    if (taskSessionRecordsState.kind !== "ready") {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        taskSessionRecordsState.records.records.map(
+          ({ record }) => toPersistedSessionIdentity(record).runtimeKind,
+        ),
+      ),
+    ).sort();
+  }, [taskSessionRecordsState]);
   const runtimeReadiness =
     taskSessionRecordsState.kind === "ready"
-      ? deriveSessionRuntimeReadiness({
-          tasks: taskSessionRecordsState.records,
+      ? deriveRepoRuntimeReadiness({
+          hasActiveWorkspace: workspaceRepoPath !== null,
+          runtimeDefinitions: allRuntimeDefinitions,
+          isLoadingRuntimeDefinitions,
+          runtimeDefinitionsError,
           runtimeHealthByRuntime,
+          isLoadingChecks,
+          runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(requiredRuntimeKinds),
         })
       : null;
-  const runtimeReadinessKind = runtimeReadiness?.kind ?? null;
-  const runtimeReadinessMessage =
-    runtimeReadiness?.kind === "blocked" ? runtimeReadiness.message : "";
+  const runtimeReadinessState = runtimeReadiness?.state ?? null;
+  const runtimeReadinessMessage = runtimeReadiness?.message ?? "";
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -105,14 +128,14 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
-      if (runtimeReadinessKind === null) {
+      if (runtimeReadinessState === null) {
         return;
       }
-      if (runtimeReadinessKind === "waiting_for_runtime") {
+      if (runtimeReadinessState === "checking") {
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
         return;
       }
-      if (runtimeReadinessKind === "blocked") {
+      if (runtimeReadinessState === "blocked") {
         setSessionReadModelLoadState(
           failedAgentSessionReadModelLoadState(
             workspaceRepoPath,
@@ -159,7 +182,7 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    runtimeReadinessKind,
+    runtimeReadinessState,
     runtimeReadinessMessage,
     currentWorkspaceRepoPathRef,
     repoEpochRef,

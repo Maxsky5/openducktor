@@ -17,6 +17,7 @@ export type RepoRuntimeReadinessSnapshot = {
 export type RepoRuntimeReadinessTarget =
   | { kind: "all" }
   | { kind: "runtime"; runtimeKind: RuntimeKind }
+  | { kind: "runtime_set"; runtimeKinds: RuntimeKind[] }
   | { kind: "resolving" }
   | { kind: "inactive" };
 
@@ -41,6 +42,13 @@ export const repoRuntimeReadinessTargetForRuntime = (
 
   return { kind: "runtime", runtimeKind };
 };
+
+export const repoRuntimeReadinessTargetForRuntimeSet = (
+  runtimeKinds: Iterable<RuntimeKind>,
+): RepoRuntimeReadinessTarget => ({
+  kind: "runtime_set",
+  runtimeKinds: Array.from(new Set(runtimeKinds)).sort(),
+});
 
 type DeriveRepoRuntimeReadinessArgs = {
   hasActiveWorkspace: boolean;
@@ -90,6 +98,9 @@ const findRuntimeEntryWithReadiness = (
 const describeRuntimeEntry = (entry: RuntimeReadinessEntry): string | null =>
   describeRepoRuntimeStatus(entry.definition.label, entry.runtimeHealth ?? null);
 
+const toMissingRuntimeMessage = (runtimeKind: RuntimeKind): string =>
+  `Runtime '${runtimeKind}' is not available for agent chat.`;
+
 const readyRepoRuntimeReadiness = (isLoadingChecks: boolean): RepoRuntimeReadinessSnapshot => ({
   state: "ready",
   message: null,
@@ -137,12 +148,24 @@ export const deriveRepoRuntimeReadiness = ({
 
   const runtimeKind = runtimeTarget.kind === "runtime" ? runtimeTarget.runtimeKind : null;
   const isResolvingRuntimeTarget = runtimeTarget.kind === "resolving";
+  const isRequiredRuntimeSet = runtimeTarget.kind === "runtime_set";
+  const requiredRuntimeKinds = isRequiredRuntimeSet ? runtimeTarget.runtimeKinds : [];
+  const missingRequiredRuntimeKind =
+    requiredRuntimeKinds.find((kind) => !findRuntimeDefinition(runtimeDefinitions, kind)) ?? null;
   const targetRuntimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
-  const scopedRuntimeDefinitions = targetRuntimeDefinition
-    ? [targetRuntimeDefinition]
-    : runtimeKind
-      ? []
-      : runtimeDefinitions;
+  let scopedRuntimeDefinitions: RuntimeDescriptor[];
+  if (isRequiredRuntimeSet) {
+    scopedRuntimeDefinitions = requiredRuntimeKinds.flatMap((kind) => {
+      const definition = findRuntimeDefinition(runtimeDefinitions, kind);
+      return definition ? [definition] : [];
+    });
+  } else if (targetRuntimeDefinition) {
+    scopedRuntimeDefinitions = [targetRuntimeDefinition];
+  } else if (runtimeKind) {
+    scopedRuntimeDefinitions = [];
+  } else {
+    scopedRuntimeDefinitions = runtimeDefinitions;
+  }
   const scopedRuntimeEntries = toRuntimeReadinessEntries(
     scopedRuntimeDefinitions,
     runtimeHealthByRuntime,
@@ -158,6 +181,7 @@ export const deriveRepoRuntimeReadiness = ({
     "startup_pending",
   );
   const blockedRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "blocked");
+  const unknownRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "unknown");
 
   if (runtimeDefinitionsError) {
     return blockedRepoRuntimeReadiness(runtimeDefinitionsError, isLoadingChecks);
@@ -168,13 +192,28 @@ export const deriveRepoRuntimeReadiness = ({
   if (isResolvingRuntimeTarget) {
     return checkingRepoRuntimeReadiness("Resolving selected agent runtime...", isLoadingChecks);
   }
-  if (runtimeKind && !targetRuntimeDefinition) {
+  if (isRequiredRuntimeSet && requiredRuntimeKinds.length === 0) {
+    return readyRepoRuntimeReadiness(isLoadingChecks);
+  }
+  if (missingRequiredRuntimeKind) {
     return blockedRepoRuntimeReadiness(
-      `Runtime '${runtimeKind}' is not available for agent chat.`,
+      toMissingRuntimeMessage(missingRequiredRuntimeKind),
       isLoadingChecks,
     );
   }
-  if (healthyRuntime) {
+  if (runtimeKind && !targetRuntimeDefinition) {
+    return blockedRepoRuntimeReadiness(toMissingRuntimeMessage(runtimeKind), isLoadingChecks);
+  }
+  if (isRequiredRuntimeSet && blockedRuntime) {
+    return blockedRepoRuntimeReadiness(
+      describeRuntimeEntry(blockedRuntime) ?? "No configured runtime is ready for agent chat.",
+      isLoadingChecks,
+    );
+  }
+  if (isRequiredRuntimeSet && scopedRuntimeEntries.every((entry) => entry.readiness === "ready")) {
+    return readyRepoRuntimeReadiness(isLoadingChecks);
+  }
+  if (!isRequiredRuntimeSet && healthyRuntime) {
     return readyRepoRuntimeReadiness(isLoadingChecks);
   }
   if (checkingRuntime) {
@@ -190,6 +229,9 @@ export const deriveRepoRuntimeReadiness = ({
     );
   }
   if (isLoadingChecks || isRuntimeHealthPending) {
+    return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
+  }
+  if (isRequiredRuntimeSet && unknownRuntime) {
     return checkingRepoRuntimeReadiness("Checking runtime health...", isLoadingChecks);
   }
   if (blockedRuntime) {

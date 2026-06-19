@@ -5,6 +5,7 @@ import {
   deriveRepoRuntimeReadiness,
   inactiveRepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
+  repoRuntimeReadinessTargetForRuntimeSet,
   resolvingRepoRuntimeReadinessTarget,
 } from "./repo-runtime-readiness";
 
@@ -74,6 +75,91 @@ describe("repo runtime readiness", () => {
 
     expect(readiness.state).toBe("checking");
     expect(readiness.message).toBe("Codex runtime is starting...");
+  });
+
+  test("has no runtime requirement for an empty required runtime set", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet([]),
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(readiness.state).toBe("ready");
+    expect(readiness.message).toBeNull();
+  });
+
+  test("keeps required runtime-set readiness loading when automatic startup has not observed a runtime yet", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(["opencode"]),
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({
+          status: "not_started",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            detail: "Runtime has not been started yet.",
+          },
+        }),
+      },
+    });
+
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toBe("OpenCode runtime is starting...");
+  });
+
+  test("requires every runtime in a required runtime set to be ready", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(["opencode", "codex"]),
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+        codex: createRepoRuntimeHealthFixture({
+          status: "checking",
+          runtime: { status: "checking", stage: "waiting_for_runtime" },
+        }),
+      },
+    });
+
+    expect(readiness.state).toBe("checking");
+    expect(readiness.message).toContain("Codex runtime is starting");
+  });
+
+  test("blocks required runtime-set readiness when any referenced runtime is blocked", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: repoRuntimeReadinessTargetForRuntimeSet(["opencode", "codex"]),
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+        codex: createRepoRuntimeHealthFixture({
+          status: "error",
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            detail: "Codex startup failed.",
+          },
+        }),
+      },
+    });
+
+    expect(readiness.state).toBe("blocked");
+    expect(readiness.message).toBe("Codex startup failed.");
   });
 
   test("uses the health summary status as the startup source of truth", () => {
