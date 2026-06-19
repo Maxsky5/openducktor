@@ -6,6 +6,7 @@ import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { useChecksStateContext } from "@/state/app-state-contexts";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import {
   type AgentSessionReadModelLoadState,
@@ -15,7 +16,6 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
 import { deriveSessionRuntimeReadiness } from "../session-read-model/session-runtime-readiness";
 import { toTaskSessionRecords } from "../session-read-model/task-session-records";
@@ -32,7 +32,6 @@ type UseRepoSessionReadModelArgs = {
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   queryClient: QueryClient;
 };
 
@@ -57,9 +56,9 @@ export const useRepoSessionReadModel = ({
   agentEngine,
   observeAgentSession,
   clearSessionObservationState,
-  runtimeHealthByRuntime,
   queryClient,
 }: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
+  const { runtimeHealthByRuntime } = useChecksStateContext();
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const currentSessionReadModelLoadState = useMemo(

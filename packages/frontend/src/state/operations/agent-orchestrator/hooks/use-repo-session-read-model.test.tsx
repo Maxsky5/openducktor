@@ -2,11 +2,13 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
+import type { PropsWithChildren } from "react";
 import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { ChecksStateContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -45,10 +47,8 @@ const createHarnessState = () => {
   const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
     opencode: createRepoRuntimeHealthFixture(),
   };
-  const props = (
-    taskIds: string[],
-    runtimeHealthByRuntime: RepoRuntimeHealthMap = readyRuntimeHealthByRuntime,
-  ) => ({
+  let runtimeHealthByRuntime = readyRuntimeHealthByRuntime;
+  const props = (taskIds: string[]) => ({
     workspaceRepoPath: "/repo",
     taskIds,
     isLoadingTasks: false,
@@ -58,12 +58,37 @@ const createHarnessState = () => {
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
-    runtimeHealthByRuntime,
     queryClient,
   });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <ChecksStateContext.Provider
+      value={{
+        runtimeCheck: null,
+        taskStoreCheck: null,
+        runtimeCheckFailureKind: null,
+        taskStoreCheckFailureKind: null,
+        runtimeHealthByRuntime,
+        isLoadingChecks: false,
+        refreshChecks: async () => undefined,
+      }}
+    >
+      {children}
+    </ChecksStateContext.Provider>
+  );
+  const setRuntimeHealth = (nextRuntimeHealthByRuntime = readyRuntimeHealthByRuntime) => {
+    runtimeHealthByRuntime = nextRuntimeHealthByRuntime;
+  };
+  const createReadModelHarness = (taskIds: string[]) =>
+    createHookHarness(useRepoSessionReadModel, props(taskIds), { wrapper });
+  const updateReadModelHarness = (
+    harness: ReturnType<typeof createReadModelHarness>,
+    taskIds: string[],
+  ) => harness.update(props(taskIds));
 
   return {
-    props,
+    setRuntimeHealth,
+    createReadModelHarness,
+    updateReadModelHarness,
     listSessionRuntimeSnapshots,
     observedSessions,
     clearSessionObservationState,
@@ -73,7 +98,7 @@ const createHarnessState = () => {
 describe("useRepoSessionReadModel", () => {
   test("does not reload the repo session read model when task metadata changes but task ids do not", async () => {
     const state = createHarnessState();
-    const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));
+    const harness = state.createReadModelHarness(["task-1"]);
 
     try {
       await harness.mount();
@@ -81,7 +106,7 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
-      await harness.update(state.props(["task-1"]));
+      await state.updateReadModelHarness(harness, ["task-1"]);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
@@ -91,13 +116,13 @@ describe("useRepoSessionReadModel", () => {
 
   test("does not reload the repo session read model when task ids are reordered", async () => {
     const state = createHarnessState();
-    const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1", "task-2"]));
+    const harness = state.createReadModelHarness(["task-1", "task-2"]);
 
     try {
       await harness.mount();
       await harness.waitFor((loadState) => loadState.kind === "ready");
 
-      await harness.update(state.props(["task-2", "task-1"]));
+      await state.updateReadModelHarness(harness, ["task-2", "task-1"]);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
@@ -107,7 +132,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("does not reload the repo session read model when runtime diagnostics change but readiness does not", async () => {
     const state = createHarnessState();
-    const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));
+    const harness = state.createReadModelHarness(["task-1"]);
 
     try {
       await harness.mount();
@@ -115,15 +140,14 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
-      await harness.update(
-        state.props(["task-1"], {
-          opencode: createRepoRuntimeHealthFixture({
-            checkedAt: "2026-06-12T08:01:00.000Z",
-            mcp: { toolIds: ["odt_read_task", "odt_set_plan"] },
-            runtime: { updatedAt: "2026-06-12T08:01:00.000Z" },
-          }),
+      state.setRuntimeHealth({
+        opencode: createRepoRuntimeHealthFixture({
+          checkedAt: "2026-06-12T08:01:00.000Z",
+          mcp: { toolIds: ["odt_read_task", "odt_set_plan"] },
+          runtime: { updatedAt: "2026-06-12T08:01:00.000Z" },
         }),
-      );
+      });
+      await state.updateReadModelHarness(harness, ["task-1"]);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
@@ -133,13 +157,11 @@ describe("useRepoSessionReadModel", () => {
 
   test("does not reload the repo session read model when an unused runtime changes readiness", async () => {
     const state = createHarnessState();
-    const harness = createHookHarness(
-      useRepoSessionReadModel,
-      state.props(["task-1"], {
-        opencode: createRepoRuntimeHealthFixture(),
-        codex: createRepoRuntimeHealthFixture(),
-      }),
-    );
+    state.setRuntimeHealth({
+      opencode: createRepoRuntimeHealthFixture(),
+      codex: createRepoRuntimeHealthFixture(),
+    });
+    const harness = state.createReadModelHarness(["task-1"]);
 
     try {
       await harness.mount();
@@ -147,24 +169,23 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
-      await harness.update(
-        state.props(["task-1"], {
-          opencode: createRepoRuntimeHealthFixture(),
-          codex: createRepoRuntimeHealthFixture(
-            {},
-            {
+      state.setRuntimeHealth({
+        opencode: createRepoRuntimeHealthFixture(),
+        codex: createRepoRuntimeHealthFixture(
+          {},
+          {
+            status: "checking",
+            runtime: {
               status: "checking",
-              runtime: {
-                status: "checking",
-                stage: "waiting_for_runtime",
-              },
-              mcp: {
-                status: "waiting_for_runtime",
-              },
+              stage: "waiting_for_runtime",
             },
-          ),
-        }),
-      );
+            mcp: {
+              status: "waiting_for_runtime",
+            },
+          },
+        ),
+      });
+      await state.updateReadModelHarness(harness, ["task-1"]);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
@@ -174,13 +195,13 @@ describe("useRepoSessionReadModel", () => {
 
   test("reloads the repo session read model when the task id set changes", async () => {
     const state = createHarnessState();
-    const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));
+    const harness = state.createReadModelHarness(["task-1"]);
 
     try {
       await harness.mount();
       await harness.waitFor((loadState) => loadState.kind === "ready");
 
-      await harness.update(state.props(["task-1", "task-2"]));
+      await state.updateReadModelHarness(harness, ["task-1", "task-2"]);
       await harness.waitFor(() => state.listSessionRuntimeSnapshots.mock.calls.length === 2);
 
       expect(harness.getLatest().kind).toBe("ready");
@@ -206,10 +227,8 @@ describe("useRepoSessionReadModel", () => {
         },
       ),
     };
-    const harness = createHookHarness(
-      useRepoSessionReadModel,
-      state.props(["task-1"], loadingRuntimeHealthByRuntime),
-    );
+    state.setRuntimeHealth(loadingRuntimeHealthByRuntime);
+    const harness = state.createReadModelHarness(["task-1"]);
 
     try {
       await harness.mount();
@@ -217,7 +236,8 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.listSessionRuntimeSnapshots).not.toHaveBeenCalled();
 
-      await harness.update(state.props(["task-1"]));
+      state.setRuntimeHealth();
+      await state.updateReadModelHarness(harness, ["task-1"]);
       await harness.waitFor((loadState) => loadState.kind === "ready");
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);

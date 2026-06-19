@@ -467,6 +467,9 @@ state instead of an empty/ready state.
 `useRepoSessionReadModel` owns that public projection and the actual repo read
 lifecycle: start the repo read, commit ready, or commit failed. It must not
 prepare runtime sessions or choose transcript/history load policy.
+It reads runtime health from the canonical checks state to derive runtime
+readiness for persisted sessions. Do not pass runtime health through
+`AgentStudioStateProvider` or `useAgentOrchestratorOperations`.
 The repo read-model load is keyed by the selected repository plus the task id
 set. Task metadata changes and task order changes must not restart the repo
 session read model, because that would temporarily demote selected sessions back
