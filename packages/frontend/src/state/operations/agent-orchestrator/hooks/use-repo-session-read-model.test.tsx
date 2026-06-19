@@ -245,4 +245,36 @@ describe("useRepoSessionReadModel", () => {
       await harness.unmount();
     }
   });
+
+  test("fails the repo session read model when the persisted session runtime is blocked", async () => {
+    const state = createHarnessState();
+    state.setRuntimeHealth({
+      opencode: createRepoRuntimeHealthFixture({
+        status: "error",
+        runtime: {
+          status: "error",
+          stage: "startup_failed",
+          detail: "OpenCode runtime startup failed.",
+          failureKind: "error",
+        },
+      }),
+    });
+    const harness = state.createReadModelHarness(["task-1"]);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((loadState) => loadState.kind === "failed");
+
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          kind: "failed",
+          message:
+            "Failed to load agent session read model for repo '/repo': OpenCode runtime startup failed.",
+        }),
+      );
+      expect(state.listSessionRuntimeSnapshots).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

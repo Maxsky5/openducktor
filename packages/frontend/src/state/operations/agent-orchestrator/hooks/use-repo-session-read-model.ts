@@ -14,11 +14,7 @@ import {
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
-import {
-  deriveSessionRuntimeReadiness,
-  fromStableSessionRuntimeReadinessInput,
-  toStableSessionRuntimeReadinessInput,
-} from "../session-read-model/session-runtime-readiness";
+import { deriveSessionRuntimeReadiness } from "../session-read-model/session-runtime-readiness";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -72,17 +68,9 @@ export const useRepoSessionReadModel = ({
           runtimeHealthByRuntime,
         })
       : null;
-  const stableRuntimeReadinessInput = toStableSessionRuntimeReadinessInput(runtimeReadiness);
-  const runtimeReadinessKind = stableRuntimeReadinessInput.kind;
-  const runtimeReadinessMessage = stableRuntimeReadinessInput.message;
-  const runtimeReadinessForLoad = useMemo(
-    () =>
-      fromStableSessionRuntimeReadinessInput({
-        kind: runtimeReadinessKind,
-        message: runtimeReadinessMessage,
-      }),
-    [runtimeReadinessKind, runtimeReadinessMessage],
-  );
+  const runtimeReadinessKind = runtimeReadiness?.kind ?? null;
+  const runtimeReadinessMessage =
+    runtimeReadiness?.kind === "blocked" ? runtimeReadiness.message : "";
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -117,7 +105,20 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
-      if (runtimeReadinessForLoad === null) {
+      if (runtimeReadinessKind === null) {
+        return;
+      }
+      if (runtimeReadinessKind === "waiting_for_runtime") {
+        setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+        return;
+      }
+      if (runtimeReadinessKind === "blocked") {
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(
+            workspaceRepoPath,
+            `Failed to load agent session read model for repo '${workspaceRepoPath}': ${runtimeReadinessMessage}`,
+          ),
+        );
         return;
       }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
@@ -129,7 +130,6 @@ export const useRepoSessionReadModel = ({
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
-          runtimeReadiness: runtimeReadinessForLoad,
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -159,7 +159,8 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    runtimeReadinessForLoad,
+    runtimeReadinessKind,
+    runtimeReadinessMessage,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,

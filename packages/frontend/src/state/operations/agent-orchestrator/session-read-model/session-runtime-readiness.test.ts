@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import {
-  deriveSessionRuntimeReadiness,
-  fromStableSessionRuntimeReadinessInput,
-  toStableSessionRuntimeReadinessInput,
-} from "./session-runtime-readiness";
+import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
 
 const record: AgentSessionRecord = {
@@ -39,22 +35,5 @@ describe("session runtime readiness", () => {
     });
 
     expect(readiness).toEqual({ kind: "waiting_for_runtime" });
-  });
-
-  test("round-trips stable readiness input without inventing blocked messages", () => {
-    const blocked = {
-      kind: "blocked" as const,
-      message: "OpenCode runtime startup failed.",
-    };
-    const stableInput = toStableSessionRuntimeReadinessInput(blocked);
-
-    expect(stableInput).toEqual(blocked);
-    expect(fromStableSessionRuntimeReadinessInput(stableInput)).toEqual(blocked);
-    expect(() =>
-      fromStableSessionRuntimeReadinessInput({
-        kind: "blocked",
-        message: null,
-      }),
-    ).toThrow("Blocked session runtime readiness requires a message.");
   });
 });

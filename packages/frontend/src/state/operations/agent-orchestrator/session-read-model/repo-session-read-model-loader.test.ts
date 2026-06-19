@@ -9,14 +9,9 @@ import {
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import {
-  createAgentSessionFixture,
-  createRepoRuntimeHealthFixture,
-} from "@/test-utils/shared-test-fixtures";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import { loadRepoSessionReadModel } from "./repo-session-read-model-loader";
-import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
 
 const record: AgentSessionRecord = {
@@ -26,10 +21,6 @@ const record: AgentSessionRecord = {
   workingDirectory: "/repo/worktree",
   startedAt: "2026-06-12T08:00:00.000Z",
   selectedModel: null,
-};
-
-const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
-  opencode: createRepoRuntimeHealthFixture(),
 };
 
 const taskSessionRecords: TaskSessionRecords = {
@@ -58,13 +49,11 @@ const createCommitSessionCollection = (
 
 const loadReadModel = async ({
   initialSessionCollection,
-  runtimeHealthByRuntime = readyRuntimeHealthByRuntime,
   listSessionRuntimeSnapshots,
   observeAgentSession = async () => undefined,
   clearSessionObservationState = () => undefined,
 }: {
   initialSessionCollection?: AgentSessionCollection;
-  runtimeHealthByRuntime?: RepoRuntimeHealthMap;
   listSessionRuntimeSnapshots: () => Promise<
     Awaited<ReturnType<typeof toAgentSessionRuntimeSnapshot>>[]
   >;
@@ -81,10 +70,6 @@ const loadReadModel = async ({
     commitSessionCollection: collection.commitSessionCollection,
     observeAgentSession,
     clearSessionObservationState,
-    runtimeReadiness: deriveSessionRuntimeReadiness({
-      tasks: taskSessionRecords,
-      runtimeHealthByRuntime,
-    }),
     isStaleRepoOperation: () => false,
   });
 
@@ -139,30 +124,6 @@ describe("repo session read model loader", () => {
         workingDirectory: "/repo/worktree",
       },
     ]);
-  });
-
-  test("waits for runtime readiness before scanning runtime snapshots", async () => {
-    let runtimeSnapshotReads = 0;
-    const harness = await loadReadModel({
-      listSessionRuntimeSnapshots: async () => {
-        runtimeSnapshotReads += 1;
-        return [];
-      },
-      runtimeHealthByRuntime: {
-        opencode: createRepoRuntimeHealthFixture({
-          status: "not_started",
-          runtime: {
-            status: "not_started",
-            stage: "idle",
-            detail: "Runtime has not been started yet.",
-          },
-        }),
-      },
-    });
-
-    expect(harness.result).toBe(false);
-    expect(runtimeSnapshotReads).toBe(0);
-    expect(harness.listSessions()).toEqual([]);
   });
 
   test("clears observations for mounted sessions no longer listed by persistence", async () => {

@@ -13,11 +13,6 @@ export type SessionRuntimeReadiness =
   | { kind: "waiting_for_runtime" }
   | { kind: "blocked"; message: string };
 
-export type StableSessionRuntimeReadinessInput = {
-  kind: SessionRuntimeReadiness["kind"] | null;
-  message: string | null;
-};
-
 const collectRuntimeKinds = (tasks: TaskSessionRecords): RuntimeKind[] => {
   const runtimeKinds = new Set<RuntimeKind>();
   for (const { record } of tasks.records) {
@@ -66,29 +61,4 @@ export const deriveSessionRuntimeReadiness = ({
   }
 
   return { kind: "ready" };
-};
-
-export const toStableSessionRuntimeReadinessInput = (
-  readiness: SessionRuntimeReadiness | null,
-): StableSessionRuntimeReadinessInput => ({
-  kind: readiness?.kind ?? null,
-  message: readiness?.kind === "blocked" ? readiness.message : null,
-});
-
-export const fromStableSessionRuntimeReadinessInput = ({
-  kind,
-  message,
-}: StableSessionRuntimeReadinessInput): SessionRuntimeReadiness | null => {
-  if (kind === null) {
-    return null;
-  }
-
-  if (kind === "blocked") {
-    if (message === null) {
-      throw new Error("Blocked session runtime readiness requires a message.");
-    }
-    return { kind, message };
-  }
-
-  return { kind };
 };

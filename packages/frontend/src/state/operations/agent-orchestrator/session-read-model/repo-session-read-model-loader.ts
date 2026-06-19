@@ -3,7 +3,6 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
-import type { SessionRuntimeReadiness } from "./session-runtime-readiness";
 import type { TaskSessionRecords } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
@@ -17,7 +16,6 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection,
   observeAgentSession,
   clearSessionObservationState,
-  runtimeReadiness,
   isStaleRepoOperation,
 }: {
   repoPath: string;
@@ -26,17 +24,10 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
-  runtimeReadiness: SessionRuntimeReadiness;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {
   if (isStaleRepoOperation()) {
     return false;
-  }
-  if (runtimeReadiness.kind === "waiting_for_runtime") {
-    return false;
-  }
-  if (runtimeReadiness.kind === "blocked") {
-    throw new Error(runtimeReadiness.message);
   }
 
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
