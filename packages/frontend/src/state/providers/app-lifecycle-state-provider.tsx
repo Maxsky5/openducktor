@@ -17,13 +17,12 @@ export function AppLifecycleStateProvider({
     WorkspaceStateContext,
     "AppLifecycleStateProvider",
   );
-  const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
+  const { refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { refreshRuntimeCheck, refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { refreshTaskData } = useTaskControlContext();
 
   useAppLifecycle({
     activeWorkspace,
-    refreshWorkspaces,
     refreshBranches,
     refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,

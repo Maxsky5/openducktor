@@ -8,6 +8,8 @@ type CreateHookHarnessOptions = {
   wrapper?: ComponentType<PropsWithChildren>;
 };
 
+const scheduleTimerFlush = globalThis.setTimeout.bind(globalThis);
+
 const flushHookEffects = async (): Promise<void> => {
   await act(async () => {
     await Promise.resolve();
@@ -24,6 +26,9 @@ const flushHookEffects = async (): Promise<void> => {
         resolve();
       };
       channel.port2.postMessage(undefined);
+    });
+    await new Promise<void>((resolve) => {
+      scheduleTimerFlush(resolve, 0);
     });
   });
 };

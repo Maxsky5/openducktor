@@ -54,8 +54,10 @@ const IsolatedQueryWrapper = ({ children }: PropsWithChildren) => (
 );
 
 const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 };
 
 const createBrowserListenerHarness = (
@@ -661,11 +663,17 @@ describe("use-workspace-operations", () => {
 
   test("hydrates branches after switching between real repositories", async () => {
     const workspaceSelectDeferred = createDeferred<WorkspaceRecord>();
-    const workspaceSelect = mock(
-      async (): Promise<WorkspaceRecord> => workspaceSelectDeferred.promise,
-    );
+    let hasSelectedRepoA = false;
+    const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
+      const selectedWorkspace = await workspaceSelectDeferred.promise;
+      hasSelectedRepoA = true;
+      return selectedWorkspace;
+    });
     const workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
+      async (): Promise<WorkspaceRecord[]> =>
+        hasSelectedRepoA
+          ? [workspace("/repo-old"), workspace("/repo-a", true)]
+          : [workspace("/repo-old", true), workspace("/repo-a")],
     );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",

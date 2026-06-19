@@ -1,9 +1,15 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type TaskCard,
+} from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { ChecksStateContext } from "@/state/app-state-contexts";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
+import { ChecksStateContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -95,6 +101,27 @@ const createChecksStateContextValue = (runtimeHealthByRuntime: RepoRuntimeHealth
   refreshChecks: async () => undefined,
 });
 
+const createRuntimeDefinitionsContextValue = () => {
+  const runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+  return {
+    runtimeDefinitions,
+    availableRuntimeDefinitions: getAvailableRuntimeDefinitions({
+      runtimeDefinitions,
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    }),
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => runtimeDefinitions,
+    loadRepoRuntimeCatalog: async () => {
+      throw new Error("Test runtime catalog loader was not configured.");
+    },
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+};
+
 export const listHarnessSessions = (state: OrchestratorHookState): AgentSessionState[] =>
   state.sessionStore.getActivitySnapshot().sessions.flatMap((summary) => {
     const session = state.sessionStore.getSessionSnapshot(summary);
@@ -128,9 +155,13 @@ export const createHookHarness = (args: {
   };
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
-      ChecksStateContext.Provider,
-      { value: createChecksStateContextValue(currentArgs.runtimeHealthByRuntime) },
-      children,
+      RuntimeDefinitionsContext.Provider,
+      { value: createRuntimeDefinitionsContextValue() },
+      createElement(
+        ChecksStateContext.Provider,
+        { value: createChecksStateContextValue(currentArgs.runtimeHealthByRuntime) },
+        children,
+      ),
     );
 
   const sharedHarness = createSharedHookHarness(Harness, undefined, { wrapper });

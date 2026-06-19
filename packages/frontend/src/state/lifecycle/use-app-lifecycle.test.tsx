@@ -76,18 +76,19 @@ type UseAppLifecycleArgs = Parameters<
 type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, "activeWorkspace"> & {
   activeWorkspace?: ActiveWorkspace | null;
   activeRepo?: string | null;
+  refreshWorkspaces?: () => Promise<void>;
   setEvents?: unknown;
   setRunCompletionSignal?: unknown;
 };
 
-const normalizeHookArgs = ({
-  activeWorkspace,
-  activeRepo,
-  ...rest
-}: LegacyUseAppLifecycleArgs): UseAppLifecycleArgs => ({
-  ...rest,
-  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
-});
+const normalizeHookArgs = (args: LegacyUseAppLifecycleArgs): UseAppLifecycleArgs => {
+  const { activeWorkspace, activeRepo, refreshWorkspaces, ...rest } = args;
+  void refreshWorkspaces;
+  return {
+    ...rest,
+    activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+  };
+};
 beforeEach(() => {
   subscribeTaskEventsImpl = async (listener: (payload: unknown) => void) => {
     subscribedTaskListener = listener;

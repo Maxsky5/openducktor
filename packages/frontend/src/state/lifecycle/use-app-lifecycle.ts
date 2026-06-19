@@ -40,7 +40,6 @@ const rememberProcessedExternalTaskEvent = (
 
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
@@ -55,7 +54,6 @@ type UseAppLifecycleArgs = {
 
 export function useAppLifecycle({
   activeWorkspace,
-  refreshWorkspaces,
   refreshBranches,
   refreshRuntimeCheck,
   refreshTaskStoreCheckForRepo,
@@ -89,16 +87,8 @@ export function useAppLifecycle({
   }, [activeWorkspace, refreshTaskData]);
 
   useEffect(() => {
-    Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
-      ([workspaceResult]) => {
-        if (workspaceResult.status === "rejected") {
-          toast.error("Workspace load failed", {
-            description: errorMessage(workspaceResult.reason),
-          });
-        }
-      },
-    );
-  }, [refreshRuntimeCheck, refreshWorkspaces]);
+    void refreshRuntimeCheck(false);
+  }, [refreshRuntimeCheck]);
 
   useEffect(() => {
     let disposed = false;
