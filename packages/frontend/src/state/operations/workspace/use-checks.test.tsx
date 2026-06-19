@@ -335,6 +335,35 @@ describe("use-checks", () => {
     }
   }, 5000);
 
+  test("loads repo runtime health when runtime definitions become available after mount", async () => {
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          value.runtimeCheck !== null &&
+          value.activeTaskStoreCheck !== null &&
+          value.isLoadingChecks === false,
+      );
+
+      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
+
+      await harness.updateArgs({ runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR] });
+      await harness.waitFor(
+        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
+      );
+
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
+    } finally {
+      await harness.unmount();
+    }
+  }, 5000);
+
   test("tracks per-repo task-store cache and loads runtime health when active repo changes", async () => {
     const taskStoreCheck = mock(
       async (repoPath: string): Promise<TaskStoreCheck> =>

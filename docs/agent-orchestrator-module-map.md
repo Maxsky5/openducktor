@@ -97,11 +97,12 @@ Files:
 - `session-read-model/source-session-loader.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `session-read-model/session-runtime-snapshot.ts`
+- `session-read-model/use-task-session-records.ts`
 - `hooks/use-repo-session-read-model.ts`
 
 Owns:
 
-- reading persisted task session records from the per-task session-list query
+- consuming the query-backed task session records for the active task set
 - scanning runtime snapshots by repo path, runtime kind, and working directory
 - merging persisted records plus runtime snapshots into `AgentSessionState`
 - returning live runtime session refs
@@ -810,6 +811,7 @@ Files:
 
 - `state/queries/agent-sessions.ts`
 - `state/operations/agent-orchestrator/session-read-model/task-session-records.ts`
+- `state/operations/agent-orchestrator/session-read-model/use-task-session-records.ts`
 - `state/operations/agent-orchestrator/session-read-model/repo-session-read-model.ts`
 
 Owns:
@@ -834,10 +836,12 @@ model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
-`useRepoSessionReadModel` consumes the per-task session-record queries directly;
-task reset pages must not call a session refresh command after reset. Reset
-operations invalidate the exact task-session-record query, and the repo read
-model reacts to that owned query data.
+`useTaskSessionRecords` is the only hook that fans out per-task session-record
+queries for repo startup. `useRepoSessionReadModel` consumes that result and owns
+only repo session projection/commit. Task reset pages must not call a session
+refresh command after reset. Reset operations invalidate the exact
+task-session-record query, and the repo read model reacts to that owned query
+data.
 Local session projection during repo reads is owned by
 `repo-session-read-model.ts`. It carries sessions outside the loaded task set and
 local starting sessions whose persisted record is not visible yet; every other
@@ -847,7 +851,7 @@ unlisted session ref whose observer state can be cleared.
 ## Startup Flow
 
 1. The app loads task IDs from the task store.
-2. `use-repo-session-read-model.ts` reads per-task session records through the
+2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
