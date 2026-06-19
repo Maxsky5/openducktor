@@ -27,7 +27,7 @@ import {
   effectiveTaskTargetBranch,
   targetBranchSelectionValue,
 } from "@/lib/target-branch";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import { orderStartModesForDisplay } from "./session-start-display";
@@ -44,7 +44,6 @@ export type { SessionStartPostAction } from "./session-start-workflow";
 type UseSessionStartModalStateArgs = {
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
-  runtimeDefinitions: RuntimeDescriptor[];
   initialCatalog?: AgentModelCatalog | null;
   loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   workspaceRepoPath: string | null;
@@ -86,12 +85,11 @@ type UseSessionStartModalStateResult = {
 export function useSessionStartModalState({
   branches = [],
   repoSettings,
-  runtimeDefinitions,
   initialCatalog,
   loadCatalog,
   workspaceRepoPath,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
-  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
@@ -111,7 +109,7 @@ export function useSessionStartModalState({
     initialCatalog,
     isOpen: intent !== null,
     loadCatalog: loadCatalogForRepo,
-    runtimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
     selectedStartMode: selectedStartModeForRuntime,
     workspaceRepoPath,
   });
@@ -128,7 +126,7 @@ export function useSessionStartModalState({
   } = useSessionStartModalReuseState({
     catalog,
     intent,
-    runtimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
     setRequestedRuntimeKind,
     setSelection,
   });
@@ -173,7 +171,7 @@ export function useSessionStartModalState({
       const initialStartMode = initialStartState.selectedStartMode;
       const initialRuntimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions: filterRuntimeDefinitionsForStartMode(
-          runtimeDefinitions,
+          availableRuntimeDefinitions,
           initialStartMode,
         ),
         requestedRuntimeKind,
@@ -198,8 +196,8 @@ export function useSessionStartModalState({
     [
       initializeSelection,
       initializeStartState,
+      availableRuntimeDefinitions,
       repoSettings,
-      runtimeDefinitions,
       setRequestedRuntimeKind,
     ],
   );

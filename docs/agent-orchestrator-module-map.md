@@ -774,6 +774,10 @@ or task-readiness inputs just to re-check workflow availability.
 The session-start flow may use `selectedTask` for modal context, target branch,
 and human-review prompts, but it consumes parent-owned start predicates instead
 of recomputing task/runtime readiness.
+The session start modal reads available runtime definitions from runtime
+availability context. Do not pass a second runtime-definition list into the
+modal state; start-mode filtering is local modal selection policy, and runtime
+health/readiness interpretation stays in `useRepoRuntimeReadiness`.
 Agent Studio, Kanban, and Autopilot start entry points consume a single
 `RunSessionStartWorkflow` command. Only shell/provider composition wires that
 command from `startAgentSession` and `sendAgentMessage`; page/business modules

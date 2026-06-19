@@ -9,11 +9,8 @@ import {
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
-import {
-  deriveRepoRuntimeReadiness,
-  repoRuntimeReadinessTargetForRuntime,
-} from "@/lib/repo-runtime-readiness";
-import { useChecksStateContext } from "@/state/app-state-contexts";
+import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
+import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
@@ -57,7 +54,6 @@ export function useSessionStartModalRuntimeState({
   workspaceRepoPath,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
   const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
-  const { runtimeHealthByRuntime, isLoadingChecks } = useChecksStateContext();
 
   const eligibleRuntimeDefinitions = useMemo(
     () => filterRuntimeDefinitionsForStartMode(runtimeDefinitions, selectedStartMode),
@@ -85,13 +81,8 @@ export function useSessionStartModalRuntimeState({
         : null,
     [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
-  const selectedRuntimeReadiness = deriveRepoRuntimeReadiness({
-    hasActiveWorkspace: workspaceRepoPath !== null,
-    runtimeDefinitions: eligibleRuntimeDefinitions,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
+  const selectedRuntimeReadiness = useRepoRuntimeReadiness({
+    hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedRuntimeKind),
   });
 

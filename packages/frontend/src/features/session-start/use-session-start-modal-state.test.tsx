@@ -8,6 +8,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createChecksStateContextValue,
   createDeferred,
+  createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "../../pages/agents/agent-studio-test-utils";
@@ -16,6 +17,9 @@ import { useSessionStartModalState } from "./use-session-start-modal-state";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useSessionStartModalState>[0];
+type HookHarnessArgs = HookArgs & {
+  runtimeDefinitions: RuntimeDescriptor[];
+};
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -199,17 +203,42 @@ const createReadyRuntimeHealthMap = (
 };
 
 const createHookHarness = (
-  initialProps: HookArgs,
+  initialProps: HookHarnessArgs,
   options?: Parameters<typeof createSharedHookHarness>[2],
-) =>
-  createSharedHookHarness(useSessionStartModalState, initialProps, {
-    checksStateContext: createChecksStateContextValue({
-      runtimeHealthByRuntime: createReadyRuntimeHealthMap(initialProps.runtimeDefinitions),
-    }),
+) => {
+  const { runtimeDefinitions, ...hookProps } = initialProps;
+  const runtimeDefinitionsContextRef = options?.runtimeDefinitionsContextRef ?? {
+    current:
+      options?.runtimeDefinitionsContext ??
+      createRuntimeDefinitionsContextValue({
+        runtimeDefinitions,
+        availableRuntimeDefinitions: runtimeDefinitions,
+      }),
+  };
+  const checksStateContext =
+    options?.checksStateContext ??
+    createChecksStateContextValue({
+      runtimeHealthByRuntime: createReadyRuntimeHealthMap(runtimeDefinitions),
+    });
+  const harness = createSharedHookHarness(useSessionStartModalState, hookProps, {
     ...options,
+    runtimeDefinitionsContextRef,
+    checksStateContext,
   });
+  return {
+    ...harness,
+    update: async (nextProps: HookHarnessArgs): Promise<void> => {
+      runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: nextProps.runtimeDefinitions,
+        availableRuntimeDefinitions: nextProps.runtimeDefinitions,
+      });
+      const { runtimeDefinitions: _runtimeDefinitions, ...nextHookProps } = nextProps;
+      await harness.update(nextHookProps);
+    },
+  };
+};
 
-const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+const createBaseProps = (overrides: Partial<HookHarnessArgs> = {}): HookHarnessArgs => ({
   workspaceRepoPath: "/repo",
   branches: [
     { name: "main", isCurrent: true, isRemote: false },

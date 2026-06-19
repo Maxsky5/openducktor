@@ -1,7 +1,6 @@
 import type { GitBranch } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
@@ -76,11 +75,9 @@ export function useSessionStartModalCoordinator({
   initialCatalog,
   workspaceRepoPath,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
-  const { availableRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     branches,
     repoSettings,
-    runtimeDefinitions,
     ...(initialCatalog !== undefined ? { initialCatalog } : {}),
     workspaceRepoPath,
   });
