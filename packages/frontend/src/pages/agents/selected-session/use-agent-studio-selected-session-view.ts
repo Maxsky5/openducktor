@@ -15,7 +15,6 @@ import {
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import { deriveAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -23,7 +22,10 @@ import {
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
-import { deriveSelectedSessionViewProjection } from "./selected-session-view-projection";
+import {
+  deriveSelectedSessionRuntimeTarget,
+  deriveSelectedSessionViewProjection,
+} from "./selected-session-view-projection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
@@ -90,6 +92,22 @@ export function useAgentStudioSelectedSessionView({
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const runtimeTarget = useMemo(
+    () =>
+      deriveSelectedSessionRuntimeTarget({
+        selectedSessionIdentity,
+        selectedTask,
+        role: selection.role,
+        repoSettings,
+        isLoadingRepoSettings,
+      }),
+    [isLoadingRepoSettings, repoSettings, selectedSessionIdentity, selectedTask, selection.role],
+  );
+  const runtimeReadiness = useRepoRuntimeReadiness({
+    hasWorkspace: workspaceRepoPath !== null,
+    runtimeTarget,
+  });
+  const repoReadinessState = runtimeReadiness.state;
   const selectedSessionViewProjection = useMemo(
     () =>
       deriveSelectedSessionViewProjection({
@@ -98,41 +116,28 @@ export function useAgentStudioSelectedSessionView({
         sessionSummary: selection.sessionSummary,
         selectedTask,
         readModelLoadState: sessionReadModelLoadState,
-        role: selection.role,
-        repoSettings,
-        isLoadingRepoSettings,
+        runtimeTarget,
+        repoReadinessState,
       }),
     [
-      isLoadingRepoSettings,
-      repoSettings,
+      repoReadinessState,
+      runtimeTarget,
       selectedSessionIdentity,
       selectedTask,
       session,
-      selection.role,
       selection.sessionSummary,
       sessionReadModelLoadState,
     ],
   );
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
-  const runtimeTarget = selectedSessionViewProjection.runtimeTarget;
-  const runtimeReadiness = useRepoRuntimeReadiness({
-    hasWorkspace: workspaceRepoPath !== null,
-    runtimeTarget,
-  });
-  const repoReadinessState = runtimeReadiness.state;
+  const transcriptState = selectedSessionViewProjection.transcriptState;
 
   const launchActionId: SessionLaunchActionId =
     selection.role === "build"
       ? resolveBuildContinuationLaunchAction(selectedTask)
       : firstLaunchAction(selection.role);
 
-  const transcriptState = useMemo(() => {
-    return deriveAgentSessionTranscriptState({
-      source: selectedSessionViewProjection.transcriptSource,
-      repoReadinessState,
-    });
-  }, [repoReadinessState, selectedSessionViewProjection.transcriptSource]);
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
     selectedSessionIdentity,

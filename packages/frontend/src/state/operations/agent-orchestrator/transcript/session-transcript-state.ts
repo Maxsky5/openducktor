@@ -5,13 +5,6 @@ import { hasRenderableSessionTranscript } from "../support/session-transcript-co
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
 export type AgentSessionTranscriptLoadingReason = "preparing" | "history";
 
-export type AgentSessionTranscriptSource =
-  | { kind: "visible" }
-  | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
-  | { kind: "runtime_gated_empty"; reason: AgentSessionTranscriptEmptyReason }
-  | { kind: "runtime_gated_loading"; reason: AgentSessionTranscriptLoadingReason }
-  | { kind: "failed"; message: string };
-
 type AgentSessionTranscriptNonEmptyState =
   | { kind: "runtime_waiting" }
   | { kind: "session_loading"; reason: AgentSessionTranscriptLoadingReason }
@@ -33,9 +26,33 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-export const deriveLoadedAgentSessionTranscriptSource = (
-  session: AgentSessionState,
-): AgentSessionTranscriptSource => {
+export const deriveRuntimeBoundTranscriptEmptyState = ({
+  reason,
+  repoReadinessState,
+}: {
+  reason: AgentSessionTranscriptEmptyReason;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState =>
+  repoReadinessState === "ready" ? { kind: "empty", reason } : { kind: "runtime_waiting" };
+
+export const deriveRuntimeBoundTranscriptLoadingState = ({
+  reason,
+  repoReadinessState,
+}: {
+  reason: AgentSessionTranscriptLoadingReason;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState =>
+  repoReadinessState === "ready"
+    ? { kind: "session_loading", reason }
+    : { kind: "runtime_waiting" };
+
+export const deriveLoadedAgentSessionTranscriptState = ({
+  session,
+  repoReadinessState,
+}: {
+  session: AgentSessionState;
+  repoReadinessState: RepoRuntimeReadinessState;
+}): AgentSessionTranscriptState => {
   if (hasRenderableSessionTranscript(session)) {
     return { kind: "visible" };
   }
@@ -44,33 +61,8 @@ export const deriveLoadedAgentSessionTranscriptSource = (
     return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
   }
 
-  return {
-    kind: "runtime_gated_loading",
+  return deriveRuntimeBoundTranscriptLoadingState({
     reason: "history",
-  };
-};
-
-export const deriveAgentSessionTranscriptState = ({
-  source,
-  repoReadinessState,
-}: {
-  source: AgentSessionTranscriptSource;
-  repoReadinessState: RepoRuntimeReadinessState;
-}): AgentSessionTranscriptState => {
-  switch (source.kind) {
-    case "visible":
-      return { kind: "visible" };
-    case "empty":
-      return { kind: "empty", reason: source.reason };
-    case "runtime_gated_empty":
-      return repoReadinessState === "ready"
-        ? { kind: "empty", reason: source.reason }
-        : { kind: "runtime_waiting" };
-    case "runtime_gated_loading":
-      return repoReadinessState === "ready"
-        ? { kind: "session_loading", reason: source.reason }
-        : { kind: "runtime_waiting" };
-    case "failed":
-      return { kind: "failed", message: source.message };
-  }
+    repoReadinessState,
+  });
 };

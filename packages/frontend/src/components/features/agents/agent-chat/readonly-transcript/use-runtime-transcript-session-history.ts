@@ -8,9 +8,8 @@ import { useAgentOperations } from "@/state/app-state-provider";
 import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   type AgentSessionTranscriptEmptyReason,
-  type AgentSessionTranscriptSource,
   type AgentSessionTranscriptState,
-  deriveAgentSessionTranscriptState,
+  deriveRuntimeBoundTranscriptLoadingState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   SESSION_HISTORY_STALE_TIME_MS,
@@ -88,7 +87,7 @@ export function useRuntimeTranscriptSessionHistory({
       history: historyQuery.data,
     });
   }, [historyQuery.data, historySource]);
-  const transcriptSource = useMemo<AgentSessionTranscriptSource>(() => {
+  const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
     }
@@ -101,12 +100,11 @@ export function useRuntimeTranscriptSessionHistory({
         message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
       };
     }
-    return { kind: "runtime_gated_loading", reason: "history" };
+    return deriveRuntimeBoundTranscriptLoadingState({
+      reason: "history",
+      repoReadinessState,
+    });
   }, [historyQuery.error, historySource, repoReadinessState, session]);
-  const transcriptState = useMemo(
-    () => deriveAgentSessionTranscriptState({ source: transcriptSource, repoReadinessState }),
-    [repoReadinessState, transcriptSource],
-  );
 
   return {
     session,

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { deriveAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
@@ -12,7 +11,10 @@ import {
   createAgentSessionSummaryFixture,
   createTaskCardFixture,
 } from "../agent-studio-test-utils";
-import { deriveSelectedSessionViewProjection } from "./selected-session-view-projection";
+import {
+  deriveSelectedSessionRuntimeTarget,
+  deriveSelectedSessionViewProjection,
+} from "./selected-session-view-projection";
 
 const repoPath = "/repo";
 const readModelLoadState = readyAgentSessionReadModelLoadState(repoPath);
@@ -40,31 +42,41 @@ const repoSettings = {
 } satisfies RepoSettingsInput;
 
 type ProjectionInput = Parameters<typeof deriveSelectedSessionViewProjection>[0];
+type RuntimeTargetInput = Parameters<typeof deriveSelectedSessionRuntimeTarget>[0];
 
-const project = (overrides: Partial<ProjectionInput> = {}) =>
-  deriveSelectedSessionViewProjection({
-    selectedSessionIdentity: null,
+type ProjectOverrides = Partial<ProjectionInput> &
+  Partial<Pick<RuntimeTargetInput, "role" | "repoSettings" | "isLoadingRepoSettings">>;
+
+const project = (overrides: ProjectOverrides = {}) => {
+  const {
+    role = "build",
+    repoSettings: runtimeRepoSettings = repoSettings,
+    isLoadingRepoSettings = false,
+    ...projectionOverrides
+  } = overrides;
+  const selectedSessionIdentity = projectionOverrides.selectedSessionIdentity ?? null;
+  const selectedTask = projectionOverrides.selectedTask ?? null;
+  const runtimeTarget =
+    projectionOverrides.runtimeTarget ??
+    deriveSelectedSessionRuntimeTarget({
+      selectedSessionIdentity,
+      selectedTask,
+      role,
+      repoSettings: runtimeRepoSettings,
+      isLoadingRepoSettings,
+    });
+
+  return deriveSelectedSessionViewProjection({
     session: null,
     sessionSummary: null,
-    selectedTask: null,
     readModelLoadState,
-    role: "build",
-    repoSettings,
-    isLoadingRepoSettings: false,
-    ...overrides,
+    repoReadinessState: "ready",
+    ...projectionOverrides,
+    selectedSessionIdentity,
+    selectedTask,
+    runtimeTarget,
   });
-
-const deriveTranscriptState = ({
-  projection,
-  repoReadinessState,
-}: {
-  projection: ReturnType<typeof deriveSelectedSessionViewProjection>;
-  repoReadinessState: "checking" | "ready";
-}) =>
-  deriveAgentSessionTranscriptState({
-    source: projection.transcriptSource,
-    repoReadinessState,
-  });
+};
 
 describe("selected-session-view-projection", () => {
   test("uses the loaded session as the selected-session projection when available", () => {
@@ -90,12 +102,7 @@ describe("selected-session-view-projection", () => {
     expect(projection.activityState).toBe("running");
     expect(projection.selectedModel).toBe(session.selectedModel);
     expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "opencode" });
-    expect(
-      deriveTranscriptState({
-        projection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({ kind: "visible" });
+    expect(projection.transcriptState).toEqual({ kind: "visible" });
   });
 
   test("uses the selected-session summary while the full session is not loaded", () => {
@@ -127,12 +134,7 @@ describe("selected-session-view-projection", () => {
     expect(projection.activityState).toBe("waiting_input");
     expect(projection.selectedModel).toBe(summary.selectedModel);
     expect(projection.runtimeTarget).toEqual({ kind: "runtime", runtimeKind: "codex" });
-    expect(
-      deriveTranscriptState({
-        projection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({ kind: "session_loading", reason: "preparing" });
+    expect(projection.transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
   });
 
   test("uses repository settings as the runtime target for sessionless selected tasks", () => {
@@ -162,49 +164,40 @@ describe("selected-session-view-projection", () => {
     const selectedTaskProjection = project({
       selectedTask: createTaskCardFixture(),
     });
-    const inactiveProjection = project();
+    const waitingSelectedTaskProjection = project({
+      selectedTask: createTaskCardFixture(),
+      repoReadinessState: "checking",
+    });
+    const inactiveProjection = project({ repoReadinessState: "checking" });
 
-    expect(
-      deriveTranscriptState({
-        projection: selectedTaskProjection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({ kind: "empty", reason: "sessionless" });
-    expect(
-      deriveTranscriptState({
-        projection: selectedTaskProjection,
-        repoReadinessState: "checking",
-      }),
-    ).toEqual({ kind: "runtime_waiting" });
+    expect(selectedTaskProjection.transcriptState).toEqual({
+      kind: "empty",
+      reason: "sessionless",
+    });
+    expect(waitingSelectedTaskProjection.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(inactiveProjection.runtimeTarget).toEqual({
       kind: "inactive",
     });
-    expect(
-      deriveTranscriptState({
-        projection: inactiveProjection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({ kind: "empty", reason: "inactive" });
+    expect(inactiveProjection.transcriptState).toEqual({ kind: "empty", reason: "inactive" });
   });
 
   test("waits for runtime readiness before resolving selected task read-model loading", () => {
     const projection = project({
       selectedTask: createTaskCardFixture(),
       readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      repoReadinessState: "checking",
+    });
+    const readyProjection = project({
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      repoReadinessState: "ready",
     });
 
-    expect(
-      deriveTranscriptState({
-        projection,
-        repoReadinessState: "checking",
-      }),
-    ).toEqual({ kind: "runtime_waiting" });
-    expect(
-      deriveTranscriptState({
-        projection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({ kind: "session_loading", reason: "preparing" });
+    expect(projection.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(readyProjection.transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "preparing",
+    });
   });
 
   test("surfaces selected session read-model failures", () => {
@@ -220,12 +213,7 @@ describe("selected-session-view-projection", () => {
       readModelLoadState: failedAgentSessionReadModelLoadState(repoPath, "Session history failed"),
     });
 
-    expect(
-      deriveTranscriptState({
-        projection,
-        repoReadinessState: "ready",
-      }),
-    ).toEqual({
+    expect(projection.transcriptState).toEqual({
       kind: "failed",
       message: "Session history failed",
     });

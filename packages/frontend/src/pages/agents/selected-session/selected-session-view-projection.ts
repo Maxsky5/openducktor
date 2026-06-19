@@ -4,14 +4,17 @@ import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-act
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
   inactiveRepoRuntimeReadinessTarget,
+  type RepoRuntimeReadinessState,
   type RepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
   resolvingRepoRuntimeReadinessTarget,
 } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
-  type AgentSessionTranscriptSource,
-  deriveLoadedAgentSessionTranscriptSource,
+  type AgentSessionTranscriptState,
+  deriveLoadedAgentSessionTranscriptState,
+  deriveRuntimeBoundTranscriptEmptyState,
+  deriveRuntimeBoundTranscriptLoadingState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -22,7 +25,33 @@ export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
   runtimeTarget: RepoRuntimeReadinessTarget;
-  transcriptSource: AgentSessionTranscriptSource;
+  transcriptState: AgentSessionTranscriptState;
+};
+
+export const deriveSelectedSessionRuntimeTarget = ({
+  selectedSessionIdentity,
+  selectedTask,
+  role,
+  repoSettings,
+  isLoadingRepoSettings,
+}: {
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedTask: TaskCard | null;
+  role: AgentRole;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+}): RepoRuntimeReadinessTarget => {
+  if (selectedSessionIdentity) {
+    return repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind);
+  }
+
+  if (selectedTask) {
+    return isLoadingRepoSettings
+      ? resolvingRepoRuntimeReadinessTarget
+      : repoRuntimeReadinessTargetForRuntime(resolveConfiguredAgentRuntimeKind(repoSettings, role));
+  }
+
+  return inactiveRepoRuntimeReadinessTarget;
 };
 
 export const deriveSelectedSessionViewProjection = ({
@@ -31,25 +60,26 @@ export const deriveSelectedSessionViewProjection = ({
   sessionSummary,
   selectedTask,
   readModelLoadState,
-  role,
-  repoSettings,
-  isLoadingRepoSettings,
+  runtimeTarget,
+  repoReadinessState,
 }: {
   selectedSessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   sessionSummary: AgentSessionSummary | null;
   selectedTask: TaskCard | null;
   readModelLoadState: AgentSessionReadModelLoadState;
-  role: AgentRole;
-  repoSettings: RepoSettingsInput | null;
-  isLoadingRepoSettings: boolean;
+  runtimeTarget: RepoRuntimeReadinessTarget;
+  repoReadinessState: RepoRuntimeReadinessState;
 }): SelectedSessionViewProjection => {
   if (selectedSessionIdentity && session) {
     return {
       activityState: getAgentSessionActivityStateFromSession(session),
       selectedModel: session.selectedModel,
-      runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind),
-      transcriptSource: deriveLoadedAgentSessionTranscriptSource(session),
+      runtimeTarget,
+      transcriptState: deriveLoadedAgentSessionTranscriptState({
+        session,
+        repoReadinessState,
+      }),
     };
   }
 
@@ -57,11 +87,14 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: sessionSummary?.activityState ?? null,
       selectedModel: sessionSummary?.selectedModel ?? null,
-      runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind),
-      transcriptSource:
+      runtimeTarget,
+      transcriptState:
         readModelLoadState.kind === "failed"
           ? { kind: "failed", message: readModelLoadState.message }
-          : { kind: "runtime_gated_loading", reason: "preparing" },
+          : deriveRuntimeBoundTranscriptLoadingState({
+              reason: "preparing",
+              repoReadinessState,
+            }),
     };
   }
 
@@ -69,24 +102,26 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: null,
       selectedModel: null,
-      runtimeTarget: isLoadingRepoSettings
-        ? resolvingRepoRuntimeReadinessTarget
-        : repoRuntimeReadinessTargetForRuntime(
-            resolveConfiguredAgentRuntimeKind(repoSettings, role),
-          ),
-      transcriptSource:
+      runtimeTarget,
+      transcriptState:
         readModelLoadState.kind === "failed"
           ? { kind: "failed", message: readModelLoadState.message }
           : readModelLoadState.kind === "loading"
-            ? { kind: "runtime_gated_loading", reason: "preparing" }
-            : { kind: "runtime_gated_empty", reason: "sessionless" },
+            ? deriveRuntimeBoundTranscriptLoadingState({
+                reason: "preparing",
+                repoReadinessState,
+              })
+            : deriveRuntimeBoundTranscriptEmptyState({
+                reason: "sessionless",
+                repoReadinessState,
+              }),
     };
   }
 
   return {
     activityState: null,
     selectedModel: null,
-    runtimeTarget: inactiveRepoRuntimeReadinessTarget,
-    transcriptSource: { kind: "empty", reason: "inactive" },
+    runtimeTarget,
+    transcriptState: { kind: "empty", reason: "inactive" },
   };
 };
