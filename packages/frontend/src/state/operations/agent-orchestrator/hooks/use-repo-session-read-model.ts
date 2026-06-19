@@ -1,7 +1,7 @@
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/types/agent-session-read-model";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { loadRepoAgentSessionsForTasks } from "../session-read-model/load-sessions";
+import { sessionRuntimeReadinessKey } from "../session-read-model/session-runtime-readiness";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
@@ -66,6 +67,9 @@ export const useRepoSessionReadModel = ({
     }
     return taskIdsKey.split(TASK_ID_SEPARATOR).map((id) => ({ id }));
   }, [taskIdsKey]);
+  const runtimeReadinessKey = sessionRuntimeReadinessKey(runtimeHealthByRuntime);
+  const runtimeHealthByRuntimeRef = useRef(runtimeHealthByRuntime);
+  runtimeHealthByRuntimeRef.current = runtimeHealthByRuntime;
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -85,6 +89,10 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
+      const runtimeHealthSnapshot = runtimeHealthByRuntimeRef.current;
+      if (sessionRuntimeReadinessKey(runtimeHealthSnapshot) !== runtimeReadinessKey) {
+        return;
+      }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
         const didLoadSessionReadModel = await loadRepoAgentSessionsForTasks({
@@ -94,7 +102,7 @@ export const useRepoSessionReadModel = ({
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
-          runtimeHealthByRuntime,
+          runtimeHealthByRuntime: runtimeHealthSnapshot,
           queryClient,
           isStaleRepoOperation,
         });
@@ -126,7 +134,7 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    runtimeHealthByRuntime,
+    runtimeReadinessKey,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,

@@ -105,6 +105,32 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("does not reload the repo session read model when runtime diagnostics change but readiness does not", async () => {
+    const state = createHarnessState();
+    const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((loadState) => loadState.kind === "ready");
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        state.props(["task-1"], {
+          opencode: createRepoRuntimeHealthFixture({
+            checkedAt: "2026-06-12T08:01:00.000Z",
+            mcp: { toolIds: ["odt_read_task", "odt_set_plan"] },
+            runtime: { updatedAt: "2026-06-12T08:01:00.000Z" },
+          }),
+        }),
+      );
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reloads the repo session read model when the task id set changes", async () => {
     const state = createHarnessState();
     const harness = createHookHarness(useRepoSessionReadModel, state.props(["task-1"]));

@@ -13,6 +13,8 @@ type SessionRuntimeReadiness =
   | { kind: "waiting_for_runtime" }
   | { kind: "blocked"; message: string };
 
+const READINESS_KEY_SEPARATOR = "\u001f";
+
 const collectRuntimeKinds = (tasks: TaskSessionRecords[]): RuntimeKind[] => {
   const runtimeKinds = new Set<RuntimeKind>();
   for (const { record } of collectTaskSessionRecords(tasks)) {
@@ -20,6 +22,29 @@ const collectRuntimeKinds = (tasks: TaskSessionRecords[]): RuntimeKind[] => {
   }
   return Array.from(runtimeKinds).sort();
 };
+
+const runtimeReadinessKeyPart = (
+  runtimeKind: string,
+  runtimeHealth: RepoRuntimeHealthMap[string],
+): string => {
+  if (isRepoRuntimeReady(runtimeHealth ?? null)) {
+    return `${runtimeKind}:ready`;
+  }
+
+  if (!runtimeHealth || isRepoRuntimeStartupPending(runtimeHealth)) {
+    return `${runtimeKind}:waiting`;
+  }
+
+  return `${runtimeKind}:blocked`;
+};
+
+export const sessionRuntimeReadinessKey = (runtimeHealthByRuntime: RepoRuntimeHealthMap): string =>
+  Object.keys(runtimeHealthByRuntime)
+    .sort()
+    .map((runtimeKind) =>
+      runtimeReadinessKeyPart(runtimeKind, runtimeHealthByRuntime[runtimeKind] ?? null),
+    )
+    .join(READINESS_KEY_SEPARATOR);
 
 export const deriveSessionRuntimeReadiness = ({
   tasks,
