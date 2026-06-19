@@ -12,7 +12,7 @@ import {
   createAgentSessionSummaryFixture,
   createTaskCardFixture,
 } from "../agent-studio-test-utils";
-import { deriveSelectedSessionViewProjection } from "./selected-session-view-source";
+import { deriveSelectedSessionViewProjection } from "./selected-session-view-projection";
 
 const repoPath = "/repo";
 const readModelLoadState = readyAgentSessionReadModelLoadState(repoPath);
@@ -66,8 +66,8 @@ const deriveTranscriptState = ({
     repoReadinessState,
   });
 
-describe("selected-session-view-source", () => {
-  test("uses the loaded session as the selected-session source when available", () => {
+describe("selected-session-view-projection", () => {
+  test("uses the loaded session as the selected-session projection when available", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
       status: "running",

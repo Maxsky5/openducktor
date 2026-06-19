@@ -373,8 +373,8 @@ Owns:
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
 
-Invariant: `selected-session-view-source.ts` owns selected-session source
-projection. It walks the selected source once and returns selected activity,
+Invariant: `selected-session-view-projection.ts` owns selected-session
+projection. It walks the selected facts once and returns selected activity,
 selected model, runtime readiness target, and transcript source. Runtime
 readiness-to-display projection stays in the transcript-state module. History
 loading policy and runtime-data query gating live in their owner modules, not in
@@ -421,11 +421,10 @@ Selected-session model choice belongs to the selected session summary until the
 full session is loaded, then to `AgentSessionState.selectedModel`. The selected
 view may expose that display fallback only as `selectedSessionModel`; do not wrap
 it in a session-shaped selected-view projection.
-Selected-session view-source receives exactly one selected source: inactive,
+Selected-session view projection receives selected facts once: inactive,
 selected task, selected session, or loaded session. Runtime readiness target,
-transcript source, selected activity, and selected model all derive from that one
-source. Do not pass parallel task, identity, and session facts through separate
-boundaries and make them infer the source again.
+transcript source, selected activity, and selected model all derive there. Do
+not split that work into separate source-resolution and projection APIs.
 Outside those boundaries, selected-session existence is the selected session
 identity itself; pass `selectedSessionIdentity` and derive booleans locally only
 when a branch truly needs them. Likewise, pass `selectedSessionModel` instead of
@@ -439,10 +438,10 @@ runtime readiness, runtime health, runtime definitions, or runtime catalog
 loader props for the selected session. The selected-session view owner reads the
 runtime/check contexts directly when deriving `runtimeReadiness` and
 `sessionRuntimeData`.
-`selected-session-view-source.ts` owns the selected-session source projection:
+`selected-session-view-projection.ts` owns the selected-session projection:
 loaded session, selected session, selected task, or inactive. Runtime target,
-transcript source, selected activity, and selected model must derive from that one
-source instead of rebuilding the same branch ladder in the hook.
+transcript source, selected activity, and selected model must derive there
+instead of rebuilding the same branch ladder in the hook.
 `selected-session-context.ts` exposes transcript state as selected-session state,
 not as runtime state. Runtime context contains runtime definitions, readiness,
 and selected-session runtime data only.
@@ -451,7 +450,7 @@ session messages and `historyLoadState` only; do not pass transcript loading
 state through the shell to suppress historical tool completions.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
-loading and error fields; selected-session view-source is the only selected
+loading and error fields; selected-session view projection is the only selected
 session layer that interprets read-model load state into a transcript source.
 Expose that value only through `AgentSessionReadModelStateContext`; do not put it
 back on aggregate agent state or operations values.
@@ -727,7 +726,7 @@ Owns:
 Invariant: session-action availability answers whether an action is valid for
 the selected task, role, launch action, and current loaded session. It must not
 gate transcript empty-state actions on selection timing or runtime-loading
-timing; selected-session view-source owns that loading-vs-empty distinction.
+timing; selected-session view projection owns that loading-vs-empty distinction.
 Selected-session send policy must resolve runtime capabilities from selected-session
 runtime data or `AgentSessionState.runtimeKind`; it must not use composer model
 selection as a substitute runtime source for an already-selected session.
@@ -877,7 +876,7 @@ Use these compact tests as the first-line safety net:
 | User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
-| Selected-session runtime/history/read-model loading surface | `pages/agents/selected-session/selected-session-view-source.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
+| Selected-session runtime/history/read-model loading surface | `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |
 | Composer summary runtime cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Existing idle session send preparation | `handlers/prepare-session-send.test.ts` and `handlers/session-actions-send.test.ts` |

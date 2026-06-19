@@ -24,7 +24,7 @@ import {
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
-import { deriveSelectedSessionViewProjection } from "./selected-session-view-source";
+import { deriveSelectedSessionViewProjection } from "./selected-session-view-projection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
