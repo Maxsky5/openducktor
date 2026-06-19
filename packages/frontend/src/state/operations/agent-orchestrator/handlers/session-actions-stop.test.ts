@@ -514,7 +514,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     }
   });
 
-  test("persists stopped snapshot before reloading host sessions", async () => {
+  test("persists stopped snapshot before refreshing task-owned state", async () => {
     const adapter = new OpencodeSdkAdapter();
 
     const persistDeferred = createDeferred<void>();
@@ -560,7 +560,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       sessionsRef,
       taskRef: { current: [] },
       refreshTaskSessionReadModel: async () => {
-        callOrder.push("load-agent-sessions");
+        callOrder.push("force-read-model-refresh");
       },
       refreshTaskData: async () => {
         callOrder.push("refresh-task-data");
@@ -582,7 +582,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     await Promise.resolve();
 
     expect(callOrder).toContain("stop-authoritative-session");
-    expect(callOrder).not.toContain("load-agent-sessions");
+    expect(callOrder).not.toContain("force-read-model-refresh");
 
     persistDeferred.resolve();
     await stopPromise;
@@ -591,13 +591,13 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(persistEndIndex).toBeGreaterThan(-1);
     expect(callOrder.indexOf("invalidate-stop-queries")).toBeGreaterThan(persistEndIndex);
     expect(callOrder.indexOf("refresh-task-data")).toBeGreaterThan(persistEndIndex);
-    expect(callOrder.indexOf("load-agent-sessions")).toBeGreaterThan(persistEndIndex);
+    expect(callOrder).not.toContain("force-read-model-refresh");
     expect(getSession(sessionsRef)?.status).toBe("stopped");
     expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
     expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
   });
 
-  test("refreshes backend-owned state after successful authoritative stop", async () => {
+  test("refreshes task-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalReleaseSession = adapter.releaseSession;
     let refreshTaskDataCalls = 0;
@@ -634,7 +634,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       await actions.stopAgentSession(getSession(sessionsRef));
       expect(localReleaseCalls).toBe(1);
       expect(refreshTaskDataCalls).toBe(1);
-      expect(refreshTaskSessionReadModelCalls).toBe(1);
+      expect(refreshTaskSessionReadModelCalls).toBe(0);
       expect(invalidationCalls).toEqual([
         {
           repoPath: "/tmp/repo",

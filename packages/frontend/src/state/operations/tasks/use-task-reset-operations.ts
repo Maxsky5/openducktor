@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { documentQueryKeys } from "@/state/queries/documents";
-import { agentSessionQueryKeys } from "../../queries/agent-sessions";
+import { invalidateAgentSessionListQuery } from "../../queries/agent-sessions";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
@@ -71,14 +71,11 @@ const invalidateTaskWorkflowQueries = async (
 ): Promise<void> => {
   await Promise.all([
     queryClient.invalidateQueries({
-      queryKey: agentSessionQueryKeys.all,
-      refetchType: "none",
-    }),
-    queryClient.invalidateQueries({
       queryKey: documentQueryKeys.qaReport(repoPath, taskId),
       exact: true,
       refetchType: "none",
     }),
+    invalidateAgentSessionListQuery(queryClient, repoPath, taskId, { refetchActive: true }),
     queryClient.invalidateQueries({
       queryKey: documentQueryKeys.spec(repoPath, taskId),
       exact: true,

@@ -31,7 +31,6 @@ export type StopAgentSessionDependencies = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  refreshTaskSessionReadModel: (taskId: string) => Promise<void>;
 };
 
 const appendUserStoppedNotice = (
@@ -60,7 +59,6 @@ export const createStopAgentSession = ({
   stopAuthoritativeSession,
   invalidateSessionStopQueries,
   refreshTaskData,
-  refreshTaskSessionReadModel,
 }: StopAgentSessionDependencies) => {
   return async (identity: AgentSessionIdentity): Promise<void> => {
     const session = readSessionSnapshot(identity);
@@ -135,7 +133,6 @@ export const createStopAgentSession = ({
         taskId: session.taskId,
       }),
       refreshTaskData(stopRepoPath),
-      refreshTaskSessionReadModel(session.taskId),
     ]);
   };
 };

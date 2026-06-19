@@ -1,7 +1,7 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  agentSessionQueryKeys,
+  invalidateAgentSessionListQuery,
   upsertAgentSessionRecordInQuery,
 } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
@@ -37,11 +37,7 @@ export const createSessionCacheEffects = ({
   }): Promise<void> => {
     await Promise.all([
       invalidateRepoTaskQueries(queryClient, repoPath),
-      queryClient.invalidateQueries({
-        queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-        exact: true,
-        refetchType: "none",
-      }),
+      invalidateAgentSessionListQuery(queryClient, repoPath, taskId),
     ]);
   };
 

@@ -139,7 +139,6 @@ export const createAgentSessionActions = ({
     stopAuthoritativeSession,
     invalidateSessionStopQueries,
     refreshTaskData,
-    refreshTaskSessionReadModel,
   });
 
   const pendingInputActions = createPendingInputActions({

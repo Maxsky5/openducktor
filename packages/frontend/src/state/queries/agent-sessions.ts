@@ -50,6 +50,20 @@ export const loadAgentSessionListsFromQuery = async (
   return Object.fromEntries(entries);
 };
 
+export const invalidateAgentSessionListQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  options?: {
+    refetchActive?: boolean;
+  },
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+    exact: true,
+    refetchType: options?.refetchActive === true ? "active" : "none",
+  });
+
 const areSelectedModelsEquivalent = (
   left: AgentSessionRecord["selectedModel"],
   right: AgentSessionRecord["selectedModel"],

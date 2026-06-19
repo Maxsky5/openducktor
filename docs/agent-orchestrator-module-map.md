@@ -827,8 +827,13 @@ Repo startup session loading is keyed by task IDs only. Task title, status,
 document, or workflow metadata changes must not reload the repo session read
 model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces; orchestrator internals may reload the repo
-session read model after start/stop/reuse paths, but `refreshTaskSessionReadModel` must not
-be exposed through public app operation contexts.
+session read model for explicit start/reuse preparation, but
+`refreshTaskSessionReadModel` must not be exposed through public app operation
+contexts.
+`useRepoSessionReadModel` consumes the per-task session-record queries directly;
+task reset pages must not call a session refresh command after reset. Reset
+operations invalidate the exact task-session-record query, and the repo read
+model reacts to that owned query data.
 Local session projection during repo reads is owned by
 `repo-session-read-model.ts`. It carries sessions outside the loaded task set and
 local starting sessions whose persisted record is not visible yet; every other

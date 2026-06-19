@@ -10,7 +10,6 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import {
   useAgentOperations,
-  useAgentSessionReadModelState,
   useAgentSessionSummaries,
   useTasksState,
   useWorkspaceState,
@@ -30,29 +29,7 @@ type UseKanbanPageModelsArgs = {
   onCloseDetails: () => void;
 };
 
-type ResetTaskAndRefreshTaskSessionsArgs = {
-  taskId: string;
-  resetTask: (taskId: string) => Promise<void>;
-  refreshTaskSessions: (taskId: string) => Promise<void>;
-  onSessionRefreshError?: (error: unknown) => void;
-};
-
 const EMPTY_KANBAN_TASKS = Object.freeze([]) as unknown as TaskCard[];
-
-export const resetTaskAndRefreshTaskSessions = async ({
-  taskId,
-  resetTask,
-  refreshTaskSessions,
-  onSessionRefreshError,
-}: ResetTaskAndRefreshTaskSessionsArgs): Promise<void> => {
-  await resetTask(taskId);
-  try {
-    await refreshTaskSessions(taskId);
-  } catch (error: unknown) {
-    onSessionRefreshError?.(error);
-    throw error;
-  }
-};
 
 export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;
@@ -77,7 +54,6 @@ export function useKanbanPageModels({
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
   const { startAgentSession, sendAgentMessage } = useAgentOperations();
-  const { refreshTaskSessions } = useAgentSessionReadModelState();
   const sessions = useAgentSessionSummaries();
   const {
     refreshTasks,
@@ -216,21 +192,9 @@ export function useKanbanPageModels({
   );
   const onResetTask = useCallback(
     async (taskId: string): Promise<void> => {
-      if (!workspaceRepoPath) {
-        throw new Error("Active workspace is required to refresh task sessions.");
-      }
-      await resetTaskAndRefreshTaskSessions({
-        taskId,
-        resetTask,
-        refreshTaskSessions,
-        onSessionRefreshError: (error) => {
-          toast.error("Failed to refresh sessions", {
-            description: errorMessage(error),
-          });
-        },
-      });
+      await resetTask(taskId);
     },
-    [workspaceRepoPath, refreshTaskSessions, resetTask],
+    [resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
     workspaceId: activeWorkspaceId,
@@ -273,7 +237,6 @@ export function useKanbanPageModels({
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks: kanbanTasks,
     sessions,
-    refreshTaskSessions,
     resetTaskImplementation,
     closeTaskDetails: onCloseDetails,
   });

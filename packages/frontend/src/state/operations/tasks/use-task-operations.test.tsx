@@ -751,8 +751,9 @@ describe("use-task-operations", () => {
       expect(taskReset).toHaveBeenCalledWith("/repo", "A");
       expect(getLatest().tasks[0]?.status).toBe("open");
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
-        queryKey: agentSessionQueryKeys.all,
-        refetchType: "none",
+        queryKey: agentSessionQueryKeys.list("/repo", "A"),
+        exact: true,
+        refetchType: "active",
       });
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: documentQueryKeys.qaReport("/repo", "A"),

@@ -256,28 +256,28 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
-  return useMemo<UseAgentOrchestratorOperationsResult>(() => {
-    const readModelState = {
+  const readModelState = useMemo<AgentSessionReadModelStateContextValue>(
+    () => ({
       sessionReadModelLoadState: currentSessionReadModelLoadState,
-      refreshTaskSessions: refreshTaskSessionReadModel,
-    };
-    const operations = createOrchestratorPublicOperations({
-      agentEngine,
-      sessionActions,
-      loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
-    });
+    }),
+    [currentSessionReadModelLoadState],
+  );
+  const operations = useMemo<AgentOperationsContextValue>(
+    () =>
+      createOrchestratorPublicOperations({
+        agentEngine,
+        sessionActions,
+        loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
+      }),
+    [agentEngine, loadAgentSessionHistoryIntoStore, sessionActions],
+  );
 
-    return {
+  return useMemo<UseAgentOrchestratorOperationsResult>(
+    () => ({
       sessionStore,
       operations,
       readModelState,
-    };
-  }, [
-    currentSessionReadModelLoadState,
-    sessionStore,
-    agentEngine,
-    loadAgentSessionHistoryIntoStore,
-    refreshTaskSessionReadModel,
-    sessionActions,
-  ]);
+    }),
+    [operations, readModelState, sessionStore],
+  );
 }

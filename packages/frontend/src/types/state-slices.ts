@@ -157,7 +157,6 @@ export type SpecStateContextValue = {
 
 export type AgentSessionReadModelStateContextValue = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-  refreshTaskSessions: (taskId: string) => Promise<void>;
 };
 
 export type AgentOperationsContextValue = {

@@ -15,7 +15,6 @@ type ResetImplementationOptions = {
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
-  refreshTaskSessions: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
@@ -41,7 +40,6 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 export function useTaskResetFlow({
   tasks,
   sessions,
-  refreshTaskSessions,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs): {
@@ -109,7 +107,6 @@ export function useTaskResetFlow({
     void (async () => {
       try {
         await resetTaskImplementation(task.id);
-        await refreshTaskSessions(task.id);
         setTaskId(null);
         setCloseDetailsAfterReset(false);
         if (closeDetailsAfterReset) {
@@ -121,14 +118,7 @@ export function useTaskResetFlow({
         setIsSubmitting(false);
       }
     })();
-  }, [
-    closeTaskDetails,
-    closeDetailsAfterReset,
-    isSubmitting,
-    refreshTaskSessions,
-    resetTaskImplementation,
-    task,
-  ]);
+  }, [closeTaskDetails, closeDetailsAfterReset, isSubmitting, resetTaskImplementation, task]);
 
   if (!task) {
     return {

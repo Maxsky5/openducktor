@@ -9,6 +9,7 @@ import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
 import { deriveSessionRuntimeReadiness } from "./session-runtime-readiness";
+import type { TaskSessionRecords } from "./task-session-records";
 import { loadTaskSessionRecordsForTasks } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
@@ -64,6 +65,40 @@ export const loadRepoSessionReadModelForTasks = async ({
     return false;
   }
 
+  return loadRepoSessionReadModel({
+    repoPath,
+    taskSessionRecords,
+    adapter,
+    commitSessionCollection,
+    observeAgentSession,
+    clearSessionObservationState,
+    runtimeHealthByRuntime,
+    isStaleRepoOperation,
+  });
+};
+
+export const loadRepoSessionReadModel = async ({
+  repoPath,
+  taskSessionRecords,
+  adapter,
+  commitSessionCollection,
+  observeAgentSession,
+  clearSessionObservationState,
+  runtimeHealthByRuntime,
+  isStaleRepoOperation,
+}: {
+  repoPath: string;
+  taskSessionRecords: TaskSessionRecords;
+  adapter: SessionLoaderAdapter;
+  commitSessionCollection: CommitSessionCollection;
+  observeAgentSession: ObserveAgentSession;
+  clearSessionObservationState: ClearSessionObservationState;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  isStaleRepoOperation: () => boolean;
+}): Promise<boolean> => {
+  if (isStaleRepoOperation()) {
+    return false;
+  }
   const runtimeReadiness = deriveSessionRuntimeReadiness({
     tasks: taskSessionRecords,
     runtimeHealthByRuntime,

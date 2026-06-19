@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./support/session-transcript-content";
 import {
@@ -9,6 +10,7 @@ import {
   buildBootstrapFixture,
   createAgentSessionRuntimeSnapshotFixture,
   createHookHarness,
+  createTestDependencies,
   createUnavailableBuildTaskFixture,
   host,
   listHarnessSessions,
@@ -675,21 +677,22 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("task session read-model refresh removes sessions whose durable records disappeared", async () => {
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-    });
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [
+  test("task session record query changes remove sessions whose durable records disappeared", async () => {
+    const dependencies = createTestDependencies();
+    dependencies.queryClient.setQueryData(agentSessionQueryKeys.list("/tmp/repo", "task-1"), [
       persistedSessionFixture,
       {
         ...persistedSessionFixture,
         externalSessionId: "external-spec",
         role: "spec",
       },
-    ];
+    ]);
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies,
+    });
 
     try {
       await harness.mount();
@@ -701,23 +704,23 @@ describe("use-agent-orchestrator-operations session state", () => {
           .sort(),
       ).toEqual(["external-1", "external-spec"]);
 
-      host.agentSessionsList = async () => [
-        {
-          ...persistedSessionFixture,
-          externalSessionId: "external-spec",
-          role: "spec",
-        },
-      ];
-
       await harness.run(async () => {
-        await harness.getLatest().readModelState.refreshTaskSessions("task-1");
+        dependencies.queryClient.setQueryData(agentSessionQueryKeys.list("/tmp/repo", "task-1"), [
+          {
+            ...persistedSessionFixture,
+            externalSessionId: "external-spec",
+            role: "spec",
+          },
+        ]);
       });
 
+      await harness.waitFor((state) =>
+        listHarnessSessions(state).every((session) => session.externalSessionId !== "external-1"),
+      );
       expect(
         listHarnessSessions(harness.getLatest()).map((session) => session.externalSessionId),
       ).toEqual(["external-spec"]);
     } finally {
-      host.agentSessionsList = originalAgentSessionsList;
       await harness.unmount();
     }
   });
