@@ -320,7 +320,7 @@ describe("use-checks", () => {
       expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
       await harness.run(async (value) => {
-        await value.refreshRepoRuntimeHealthForRepo("/repo-a", true);
+        await value.refreshChecks();
       });
       await harness.waitFor(
         (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
@@ -335,7 +335,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("tracks per-repo cache and projects cached checks when active repo changes", async () => {
+  test("tracks per-repo task-store cache and loads runtime health when active repo changes", async () => {
     const taskStoreCheck = mock(
       async (repoPath: string): Promise<TaskStoreCheck> =>
         makeTaskStoreCheck({
@@ -363,7 +363,6 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
-        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
       await harness.waitFor((value) => value.hasCachedTaskStoreCheck("/repo-b"));
 
@@ -375,21 +374,27 @@ describe("use-checks", () => {
       ]);
       expect(harness.getLatest().hasCachedTaskStoreCheck("/repo-b")).toBe(true);
       expect(taskStoreCheck).toHaveBeenCalledTimes(1);
-      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
 
       await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.waitFor(
+        (value) =>
+          value.activeTaskStoreCheck?.taskStorePath ===
+            "/repo-b/.openducktor/task-stores/workspace/database.sqlite" &&
+          value.activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds[0] === "/repo-b",
+      );
       expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
         "/repo-b/.openducktor/task-stores/workspace/database.sqlite",
       );
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
         "/repo-b",
       ]);
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
       taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
-        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
       expect(taskStoreCheck).not.toHaveBeenCalled();
@@ -881,12 +886,6 @@ describe("use-checks", () => {
     try {
       await harness.mount();
 
-      await harness.run(async (value) => {
-        return expect(
-          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
-        ).resolves.toBeDefined();
-      });
-
       await harness.waitFor((value) => {
         const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
         return runtimeHealth?.status === "error";
@@ -929,9 +928,7 @@ describe("use-checks", () => {
       shouldFailRefresh = true;
 
       await harness.run(async (value) => {
-        return expect(
-          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
-        ).resolves.toBeDefined();
+        await value.refreshChecks();
       });
 
       await harness.waitFor((value) => {

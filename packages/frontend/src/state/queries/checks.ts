@@ -183,16 +183,3 @@ export const loadTaskStoreCheckFromQuery = (
   taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
 ): Promise<TaskStoreCheck> =>
   queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck));
-
-export const loadRepoRuntimeHealthFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  runtimeDefinitions: RuntimeDescriptor[],
-  checkRepoRuntimeHealth: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<RepoRuntimeHealthCheck>,
-): Promise<RepoRuntimeHealthMap> =>
-  queryClient.fetchQuery(
-    repoRuntimeHealthQueryOptions(repoPath, runtimeDefinitions, checkRepoRuntimeHealth),
-  );

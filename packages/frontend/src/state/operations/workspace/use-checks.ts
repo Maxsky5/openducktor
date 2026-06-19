@@ -18,7 +18,6 @@ import {
   type ChecksQueryDependencies,
   checksQueryKeys,
   classifyDiagnosticsQueryError,
-  loadRepoRuntimeHealthFromQuery,
   loadRuntimeCheckFromQuery,
   loadTaskStoreCheckFromQuery,
   repoRuntimeHealthQueryOptions,
@@ -56,10 +55,6 @@ type UseChecksResult = {
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  refreshRepoRuntimeHealthForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<RepoRuntimeHealthMap>;
   refreshChecks: () => Promise<void>;
   hasRuntimeCheck: () => boolean;
   hasCachedTaskStoreCheck: (repoPath: string) => boolean;
@@ -124,37 +119,6 @@ export function useChecks({
     [taskStoreCheck, queryClient],
   );
 
-  const refreshRepoRuntimeHealthForRepo = useCallback(
-    async (repoPath: string, force = false): Promise<RepoRuntimeHealthMap> => {
-      if (runtimeDefinitions.length === 0) {
-        return {};
-      }
-
-      const queryOptions = repoRuntimeHealthQueryOptions(
-        repoPath,
-        runtimeDefinitions,
-        checkRepoRuntimeHealth,
-      );
-
-      if (force) {
-        await queryClient.invalidateQueries({
-          queryKey: queryOptions.queryKey,
-          exact: true,
-          refetchType: "none",
-        });
-        return queryClient.fetchQuery(queryOptions);
-      }
-
-      return loadRepoRuntimeHealthFromQuery(
-        queryClient,
-        repoPath,
-        runtimeDefinitions,
-        checkRepoRuntimeHealth,
-      );
-    },
-    [checkRepoRuntimeHealth, queryClient, runtimeDefinitions],
-  );
-
   const refreshChecks = useCallback(async (): Promise<void> => {
     if (!activeRepoPath) {
       return;
@@ -162,10 +126,28 @@ export function useChecks({
 
     setIsManualLoadingChecks(true);
     try {
+      const refreshRuntimeHealth = async (): Promise<RepoRuntimeHealthMap> => {
+        if (runtimeDefinitions.length === 0) {
+          return {};
+        }
+
+        const queryOptions = repoRuntimeHealthQueryOptions(
+          activeRepoPath,
+          runtimeDefinitions,
+          checkRepoRuntimeHealth,
+        );
+        await queryClient.invalidateQueries({
+          queryKey: queryOptions.queryKey,
+          exact: true,
+          refetchType: "none",
+        });
+        return queryClient.fetchQuery(queryOptions);
+      };
+
       const [runtimeResult, taskStoreResult, runtimeHealthResult] = await Promise.allSettled([
         refreshRuntimeCheck(true),
         refreshTaskStoreCheckForRepo(activeRepoPath, true),
-        refreshRepoRuntimeHealthForRepo(activeRepoPath, true),
+        refreshRuntimeHealth(),
       ]);
 
       if (runtimeResult.status === "rejected") {
@@ -191,9 +173,11 @@ export function useChecks({
     }
   }, [
     activeRepoPath,
+    checkRepoRuntimeHealth,
+    queryClient,
     refreshTaskStoreCheckForRepo,
-    refreshRepoRuntimeHealthForRepo,
     refreshRuntimeCheck,
+    runtimeDefinitions,
   ]);
 
   const hasCachedTaskStoreCheck = useCallback(
@@ -330,7 +314,6 @@ export function useChecks({
     setIsLoadingChecks: setIsManualLoadingChecks,
     refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,
-    refreshRepoRuntimeHealthForRepo,
     refreshChecks,
     hasRuntimeCheck,
     hasCachedTaskStoreCheck,
