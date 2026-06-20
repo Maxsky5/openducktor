@@ -314,6 +314,11 @@ describe("model-selection-preferences", () => {
   });
 
   test("resolves stale loaded-session models to an explicit repair selection", () => {
+    const sessionIdentity = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
     const draftSelection = {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -335,6 +340,7 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
+          sessionIdentity,
           sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel: unknownSessionModel,
@@ -346,7 +352,11 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: roleDefaultSelection,
       selectionForNewSession: draftSelection,
-      sessionModelRepairSelection: roleDefaultSelection,
+      sessionModelRepairCommand: {
+        key: "session-1|opencode|%2Frepo\u001fopencode\u001fanthropic\u001fclaude-sonnet\u001f\u001f",
+        session: sessionIdentity,
+        selection: roleDefaultSelection,
+      },
       isSelectedSessionModelSendable: false,
     });
   });
@@ -362,6 +372,11 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/repo",
+          },
           sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel: null,
@@ -373,7 +388,7 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: null,
       selectionForNewSession: roleDefaultSelection,
-      sessionModelRepairSelection: null,
+      sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
   });
@@ -399,7 +414,7 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: roleDefaultSelection,
       selectionForNewSession: roleDefaultSelection,
-      sessionModelRepairSelection: null,
+      sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
 
@@ -417,7 +432,7 @@ describe("model-selection-preferences", () => {
       selectionCatalog: null,
       selectedModelSelection: null,
       selectionForNewSession: null,
-      sessionModelRepairSelection: null,
+      sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
   });

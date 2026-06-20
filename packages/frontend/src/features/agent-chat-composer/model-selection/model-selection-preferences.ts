@@ -6,6 +6,8 @@ import {
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const toRoleDefaultModelSelection = (
@@ -98,8 +100,14 @@ export type ChatComposerModelSelections = {
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   selectionForNewSession: AgentModelSelection | null;
-  sessionModelRepairSelection: AgentModelSelection | null;
+  sessionModelRepairCommand: ChatComposerSessionModelRepairCommand | null;
   isSelectedSessionModelSendable: boolean;
+};
+
+export type ChatComposerSessionModelRepairCommand = {
+  key: string;
+  session: AgentSessionIdentity;
+  selection: AgentModelSelection;
 };
 
 export type ChatComposerModelSelectionSource =
@@ -111,6 +119,7 @@ export type ChatComposerModelSelectionSource =
     }
   | {
       kind: "session";
+      sessionIdentity: AgentSessionIdentity | null;
       sessionRuntimeKind: RuntimeKind;
       modelCatalog: AgentModelCatalog | null;
       selectedSessionModel: AgentModelSelection | null;
@@ -139,7 +148,10 @@ export const resolveChatComposerModelSelections = ({
       selectedModelSelection: selectedSessionSelection.selectedModelSelection,
       selectionForNewSession:
         source.draftSelection ?? roleDefaultSelection ?? fallbackCatalogSelection,
-      sessionModelRepairSelection: selectedSessionSelection.repairSelection,
+      sessionModelRepairCommand: resolveSessionModelRepairCommand({
+        sessionIdentity: source.sessionIdentity,
+        repairSelection: selectedSessionSelection.repairSelection,
+      }),
       isSelectedSessionModelSendable: selectedSessionSelection.isSendable,
     };
   }
@@ -158,8 +170,33 @@ export const resolveChatComposerModelSelections = ({
       source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
     selectionForNewSession:
       source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
-    sessionModelRepairSelection: null,
+    sessionModelRepairCommand: null,
     isSelectedSessionModelSendable: true,
+  };
+};
+
+export const resolveSessionModelRepairCommand = ({
+  sessionIdentity,
+  repairSelection,
+}: {
+  sessionIdentity: AgentSessionIdentity | null;
+  repairSelection: AgentModelSelection | null;
+}): ChatComposerSessionModelRepairCommand | null => {
+  if (!sessionIdentity || !repairSelection) {
+    return null;
+  }
+
+  return {
+    key: [
+      agentSessionIdentityKey(sessionIdentity),
+      repairSelection.runtimeKind ?? "",
+      repairSelection.providerId,
+      repairSelection.modelId,
+      repairSelection.variant ?? "",
+      repairSelection.profileId ?? "",
+    ].join("\u001f"),
+    session: sessionIdentity,
+    selection: repairSelection,
   };
 };
 

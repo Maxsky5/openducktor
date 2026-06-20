@@ -6,22 +6,18 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
 import {
   type AgentStudioRouteSessionResolution,
-  findAgentStudioSessionSummaryByKey,
   groupSessionsByTaskId,
-  resolveAgentStudioRouteSession,
-  resolveAgentStudioSessionSelection,
-  resolveAgentStudioTaskId,
 } from "./agents-page-selection";
 import {
   type AgentStudioSelectedSessionView,
   useAgentStudioSelectedSessionView,
 } from "./selected-session/use-agent-studio-selected-session-view";
-import {
-  type AgentStudioSelectionState,
-  agentStudioSelectionSessionKey,
-  type SelectAgentStudioSelection,
+import type {
+  AgentStudioSelectionState,
+  SelectAgentStudioSelection,
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -57,6 +53,7 @@ export type AgentStudioSelectionControllerResult = {
   allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
   resolvedRouteSession: AgentSessionSummary | null;
+  queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -89,82 +86,37 @@ export function useAgentStudioSelectionController({
   selectAgentStudioSelection,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-  const tasksById = useMemo(() => {
-    return new Map(tasks.map((task) => [task.id, task]));
-  }, [tasks]);
 
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
-  const routeSessionResolution = useMemo(
+  const navigationBase = useMemo(
     () =>
-      resolveAgentStudioRouteSession({
+      resolveAgentStudioNavigationState({
         isRepoNavigationBoundaryPending,
         isLoadingTasks,
         sessionReadModelLoadState,
+        tasks,
         sessions,
-        sessionKey: sessionKeyParam,
+        taskIdParam,
+        sessionKeyParam,
+        hasExplicitRoleParam,
+        roleFromQuery,
+        selectionState,
+        activeTaskTabId: "",
       }),
     [
+      hasExplicitRoleParam,
       isLoadingTasks,
       isRepoNavigationBoundaryPending,
+      roleFromQuery,
+      selectionState,
       sessionKeyParam,
       sessionReadModelLoadState,
       sessions,
+      taskIdParam,
+      tasks,
     ],
   );
-  const selectedSessionFromRoute =
-    routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
-  const selectedSessionFromSelection = useMemo(
-    () =>
-      findAgentStudioSessionSummaryByKey(sessions, agentStudioSelectionSessionKey(selectionState)),
-    [selectionState, sessions],
-  );
-
-  const taskId = resolveAgentStudioTaskId({
-    taskIdParam: selectionState.taskId,
-    selectedSessionFromRoute: selectedSessionFromSelection,
-  });
-
-  const selectedTask = useMemo(
-    () => (taskId ? (tasksById.get(taskId) ?? null) : null),
-    [taskId, tasksById],
-  );
-
-  const sessionsForTask = useMemo(() => {
-    if (!taskId) {
-      return [];
-    }
-    return sessionsByTaskId.get(taskId) ?? [];
-  }, [sessionsByTaskId, taskId]);
-
-  const resolvedRouteSession = useMemo(() => {
-    if (isRepoNavigationBoundaryPending) {
-      return null;
-    }
-    const routeTaskId = resolveAgentStudioTaskId({
-      taskIdParam,
-      selectedSessionFromRoute,
-    });
-    const routeSelectedTask = routeTaskId ? (tasksById.get(routeTaskId) ?? null) : null;
-    const routeSessionsForTask = routeTaskId ? (sessionsByTaskId.get(routeTaskId) ?? []) : [];
-    return resolveAgentStudioSessionSelection({
-      sessionsForTask: routeSessionsForTask,
-      sessionKey: sessionKeyParam,
-      hasExplicitRoleParam,
-      roleFromQuery,
-      selectedTask: routeSelectedTask,
-      sessionlessRole: roleFromQuery,
-    }).sessionSummary;
-  }, [
-    hasExplicitRoleParam,
-    isRepoNavigationBoundaryPending,
-    roleFromQuery,
-    selectedSessionFromRoute,
-    sessionKeyParam,
-    sessionsByTaskId,
-    taskIdParam,
-    tasksById,
-  ]);
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionSummary>();
@@ -205,8 +157,8 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskTabs({
     activeWorkspaceId,
     isRepoNavigationBoundaryPending,
-    taskId,
-    selectedTask,
+    taskId: navigationBase.taskId,
+    selectedTask: navigationBase.selectedTask,
     tasks,
     isLoadingTasks,
     latestSessionByTaskId,
@@ -214,49 +166,48 @@ export function useAgentStudioSelectionController({
     selectAgentStudioSelection,
   });
 
-  const selectedViewTaskId = activeTaskTabId || taskId;
-
-  const selectedViewTask = useMemo(
-    () => (selectedViewTaskId ? (tasksById.get(selectedViewTaskId) ?? null) : null),
-    [tasksById, selectedViewTaskId],
-  );
-
-  const selectedViewSessions = useMemo(() => {
-    if (!selectedViewTaskId) {
-      return [];
+  const navigationState = useMemo(() => {
+    if (!activeTaskTabId || activeTaskTabId === navigationBase.taskId) {
+      return navigationBase;
     }
-    return sessionsByTaskId.get(selectedViewTaskId) ?? [];
-  }, [sessionsByTaskId, selectedViewTaskId]);
-
-  const isDetachedFromSelectedTask = Boolean(
-    selectedViewTaskId && taskId && selectedViewTaskId !== taskId,
-  );
-  const selectionSessionKey = agentStudioSelectionSessionKey(selectionState);
-  const hasMissingRouteSessionSelection =
-    routeSessionResolution.kind === "missing" &&
-    selectionSessionKey === routeSessionResolution.sessionKey;
-  const viewSessionKey =
-    isDetachedFromSelectedTask || hasMissingRouteSessionSelection ? null : selectionSessionKey;
-  const viewSessionIdentity =
-    isDetachedFromSelectedTask || hasMissingRouteSessionSelection
-      ? null
-      : selectionState.sessionIdentity;
-  const viewRole = isDetachedFromSelectedTask ? "spec" : selectionState.role;
-  const hasExplicitRoleSelection =
-    !isDetachedFromSelectedTask && selectionState.hasExplicitRoleSelection;
-  const keepExplicitRoleSessionless =
-    !isDetachedFromSelectedTask && selectionState.keepSessionless && viewSessionKey === null;
+    return resolveAgentStudioNavigationState({
+      isRepoNavigationBoundaryPending,
+      isLoadingTasks,
+      sessionReadModelLoadState,
+      tasks,
+      sessions,
+      taskIdParam,
+      sessionKeyParam,
+      hasExplicitRoleParam,
+      roleFromQuery,
+      selectionState,
+      activeTaskTabId,
+    });
+  }, [
+    activeTaskTabId,
+    hasExplicitRoleParam,
+    isLoadingTasks,
+    isRepoNavigationBoundaryPending,
+    navigationBase,
+    roleFromQuery,
+    selectionState,
+    sessionKeyParam,
+    sessionReadModelLoadState,
+    sessions,
+    taskIdParam,
+    tasks,
+  ]);
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceRepoPath,
-    selectedTask: selectedViewTask,
-    sessionSummaries: selectedViewSessions,
-    sessionKey: viewSessionKey,
-    hasExplicitRoleSelection,
-    roleSelection: viewRole,
-    sessionlessRole: viewRole,
-    keepExplicitRoleSessionless,
-    sessionIdentityFromRoute: viewSessionIdentity,
+    selectedTask: navigationState.view.selectedTask,
+    sessionSummaries: navigationState.view.sessionsForTask,
+    sessionKey: navigationState.view.sessionKey,
+    hasExplicitRoleSelection: navigationState.view.hasExplicitRoleSelection,
+    roleSelection: navigationState.view.role,
+    sessionlessRole: navigationState.view.role,
+    keepExplicitRoleSessionless: navigationState.view.keepExplicitRoleSessionless,
+    sessionIdentityFromRoute: navigationState.view.sessionIdentity,
     repoSettings,
     isLoadingRepoSettings,
   });
@@ -264,17 +215,18 @@ export function useAgentStudioSelectionController({
     session: selectedSessionView.selectedSession.loadedSession,
     repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
-  const isActiveTaskReady = Boolean(activeWorkspaceId && selectedViewTaskId);
+  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.taskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
-      routeSessionResolution,
-      selectedSessionFromRoute,
-      taskId,
-      selectedTask,
+      routeSessionResolution: navigationState.routeSessionResolution,
+      selectedSessionFromRoute: navigationState.selectedSessionFromRoute,
+      taskId: navigationState.taskId,
+      selectedTask: navigationState.selectedTask,
       allSessionSummaries: sessions,
-      sessionsForTask,
-      resolvedRouteSession,
+      sessionsForTask: navigationState.sessionsForTask,
+      resolvedRouteSession: navigationState.resolvedRouteSession,
+      queryUpdate: navigationState.queryUpdate,
       isLoadingTasks,
       activeTaskTabId,
       availableTabTasks,
@@ -284,9 +236,9 @@ export function useAgentStudioSelectionController({
       handleCloseTab,
       handleReorderTab,
       view: {
-        taskId: selectedViewTaskId,
-        selectedTask: selectedViewTask,
-        sessionsForTask: selectedViewSessions,
+        taskId: navigationState.view.taskId,
+        selectedTask: navigationState.view.selectedTask,
+        sessionsForTask: navigationState.view.sessionsForTask,
         isTaskReady: isActiveTaskReady,
         ...selectedSessionView,
       },
@@ -300,18 +252,10 @@ export function useAgentStudioSelectionController({
       handleSelectTab,
       isActiveTaskReady,
       isLoadingTasks,
-      routeSessionResolution,
-      resolvedRouteSession,
+      navigationState,
       selectedSessionView,
-      selectedSessionFromRoute,
-      selectedTask,
       sessions,
-      sessionsForTask,
-      taskId,
       taskTabs,
-      selectedViewTask,
-      selectedViewSessions,
-      selectedViewTaskId,
     ],
   );
 }

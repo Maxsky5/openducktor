@@ -1,10 +1,9 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { listenToAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/session-events";
+import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
-import { createSessionTurnState } from "@/state/operations/agent-orchestrator/support/session-turn-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
@@ -72,7 +71,6 @@ export function useRuntimeTranscriptLiveOverlay({
     }
 
     const sessionRef = toRuntimeSessionRef(repoPath, target);
-    const turnState = createSessionTurnState();
     let isCancelled = false;
     let unsubscribe: (() => void) | null = null;
 
@@ -95,23 +93,12 @@ export function useRuntimeTranscriptLiveOverlay({
       error: null,
     });
 
-    void listenToAgentSessionEvents({
-      adapter: {
-        subscribeEvents: subscribeSessionEvents,
-        replyApproval: ({ requestId, outcome, message, ...session }) =>
-          replyAgentApproval(session, requestId, outcome, message),
-      },
+    void observeTransientAgentSessionEvents({
+      subscribeEvents: subscribeSessionEvents,
+      replyApproval: replyAgentApproval,
       sessionRef,
-      turnMetadata: turnState.metadata,
-      readSession: (identity) =>
-        matchesAgentSessionIdentity(identity, target)
-          ? (liveStateRef.current?.session ?? null)
-          : null,
-      updateSession: (identity, updater) => {
-        if (!matchesAgentSessionIdentity(identity, target)) {
-          return null;
-        }
-
+      readSession: () => liveStateRef.current?.session ?? null,
+      applySessionEvent: (updater) => {
         const nextSession = updater(ensureSession());
         setNextState({
           session: nextSession,
@@ -120,18 +107,6 @@ export function useRuntimeTranscriptLiveOverlay({
         });
         return nextSession;
       },
-      updateSessionTodos: () => undefined,
-      isSessionObserved: (identity) => matchesAgentSessionIdentity(identity, target),
-      recordTurnActivityTimestamp: turnState.timing.recordTurnActivityTimestamp,
-      recordTurnUserMessageTimestamp: turnState.timing.recordTurnUserMessageTimestamp,
-      resolveTurnDurationMs: turnState.timing.resolveTurnDurationMs,
-      clearTurnDuration: turnState.timing.clearTurnDuration,
-      buildReadOnlyApprovalRejectionMessage: async () => {
-        throw new Error("Read-only transcript views do not auto-reject approvals.");
-      },
-      readOnlyApprovalAutoRejectSafe: false,
-      refreshTaskData: async () => undefined,
-      workflowToolAliasesByCanonical: undefined,
     })
       .then((nextUnsubscribe) => {
         if (isCancelled) {
@@ -154,7 +129,6 @@ export function useRuntimeTranscriptLiveOverlay({
     return () => {
       isCancelled = true;
       unsubscribe?.();
-      turnState.clearAll();
     };
   }, [repoPath, replyAgentApproval, shouldObserve, subscribeSessionEvents, target]);
 

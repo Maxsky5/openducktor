@@ -31,7 +31,7 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
@@ -255,12 +255,13 @@ export function useAgentStudioChatComposer({
     selectionCatalog,
     selectedModelSelection,
     selectionForNewSession,
-    sessionModelRepairSelection,
+    sessionModelRepairCommand,
     isSelectedSessionModelSendable,
   } = useMemo(() => {
     const source: ChatComposerModelSelectionSource = selectedSessionIdentity
       ? {
           kind: "session",
+          sessionIdentity: loadedSessionIdentity,
           sessionRuntimeKind: selectedSessionIdentity.runtimeKind,
           modelCatalog: sessionModelCatalog,
           selectedSessionModel,
@@ -285,26 +286,19 @@ export function useAgentStudioChatComposer({
     selectedSessionIdentity,
     selectedSessionModel,
     sessionModelCatalog,
+    loadedSessionIdentity,
   ]);
   useEffect(() => {
-    if (!loadedSessionIdentity || !sessionModelRepairSelection) {
+    if (!sessionModelRepairCommand) {
       lastSessionModelRepairKeyRef.current = null;
       return;
     }
-    const repairKey = JSON.stringify([
-      agentSessionIdentityKey(loadedSessionIdentity),
-      sessionModelRepairSelection.runtimeKind ?? "",
-      sessionModelRepairSelection.providerId,
-      sessionModelRepairSelection.modelId,
-      sessionModelRepairSelection.variant ?? "",
-      sessionModelRepairSelection.profileId ?? "",
-    ]);
-    if (lastSessionModelRepairKeyRef.current === repairKey) {
+    if (lastSessionModelRepairKeyRef.current === sessionModelRepairCommand.key) {
       return;
     }
-    lastSessionModelRepairKeyRef.current = repairKey;
-    updateAgentSessionModel(loadedSessionIdentity, sessionModelRepairSelection);
-  }, [loadedSessionIdentity, sessionModelRepairSelection, updateAgentSessionModel]);
+    lastSessionModelRepairKeyRef.current = sessionModelRepairCommand.key;
+    updateAgentSessionModel(sessionModelRepairCommand.session, sessionModelRepairCommand.selection);
+  }, [sessionModelRepairCommand, updateAgentSessionModel]);
 
   const searchFiles = useMemo(
     () =>
