@@ -12,7 +12,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   taskIdParam: string;
   sessionKeyParam: string | null;
   sessionFromQuery: AgentSessionSummary | null;
-  resolvedTaskId: string;
+  routeTaskId: string;
   resolvedSession: AgentSessionSummary | null;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
@@ -30,7 +30,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
   taskIdParam,
   sessionKeyParam,
   sessionFromQuery,
-  resolvedTaskId,
+  routeTaskId,
   resolvedSession,
   roleFromQuery,
 }: ResolveAgentStudioQuerySessionUpdateArgs): AgentStudioQueryUpdate | null => {
@@ -58,13 +58,12 @@ const resolveAgentStudioQuerySessionUpdate = ({
     updates[AGENT_STUDIO_QUERY_KEYS.task] = sessionFromQuery.taskId;
   }
 
-  const selectedTaskExists =
-    resolvedTaskId.length > 0 && tasks.some((entry) => entry.id === resolvedTaskId);
+  const routeTaskExists = routeTaskId.length > 0 && tasks.some((entry) => entry.id === routeTaskId);
   const shouldClearSessionKey =
-    Boolean(sessionKeyParam) && !isLoadingTasks && selectedTaskExists && !sessionFromQuery;
+    Boolean(sessionKeyParam) && !isLoadingTasks && routeTaskExists && !sessionFromQuery;
 
   if (sessionKeyParam) {
-    if (sessionFromQuery && resolvedTaskId && sessionFromQuery.taskId !== resolvedTaskId) {
+    if (sessionFromQuery && routeTaskId && sessionFromQuery.taskId !== routeTaskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = sessionFromQuery.taskId;
     } else if (shouldClearSessionKey) {
       updates[AGENT_STUDIO_QUERY_KEYS.session] = undefined;
@@ -94,7 +93,7 @@ export function useAgentStudioQuerySessionSync({
   taskIdParam,
   sessionKeyParam,
   sessionFromQuery,
-  resolvedTaskId,
+  routeTaskId,
   resolvedSession,
   roleFromQuery,
   scheduleQueryUpdate,
@@ -108,7 +107,7 @@ export function useAgentStudioQuerySessionSync({
         taskIdParam,
         sessionKeyParam,
         sessionFromQuery,
-        resolvedTaskId,
+        routeTaskId,
         resolvedSession,
         roleFromQuery,
       }),
@@ -117,7 +116,7 @@ export function useAgentStudioQuerySessionSync({
       isRepoNavigationBoundaryPending,
       roleFromQuery,
       resolvedSession,
-      resolvedTaskId,
+      routeTaskId,
       sessionFromQuery,
       sessionKeyParam,
       taskIdParam,

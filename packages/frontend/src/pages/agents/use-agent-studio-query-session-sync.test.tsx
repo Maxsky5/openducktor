@@ -38,7 +38,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   taskIdParam: "task-1",
   sessionKeyParam: null,
   sessionFromQuery: null,
-  resolvedTaskId: "task-1",
+  routeTaskId: "task-1",
   resolvedSession: null,
   roleFromQuery: "spec",
   scheduleQueryUpdate: () => {},
@@ -52,7 +52,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1")],
         taskIdParam: "missing-task",
-        resolvedTaskId: "missing-task",
+        routeTaskId: "missing-task",
         scheduleQueryUpdate,
       }),
     );
@@ -82,7 +82,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "",
         sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
-        resolvedTaskId: "task-2",
+        routeTaskId: "task-2",
         resolvedSession: selectedSession,
         scheduleQueryUpdate,
       }),
@@ -105,7 +105,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         tasks: [createTask("task-1")],
         taskIdParam: "missing-task",
         sessionKeyParam: "session-2",
-        resolvedTaskId: "",
+        routeTaskId: "",
         scheduleQueryUpdate,
       }),
     );
@@ -126,7 +126,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "task-1",
         sessionKeyParam: "removed-session",
         sessionFromQuery: null,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         scheduleQueryUpdate,
       }),
     );
@@ -151,7 +151,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession: selectedSession,
         scheduleQueryUpdate,
       }),
@@ -174,7 +174,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession: null,
         scheduleQueryUpdate,
       }),
@@ -185,6 +185,30 @@ describe("useAgentStudioQuerySessionSync", () => {
 
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
       expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ task: "task-2" }]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not reassert a stale session task when the URL task already matches that session", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const selectedSession = createSession("task-1", "session-1");
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [createTask("task-1"), createTask("task-2")],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(selectedSession),
+        sessionFromQuery: selectedSession,
+        routeTaskId: "task-1",
+        resolvedSession: null,
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
@@ -203,7 +227,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(resolvedSession),
         sessionFromQuery: resolvedSession,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
@@ -237,7 +261,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "",
         sessionKeyParam: sessionKeyParam(resolvedSession),
         sessionFromQuery: resolvedSession,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
@@ -271,7 +295,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         taskIdParam: "task-1",
         sessionKeyParam: null,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
@@ -298,7 +322,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         taskIdParam: "task-1",
         sessionKeyParam: null,
-        resolvedTaskId: "task-1",
+        routeTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "qa",
         scheduleQueryUpdate,

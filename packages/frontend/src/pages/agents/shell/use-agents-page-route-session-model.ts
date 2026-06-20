@@ -98,7 +98,7 @@ export function useAgentsPageRouteSessionModel({
     taskIdParam,
     sessionKeyParam,
     sessionFromQuery: selection.selectedSessionFromRoute,
-    resolvedTaskId: selection.taskId,
+    routeTaskId: taskIdParam || selection.selectedSessionFromRoute?.taskId || "",
     resolvedSession: selection.resolvedRouteSession,
     roleFromQuery,
     scheduleQueryUpdate,
