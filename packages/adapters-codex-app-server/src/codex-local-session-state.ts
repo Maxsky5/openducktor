@@ -9,6 +9,7 @@ type CodexLocalSessionStateDeps = {
   sessionEvents: { clear(externalSessionId: string): void };
   activeTurnsBySessionId: { delete(externalSessionId: string): boolean };
   pendingInput: { clearSession(externalSessionId: string): void };
+  threadStatusOverrides: { clear(runtimeId: string, threadId: string): void };
   runtimeEvents: {
     clearSession(externalSessionId: string): void;
     drainBufferedStreamEvents(externalSessionId: string): Promise<void>;
@@ -49,6 +50,9 @@ export class CodexLocalSessionState implements CodexSessionLookup {
   private clearSessionState(externalSessionId: string): CodexSessionState | undefined {
     const session = this.sessions.get(externalSessionId);
     this.sessions.delete(externalSessionId);
+    if (session) {
+      this.deps.threadStatusOverrides.clear(session.runtimeId, session.threadId);
+    }
     this.deps.sessionEvents.clear(externalSessionId);
     this.deps.activeTurnsBySessionId.delete(externalSessionId);
     this.deps.pendingInput.clearSession(externalSessionId);

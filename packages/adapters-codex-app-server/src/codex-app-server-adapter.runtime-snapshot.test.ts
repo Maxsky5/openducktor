@@ -694,6 +694,40 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     unsubscribe();
   });
 
+  test("clears live status overrides when releasing a Codex session", async () => {
+    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications: mock(async () => [] as unknown[]),
+      drainServerRequests: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    await observeSessionState(adapter, "thread-saved");
+    await adapter.sendUserMessage({
+      ...codexSessionRuntimeRef("thread-saved"),
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+    transport.threadSavedStatus = { type: "idle" };
+
+    await adapter.releaseSession({
+      externalSessionId: "thread-saved",
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-saved",
+      }),
+    ).resolves.toMatchObject({ classification: "idle" });
+  });
+
   test("streams messages and completion after refresh resume stream", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void

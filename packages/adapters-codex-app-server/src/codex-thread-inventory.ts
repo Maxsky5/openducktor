@@ -23,21 +23,20 @@ type PendingInventoryRead = {
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, PendingInventoryRead>();
-  private readonly statusUpdatesByRuntimeId = new Map<
+  private readonly statusOverridesByRuntimeId = new Map<
     string,
     Map<string, CodexThreadStatusSnapshot>
   >();
 
-  clear(runtimeId: string): void {
+  clearInventory(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
     this.pendingInventoryByRuntimeId.delete(runtimeId);
-    this.statusUpdatesByRuntimeId.delete(runtimeId);
   }
 
   async read(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
     const existing = this.inventoryByRuntimeId.get(runtimeId);
     if (existing) {
-      return existing;
+      return this.withStatusOverrides(runtimeId, existing);
     }
     const pending = this.pendingInventoryByRuntimeId.get(runtimeId);
     if (pending) {
@@ -64,12 +63,11 @@ export class CodexThreadInventoryReader {
       mode,
       promise: this.fetch(client, runtimeId).then(
         (inventory) => {
-          const updatedInventory = this.applyStatusUpdates(runtimeId, inventory);
           if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
-            this.inventoryByRuntimeId.set(runtimeId, updatedInventory);
+            this.inventoryByRuntimeId.set(runtimeId, inventory);
             this.pendingInventoryByRuntimeId.delete(runtimeId);
           }
-          return updatedInventory;
+          return this.withStatusOverrides(runtimeId, inventory);
         },
         (error) => {
           if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
@@ -84,43 +82,49 @@ export class CodexThreadInventoryReader {
   }
 
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void {
-    const statusUpdates =
-      this.statusUpdatesByRuntimeId.get(runtimeId) ?? new Map<string, CodexThreadStatusSnapshot>();
-    statusUpdates.set(threadId, status);
-    this.statusUpdatesByRuntimeId.set(runtimeId, statusUpdates);
-
-    const inventory = this.inventoryByRuntimeId.get(runtimeId);
-    if (!inventory) {
-      return;
-    }
-    this.applyStatusUpdate(inventory, threadId, status);
+    const statusOverrides =
+      this.statusOverridesByRuntimeId.get(runtimeId) ??
+      new Map<string, CodexThreadStatusSnapshot>();
+    statusOverrides.set(threadId, status);
+    this.statusOverridesByRuntimeId.set(runtimeId, statusOverrides);
   }
 
-  private applyStatusUpdates(
+  clearThreadStatus(runtimeId: string, threadId: string): void {
+    const statusOverrides = this.statusOverridesByRuntimeId.get(runtimeId);
+    if (!statusOverrides) {
+      return;
+    }
+    statusOverrides.delete(threadId);
+    if (statusOverrides.size === 0) {
+      this.statusOverridesByRuntimeId.delete(runtimeId);
+    }
+  }
+
+  private withStatusOverrides(
     runtimeId: string,
     inventory: CodexThreadInventory,
   ): CodexThreadInventory {
-    const statusUpdates = this.statusUpdatesByRuntimeId.get(runtimeId);
-    if (!statusUpdates) {
+    const statusOverrides = this.statusOverridesByRuntimeId.get(runtimeId);
+    if (!statusOverrides || statusOverrides.size === 0) {
       return inventory;
     }
-    for (const [threadId, status] of statusUpdates) {
-      this.applyStatusUpdate(inventory, threadId, status);
+    let projected: CodexThreadInventory | null = null;
+    for (const [threadId, status] of statusOverrides) {
+      const thread = inventory.threadsById.get(threadId);
+      if (!thread) {
+        continue;
+      }
+      if (!projected) {
+        projected = {
+          runtimeId: inventory.runtimeId,
+          loadedIds: new Set(inventory.loadedIds),
+          threadsById: new Map(inventory.threadsById),
+        };
+      }
+      projected.loadedIds.add(threadId);
+      projected.threadsById.set(threadId, { ...thread, status });
     }
-    return inventory;
-  }
-
-  private applyStatusUpdate(
-    inventory: CodexThreadInventory,
-    threadId: string,
-    status: CodexThreadStatusSnapshot,
-  ): void {
-    const thread = inventory.threadsById.get(threadId);
-    if (!thread) {
-      return;
-    }
-    inventory.loadedIds.add(threadId);
-    inventory.threadsById.set(threadId, { ...thread, status });
+    return projected ?? inventory;
   }
 
   async findThread(
@@ -158,7 +162,7 @@ export class CodexThreadInventoryReader {
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
     });
-    this.clear(runtimeId);
+    this.clearInventory(runtimeId);
     await client.threadRead({
       threadId: input.externalSessionId,
       includeTurns: false,

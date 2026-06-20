@@ -126,6 +126,96 @@ describe("CodexThreadInventoryReader", () => {
     expect(cached.threadsById.get("thread-1")?.status).toEqual({ classification: "idle" });
   });
 
+  test("clears a runtime status override without refetching inventory", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const calls: string[] = [];
+    const client = {
+      threadLoadedList: async () => {
+        calls.push("thread/loaded/list");
+        return { data: ["thread-1"], nextCursor: null };
+      },
+      threadList: async () => {
+        calls.push("thread/list");
+        return threadListResponse("thread-1", "Cached inventory", "/repo", {
+          type: "active",
+          activeFlags: [],
+        });
+      },
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+    reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
+    expect((await reader.read(client, "runtime-1")).threadsById.get("thread-1")?.status).toEqual({
+      classification: "idle",
+    });
+
+    reader.clearThreadStatus("runtime-1", "thread-1");
+
+    expect((await reader.read(client, "runtime-1")).threadsById.get("thread-1")?.status).toEqual({
+      classification: "running",
+    });
+    expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
+  });
+
+  test("clears one runtime status override without touching other sessions", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({
+        data: ["thread-1", "thread-2"],
+        nextCursor: null,
+      }),
+      threadList: async () => ({
+        data: [
+          {
+            id: "thread-1",
+            cwd: "/repo",
+            createdAt: 1,
+            preview: "First thread",
+            status: { type: "active", activeFlags: [] },
+          },
+          {
+            id: "thread-2",
+            cwd: "/repo",
+            createdAt: 1,
+            preview: "Second thread",
+            status: { type: "active", activeFlags: [] },
+          },
+        ],
+        nextCursor: null,
+      }),
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+    reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
+    reader.updateThreadStatus("runtime-1", "thread-2", codexThreadStatusSnapshot("idle"));
+
+    reader.clearThreadStatus("runtime-1", "thread-1");
+
+    const cached = await reader.read(client, "runtime-1");
+    expect(cached.threadsById.get("thread-1")?.status).toEqual({ classification: "running" });
+    expect(cached.threadsById.get("thread-2")?.status).toEqual({ classification: "idle" });
+  });
+
+  test("clears raw inventory without clearing status overrides", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
+      threadList: async () =>
+        threadListResponse("thread-1", "Cached inventory", "/repo", {
+          type: "active",
+          activeFlags: [],
+        }),
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+    reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
+
+    reader.clearInventory("runtime-1");
+
+    const refreshed = await reader.read(client, "runtime-1");
+    expect(refreshed.threadsById.get("thread-1")?.status).toEqual({ classification: "idle" });
+  });
+
   test("applies runtime status updates to in-flight inventory reads", async () => {
     const reader = new CodexThreadInventoryReader();
     const loaded = createDeferred<unknown>();

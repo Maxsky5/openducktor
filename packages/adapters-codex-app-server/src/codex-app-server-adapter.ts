@@ -114,6 +114,9 @@ export class CodexAppServerAdapter
       sessionEvents: this.sessionEvents,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
+      threadStatusOverrides: {
+        clear: (runtimeId, threadId) => this.threadInventory.clearThreadStatus(runtimeId, threadId),
+      },
       runtimeEvents: this.runtimeEvents,
     });
   }
@@ -132,7 +135,7 @@ export class CodexAppServerAdapter
   }
 
   private clearThreadInventory(runtimeId: string): void {
-    this.threadInventory.clear(runtimeId);
+    this.threadInventory.clearInventory(runtimeId);
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
