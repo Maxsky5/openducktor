@@ -3,6 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentStudioRouteSessionResolution } from "../agents-page-selection";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
@@ -11,7 +12,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   tasks: TaskCard[];
   taskIdParam: string;
   sessionKeyParam: string | null;
-  sessionFromQuery: AgentSessionSummary | null;
+  routeSessionResolution: AgentStudioRouteSessionResolution;
   routeTaskId: string;
   resolvedSession: AgentSessionSummary | null;
   roleFromQuery: AgentRole;
@@ -29,7 +30,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
   tasks,
   taskIdParam,
   sessionKeyParam,
-  sessionFromQuery,
+  routeSessionResolution,
   routeTaskId,
   resolvedSession,
   roleFromQuery,
@@ -37,6 +38,10 @@ const resolveAgentStudioQuerySessionUpdate = ({
   if (isRepoNavigationBoundaryPending) {
     return null;
   }
+
+  const sessionFromQuery =
+    routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
+  const isMissingRouteSession = routeSessionResolution.kind === "missing";
 
   if (
     !isLoadingTasks &&
@@ -59,8 +64,14 @@ const resolveAgentStudioQuerySessionUpdate = ({
   }
 
   const routeTaskExists = routeTaskId.length > 0 && tasks.some((entry) => entry.id === routeTaskId);
-  const shouldClearSessionKey =
-    Boolean(sessionKeyParam) && !isLoadingTasks && routeTaskExists && !sessionFromQuery;
+  if (sessionKeyParam && isMissingRouteSession && taskIdParam && !routeTaskExists) {
+    return {
+      [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+    };
+  }
+  const shouldClearSessionKey = Boolean(sessionKeyParam) && isMissingRouteSession;
 
   if (sessionKeyParam) {
     if (sessionFromQuery && routeTaskId && sessionFromQuery.taskId !== routeTaskId) {
@@ -92,7 +103,7 @@ export function useAgentStudioQuerySessionSync({
   tasks,
   taskIdParam,
   sessionKeyParam,
-  sessionFromQuery,
+  routeSessionResolution,
   routeTaskId,
   resolvedSession,
   roleFromQuery,
@@ -106,7 +117,7 @@ export function useAgentStudioQuerySessionSync({
         tasks,
         taskIdParam,
         sessionKeyParam,
-        sessionFromQuery,
+        routeSessionResolution,
         routeTaskId,
         resolvedSession,
         roleFromQuery,
@@ -116,8 +127,8 @@ export function useAgentStudioQuerySessionSync({
       isRepoNavigationBoundaryPending,
       roleFromQuery,
       resolvedSession,
+      routeSessionResolution,
       routeTaskId,
-      sessionFromQuery,
       sessionKeyParam,
       taskIdParam,
       tasks,

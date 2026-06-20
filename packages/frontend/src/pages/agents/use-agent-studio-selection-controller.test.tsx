@@ -959,6 +959,86 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("keeps full route session identity pending while the session read model loads", async () => {
+    const staleSessionIdentity: AgentSessionIdentity = {
+      externalSessionId: "deleted-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/deleted-session",
+    };
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [createTask("task-1")],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(staleSessionIdentity),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+      {
+        sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.routeSessionResolution).toEqual({
+        kind: "pending",
+        sessionKey: sessionKeyParam(staleSessionIdentity),
+      });
+      expect(latest.view.selectedSession.identity).toEqual(staleSessionIdentity);
+      expect(latest.view.selectedSession.transcriptState).toEqual({
+        kind: "session_loading",
+        reason: "preparing",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("drops stale full route session identity after the session read model resolves", async () => {
+    const staleSessionIdentity: AgentSessionIdentity = {
+      externalSessionId: "deleted-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/deleted-session",
+    };
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [createTask("task-1")],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(staleSessionIdentity),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.routeSessionResolution).toEqual({
+        kind: "missing",
+        sessionKey: sessionKeyParam(staleSessionIdentity),
+      });
+      expect(latest.taskId).toBe("task-1");
+      expect(latest.selectedTask?.id).toBe("task-1");
+      expect(latest.view.selectedSession.identity).toBeNull();
+      expect(latest.view.selectedSession.loadedSession).toBeNull();
+      expect(latest.view.selectedSession.transcriptState).toEqual({
+        kind: "empty",
+        reason: "sessionless",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads runtime data once when selected and view sessions are the same", async () => {
     const readSessionTodos = mock(async () => [
       {

@@ -16,6 +16,7 @@ import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
@@ -230,6 +231,41 @@ export const findAgentStudioSessionSummaryByKey = (
   }
 
   return sessions.find((entry) => agentSessionIdentityKey(entry) === sessionKey) ?? null;
+};
+
+export type AgentStudioRouteSessionResolution =
+  | { kind: "none" }
+  | { kind: "pending"; sessionKey: string }
+  | { kind: "found"; session: AgentSessionSummary }
+  | { kind: "missing"; sessionKey: string };
+
+export const resolveAgentStudioRouteSession = ({
+  isRepoNavigationBoundaryPending,
+  isLoadingTasks,
+  sessionReadModelLoadState,
+  sessions,
+  sessionKey,
+}: {
+  isRepoNavigationBoundaryPending: boolean;
+  isLoadingTasks: boolean;
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  sessions: AgentSessionSummary[];
+  sessionKey: string | null;
+}): AgentStudioRouteSessionResolution => {
+  if (isRepoNavigationBoundaryPending || !sessionKey) {
+    return { kind: "none" };
+  }
+
+  const session = findAgentStudioSessionSummaryByKey(sessions, sessionKey);
+  if (session) {
+    return { kind: "found", session };
+  }
+
+  if (!isLoadingTasks && sessionReadModelLoadState.kind === "ready") {
+    return { kind: "missing", sessionKey };
+  }
+
+  return { kind: "pending", sessionKey };
 };
 
 export const groupSessionsByTaskId = (

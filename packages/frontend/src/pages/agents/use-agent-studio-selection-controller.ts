@@ -3,11 +3,14 @@ import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  type AgentStudioRouteSessionResolution,
   findAgentStudioSessionSummaryByKey,
   groupSessionsByTaskId,
+  resolveAgentStudioRouteSession,
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
@@ -47,6 +50,7 @@ export type AgentStudioSelectedView = {
 } & AgentStudioSelectedSessionView;
 
 export type AgentStudioSelectionControllerResult = {
+  routeSessionResolution: AgentStudioRouteSessionResolution;
   selectedSessionFromRoute: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
@@ -84,19 +88,32 @@ export function useAgentStudioSelectionController({
   isLoadingRepoSettings,
   selectAgentStudioSelection,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
+  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
   }, [tasks]);
 
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
-  const selectedSessionFromRoute = useMemo(
+  const routeSessionResolution = useMemo(
     () =>
-      isRepoNavigationBoundaryPending
-        ? null
-        : findAgentStudioSessionSummaryByKey(sessions, sessionKeyParam),
-    [isRepoNavigationBoundaryPending, sessionKeyParam, sessions],
+      resolveAgentStudioRouteSession({
+        isRepoNavigationBoundaryPending,
+        isLoadingTasks,
+        sessionReadModelLoadState,
+        sessions,
+        sessionKey: sessionKeyParam,
+      }),
+    [
+      isLoadingTasks,
+      isRepoNavigationBoundaryPending,
+      sessionKeyParam,
+      sessionReadModelLoadState,
+      sessions,
+    ],
   );
+  const selectedSessionFromRoute =
+    routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
   const selectedSessionFromSelection = useMemo(
     () =>
       findAgentStudioSessionSummaryByKey(sessions, agentStudioSelectionSessionKey(selectionState)),
@@ -214,10 +231,16 @@ export function useAgentStudioSelectionController({
   const isDetachedFromSelectedTask = Boolean(
     selectedViewTaskId && taskId && selectedViewTaskId !== taskId,
   );
-  const viewSessionKey = isDetachedFromSelectedTask
-    ? null
-    : agentStudioSelectionSessionKey(selectionState);
-  const viewSessionIdentity = isDetachedFromSelectedTask ? null : selectionState.sessionIdentity;
+  const selectionSessionKey = agentStudioSelectionSessionKey(selectionState);
+  const hasMissingRouteSessionSelection =
+    routeSessionResolution.kind === "missing" &&
+    selectionSessionKey === routeSessionResolution.sessionKey;
+  const viewSessionKey =
+    isDetachedFromSelectedTask || hasMissingRouteSessionSelection ? null : selectionSessionKey;
+  const viewSessionIdentity =
+    isDetachedFromSelectedTask || hasMissingRouteSessionSelection
+      ? null
+      : selectionState.sessionIdentity;
   const viewRole = isDetachedFromSelectedTask ? "spec" : selectionState.role;
   const hasExplicitRoleSelection =
     !isDetachedFromSelectedTask && selectionState.hasExplicitRoleSelection;
@@ -245,6 +268,7 @@ export function useAgentStudioSelectionController({
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
+      routeSessionResolution,
       selectedSessionFromRoute,
       taskId,
       selectedTask,
@@ -276,6 +300,7 @@ export function useAgentStudioSelectionController({
       handleSelectTab,
       isActiveTaskReady,
       isLoadingTasks,
+      routeSessionResolution,
       resolvedRouteSession,
       selectedSessionView,
       selectedSessionFromRoute,
