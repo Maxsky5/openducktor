@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
@@ -15,24 +16,23 @@ type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mc
   mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
 };
 
-const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => ({
-  status: overrides.status ?? "ready",
-  checkedAt: overrides.checkedAt ?? "2026-02-20T12:01:00.000Z",
-  runtime: {
+const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
+  const checkedAt = overrides.checkedAt ?? "2026-02-20T12:01:00.000Z";
+  const runtime: RepoRuntimeHealthCheck["runtime"] = {
     status: "ready",
     stage: "runtime_ready",
     observation: null,
     instance: null,
     startedAt: null,
-    updatedAt: overrides.checkedAt ?? "2026-02-20T12:01:00.000Z",
+    updatedAt: checkedAt,
     elapsedMs: null,
     attempts: null,
     detail: null,
     failureKind: null,
     failureReason: null,
     ...overrides.runtime,
-  },
-  mcp: {
+  };
+  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
     supported: true,
     status: "connected",
     serverName: "openducktor",
@@ -41,8 +41,15 @@ const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthC
     detail: null,
     failureKind: null,
     ...overrides.mcp,
-  },
-});
+  };
+
+  return {
+    status: overrides.status ?? deriveRepoRuntimeHealthState({ runtime, mcp }),
+    checkedAt,
+    runtime,
+    mcp,
+  };
+};
 
 const makeTaskStoreCheck = (overrides: Partial<TaskStoreCheck> = {}): TaskStoreCheck => ({
   taskStoreOk: true,

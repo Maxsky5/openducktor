@@ -8,6 +8,7 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
+import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
@@ -343,16 +344,7 @@ export const createRepoRuntimeHealthFixture = (
     ...BASE_REPO_RUNTIME_HEALTH_FIXTURE,
     ...defaults,
     ...overrides,
-    status:
-      overrides.status ??
-      defaults.status ??
-      (runtime.status === "error" || mcp.status === "error"
-        ? "error"
-        : mcp.status === "checking" ||
-            mcp.status === "reconnecting" ||
-            mcp.status === "waiting_for_runtime"
-          ? "checking"
-          : runtime.status),
+    status: overrides.status ?? defaults.status ?? deriveRepoRuntimeHealthState({ runtime, mcp }),
     checkedAt,
     runtime,
     mcp,

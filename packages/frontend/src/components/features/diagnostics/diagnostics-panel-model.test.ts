@@ -747,6 +747,100 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
+  test("keeps the summary checking when MCP is reconnecting even if the health summary is stale", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "ready",
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
+          mcp: {
+            supported: true,
+            status: "reconnecting",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "The operation was aborted due to timeout",
+            failureKind: "timeout",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+    expect(model.criticalReasons).toEqual([]);
+    expect(mcpSection?.badge).toEqual({ label: "Reconnecting", variant: "warning" });
+  });
+
+  test("reports MCP failures as critical even if the health summary is stale", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "ready",
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "MCP unavailable",
+            failureKind: "error",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.criticalReasons).toContain("MCP unavailable");
+    expect(mcpSection?.errors).toEqual(["MCP unavailable"]);
+  });
+
   test("shows timeout-specific cli tools and task-store states instead of leaving them checking", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",

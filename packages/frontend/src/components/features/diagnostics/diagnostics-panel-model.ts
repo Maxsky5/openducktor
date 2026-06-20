@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
-  classifyRepoRuntimeHealth,
   describeRepoRuntimeStatus,
   formatRepoRuntimeElapsed,
   formatRepoRuntimeObservation,
@@ -14,6 +13,7 @@ import {
   getRepoRuntimeMcpActivity,
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
+  isRepoRuntimeHealthBlockingReadiness,
   isRepoRuntimeHealthPendingReadiness,
 } from "@/lib/repo-runtime-health";
 import {
@@ -377,12 +377,9 @@ export const buildDiagnosticsPanelModel = (
       criticalReasons.push(cliToolsIssueDetail);
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
-      if (
-        runtimeHealth?.status === "error" &&
-        classifyRepoRuntimeHealth(runtimeHealth) === "blocked"
-      ) {
+      if (isRepoRuntimeHealthBlockingReadiness(runtimeHealth)) {
         criticalReasons.push(
-          describeRepoRuntimeStatus(definition.label, runtimeHealth) ??
+          describeRepoRuntimeStatus(definition.label, runtimeHealth ?? null) ??
             `${definition.label} runtime health has an issue.`,
         );
       }

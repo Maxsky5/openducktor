@@ -1,5 +1,6 @@
 import type { RuntimeDescriptor, TaskStoreCheck, WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import {
   createTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
@@ -23,31 +24,6 @@ export const makeRuntimeDiagnosticInstance = (): RepoRuntimeDiagnosticInstance =
 type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
   runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
   mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
-};
-
-const repoHealthStatusFor = ({
-  mcp,
-  overrides,
-  runtime,
-}: {
-  mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]>;
-  overrides: RepoHealthOverrides;
-  runtime: RepoRuntimeHealthCheck["runtime"];
-}): RepoRuntimeHealthCheck["status"] => {
-  if (overrides.status) {
-    return overrides.status;
-  }
-  if (runtime.status === "error" || mcp.status === "error") {
-    return "error";
-  }
-  if (
-    mcp.status === "checking" ||
-    mcp.status === "reconnecting" ||
-    mcp.status === "waiting_for_runtime"
-  ) {
-    return "checking";
-  }
-  return runtime.status;
 };
 
 export const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
@@ -78,7 +54,7 @@ export const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntime
   };
 
   return {
-    status: repoHealthStatusFor({ mcp, overrides, runtime }),
+    status: overrides.status ?? deriveRepoRuntimeHealthState({ runtime, mcp }),
     checkedAt,
     runtime,
     mcp,

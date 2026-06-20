@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import {
   classifyRepoRuntimeHealth,
+  deriveRepoRuntimeHealthState,
   describeRepoRuntimeStatus,
   getRepoRuntimeBadge,
+  isRepoRuntimeHealthBlockingReadiness,
   isRepoRuntimeHealthPendingReadiness,
+  isRepoRuntimeReady,
   isRepoRuntimeStarting,
   isRepoRuntimeStartupPending,
 } from "./repo-runtime-health";
@@ -75,6 +78,62 @@ describe("repo runtime health", () => {
     expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe(
       "Reconnecting OpenDucktor MCP for OpenCode.",
     );
+  });
+
+  test("derives aggregate health from MCP status once the runtime is ready", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      runtime: {
+        status: "ready",
+        stage: "runtime_ready",
+      },
+      mcp: {
+        status: "reconnecting",
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      },
+    });
+
+    expect(deriveRepoRuntimeHealthState(runtimeHealth)).toBe("checking");
+  });
+
+  test("does not let a stale ready summary hide reconnecting MCP readiness", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "ready",
+      runtime: {
+        status: "ready",
+        stage: "runtime_ready",
+      },
+      mcp: {
+        status: "reconnecting",
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      },
+    });
+
+    expect(isRepoRuntimeReady(runtimeHealth)).toBe(false);
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("checking");
+    expect(isRepoRuntimeHealthPendingReadiness(runtimeHealth)).toBe(true);
+    expect(isRepoRuntimeHealthBlockingReadiness(runtimeHealth)).toBe(false);
+  });
+
+  test("does not let a stale ready summary hide MCP failures", () => {
+    const runtimeHealth = createRepoRuntimeHealthFixture({
+      status: "ready",
+      runtime: {
+        status: "ready",
+        stage: "runtime_ready",
+      },
+      mcp: {
+        status: "error",
+        detail: "MCP unavailable",
+        failureKind: "error",
+      },
+    });
+
+    expect(isRepoRuntimeReady(runtimeHealth)).toBe(false);
+    expect(classifyRepoRuntimeHealth(runtimeHealth)).toBe("blocked");
+    expect(isRepoRuntimeHealthBlockingReadiness(runtimeHealth)).toBe(true);
+    expect(describeRepoRuntimeStatus("OpenCode", runtimeHealth)).toBe("MCP unavailable");
   });
 
   test("does not report idle runtimes as starting just because MCP is waiting", () => {
