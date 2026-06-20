@@ -48,6 +48,9 @@ const createHarnessState = () => {
 
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   const observedSessions: AgentSessionRef[] = [];
+  let observeAgentSessionImpl = async (session: AgentSessionRef): Promise<void> => {
+    observedSessions.push(session);
+  };
   const listSessionRuntimeSnapshots = mock(
     async (
       _input: Parameters<AgentEnginePort["listSessionRuntimeSnapshots"]>[0],
@@ -61,9 +64,7 @@ const createHarnessState = () => {
     sessionCollection = collection;
     return result;
   };
-  const observeAgentSession = async (session: AgentSessionRef) => {
-    observedSessions.push(session);
-  };
+  const observeAgentSession = (session: AgentSessionRef) => observeAgentSessionImpl(session);
   const clearSessionObservationState = mock(() => undefined);
   const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
     opencode: createRepoRuntimeHealthFixture(),
@@ -135,6 +136,9 @@ const createHarnessState = () => {
   const setTaskSessionRecords = (taskId: string, records: AgentSessionRecord[]) => {
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo", taskId), records);
   };
+  const setObserveAgentSession = (nextObserveAgentSession: typeof observeAgentSessionImpl) => {
+    observeAgentSessionImpl = nextObserveAgentSession;
+  };
   const getSession = (externalSessionId: string) =>
     listAgentSessions(sessionCollection).find(
       (session) => session.externalSessionId === externalSessionId,
@@ -142,6 +146,7 @@ const createHarnessState = () => {
 
   return {
     setRuntimeHealth,
+    setObserveAgentSession,
     setTaskSessionRecords,
     getSession,
     createReadModelHarness,
@@ -325,6 +330,57 @@ describe("useRepoSessionReadModel", () => {
           externalSessionId: record.externalSessionId,
           status: "running",
           runtimeKind: "opencode",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the repo session read model ready when one live observer fails", async () => {
+    const state = createHarnessState();
+    state.listSessionRuntimeSnapshots.mockImplementation(async () => [
+      toAgentSessionRuntimeSnapshot({
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: record.workingDirectory,
+          externalSessionId: record.externalSessionId,
+        },
+        snapshot: {
+          title: "OpenCode Builder",
+          startedAt: record.startedAt,
+          runtimeActivity: "running",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      }),
+    ]);
+    state.setObserveAgentSession(async (session) => {
+      state.observedSessions.push(session);
+      throw new Error("observer refused");
+    });
+    const harness = state.createReadModelHarness(["task-1"]);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(isReadModelReady);
+
+      expect(harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+      expect(state.getSession(record.externalSessionId)).toEqual(
+        expect.objectContaining({
+          externalSessionId: record.externalSessionId,
+          status: "error",
+        }),
+      );
+      expect(state.getSession(record.externalSessionId)?.messages.items.at(-1)).toEqual(
+        expect.objectContaining({
+          role: "system",
+          content: "Failed to observe live session: observer refused",
+          meta: expect.objectContaining({
+            kind: "session_notice",
+            reason: "session_error",
+          }),
         }),
       );
     } finally {

@@ -28,6 +28,15 @@ const taskSessionRecords: TaskSessionRecords = {
   records: [{ taskId: "task-1", record }],
 };
 
+const secondRecord: AgentSessionRecord = {
+  externalSessionId: "external-2",
+  role: "qa",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/second-worktree",
+  startedAt: "2026-06-12T08:05:00.000Z",
+  selectedModel: null,
+};
+
 const createCommitSessionCollection = (
   initialSessionCollection = emptyAgentSessionCollection(),
 ) => {
@@ -52,6 +61,7 @@ const loadReadModel = async ({
   listSessionRuntimeSnapshots,
   observeAgentSession = async () => undefined,
   clearSessionObservationState = () => undefined,
+  records = taskSessionRecords,
 }: {
   initialSessionCollection?: AgentSessionCollection;
   listSessionRuntimeSnapshots: () => Promise<
@@ -59,11 +69,12 @@ const loadReadModel = async ({
   >;
   observeAgentSession?: (session: AgentSessionRef) => Promise<void>;
   clearSessionObservationState?: (sessions: readonly AgentSessionRef[]) => void;
+  records?: TaskSessionRecords;
 }) => {
   const collection = createCommitSessionCollection(initialSessionCollection);
   const result = await loadRepoSessionReadModel({
     repoPath: "/repo",
-    taskSessionRecords,
+    taskSessionRecords: records,
     adapter: {
       listSessionRuntimeSnapshots: async () => listSessionRuntimeSnapshots(),
     },
@@ -153,6 +164,76 @@ describe("repo session read model loader", () => {
         workingDirectory: "/repo/old-worktree",
       },
     ]);
+  });
+
+  test("commits the read model when one live session observer fails", async () => {
+    const observedSessions: AgentSessionRef[] = [];
+    const records: TaskSessionRecords = {
+      taskIds: ["task-1", "task-2"],
+      records: [
+        { taskId: "task-1", record },
+        { taskId: "task-2", record: secondRecord },
+      ],
+    };
+    const harness = await loadReadModel({
+      records,
+      listSessionRuntimeSnapshots: async () => [
+        toAgentSessionRuntimeSnapshot({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: record.workingDirectory,
+            externalSessionId: record.externalSessionId,
+          },
+          snapshot: {
+            title: "Builder",
+            startedAt: record.startedAt,
+            runtimeActivity: "running",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+        toAgentSessionRuntimeSnapshot({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: secondRecord.workingDirectory,
+            externalSessionId: secondRecord.externalSessionId,
+          },
+          snapshot: {
+            title: "QA",
+            startedAt: secondRecord.startedAt,
+            runtimeActivity: "running",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+      ],
+      observeAgentSession: async (session) => {
+        observedSessions.push(session);
+        if (session.externalSessionId === secondRecord.externalSessionId) {
+          throw new Error("subscription failed");
+        }
+      },
+    });
+
+    const firstSession = harness.getSession(record.externalSessionId);
+    const failedSession = harness.getSession(secondRecord.externalSessionId);
+
+    expect(harness.result).toBe(true);
+    expect(firstSession?.status).toBe("running");
+    expect(failedSession?.status).toBe("error");
+    expect(failedSession?.messages.items.at(-1)).toEqual(
+      expect.objectContaining({
+        role: "system",
+        content: "Failed to observe live session: subscription failed",
+        meta: expect.objectContaining({
+          kind: "session_notice",
+          reason: "session_error",
+        }),
+      }),
+    );
+    expect(observedSessions).toHaveLength(2);
   });
 
   test("settles mounted live state without clearing transcript when runtime snapshot is missing", async () => {
