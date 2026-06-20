@@ -40,6 +40,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
   loadSessionTodos: async () => [],
   loadSessionHistory: async () => [],
+  subscribeEvents: async () => () => undefined,
   ...overrides,
 });
 
@@ -185,6 +186,29 @@ describe("agent-orchestrator-public-operations", () => {
       },
       limit: 50,
     });
+  });
+
+  test("delegates session event subscriptions directly to the agent engine", async () => {
+    const unsubscribe = mock(() => undefined);
+    const subscribeEvents = mock(async () => unsubscribe);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        subscribeEvents,
+      }),
+      sessionActions: createSessionActions(),
+    });
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+    const listener = mock(() => undefined);
+
+    const result = await operations.subscribeSessionEvents(sessionRef, listener);
+
+    expect(subscribeEvents).toHaveBeenCalledWith(sessionRef, listener);
+    expect(result).toBe(unsubscribe);
   });
 
   test("exposes store-backed session history loading as a command", async () => {

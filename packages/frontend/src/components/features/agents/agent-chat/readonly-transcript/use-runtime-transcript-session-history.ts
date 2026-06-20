@@ -21,6 +21,7 @@ import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
+import { useRuntimeTranscriptLiveOverlay } from "./use-runtime-transcript-live-overlay";
 
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
@@ -32,6 +33,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
 
 type RuntimeTranscriptSessionHistory = {
   session: AgentChatThreadSession | null;
+  interactionSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
 };
 
@@ -48,7 +50,7 @@ export function useRuntimeTranscriptSessionHistory({
   repoReadinessState,
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const { readSessionHistory } = useAgentOperations();
+  const { readSessionHistory, replyAgentApproval, subscribeSessionEvents } = useAgentOperations();
   const stableTarget = useStableAgentSessionIdentity(target);
 
   const emptyReason: AgentSessionTranscriptEmptyReason | null =
@@ -62,6 +64,11 @@ export function useRuntimeTranscriptSessionHistory({
       ? liveSession
       : null;
   const shouldLoadHistory = emptyReason === null && matchingLiveSession === null;
+  const shouldObserveRuntimeSession =
+    shouldLoadHistory &&
+    repoPath !== null &&
+    stableTarget !== null &&
+    repoReadinessState === "ready";
 
   const historyQuery = useQuery(
     shouldLoadHistory &&
@@ -71,10 +78,22 @@ export function useRuntimeTranscriptSessionHistory({
       ? sessionHistoryQueryOptions(toRuntimeSessionRef(repoPath, stableTarget), readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
+  const liveOverlay = useRuntimeTranscriptLiveOverlay({
+    shouldObserve: shouldObserveRuntimeSession,
+    repoPath,
+    target: stableTarget,
+    history: historyQuery.data,
+    shouldMergeHistory: shouldLoadHistory,
+    replyAgentApproval,
+    subscribeSessionEvents,
+  });
 
   const session = useMemo(() => {
     if (matchingLiveSession !== null) {
       return toAgentChatThreadSession(matchingLiveSession);
+    }
+    if (liveOverlay.hasVisibleRuntimeData && liveOverlay.session !== null) {
+      return toAgentChatThreadSession(liveOverlay.session);
     }
     if (!shouldLoadHistory || !historyQuery.data || repoPath === null || stableTarget === null) {
       return null;
@@ -84,7 +103,16 @@ export function useRuntimeTranscriptSessionHistory({
       ...stableTarget,
       history: historyQuery.data,
     });
-  }, [historyQuery.data, matchingLiveSession, repoPath, shouldLoadHistory, stableTarget]);
+  }, [
+    historyQuery.data,
+    liveOverlay.hasVisibleRuntimeData,
+    liveOverlay.session,
+    matchingLiveSession,
+    repoPath,
+    shouldLoadHistory,
+    stableTarget,
+  ]);
+  const interactionSession = matchingLiveSession ?? liveOverlay.interactionSession;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
@@ -98,14 +126,21 @@ export function useRuntimeTranscriptSessionHistory({
         message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
       };
     }
+    if (liveOverlay.error && repoReadinessState === "ready") {
+      return {
+        kind: "failed",
+        message: liveOverlay.error,
+      };
+    }
     return deriveRuntimeBoundTranscriptLoadingState({
       reason: "history",
       repoReadinessState,
     });
-  }, [emptyReason, historyQuery.error, repoReadinessState, session]);
+  }, [emptyReason, historyQuery.error, liveOverlay.error, repoReadinessState, session]);
 
   return {
     session,
+    interactionSession,
     transcriptState,
   };
 }

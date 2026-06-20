@@ -52,6 +52,7 @@ const createHistoryLoadWrapper = (
   const operations: AgentOperationsContextValue = {
     readSessionTodos: async () => [],
     readSessionHistory: async () => [],
+    subscribeSessionEvents: async () => () => undefined,
     loadAgentSessionHistory,
     startAgentSession: async () => ({
       externalSessionId: "session-started",

@@ -2,12 +2,18 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 
 type ReadonlyTranscriptSessionInput = AgentSessionIdentity & {
   history: AgentSessionHistoryMessage[];
 };
+
+const EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT = "1970-01-01T00:00:00.000Z";
 
 const updateHash = (hash: number, value: string): number => {
   let nextHash = hash;
@@ -45,3 +51,97 @@ export const createReadonlyTranscriptSession = ({
     transcriptHistoryVersion(history),
   ),
 });
+
+export const createReadonlyRuntimeSessionState = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+  history,
+}: ReadonlyTranscriptSessionInput): AgentSessionState => ({
+  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+  taskId: "",
+  role: null,
+  status: "idle",
+  startedAt: history[0]?.timestamp ?? EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
+  historyLoadState: "loaded",
+  messages: createSessionMessagesState(
+    externalSessionId,
+    historyToChatMessages(history, {
+      role: null,
+    }),
+    transcriptHistoryVersion(history),
+  ),
+  contextUsage: null,
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
+});
+
+export const createEmptyReadonlyRuntimeSessionState = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+}: AgentSessionIdentity): AgentSessionState => ({
+  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+  taskId: "",
+  role: null,
+  status: "idle",
+  startedAt: EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
+  historyLoadState: "loading",
+  messages: createSessionMessagesState(externalSessionId),
+  contextUsage: null,
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
+});
+
+const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>
+  left.id === right.id &&
+  left.role === right.role &&
+  left.content === right.content &&
+  left.timestamp === right.timestamp &&
+  left.meta === right.meta;
+
+const areMessageListsEquivalent = (
+  left: readonly AgentChatMessage[],
+  right: readonly AgentChatMessage[],
+): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((message, index) => {
+    const nextMessage = right[index];
+    return nextMessage !== undefined && areMessagesEquivalent(message, nextMessage);
+  });
+};
+
+export const mergeReadonlyRuntimeHistory = (
+  session: AgentSessionState,
+  history: AgentSessionHistoryMessage[],
+): AgentSessionState => {
+  const historyMessages = historyToChatMessages(history, { role: null });
+  const historyMessageIds = new Set(historyMessages.map((message) => message.id));
+  const liveMessageById = new Map(session.messages.items.map((message) => [message.id, message]));
+  const mergedMessages = [
+    ...historyMessages.map((message) => liveMessageById.get(message.id) ?? message),
+    ...session.messages.items.filter((message) => !historyMessageIds.has(message.id)),
+  ];
+
+  if (
+    session.historyLoadState === "loaded" &&
+    areMessageListsEquivalent(session.messages.items, mergedMessages)
+  ) {
+    return session;
+  }
+
+  return {
+    ...session,
+    startedAt: history[0]?.timestamp ?? session.startedAt,
+    historyLoadState: "loaded",
+    messages: createSessionMessagesState(
+      session.externalSessionId,
+      mergedMessages,
+      session.messages.version + 1,
+    ),
+  };
+};

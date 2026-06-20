@@ -18,11 +18,13 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
+  AgentEvent,
   AgentModelSelection,
   AgentSessionHistoryMessage,
   AgentSessionRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
+  EventUnsubscribe,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
@@ -170,6 +172,10 @@ export type AgentOperationsContextValue = {
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
+  subscribeSessionEvents: (
+    session: AgentSessionRef,
+    listener: (event: AgentEvent) => void,
+  ) => Promise<EventUnsubscribe>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;

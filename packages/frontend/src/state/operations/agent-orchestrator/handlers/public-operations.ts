@@ -36,7 +36,7 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory">;
+  agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory" | "subscribeEvents">;
   sessionActions: SessionActions;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
 };
@@ -62,6 +62,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> => agentEngine.loadSessionHistory(session),
+  subscribeSessionEvents: agentEngine.subscribeEvents,
   loadAgentSessionHistory,
   startAgentSession: sessionActions.startAgentSession,
   sendAgentMessage: (session, parts: AgentUserMessagePart[]): Promise<void> =>

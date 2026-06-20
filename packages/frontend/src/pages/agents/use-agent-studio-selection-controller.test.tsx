@@ -161,6 +161,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   const agentOperationsValue = (): AgentOperationsContextValue => ({
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
+    subscribeSessionEvents: async () => () => undefined,
     loadAgentSessionHistory: loadSessionHistoryRef.current,
     startAgentSession: async () => ({
       externalSessionId: "session-started",

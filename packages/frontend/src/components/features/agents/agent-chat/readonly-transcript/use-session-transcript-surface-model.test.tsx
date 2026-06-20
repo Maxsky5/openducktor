@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ChatSettings, SettingsSnapshot } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentEvent, AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -44,6 +44,9 @@ const readSessionHistory = mock(
 );
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
+const subscribeSessionEvents = mock(
+  async (_sessionRef: AgentSessionRef, _listener: (event: AgentEvent) => void) => () => undefined,
+);
 let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
@@ -126,6 +129,7 @@ function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
 function agentOperationsValue(): AgentOperationsContextValue {
   return {
     readSessionHistory,
+    subscribeSessionEvents,
     readSessionTodos: async () => [],
     loadAgentSessionHistory: async () => null,
     startAgentSession: async () => ({
@@ -215,6 +219,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
     );
     replyAgentApproval.mockClear();
     answerAgentQuestion.mockClear();
+    subscribeSessionEvents.mockClear();
+    subscribeSessionEvents.mockImplementation(
+      async (_sessionRef: AgentSessionRef, _listener: (event: AgentEvent) => void) => () =>
+        undefined,
+    );
     sessionStore = createAgentSessionsStore("/repo-a");
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
@@ -528,6 +537,48 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(harness.getLatest().model.thread.session?.activityState).toBeNull();
       expect(harness.getLatest().model.thread.pendingApprovalRequests).toEqual([]);
       expect(harness.getLatest().model.thread.pendingQuestionRequests).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses streamed pending input for an unmaterialized runtime transcript session", async () => {
+    const pendingQuestion = makePendingQuestion();
+    let subscribedListener: ((event: AgentEvent) => void) | null = null;
+    subscribeSessionEvents.mockImplementationOnce(
+      async (_sessionRef: AgentSessionRef, listener: (event: AgentEvent) => void) => {
+        subscribedListener = listener;
+        return () => undefined;
+      },
+    );
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.session !== null);
+
+      await harness.run(async () => {
+        subscribedListener?.({
+          type: "question_required",
+          externalSessionId: "session-subagent-1",
+          timestamp: "2026-02-22T12:01:00.000Z",
+          ...pendingQuestion,
+        });
+      });
+      await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
+
+      expect(harness.getLatest().model.thread.pendingQuestionRequests).toEqual([pendingQuestion]);
     } finally {
       await harness.unmount();
     }

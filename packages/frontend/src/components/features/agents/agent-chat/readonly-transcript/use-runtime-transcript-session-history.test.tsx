@@ -1,5 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { AgentEvent, AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { AgentOperationsContext } from "@/state/app-state-contexts";
@@ -22,9 +22,15 @@ const readSessionHistoryRef: {
 } = {
   current: async () => [],
 };
+const subscribeSessionEventsRef: {
+  current: AgentOperationsContextValue["subscribeSessionEvents"];
+} = {
+  current: async () => () => undefined,
+};
 
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
+  subscribeSessionEvents: subscribeSessionEventsRef.current,
   readSessionTodos: async () => [],
   loadAgentSessionHistory: async () => null,
   startAgentSession: async () => ({
@@ -67,6 +73,20 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
   parts: [],
 });
 
+const createLiveUserMessageEvent = (
+  overrides: Partial<Extract<AgentEvent, { type: "user_message" }>> = {},
+) =>
+  ({
+    type: "user_message",
+    externalSessionId: "session-1",
+    messageId: "message-user-live",
+    message: "Live follow-up",
+    timestamp: "2026-02-22T12:01:00.000Z",
+    state: "read",
+    parts: [],
+    ...overrides,
+  }) satisfies Extract<AgentEvent, { type: "user_message" }>;
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
   repoPath: "/repo-a",
@@ -77,6 +97,78 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useRuntimeTranscriptSessionHistory", () => {
+  beforeEach(() => {
+    subscribeSessionEventsRef.current = async () => () => undefined;
+  });
+
+  test("streams runtime events for an unmaterialized read-only transcript session", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    const subscribed: {
+      sessionRef: AgentSessionRef | null;
+      listener: ((event: AgentEvent) => void) | null;
+    } = {
+      sessionRef: null,
+      listener: null,
+    };
+    const unsubscribe = mock(() => undefined);
+    const subscribeSessionEvents = mock(async (sessionRef: AgentSessionRef, listener) => {
+      subscribed.sessionRef = sessionRef;
+      subscribed.listener = listener;
+      return unsubscribe;
+    });
+    readSessionHistoryRef.current = readSessionHistory;
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+
+      expect(subscribeSessionEvents).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo-a",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a/worktree",
+          externalSessionId: "session-1",
+        },
+        expect.any(Function),
+      );
+      expect(subscribed.sessionRef).toEqual({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-1",
+      });
+
+      await harness.run(async () => {
+        subscribed.listener?.(createLiveUserMessageEvent());
+      });
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 2,
+      );
+
+      expect(harness.getLatest().interactionSession?.externalSessionId).toBe("session-1");
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("unsubscribes the transient read-only runtime stream on unmount", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    const unsubscribe = mock(() => undefined);
+    const subscribeSessionEvents = mock(async () => unsubscribe);
+    readSessionHistoryRef.current = readSessionHistory;
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+    const harness = createHookHarness(createBaseArgs());
+
+    await harness.mount();
+    await harness.waitFor(() => subscribeSessionEvents.mock.calls.length === 1);
+    await harness.unmount();
+
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
   test("loads history and builds a readonly transcript session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     readSessionHistoryRef.current = readSessionHistory;
