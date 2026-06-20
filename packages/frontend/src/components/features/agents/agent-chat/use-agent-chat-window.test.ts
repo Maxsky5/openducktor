@@ -7,6 +7,7 @@ import {
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
 } from "./agent-chat-thread-windowing";
+import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { resolveAgentChatEffectiveTurnStart } from "./use-agent-chat-history-window";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
@@ -34,8 +35,7 @@ type MockResizeObserverController = {
 
 const ROW_HEIGHT_PX = 40;
 const mockResizeObserverControllers = new Set<MockResizeObserverController>();
-const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-let nextAnimationFrameId = 1;
+const animationFrameDriver = createAnimationFrameTestDriver();
 
 class MockResizeObserver implements ResizeObserver {
   private readonly observedElements = new Set<Element>();
@@ -116,23 +116,6 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
-};
-
-const flushAnimationFrames = async (): Promise<void> => {
-  if (animationFrameCallbacks.size === 0) {
-    return;
-  }
-
-  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-  animationFrameCallbacks.clear();
-
-  await act(async () => {
-    for (const callback of queuedCallbacks) {
-      callback(16);
-    }
-    await flush();
-  });
-  await flushAnimationFrames();
 };
 
 const getMaxScrollTop = (container: HTMLDivElement): number => {
@@ -274,29 +257,16 @@ const dispatchPointerDown = async (container: HTMLDivElement): Promise<void> => 
 
 describe("useAgentChatWindow", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    animationFrameCallbacks.clear();
-    nextAnimationFrameId = 1;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    animationFrameDriver.install();
   });
 
   afterEach(() => {
     globalThis.ResizeObserver = originalResizeObserver;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
   });
 
   test("starts with the latest turn window", async () => {
@@ -353,7 +323,7 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
@@ -381,7 +351,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(320);
@@ -414,7 +384,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBeGreaterThanOrEqual(200);
@@ -540,7 +510,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
@@ -580,7 +550,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
 
@@ -595,7 +565,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(container.style.overflowAnchor).toBe("none");
@@ -627,7 +597,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
 
@@ -648,7 +618,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(container.style.overflowAnchor).toBe("none");
@@ -677,13 +647,13 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     await act(async () => {
       harness.getLatestResult().scrollToBottom();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(
       buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
@@ -743,14 +713,14 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
     expect(container.scrollTop).toBe(120);
@@ -783,7 +753,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -814,7 +784,7 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     await act(async () => {
       harness.getLatestResult().scrollToBottomOnSend();
@@ -831,7 +801,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(initialWindowStart);
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -867,7 +837,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToBottomOnSend();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(harness.getLatestResult().windowStart).toBe(
@@ -899,13 +869,13 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     container.scrollTop = getMaxScrollTop(container);
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
@@ -913,7 +883,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToBottomOnSend();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
@@ -948,14 +918,14 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       syncBottomAfterComposerLayoutRef.current?.();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -991,14 +961,14 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       syncBottomAfterComposerLayoutRef.current?.();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(120);
     expect(harness.getLatestResult().isNearBottom).toBe(false);

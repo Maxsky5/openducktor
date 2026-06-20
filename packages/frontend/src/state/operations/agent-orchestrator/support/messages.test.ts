@@ -8,6 +8,7 @@ import {
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
+  areSessionMessagesSameRevision,
   createSessionMessagesState,
   everySessionMessage,
   findFirstChangedSessionMessageIndex,
@@ -150,6 +151,52 @@ describe("agent-orchestrator/support/messages", () => {
     expect(() => getSessionMessageCount({ externalSessionId: "session-1", messages })).toThrow(
       "belong to 'session-2'",
     );
+  });
+
+  test("compares message states through the canonical revision contract", () => {
+    const messages = [
+      {
+        id: "m1",
+        role: "user" as const,
+        content: "Question",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+    ];
+    const first = createSessionMessagesState("session-1", messages, 3);
+    const equivalent = createSessionMessagesState("session-1", messages, 3);
+    const nextVersion = createSessionMessagesState("session-1", messages, 4);
+    const nextCount = createSessionMessagesState(
+      "session-1",
+      [
+        ...messages,
+        {
+          id: "m2",
+          role: "assistant" as const,
+          content: "Answer",
+          timestamp: "2026-02-22T08:00:01.000Z",
+        },
+      ],
+      3,
+    );
+
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: equivalent },
+      ),
+    ).toBe(true);
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: nextVersion },
+      ),
+    ).toBe(false);
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: nextCount },
+      ),
+    ).toBe(false);
   });
 
   test("detects final assistant chat messages", () => {

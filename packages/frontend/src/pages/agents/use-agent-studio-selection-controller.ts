@@ -11,17 +11,15 @@ import {
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
-import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectedSessionView,
   useAgentStudioSelectedSessionView,
 } from "./selected-session/use-agent-studio-selected-session-view";
-import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
 import {
-  resolveAgentStudioRouteSelectionParams,
-  resolveAgentStudioSelectionBaseParams,
-  resolveAgentStudioViewSelectionParams,
-} from "./shell/agent-studio-selection-route";
+  type AgentStudioSelectionState,
+  agentStudioSelectionSessionKey,
+  type SelectAgentStudioSelection,
+} from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -35,10 +33,10 @@ type UseAgentStudioSelectionControllerArgs = {
   sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  selectionIntent: AgentStudioSelectionIntent | null;
+  selectionState: AgentStudioSelectionState;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
-  updateQuery: (updates: QueryUpdate) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export type AgentStudioSelectedView = {
@@ -81,21 +79,11 @@ export function useAgentStudioSelectionController({
   sessionKeyParam,
   hasExplicitRoleParam,
   roleFromQuery,
-  selectionIntent,
+  selectionState,
   repoSettings,
   isLoadingRepoSettings,
-  updateQuery,
+  selectAgentStudioSelection,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const selectionBaseParams = resolveAgentStudioSelectionBaseParams({
-    isRepoNavigationBoundaryPending,
-    taskIdParam,
-    sessionKeyParam,
-    hasExplicitRoleParam,
-    roleFromQuery,
-    selectionIntent,
-  });
-  const routeSelectionParams = resolveAgentStudioRouteSelectionParams(selectionBaseParams);
-
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
   }, [tasks]);
@@ -103,13 +91,21 @@ export function useAgentStudioSelectionController({
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
   const selectedSessionFromRoute = useMemo(
-    () => findAgentStudioSessionSummaryByKey(sessions, routeSelectionParams.sessionKeyParam),
-    [routeSelectionParams.sessionKeyParam, sessions],
+    () =>
+      isRepoNavigationBoundaryPending
+        ? null
+        : findAgentStudioSessionSummaryByKey(sessions, sessionKeyParam),
+    [isRepoNavigationBoundaryPending, sessionKeyParam, sessions],
+  );
+  const selectedSessionFromSelection = useMemo(
+    () =>
+      findAgentStudioSessionSummaryByKey(sessions, agentStudioSelectionSessionKey(selectionState)),
+    [selectionState, sessions],
   );
 
   const taskId = resolveAgentStudioTaskId({
-    taskIdParam: routeSelectionParams.taskIdParam,
-    selectedSessionFromRoute,
+    taskIdParam: selectionState.taskId,
+    selectedSessionFromRoute: selectedSessionFromSelection,
   });
 
   const selectedTask = useMemo(
@@ -125,22 +121,32 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId, taskId]);
 
   const resolvedRouteSession = useMemo(() => {
+    if (isRepoNavigationBoundaryPending) {
+      return null;
+    }
+    const routeTaskId = resolveAgentStudioTaskId({
+      taskIdParam,
+      selectedSessionFromRoute,
+    });
+    const routeSelectedTask = routeTaskId ? (tasksById.get(routeTaskId) ?? null) : null;
+    const routeSessionsForTask = routeTaskId ? (sessionsByTaskId.get(routeTaskId) ?? []) : [];
     return resolveAgentStudioSessionSelection({
-      sessionsForTask,
-      sessionKey: routeSelectionParams.sessionKeyParam,
-      hasExplicitRoleParam: routeSelectionParams.hasExplicitRoleParam,
-      roleFromQuery: routeSelectionParams.roleFromQuery,
-      selectedTask,
-      sessionlessRole: routeSelectionParams.roleFromQuery,
-      keepExplicitRoleSessionless: routeSelectionParams.keepExplicitRoleSessionless,
+      sessionsForTask: routeSessionsForTask,
+      sessionKey: sessionKeyParam,
+      hasExplicitRoleParam,
+      roleFromQuery,
+      selectedTask: routeSelectedTask,
+      sessionlessRole: roleFromQuery,
     }).sessionSummary;
   }, [
-    routeSelectionParams.hasExplicitRoleParam,
-    routeSelectionParams.keepExplicitRoleSessionless,
-    routeSelectionParams.roleFromQuery,
-    routeSelectionParams.sessionKeyParam,
-    selectedTask,
-    sessionsForTask,
+    hasExplicitRoleParam,
+    isRepoNavigationBoundaryPending,
+    roleFromQuery,
+    selectedSessionFromRoute,
+    sessionKeyParam,
+    sessionsByTaskId,
+    taskIdParam,
+    tasksById,
   ]);
 
   const latestSessionByTaskId = useMemo(() => {
@@ -188,7 +194,7 @@ export function useAgentStudioSelectionController({
     isLoadingTasks,
     latestSessionByTaskId,
     activeSessionByTaskId,
-    updateQuery,
+    selectAgentStudioSelection,
   });
 
   const selectedViewTaskId = activeTaskTabId || taskId;
@@ -205,23 +211,29 @@ export function useAgentStudioSelectionController({
     return sessionsByTaskId.get(selectedViewTaskId) ?? [];
   }, [sessionsByTaskId, selectedViewTaskId]);
 
-  const viewSelectionParams = resolveAgentStudioViewSelectionParams({
-    baseParams: selectionBaseParams,
-    routeTaskId: taskId,
-    viewTaskId: selectedViewTaskId,
-  });
+  const isDetachedFromSelectedTask = Boolean(
+    selectedViewTaskId && taskId && selectedViewTaskId !== taskId,
+  );
+  const viewSessionKey = isDetachedFromSelectedTask
+    ? null
+    : agentStudioSelectionSessionKey(selectionState);
+  const viewSessionIdentity = isDetachedFromSelectedTask ? null : selectionState.sessionIdentity;
+  const viewRole = isDetachedFromSelectedTask ? "spec" : selectionState.role;
+  const hasExplicitRoleSelection =
+    !isDetachedFromSelectedTask && selectionState.hasExplicitRoleSelection;
+  const keepExplicitRoleSessionless =
+    !isDetachedFromSelectedTask && selectionState.keepSessionless && viewSessionKey === null;
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceRepoPath,
     selectedTask: selectedViewTask,
     sessionSummaries: selectedViewSessions,
-    sessionKey: viewSelectionParams.sessionKeyParam,
-    hasExplicitRoleSelection: viewSelectionParams.hasExplicitRoleSelection,
-    roleSelection: viewSelectionParams.roleSelection,
-    sessionlessRole: viewSelectionParams.sessionlessRole,
-    keepExplicitRoleSessionless: viewSelectionParams.keepExplicitRoleSessionless,
-    selectionIntent: viewSelectionParams.selectionIntent,
-    sessionIdentityFromRoute: viewSelectionParams.sessionIdentity,
+    sessionKey: viewSessionKey,
+    hasExplicitRoleSelection,
+    roleSelection: viewRole,
+    sessionlessRole: viewRole,
+    keepExplicitRoleSessionless,
+    sessionIdentityFromRoute: viewSessionIdentity,
     repoSettings,
     isLoadingRepoSettings,
   });

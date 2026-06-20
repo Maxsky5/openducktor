@@ -1,6 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback } from "react";
 import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
-import type { NavigateToTaskIntent } from "./agent-studio-types";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -21,11 +20,10 @@ type UseTaskTabActionsArgs = {
   tabTaskIds: string[];
   activeTaskTabId: string;
   clearTaskSelection: () => void;
-  navigateToTaskIntent: NavigateToTaskIntent;
+  selectTask: (taskId: string) => void;
   handleSelectTab: (nextTaskId: string) => void;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
-  setIntentActiveTaskId: SetState<string | null>;
 };
 
 type UseTaskTabActionsResult = {
@@ -43,11 +41,10 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     tabTaskIds,
     activeTaskTabId,
     clearTaskSelection,
-    navigateToTaskIntent,
+    selectTask,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   } = args;
 
   const handleCreateTab = useCallback(
@@ -76,21 +73,18 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      setIntentActiveTaskId(nextActiveTaskId ?? null);
-
       if (!nextActiveTaskId) {
         clearTaskSelection();
         return;
       }
 
       focusTaskTabTrigger(nextActiveTaskId);
-      navigateToTaskIntent(nextActiveTaskId);
+      selectTask(nextActiveTaskId);
     },
     [
       activeTaskTabId,
       clearTaskSelection,
-      navigateToTaskIntent,
-      setIntentActiveTaskId,
+      selectTask,
       setOpenTaskTabs,
       setPersistedActiveTaskId,
       tabTaskIds,

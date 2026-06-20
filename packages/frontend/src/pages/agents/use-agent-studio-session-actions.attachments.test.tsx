@@ -200,7 +200,8 @@ const createBaseArgs = (): HookArgs => {
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
-    updateQuery: () => {},
+    scheduleQueryUpdate: () => {},
+    selectAgentStudioSelection: () => {},
   };
 };
 

@@ -34,6 +34,13 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import {
+  createAgentStudioRouteSelectionState,
+  type SelectAgentStudioSelection,
+  toAgentStudioSessionlessRoleSelection,
+  toAgentStudioSessionSelection,
+  toAgentStudioTaskSelection,
+} from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 
 enableReactActEnvironment();
@@ -211,8 +218,10 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   };
 };
 
+const noopSelectAgentStudioSelection: SelectAgentStudioSelection = () => {};
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
-  return {
+  const baseArgs: Omit<HookArgs, "selectionState"> = {
     activeWorkspaceId: null,
     workspaceRepoPath: null,
     isRepoNavigationBoundaryPending: false,
@@ -223,11 +232,22 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     sessionKeyParam: null,
     hasExplicitRoleParam: false,
     roleFromQuery: "spec",
-    selectionIntent: null,
     repoSettings,
     isLoadingRepoSettings: false,
-    updateQuery: () => {},
+    selectAgentStudioSelection: noopSelectAgentStudioSelection,
     ...overrides,
+  };
+  return {
+    ...baseArgs,
+    selectionState:
+      overrides.selectionState ??
+      createAgentStudioRouteSelectionState({
+        isRepoNavigationBoundaryPending: baseArgs.isRepoNavigationBoundaryPending,
+        taskIdParam: baseArgs.taskIdParam,
+        sessionKeyParam: baseArgs.sessionKeyParam,
+        hasExplicitRoleParam: baseArgs.hasExplicitRoleParam,
+        roleFromQuery: baseArgs.roleFromQuery,
+      }),
   };
 };
 
@@ -839,7 +859,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("prefers optimistic selection intent over stale query role and session", async () => {
+  test("prefers immediate selection state over stale query role and session", async () => {
     const specSession = createSession("task-1", "session-spec", {
       role: "spec",
       startedAt: "2026-02-22T10:00:00.000Z",
@@ -857,15 +877,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(specSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "spec",
-        selectionIntent: {
-          taskId: "task-1",
-          sessionIdentity: {
-            externalSessionId: plannerSession.externalSessionId,
-            runtimeKind: plannerSession.runtimeKind,
-            workingDirectory: plannerSession.workingDirectory,
-          },
-          role: "planner",
-        },
+        selectionState: toAgentStudioSessionSelection(plannerSession),
       }),
     );
 
@@ -876,7 +888,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.view.role).toBe("planner");
       expect(latest.view.launchActionId).toBe("planner_initial");
       expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-planner");
-      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-planner");
+      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-spec");
     } finally {
       await harness.unmount();
     }
@@ -895,11 +907,10 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "spec",
-        selectionIntent: {
+        selectionState: toAgentStudioSessionlessRoleSelection({
           taskId: "task-1",
-          sessionIdentity: null,
           role: "build",
-        },
+        }),
       }),
     );
 
@@ -907,7 +918,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.resolvedRouteSession).toBeNull();
+      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-build");
       expect(latest.view.selectedSession.loadedSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
@@ -916,7 +927,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("uses concrete URL session once a sessionless selection intent has a session param", async () => {
+  test("uses concrete URL session when route selection has a session param", async () => {
     const buildSession = createSession("task-1", "session-build", {
       role: "build",
       startedAt: "2026-02-22T11:00:00.000Z",
@@ -931,11 +942,6 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(buildSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        selectionIntent: {
-          taskId: "task-1",
-          sessionIdentity: null,
-          role: "build",
-        },
       }),
     );
 
@@ -1042,6 +1048,19 @@ describe("useAgentStudioSelectionController", () => {
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
+      await harness.update(
+        createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
+          sessions: [activeSession, viewSession],
+          taskIdParam: "task-1",
+          sessionKeyParam: sessionKeyParam(activeSession),
+          hasExplicitRoleParam: true,
+          roleFromQuery: "build",
+          selectionState: toAgentStudioTaskSelection("task-2"),
+        }),
+        { readSessionTodos },
+      );
       await harness.waitFor(
         (latest) => latest.view.selectedSession.runtimeData.todos[0]?.id === "todo-session-qa",
       );
@@ -1102,13 +1121,13 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("uses detached tab workflow default role instead of query role selection", async () => {
-    const updateQuery = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        updateQuery,
+        selectAgentStudioSelection,
       }),
     );
 
@@ -1118,19 +1137,22 @@ describe("useAgentStudioSelectionController", () => {
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
+      expect(selectAgentStudioSelection).toHaveBeenCalledWith(toAgentStudioTaskSelection("task-2"));
+
+      await harness.update(
+        createBaseArgs({
+          taskIdParam: "task-1",
+          hasExplicitRoleParam: true,
+          roleFromQuery: "build",
+          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectAgentStudioSelection,
+        }),
+      );
 
       const latest = harness.getLatest();
       expect(latest.view.taskId).toBe("task-2");
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
-      expect(updateQuery).toHaveBeenCalledTimes(1);
-      expect(updateQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          task: "task-2",
-          session: undefined,
-          agent: undefined,
-        }),
-      );
     } finally {
       await harness.unmount();
     }
@@ -1165,6 +1187,14 @@ describe("useAgentStudioSelectionController", () => {
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
+      await harness.update(
+        createBaseArgs({
+          sessions: [sessionTaskOne, sessionTaskTwo],
+          taskIdParam: "task-1",
+          hasExplicitRoleParam: false,
+          selectionState: toAgentStudioTaskSelection("task-2"),
+        }),
+      );
 
       const latest = harness.getLatest();
       expect(latest.view.taskId).toBe("task-2");
@@ -1429,7 +1459,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("keeps build selected after task-tab navigation settles on a human_review task", async () => {
-    const updateQuery = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
     const taskOne = createTask("task-1");
     const humanReviewTask = createTaskCardFixture({
       id: "task-2",
@@ -1455,7 +1485,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "qa",
-        updateQuery,
+        selectAgentStudioSelection,
       }),
     );
 
@@ -1465,17 +1495,26 @@ describe("useAgentStudioSelectionController", () => {
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
+      expect(selectAgentStudioSelection).toHaveBeenCalledWith(toAgentStudioTaskSelection("task-2"));
+
+      await harness.update(
+        createBaseArgs({
+          tasks: [taskOne, humanReviewTask],
+          sessions: [buildSession, qaSession],
+          taskIdParam: "task-1",
+          sessionKeyParam: null,
+          hasExplicitRoleParam: false,
+          roleFromQuery: "qa",
+          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectAgentStudioSelection,
+        }),
+      );
 
       expect(harness.getLatest().view.taskId).toBe("task-2");
       expect(harness.getLatest().view.selectedSession.loadedSession?.externalSessionId).toBe(
         "session-build",
       );
       expect(harness.getLatest().view.role).toBe("build");
-      expect(updateQuery).toHaveBeenCalledWith({
-        task: "task-2",
-        session: undefined,
-        agent: undefined,
-      });
 
       await harness.update(
         createBaseArgs({
@@ -1485,7 +1524,7 @@ describe("useAgentStudioSelectionController", () => {
           sessionKeyParam: null,
           hasExplicitRoleParam: false,
           roleFromQuery: "qa",
-          updateQuery,
+          selectAgentStudioSelection,
         }),
       );
 

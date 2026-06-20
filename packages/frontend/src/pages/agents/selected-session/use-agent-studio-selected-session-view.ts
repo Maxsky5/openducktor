@@ -17,10 +17,7 @@ import {
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import {
-  type AgentStudioViewSessionSelectionIntent,
-  resolveAgentStudioViewSessionSelection,
-} from "../agents-page-selection";
+import { resolveAgentStudioViewSessionSelection } from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
   deriveSelectedSessionRuntimeTarget,
@@ -36,7 +33,6 @@ type UseAgentStudioSelectedSessionViewArgs = {
   roleSelection: AgentRole;
   sessionlessRole: AgentRole;
   keepExplicitRoleSessionless: boolean;
-  selectionIntent: AgentStudioViewSessionSelectionIntent | null;
   sessionIdentityFromRoute: AgentSessionIdentity | null;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
@@ -57,7 +53,6 @@ export function useAgentStudioSelectedSessionView({
   roleSelection,
   sessionlessRole,
   keepExplicitRoleSessionless,
-  selectionIntent,
   sessionIdentityFromRoute,
   repoSettings,
   isLoadingRepoSettings,
@@ -75,7 +70,6 @@ export function useAgentStudioSelectedSessionView({
       selectedTask,
       sessionlessRole,
       keepExplicitRoleSessionless,
-      selectionIntent,
     });
   }, [
     sessionKey,
@@ -84,7 +78,6 @@ export function useAgentStudioSelectedSessionView({
     roleSelection,
     sessionlessRole,
     sessionIdentityFromRoute,
-    selectionIntent,
     selectedTask,
     sessionSummaries,
   ]);

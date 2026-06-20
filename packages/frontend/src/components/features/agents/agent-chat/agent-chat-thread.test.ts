@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -17,6 +17,10 @@ import {
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
+import {
+  createAnimationFrameTestDriver,
+  withAnimationFrameTestDriver,
+} from "./test-support/animation-frame-test-driver";
 
 (
   globalThis as typeof globalThis & {
@@ -177,13 +181,11 @@ describe("AgentChatThread", () => {
   const originalWindow = getGlobalWindow();
   const originalIntersectionObserver = globalThis.IntersectionObserver;
   const originalMatchMedia = globalThis.matchMedia;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   const originalResizeObserver = globalThis.ResizeObserver;
+  const animationFrameDriver = createAnimationFrameTestDriver();
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    let nextAnimationFrameTime = 16;
     globalThis.matchMedia = ((query: string) =>
       ({
         matches: false,
@@ -195,15 +197,7 @@ describe("AgentChatThread", () => {
         removeListener: () => {},
         dispatchEvent: () => false,
       }) as MediaQueryList) as typeof matchMedia;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameTime = nextAnimationFrameTime;
-      nextAnimationFrameTime += 16;
-      queueMicrotask(() => {
-        callback(frameTime);
-      });
-      return 1;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    animationFrameDriver.installAutoFlush();
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     globalThis.IntersectionObserver = class MockIntersectionObserver {
       disconnect(): void {}
@@ -222,8 +216,7 @@ describe("AgentChatThread", () => {
     setGlobalWindow(originalWindow);
     globalThis.IntersectionObserver = originalIntersectionObserver;
     globalThis.matchMedia = originalMatchMedia;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
@@ -670,84 +663,153 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("renders a large attachment transcript immediately through the history window on session switch", () => {
-    const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
-      buildMessage(
-        "user",
-        `Attachment message ${index + 1}`,
-        index === 0
-          ? {
-              id: `attachment-message-${index + 1}`,
-              meta: {
-                kind: "user",
-                state: "read",
-                parts: [
-                  {
-                    kind: "attachment",
-                    attachment: {
-                      id: "attachment-1",
-                      name: "spec.md",
-                      kind: "pdf",
-                      path: "/tmp/spec.md",
+  test("renders a large attachment transcript through the history window on session switch", async () => {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+      const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
+        buildMessage(
+          "user",
+          `Attachment message ${index + 1}`,
+          index === 0
+            ? {
+                id: `attachment-message-${index + 1}`,
+                meta: {
+                  kind: "user",
+                  state: "read",
+                  parts: [
+                    {
+                      kind: "attachment",
+                      attachment: {
+                        id: "attachment-1",
+                        name: "spec.md",
+                        kind: "pdf",
+                        path: "/tmp/spec.md",
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
+              }
+            : {
+                id: `attachment-message-${index + 1}`,
               },
-            }
-          : {
-              id: `attachment-message-${index + 1}`,
-            },
-      ),
-    );
+        ),
+      );
 
-    const rendered = render(
-      createElement(AgentChatThread, {
-        model: {
-          ...buildBaseModel(),
-          session: buildSession({
-            externalSessionId: "session-normal",
-            messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              externalSessionId: "session-normal",
+              messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
+            }),
+          },
+        }),
+      );
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              externalSessionId: "session-attachments",
+              messages: attachmentMessages,
+            }),
+          },
+        }),
+      );
+
+      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
+
+      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
+      await animationFrameDriver.flushFrame();
+      await animationFrameDriver.flushTimers();
+
+      await waitFor(() => {
+        expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
+      });
+      expect(rendered.queryByText("Attachment message 1")).toBeNull();
+      expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
+
+      rendered.unmount();
+    });
+  });
+
+  test("stages a cached large transcript immediately after switching back", async () => {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+      const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
+        buildMessage("user", `Turn ${turnIndex + 1} request`, {
+          id: `turn-${turnIndex + 1}-user`,
+        }),
+        ...Array.from({ length: 18 }, (_, replyIndex) =>
+          buildMessage("assistant", `Turn ${turnIndex + 1} reply ${replyIndex + 1}`, {
+            id: `turn-${turnIndex + 1}-assistant-${replyIndex + 1}`,
           }),
-        },
-      }),
-    );
+        ),
+      ]).flat();
+      const largeSession = buildSession({
+        externalSessionId: "session-cached-large",
+        status: "idle",
+        messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
+      });
+      const smallSession = buildSession({
+        externalSessionId: "session-small",
+        messages: [buildMessage("assistant", "Small transcript", { id: "small-assistant-1" })],
+      });
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: largeSession,
+          },
+        }),
+      );
 
-    rendered.rerender(
-      createElement(AgentChatThread, {
-        model: {
-          ...buildBaseModel(),
-          session: buildSession({
-            externalSessionId: "session-attachments",
-            messages: attachmentMessages,
-          }),
-        },
-      }),
-    );
+      await waitFor(async () => {
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      });
 
-    expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
-    expect(rendered.queryByText("Attachment message 1")).toBeNull();
-    expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: smallSession,
+          },
+        }),
+      );
+      await animationFrameDriver.flushTimers();
 
-    rendered.unmount();
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              ...largeSession,
+              messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
+            }),
+          },
+        }),
+      );
+
+      expect(rendered.queryByText("Loading session")).toBeNull();
+      expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
+      expect(immediateRowCount).toBeGreaterThan(0);
+      expect(immediateRowCount).toBeLessThan(largeMessages.length);
+
+      await animationFrameDriver.flushFrame();
+      await waitFor(() => {
+        expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeGreaterThan(
+          immediateRowCount,
+        );
+      });
+
+      rendered.unmount();
+    });
   });
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-    let nextAnimationFrameId = 1;
-
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
-
-    try {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const initialMessages = [
         buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
       ];
@@ -782,13 +844,10 @@ describe("AgentChatThread", () => {
 
       expect(rendered.queryByText("Loading session")).toBeNull();
       expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
-      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
       rendered.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
   });
 
   test("keeps the latest user turn uncontained after a running session completes", async () => {

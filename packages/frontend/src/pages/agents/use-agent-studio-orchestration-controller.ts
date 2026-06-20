@@ -18,7 +18,7 @@ import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-cha
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
+import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -33,8 +33,8 @@ type AgentStudioOrchestrationComposerContext = Parameters<
 >[0]["composer"];
 
 type AgentStudioOrchestrationActionsContext = {
-  updateQuery: (updates: QueryUpdate) => void;
-  scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
+  scheduleQueryUpdate: (updates: QueryUpdate) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
   openTaskDetails: () => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
@@ -209,7 +209,7 @@ export function useAgentStudioOrchestrationController({
   const selectedSession = view.selectedSession;
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
-    updateQuery,
+    scheduleQueryUpdate,
     runSessionStartWorkflow,
     sendAgentMessage,
     stopAgentSession,
@@ -218,7 +218,7 @@ export function useAgentStudioOrchestrationController({
     setTaskTargetBranch,
     replyAgentApproval,
     answerAgentQuestion,
-    scheduleSelectionIntent,
+    selectAgentStudioSelection,
   } = actions;
   const { chatSettings, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ workspaceRepoPath });
@@ -313,8 +313,8 @@ export function useAgentStudioOrchestrationController({
     setTaskTargetBranch,
     replyAgentApproval,
     answerAgentQuestion,
-    updateQuery,
-    scheduleSelectionIntent,
+    scheduleQueryUpdate,
+    selectAgentStudioSelection,
   });
 
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);

@@ -56,7 +56,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  updateQuery: (updates: QueryUpdate) => void;
+  scheduleQueryUpdate: (updates: QueryUpdate) => void;
 };
 
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
@@ -94,7 +94,7 @@ export function useAgentStudioSessionStartFlow({
   runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
-  updateQuery,
+  scheduleQueryUpdate,
 }: UseAgentStudioSessionStartFlowArgs): {
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
@@ -186,7 +186,7 @@ export function useAgentStudioSessionStartFlow({
             showPostStartActionError(request.postStartAction, workflow.postStartActionError);
           }
 
-          updateQuery(
+          scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({
               taskId: request.taskId,
               session: workflow,
@@ -220,8 +220,8 @@ export function useAgentStudioSessionStartFlow({
       runSessionStartWorkflow,
       selectedTask,
       setTaskTargetBranch,
+      scheduleQueryUpdate,
       taskId,
-      updateQuery,
       workspaceId,
     ],
   );

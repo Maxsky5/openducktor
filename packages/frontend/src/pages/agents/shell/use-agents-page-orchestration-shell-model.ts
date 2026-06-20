@@ -63,7 +63,7 @@ export function useAgentsPageOrchestrationShellModel({
   humanRequestChangesTask,
   setTaskTargetBranch,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
-  const { selection, scheduleQueryUpdate, scheduleSelectionIntent } = routeSession;
+  const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
 
   const composer = useMemo(
     (): { draftScope: AgentChatDraftScope } => ({
@@ -95,7 +95,7 @@ export function useAgentsPageOrchestrationShellModel({
     hasActiveGitConflict,
     composer,
     actions: {
-      updateQuery: scheduleQueryUpdate,
+      scheduleQueryUpdate,
       openTaskDetails,
       runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
@@ -105,7 +105,7 @@ export function useAgentsPageOrchestrationShellModel({
       setTaskTargetBranch,
       replyAgentApproval: agentOperations.replyAgentApproval,
       answerAgentQuestion: agentOperations.answerAgentQuestion,
-      scheduleSelectionIntent,
+      selectAgentStudioSelection,
     },
   });
 

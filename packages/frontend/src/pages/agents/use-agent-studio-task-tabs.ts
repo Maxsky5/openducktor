@@ -5,26 +5,13 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { getAvailableTabTasks } from "./agent-studio-task-tabs-list";
 import { buildTaskTabs } from "./agents-page-session-tabs";
 import {
-  AGENT_STUDIO_QUERY_KEYS,
-  type AgentStudioQueryUpdate as QueryUpdate,
-} from "./query-sync/agent-studio-navigation";
+  emptyAgentStudioSelectionState,
+  type SelectAgentStudioSelection,
+  toAgentStudioTaskSelection,
+} from "./shell/agent-studio-selection-state";
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
-
-const toTaskIntentQueryUpdate = (taskId: string): QueryUpdate => {
-  return {
-    [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
-    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-  };
-};
-
-const toClearTaskQueryUpdate = (): QueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-});
 
 export function useAgentStudioTaskTabs(args: {
   activeWorkspaceId: string | null;
@@ -35,7 +22,7 @@ export function useAgentStudioTaskTabs(args: {
   isLoadingTasks: boolean;
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
-  updateQuery: (updates: QueryUpdate) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 }): {
   tabTaskIds: string[];
   activeTaskTabId: string;
@@ -59,12 +46,11 @@ export function useAgentStudioTaskTabs(args: {
     isLoadingTasks,
     latestSessionByTaskId,
     activeSessionByTaskId,
-    updateQuery,
+    selectAgentStudioSelection,
   } = args;
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
-  const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
   const [loadedTabsStorageWorkspaceId, setLoadedTabsStorageWorkspaceId] = useState<string | null>(
     null,
   );
@@ -87,20 +73,19 @@ export function useAgentStudioTaskTabs(args: {
     [openTaskTabs, selectableTaskIds],
   );
 
-  const navigateToTaskIntent = useCallback(
+  const selectTask = useCallback(
     (nextTaskId: string) => {
-      updateQuery(toTaskIntentQueryUpdate(nextTaskId));
+      selectAgentStudioSelection(toAgentStudioTaskSelection(nextTaskId));
     },
-    [updateQuery],
+    [selectAgentStudioSelection],
   );
 
   const clearTaskSelection = useCallback((): void => {
-    updateQuery(toClearTaskQueryUpdate());
-  }, [updateQuery]);
+    selectAgentStudioSelection(emptyAgentStudioSelectionState());
+  }, [selectAgentStudioSelection]);
   const resetLoadedTaskTabsStorage = useCallback((): void => {
     setOpenTaskTabs([]);
     setPersistedActiveTaskId(null);
-    setIntentActiveTaskId(null);
     setLoadedTabsStorageWorkspaceId(null);
   }, []);
   const applyLoadedTaskTabsStorage = useCallback(
@@ -118,12 +103,10 @@ export function useAgentStudioTaskTabs(args: {
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,
     persistedActiveTaskId,
-    intentActiveTaskId,
     loadedTabsStorageWorkspaceId,
-    navigateToTaskIntent,
+    selectTask,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   });
 
   useTaskTabPersistence({
@@ -160,11 +143,10 @@ export function useAgentStudioTaskTabs(args: {
     tabTaskIds,
     activeTaskTabId,
     clearTaskSelection,
-    navigateToTaskIntent,
+    selectTask,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   });
 
   return {

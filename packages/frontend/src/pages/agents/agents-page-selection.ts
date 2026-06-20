@@ -252,11 +252,6 @@ export const groupSessionsByTaskId = (
   return grouped;
 };
 
-export type AgentStudioViewSessionSelectionIntent = {
-  sessionIdentity: AgentSessionIdentity | null;
-  role: AgentRole;
-};
-
 const findViewSessionCandidateByIdentity = (
   candidates: AgentSessionSummary[],
   sessionIdentity: AgentSessionIdentity,
@@ -289,7 +284,6 @@ export const resolveAgentStudioViewSessionSelection = ({
   selectedTask,
   sessionlessRole,
   keepExplicitRoleSessionless = false,
-  selectionIntent = null,
 }: {
   sessionSummaries: AgentSessionSummary[];
   sessionKey: string | null;
@@ -299,31 +293,11 @@ export const resolveAgentStudioViewSessionSelection = ({
   selectedTask: TaskCard | null;
   sessionlessRole: AgentRole;
   keepExplicitRoleSessionless?: boolean;
-  selectionIntent?: AgentStudioViewSessionSelectionIntent | null;
 }): {
   role: AgentRole;
   sessionIdentity: AgentSessionIdentity | null;
   sessionSummary: AgentSessionSummary | null;
 } => {
-  if (selectionIntent) {
-    if (selectionIntent.sessionIdentity) {
-      const matchingCandidate = findViewSessionCandidateByIdentity(
-        sessionSummaries,
-        selectionIntent.sessionIdentity,
-      );
-      return {
-        role: matchingCandidate?.role ?? selectionIntent.role,
-        sessionIdentity: toAgentSessionIdentity(selectionIntent.sessionIdentity),
-        sessionSummary: matchingCandidate,
-      };
-    }
-    return {
-      role: selectionIntent.role,
-      sessionIdentity: null,
-      sessionSummary: null,
-    };
-  }
-
   if (sessionIdentity) {
     const matchingCandidate = findViewSessionCandidateByIdentity(sessionSummaries, sessionIdentity);
     return {

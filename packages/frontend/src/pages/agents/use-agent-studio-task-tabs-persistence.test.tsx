@@ -25,7 +25,6 @@ type HookArgs = Omit<
 > & {
   initialOpenTaskTabs?: string[];
   initialPersistedActiveTaskId?: string | null;
-  initialIntentActiveTaskId?: string | null;
   initialLoadedTabsStorageWorkspaceId?: string | null;
 };
 
@@ -106,16 +105,12 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState(
     props.initialPersistedActiveTaskId ?? null,
   );
-  const [intentActiveTaskId, setIntentActiveTaskId] = useState(
-    props.initialIntentActiveTaskId ?? null,
-  );
   const [loadedTabsStorageWorkspaceId, setLoadedTabsStorageWorkspaceId] = useState(
     props.initialLoadedTabsStorageWorkspaceId ?? null,
   );
   const resetLoadedTaskTabsStorage = (): void => {
     setOpenTaskTabs([]);
     setPersistedActiveTaskId(null);
-    setIntentActiveTaskId(null);
     setLoadedTabsStorageWorkspaceId(null);
   };
   const applyLoadedTaskTabsStorage = (
@@ -145,7 +140,6 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
   return {
     openTaskTabs,
     persistedActiveTaskId,
-    intentActiveTaskId,
     loadedTabsStorageWorkspaceId,
   };
 };
@@ -164,7 +158,6 @@ describe("useTaskTabPersistence", () => {
       activeTaskTabId: "",
       initialOpenTaskTabs: ["task-1", "task-2"],
       initialPersistedActiveTaskId: "task-2",
-      initialIntentActiveTaskId: "task-2",
       initialLoadedTabsStorageWorkspaceId: "/repo",
     });
 
@@ -173,7 +166,6 @@ describe("useTaskTabPersistence", () => {
     expect(harness.getLatest()).toEqual({
       openTaskTabs: [],
       persistedActiveTaskId: null,
-      intentActiveTaskId: null,
       loadedTabsStorageWorkspaceId: null,
     });
 
@@ -203,7 +195,6 @@ describe("useTaskTabPersistence", () => {
       expect(harness.getLatest()).toEqual({
         openTaskTabs: ["task-b", "task-c"],
         persistedActiveTaskId: "task-c",
-        intentActiveTaskId: null,
         loadedTabsStorageWorkspaceId: "/repo-b",
       });
 
@@ -237,7 +228,6 @@ describe("useTaskTabPersistence", () => {
       expect(harness.getLatest()).toEqual({
         openTaskTabs: ["task-1"],
         persistedActiveTaskId: null,
-        intentActiveTaskId: null,
         loadedTabsStorageWorkspaceId: "/repo",
       });
 
@@ -278,7 +268,6 @@ describe("useTaskTabPersistence", () => {
       expect(harness.getLatest()).toEqual({
         openTaskTabs: ["task-b"],
         persistedActiveTaskId: "task-b",
-        intentActiveTaskId: null,
         loadedTabsStorageWorkspaceId: "/repo-b",
       });
       expect(setItem.mock.calls).toEqual([

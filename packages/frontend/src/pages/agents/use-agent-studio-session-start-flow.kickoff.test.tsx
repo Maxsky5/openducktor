@@ -156,7 +156,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   repoSettings: null,
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
   humanRequestChangesTask: async () => {},
-  updateQuery: () => {},
+  scheduleQueryUpdate: () => {},
   ...overrides,
 });
 

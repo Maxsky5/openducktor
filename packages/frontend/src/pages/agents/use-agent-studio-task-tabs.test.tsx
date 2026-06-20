@@ -13,6 +13,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
+import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();
@@ -60,6 +61,14 @@ const createSession = (taskId: string, externalSessionId: string) =>
     taskId,
   });
 
+const taskSelection = (taskId: string): AgentStudioSelectionState => ({
+  taskId,
+  sessionIdentity: null,
+  role: "spec",
+  hasExplicitRoleSelection: false,
+  keepSessionless: false,
+});
+
 const useTaskTabsHarness = (props: HookArgs) => useAgentStudioTaskTabs(props);
 
 const createHookHarness = (initialProps: HookArgs) =>
@@ -73,7 +82,7 @@ const withWorkspaceId = (
   tasks: [],
   isLoadingTasks: false,
   latestSessionByTaskId: new Map(),
-  updateQuery: () => {},
+  selectAgentStudioSelection: () => {},
   ...overrides,
 });
 
@@ -93,7 +102,7 @@ describe("useAgentStudioTaskTabs", () => {
       });
       memoryStorage.setItem(toTabsStorageKey("workspace-repo"), persistedValue);
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo",
@@ -102,7 +111,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1"), createTask("task-2")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -135,7 +144,7 @@ describe("useAgentStudioTaskTabs", () => {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
       const latestSession = createSession("task-2", "session-2");
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
 
       const harness = createHookHarness(
         withWorkspaceId({
@@ -145,7 +154,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [taskOne, taskTwo],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -157,11 +166,7 @@ describe("useAgentStudioTaskTabs", () => {
       });
 
       const lastUpdate = updateCalls[updateCalls.length - 1];
-      expect(lastUpdate).toEqual({
-        task: "task-2",
-        session: undefined,
-        agent: undefined,
-      });
+      expect(lastUpdate).toEqual(taskSelection("task-2"));
 
       await harness.unmount();
     } finally {
@@ -197,7 +202,7 @@ describe("useAgentStudioTaskTabs", () => {
         status: "idle",
         startedAt: "2026-02-22T10:00:00.000Z",
       });
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
 
       const harness = createHookHarness(
         withWorkspaceId({
@@ -208,7 +213,7 @@ describe("useAgentStudioTaskTabs", () => {
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
           activeSessionByTaskId: new Map([["task-2", runningBuildSession]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -219,11 +224,7 @@ describe("useAgentStudioTaskTabs", () => {
         state.handleSelectTab("task-2");
       });
 
-      expect(updateCalls[updateCalls.length - 1]).toEqual({
-        task: "task-2",
-        session: undefined,
-        agent: undefined,
-      });
+      expect(updateCalls[updateCalls.length - 1]).toEqual(taskSelection("task-2"));
 
       await harness.unmount();
     } finally {
@@ -259,7 +260,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1"), createTask("task-2")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: () => {},
+          selectAgentStudioSelection: () => {},
         }),
       );
 
@@ -293,7 +294,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
 
       const harness = createHookHarness(
         withWorkspaceId({
@@ -303,7 +304,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [taskOne, taskTwo],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -315,19 +316,44 @@ describe("useAgentStudioTaskTabs", () => {
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
+      expect(updateCalls[updateCalls.length - 1]).toEqual(taskSelection("task-2"));
+
+      await harness.update(
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
+          taskId: "task-2",
+          selectedTask: taskTwo,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
+          selectAgentStudioSelection: (updates) => {
+            updateCalls.push(updates);
+          },
+        }),
+      );
       expect(harness.getLatest().activeTaskTabId).toBe("task-2");
 
       await harness.run((state) => {
         state.handleCloseTab("task-2");
       });
 
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
       const lastUpdate = updateCalls[updateCalls.length - 1];
-      expect(lastUpdate).toEqual({
-        task: "task-1",
-        session: undefined,
-        agent: undefined,
-      });
+      expect(lastUpdate).toEqual(taskSelection("task-1"));
+      await harness.update(
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
+          taskId: "task-1",
+          selectedTask: taskOne,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
+          selectAgentStudioSelection: (updates) => {
+            updateCalls.push(updates);
+          },
+        }),
+      );
+
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
 
       await harness.unmount();
     } finally {
@@ -356,7 +382,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1"), createTask("task-2"), createTask("task-3")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: () => {},
+          selectAgentStudioSelection: () => {},
         }),
       );
 
@@ -396,7 +422,7 @@ describe("useAgentStudioTaskTabs", () => {
       );
 
       const latestSession = createSession("task-2", "session-2");
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
 
       const harness = createHookHarness(
         withWorkspaceId({
@@ -406,7 +432,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1"), createTask("task-2")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -416,11 +442,7 @@ describe("useAgentStudioTaskTabs", () => {
       await harness.waitFor(() => updateCalls.length > 0);
 
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0]).toEqual({
-        task: "task-2",
-        session: undefined,
-        agent: undefined,
-      });
+      expect(updateCalls[0]).toEqual(taskSelection("task-2"));
 
       await harness.unmount();
     } finally {
@@ -448,7 +470,7 @@ describe("useAgentStudioTaskTabs", () => {
         }),
       );
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const latestSession = createSession("task-2", "session-2");
       const harness = createHookHarness(
         withWorkspaceId({
@@ -458,7 +480,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-2")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -474,7 +496,7 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [createTask("task-2")],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
@@ -486,7 +508,7 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [createTask("task-2")],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
@@ -519,7 +541,7 @@ describe("useAgentStudioTaskTabs", () => {
         }),
       );
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo-a",
@@ -528,7 +550,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-a")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -545,19 +567,15 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [createTask("task-b")],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-b", repoBSession]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
 
       await harness.waitFor(() => updateCalls.length > 0);
 
-      expect(updateCalls[0]).toEqual({
-        task: "task-b",
-        session: undefined,
-        agent: undefined,
-      });
-      expect(updateCalls.some((call) => call.task === "task-a")).toBeFalse();
+      expect(updateCalls[0]).toEqual(taskSelection("task-b"));
+      expect(updateCalls.some((call) => call.taskId === "task-a")).toBeFalse();
 
       await harness.unmount();
     } finally {
@@ -579,7 +597,7 @@ describe("useAgentStudioTaskTabs", () => {
         }),
       );
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo-b",
@@ -589,7 +607,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-b")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -612,7 +630,7 @@ describe("useAgentStudioTaskTabs", () => {
         "workspace-repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
       });
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo-a",
@@ -621,7 +639,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-a")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -637,7 +655,7 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [createTask("task-b")],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
@@ -650,13 +668,13 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [createTask("task-a")],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a-2")]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
       await harness.waitFor(() => updateCalls.length === 3);
 
-      expect(updateCalls.map((call) => call.task)).toEqual(["task-a", "task-b", "task-a"]);
+      expect(updateCalls.map((call) => call.taskId)).toEqual(["task-a", "task-b", "task-a"]);
 
       await harness.unmount();
     });
@@ -682,7 +700,7 @@ describe("useAgentStudioTaskTabs", () => {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
       const latestSession = createSession("task-1", "session-1");
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo",
@@ -691,7 +709,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [taskOne, taskTwo],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map([["task-1", latestSession]]),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -718,7 +736,7 @@ describe("useAgentStudioTaskTabs", () => {
         ],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-1", latestSession]]),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
@@ -727,11 +745,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
       expect(harness.getLatest().activeTaskTabId).toBe("task-1");
-      expect(updateCalls[0]).toEqual({
-        task: "task-1",
-        session: undefined,
-        agent: undefined,
-      });
+      expect(updateCalls[0]).toEqual(taskSelection("task-1"));
 
       await harness.unmount();
     } finally {
@@ -759,7 +773,7 @@ describe("useAgentStudioTaskTabs", () => {
         }),
       );
 
-      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const updateCalls: AgentStudioSelectionState[] = [];
       const harness = createHookHarness(
         withWorkspaceId({
           activeWorkspaceId: "workspace-repo",
@@ -768,7 +782,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: (updates) => {
+          selectAgentStudioSelection: (updates) => {
             updateCalls.push(updates);
           },
         }),
@@ -785,7 +799,7 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map(),
-        updateQuery: (updates) => {
+        selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
         },
       });
@@ -822,7 +836,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: () => {},
+          selectAgentStudioSelection: () => {},
         }),
       );
 
@@ -857,7 +871,7 @@ describe("useAgentStudioTaskTabs", () => {
           tasks: [createTask("task-1")],
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
-          updateQuery: () => {},
+          selectAgentStudioSelection: () => {},
         }),
       );
 

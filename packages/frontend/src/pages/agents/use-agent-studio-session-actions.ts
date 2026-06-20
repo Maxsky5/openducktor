@@ -34,7 +34,7 @@ import {
   canUseAgentStudioKickoffPrompt,
 } from "./session-start/agent-studio-session-start-availability";
 import { useAgentStudioSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
-import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
+import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
@@ -64,8 +64,8 @@ type UseAgentStudioSessionActionsArgs = {
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
-  updateQuery: (updates: QueryUpdate) => void;
-  scheduleSelectionIntent?: (intent: AgentStudioSelectionIntent) => void;
+  scheduleQueryUpdate: (updates: QueryUpdate) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export type UseAgentStudioSessionActionsResult = {
@@ -119,8 +119,8 @@ export function useAgentStudioSessionActions({
   setTaskTargetBranch,
   replyAgentApproval,
   answerAgentQuestion,
-  updateQuery,
-  scheduleSelectionIntent,
+  scheduleQueryUpdate,
+  selectAgentStudioSelection,
 }: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
   const sessionState = deriveAgentStudioSessionActionState({
     selectedSession,
@@ -174,7 +174,7 @@ export function useAgentStudioSessionActions({
     runSessionStartWorkflow,
     humanRequestChangesTask,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
-    updateQuery,
+    scheduleQueryUpdate,
   });
 
   const { isSending, onSend } = useAgentStudioSendAction({
@@ -231,8 +231,7 @@ export function useAgentStudioSessionActions({
     taskId,
     sessionsForTask,
     canPrepareMessageFirstSession,
-    updateQuery,
-    scheduleSelectionIntent,
+    selectAgentStudioSelection,
   });
 
   const canUseKickoffPrompt = canUseAgentStudioKickoffPrompt({

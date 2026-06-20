@@ -353,7 +353,8 @@ const createBaseArgs = (): HookArgs => {
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
-    updateQuery: () => {},
+    scheduleQueryUpdate: () => {},
+    selectAgentStudioSelection: () => {},
   };
 };
 
@@ -379,14 +380,14 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("prepares a message-first session target without starting or sending", async () => {
-    const updateQuery = mock(() => {});
-    const scheduleSelectionIntent = mock(() => {});
+    const scheduleQueryUpdate = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      updateQuery,
-      scheduleSelectionIntent,
+      scheduleQueryUpdate,
+      selectAgentStudioSelection,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
         sendAgentMessage,
@@ -407,13 +408,13 @@ describe("useAgentStudioSessionActions", () => {
       });
     });
 
-    expect(updateQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ task: "task-1", session: undefined, agent: "build" }),
-    );
-    expect(scheduleSelectionIntent).toHaveBeenCalledWith({
+    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-1",
       sessionIdentity: null,
       role: "build",
+      hasExplicitRoleSelection: true,
+      keepSessionless: true,
     });
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -422,14 +423,12 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("does not prepare a message-first target when parent start policy rejects it", async () => {
-    const updateQuery = mock(() => {});
-    const scheduleSelectionIntent = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
       sessionsForTask: [],
       canPrepareMessageFirstSession: () => false,
-      updateQuery,
-      scheduleSelectionIntent,
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -444,8 +443,7 @@ describe("useAgentStudioSessionActions", () => {
       });
     });
 
-    expect(updateQuery).not.toHaveBeenCalled();
-    expect(scheduleSelectionIntent).not.toHaveBeenCalled();
+    expect(selectAgentStudioSelection).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -618,7 +616,7 @@ describe("useAgentStudioSessionActions", () => {
         sendAgentMessage,
       }),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -1624,7 +1622,7 @@ describe("useAgentStudioSessionActions", () => {
       selectedSession: selectedSessionFromSession(existingSpecSession),
       sessionsForTask: summarizeSessions([existingSpecSession]),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -1641,17 +1639,15 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("session selection and workflow selection update URL query", async () => {
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+  test("session selection and workflow selection publish selected session state", async () => {
+    const selectAgentStudioSelection = mock(() => {});
     const sessionTwo = createSession({ externalSessionId: "session-2", taskId: "task-2" });
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       sessionsForTask: summarizeSessions([sessionTwo]),
       taskId: "task-2",
-      updateQuery: (updates) => {
-        updateCalls.push(updates);
-      },
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1661,25 +1657,25 @@ describe("useAgentStudioSessionActions", () => {
       state.handleWorkflowStepSelect("spec", sessionTwoValue);
     });
 
-    expect(updateCalls).toContainEqual({
-      task: "task-2",
-      session: agentSessionIdentityKey(sessionTwo),
-      agent: "spec",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-2",
+      sessionIdentity: toAgentSessionIdentity(sessionTwo),
+      role: "spec",
+      hasExplicitRoleSelection: true,
+      keepSessionless: false,
     });
 
     await harness.unmount();
   });
 
   test("workflow selection without existing session switches role context", async () => {
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const selectAgentStudioSelection = mock(() => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
       sessionsForTask: [],
-      updateQuery: (updates) => {
-        updateCalls.push(updates);
-      },
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1687,10 +1683,12 @@ describe("useAgentStudioSessionActions", () => {
       state.handleWorkflowStepSelect("planner", null);
     });
 
-    expect(updateCalls).toContainEqual({
-      task: "task-1",
-      session: undefined,
-      agent: "planner",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionIdentity: null,
+      role: "planner",
+      hasExplicitRoleSelection: true,
+      keepSessionless: true,
     });
 
     await harness.unmount();
@@ -1767,7 +1765,7 @@ describe("useAgentStudioSessionActions", () => {
         sendAgentMessage,
       }),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -1824,15 +1822,13 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("selection actions ignore invalid session ids without mutating query state", async () => {
-    const updateQuery = mock(() => {});
-    const scheduleSelectionIntent = mock(() => {});
+  test("selection actions ignore invalid session ids without mutating selection state", async () => {
+    const selectAgentStudioSelection = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
       sessionsForTask: summarizeSessions([createSession({ externalSessionId: "session-1" })]),
       canPrepareMessageFirstSession: () => true,
-      updateQuery,
-      scheduleSelectionIntent,
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1840,21 +1836,19 @@ describe("useAgentStudioSessionActions", () => {
       state.handleSessionSelectionChange("missing-session");
     });
 
-    expect(updateQuery).not.toHaveBeenCalled();
-    expect(scheduleSelectionIntent).not.toHaveBeenCalled();
+    expect(selectAgentStudioSelection).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
   test("selection actions apply selected session identity", async () => {
-    const updateQuery = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
       sessionsForTask: summarizeSessions([session]),
       canPrepareMessageFirstSession: () => true,
-      updateQuery,
-      scheduleSelectionIntent: undefined,
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1862,11 +1856,56 @@ describe("useAgentStudioSessionActions", () => {
       state.handleSessionSelectionChange(agentSessionIdentityKey(session));
     });
 
-    expect(updateQuery).toHaveBeenCalledWith({
-      task: "task-1",
-      session: agentSessionIdentityKey(session),
-      agent: "spec",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionIdentity: toAgentSessionIdentity(session),
+      role: "spec",
+      hasExplicitRoleSelection: true,
+      keepSessionless: false,
     });
+
+    await harness.unmount();
+  });
+
+  test("selection actions publish local selection immediately", async () => {
+    const selections: unknown[] = [];
+    const session = createSession({ externalSessionId: "session-1", role: "spec" });
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      sessionsForTask: summarizeSessions([session]),
+      canPrepareMessageFirstSession: () => true,
+      selectAgentStudioSelection: (selection) => {
+        selections.push(selection);
+      },
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSessionSelectionChange(agentSessionIdentityKey(session));
+    });
+    expect(selections).toEqual([
+      {
+        taskId: "task-1",
+        sessionIdentity: toAgentSessionIdentity(session),
+        role: "spec",
+        hasExplicitRoleSelection: true,
+        keepSessionless: false,
+      },
+    ]);
+
+    selections.length = 0;
+    await harness.run((state) => {
+      state.handleWorkflowStepSelect("planner", null);
+    });
+    expect(selections).toEqual([
+      {
+        taskId: "task-1",
+        sessionIdentity: null,
+        role: "planner",
+        hasExplicitRoleSelection: true,
+        keepSessionless: true,
+      },
+    ]);
 
     await harness.unmount();
   });

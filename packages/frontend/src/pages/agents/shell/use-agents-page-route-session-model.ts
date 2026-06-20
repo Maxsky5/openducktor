@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { startTransition, useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -6,8 +6,8 @@ import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigati
 import { useAgentStudioQuerySessionSync } from "../query-sync/use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import type { AgentStudioSelectionIntent } from "./agent-studio-selection-intent";
-import { useAgentStudioSelectionIntentState } from "./use-agent-studio-selection-intent-state";
+import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
+import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
@@ -24,7 +24,7 @@ export type AgentsPageRouteSessionModel = {
   retryNavigationPersistence: () => void;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
-  scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export function useAgentsPageRouteSessionModel({
@@ -57,18 +57,22 @@ export function useAgentsPageRouteSessionModel({
 
   const scheduleQueryUpdate = useCallback(
     (updates: AgentStudioQueryUpdate): void => {
-      updateQuery(updates);
+      // Local selection state owns click responsiveness; URL persistence must not block it.
+      startTransition(() => {
+        updateQuery(updates);
+      });
     },
     [updateQuery],
   );
 
-  const { selectionIntentForController, scheduleSelectionIntent } =
-    useAgentStudioSelectionIntentState({
-      isRepoNavigationBoundaryPending,
-      taskIdParam,
-      sessionKeyParam,
-      roleFromQuery,
-    });
+  const { selection: selectionState, selectAgentStudioSelection } = useAgentStudioSelectionState({
+    isRepoNavigationBoundaryPending,
+    taskIdParam,
+    sessionKeyParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scheduleQueryUpdate,
+  });
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -81,10 +85,10 @@ export function useAgentsPageRouteSessionModel({
     sessionKeyParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    selectionIntent: selectionIntentForController,
+    selectionState,
     repoSettings,
     isLoadingRepoSettings,
-    updateQuery: scheduleQueryUpdate,
+    selectAgentStudioSelection,
   });
 
   useAgentStudioQuerySessionSync({
@@ -105,6 +109,6 @@ export function useAgentsPageRouteSessionModel({
     retryNavigationPersistence,
     scheduleQueryUpdate,
     selection,
-    scheduleSelectionIntent,
+    selectAgentStudioSelection,
   };
 }

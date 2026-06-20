@@ -6,7 +6,6 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -15,7 +14,6 @@ import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { cn } from "@/lib/utils";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
@@ -25,9 +23,11 @@ import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-sessio
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
 import { getSubagentMessageSessionKey } from "./subagent-session-key";
+import {
+  type AgentChatRenderedTurn,
+  useAgentChatRenderedTranscript,
+} from "./use-agent-chat-rendered-transcript";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
-import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
-import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
@@ -117,14 +117,6 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
     </div>
   );
 });
-
-type AgentChatRenderedTurn = {
-  key: string;
-  rows: AgentChatWindowRow[];
-  isActive: boolean;
-};
-
-const EMPTY_RENDERED_TURNS: AgentChatRenderedTurn[] = [];
 
 type AgentChatBottomStackProps = {
   externalSessionId: string;
@@ -458,43 +450,30 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const { showThinkingMessages } = useAgentChatSettings();
   const sessionIdentity = useMemo(
     () => (session ? toAgentSessionIdentity(session) : null),
     [session],
   );
-  const { transcriptState: transcriptRowsState } = useAgentChatTranscriptRows({
-    session,
-    showThinkingMessages,
-  });
-
-  const rows = transcriptRowsState.rows;
-  const transcriptTurns = transcriptRowsState.turns;
-  const hasAttachmentMessages = transcriptRowsState.hasAttachmentMessages;
-
-  const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const {
-    windowedRows,
-    windowedTurns,
+    messagesContentRef,
+    renderedTurns,
+    activeStreamingAssistantMessageId,
+    allowTurnContainment,
+    transcriptNotice: renderedTranscriptNotice,
     isNearBottom,
     isNearTop,
     scrollToBottom,
     scrollToTop,
-    scrollToBottomOnSend,
-  } = useAgentChatWindow({
-    rows,
-    turns: transcriptTurns,
+  } = useAgentChatRenderedTranscript({
+    session,
     displayedSessionKey,
-    shouldResetForTranscriptLoad: shouldResetTranscriptWindow,
     isSessionWorking,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
     messagesContainerRef,
-    messagesContentRef,
+    scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   });
-
-  useLayoutEffect(() => {
-    scrollToBottomOnSendRef.current = scrollToBottomOnSend;
-  }, [scrollToBottomOnSend, scrollToBottomOnSendRef]);
 
   // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
   // under-measure rich attachment rows and break bottom pinning.
@@ -525,22 +504,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   );
   // Keep the newest turn measured after completion too. Re-applying content-visibility to the
   // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
-  const latestUserTurnKey = useMemo(() => {
-    if (!displayedSessionKey || !transcriptRowsState.lastUserMessageId) {
-      return null;
-    }
-
-    return `${displayedSessionKey}:${transcriptRowsState.lastUserMessageId}`;
-  }, [displayedSessionKey, transcriptRowsState.lastUserMessageId]);
-  const activeStreamingAssistantMessageId = transcriptRowsState.activeStreamingAssistantMessageId;
-  const renderedTurns = useMemo(() => {
-    return windowedTurns.map((turn) => ({
-      key: turn.key,
-      rows: windowedRows.slice(turn.start, turn.end + 1),
-      isActive: turn.key === latestUserTurnKey,
-    }));
-  }, [latestUserTurnKey, windowedRows, windowedTurns]);
-  const allowTurnContainment = !hasAttachmentMessages;
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
 
@@ -600,10 +563,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionIdentity={sessionIdentity}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
-        renderedTurns={rows.length > 0 ? renderedTurns : EMPTY_RENDERED_TURNS}
+        renderedTurns={renderedTurns}
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
-        transcriptNotice={transcriptNotice}
+        transcriptNotice={renderedTranscriptNotice}
         runtimeReadiness={runtimeReadiness}
       />
 

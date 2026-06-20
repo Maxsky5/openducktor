@@ -115,33 +115,26 @@ describe("Agent Studio view session selection", () => {
     });
   });
 
-  test("uses a concrete selection intent identity before summaries materialize", () => {
+  test("uses a concrete selected identity before summaries materialize", () => {
+    const sessionIdentity = {
+      externalSessionId: "session-started",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/live",
+    };
     const selection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [],
       sessionKey: "session-started",
-      sessionIdentity: null,
+      sessionIdentity,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
       sessionlessRole: "build",
-      selectionIntent: {
-        role: "build",
-        sessionIdentity: {
-          externalSessionId: "session-started",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/live",
-        },
-      },
     });
 
     expect(selection).toEqual({
       role: "build",
       sessionSummary: null,
-      sessionIdentity: {
-        externalSessionId: "session-started",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/live",
-      },
+      sessionIdentity,
     });
   });
 

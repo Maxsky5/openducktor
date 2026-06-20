@@ -411,7 +411,7 @@ const registerModuleMocks = (): void => {
       retryNavigationPersistence: querySyncState.retryNavigationPersistence,
       scheduleQueryUpdate: querySyncState.updateQuery,
       selection: selectionState,
-      scheduleSelectionIntent: mock(() => {}),
+      selectAgentStudioSelection: mock(() => {}),
     }),
   }));
 

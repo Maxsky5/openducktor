@@ -230,7 +230,7 @@ const createBaseArgs = (): HookArgs => ({
   repoSettings: REPO_SETTINGS,
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
   humanRequestChangesTask: async () => {},
-  updateQuery: () => {},
+  scheduleQueryUpdate: () => {},
 });
 
 const waitForSessionStartModal = async (
@@ -393,7 +393,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       loadedSession,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -472,7 +472,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "planner",
       selectionForNewSession: null,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -578,7 +578,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       }),
       selectionForNewSession: null,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -669,7 +669,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         startAgentSession,
         sendAgentMessage,
       }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -789,7 +789,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         startAgentSession,
         sendAgentMessage,
       }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -874,7 +874,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         startAgentSession,
         sendAgentMessage,
       }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -962,7 +962,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         }),
       ]),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });

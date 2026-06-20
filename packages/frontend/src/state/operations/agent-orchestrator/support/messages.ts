@@ -120,6 +120,23 @@ export const getSessionMessagesRevision = (owner: SessionMessageOwner): SessionM
   };
 };
 
+export const areSessionMessagesSameRevision = (
+  leftOwner: SessionMessageOwner,
+  rightOwner: SessionMessageOwner,
+): boolean => {
+  if (leftOwner.messages === rightOwner.messages) {
+    return true;
+  }
+
+  const left = getSessionMessagesRevision(leftOwner);
+  const right = getSessionMessagesRevision(rightOwner);
+  return (
+    left.externalSessionId === right.externalSessionId &&
+    left.count === right.count &&
+    left.version === right.version
+  );
+};
+
 export const getSessionMessageCount = (owner: SessionMessageOwner): number => {
   return getSessionState(owner).items.length;
 };
