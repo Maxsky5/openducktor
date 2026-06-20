@@ -157,6 +157,7 @@ export type AgentSessionRuntimeSnapshot =
       availability: "runtime";
       classification: AgentSessionActivity;
       ref: AgentSessionRef;
+      parentExternalSessionId?: ExternalSessionId;
       title: string;
       startedAt: string;
       pendingApprovals: AgentPendingApprovalRequest[];

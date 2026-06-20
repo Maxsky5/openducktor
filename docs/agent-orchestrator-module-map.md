@@ -356,6 +356,31 @@ It does not read runtime session snapshots, resume runtime sessions, or classify
 pending input. Runtime adapters own local state preparation and event streams.
 Visible pending input comes from startup snapshots or runtime events.
 
+### Pending Input Projection
+
+File:
+
+- `pending-input-projection.ts`
+
+Owns:
+
+- routing live pending-input events to the session that should display the
+  prompt
+- projecting startup runtime snapshot pending input from unmaterialized child
+  sessions onto the materialized parent session
+- keeping runtime-owned pending permissions/questions transient
+
+OpenCode runtime evidence includes `parentID` on child sessions; its own UI
+walks the session tree when surfacing child permissions/questions. Codex
+request-user-input app-server payloads are thread-scoped (`threadId`, `turnId`,
+`itemId`, `questions`) and do not expose parent-session identity. Runtime
+adapters may expose optional `parentExternalSessionId` on live runtime snapshots
+when the runtime provides that evidence.
+
+Do not add overlay maps or persisted pending-input records. The projection
+returns only session patches/read-model effects from runtime evidence that is
+available now.
+
 ### Selected Session View
 
 Files:
@@ -885,6 +910,7 @@ Use these compact tests as the first-line safety net:
 | Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
+| Child pending input survives reload on a materialized parent | `pending-input-projection.test.ts` and `session-read-model/repo-session-read-model.test.ts` |
 | Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
 | User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |

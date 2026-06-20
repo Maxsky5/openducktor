@@ -10,6 +10,7 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { projectRuntimeChildPendingInputToSession } from "../pending-input-projection";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
@@ -46,6 +47,7 @@ export const buildRepoSessionReadModel = ({
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   const carriedSessions: AgentSessionState[] = [];
   const unlistedSessionRefs: AgentSessionRef[] = [];
+  const materializedSessionKeys = new Set(persistedSessionKeys);
 
   for (const session of listAgentSessions(currentSessions)) {
     if (
@@ -53,6 +55,7 @@ export const buildRepoSessionReadModel = ({
       shouldKeepLocalSessionWithoutPersistedRecord(session)
     ) {
       carriedSessions.push(session);
+      materializedSessionKeys.add(agentSessionIdentityKey(session));
       continue;
     }
 
@@ -75,10 +78,19 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const session = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
+    const directSession = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
+    const projectedPendingInput = projectRuntimeChildPendingInputToSession({
+      session: directSession,
+      runtimeSnapshots,
+      materializedSessionKeys,
+    });
+    const session = projectedPendingInput.session;
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
-    if (shouldObserveAgentSessionRuntimeSnapshot(snapshot)) {
+    if (
+      shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
+      projectedPendingInput.hasProjectedChildPendingInput
+    ) {
       liveSessionRefs.push(toRuntimeSessionRef(repoPath, session));
     }
   }

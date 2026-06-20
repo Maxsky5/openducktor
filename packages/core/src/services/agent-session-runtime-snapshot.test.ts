@@ -108,6 +108,33 @@ describe("agent-session-runtime-snapshot", () => {
     });
   });
 
+  test("preserves runtime-owned parent session evidence", () => {
+    const snapshot = toAgentSessionRuntimeSnapshot({
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "child-session",
+      },
+      snapshot: {
+        parentExternalSessionId: "parent-session",
+        title: "Subagent session",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        runtimeActivity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+    });
+
+    expect(snapshot).toMatchObject({
+      availability: "runtime",
+      ref: {
+        externalSessionId: "child-session",
+      },
+      parentExternalSessionId: "parent-session",
+    });
+  });
+
   test("builds missing snapshot when a runtime snapshot is absent", () => {
     const ref = {
       repoPath: "/repo",

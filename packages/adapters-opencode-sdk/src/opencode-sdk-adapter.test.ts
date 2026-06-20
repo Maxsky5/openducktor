@@ -918,6 +918,104 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
+  test("listSessionRuntimeSnapshots preserves OpenCode parent session evidence", async () => {
+    const mock = makeMockClient();
+    const parentChildClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return {
+            data: [
+              {
+                id: "parent-session",
+                projectID: "project-1",
+                directory: "/repo",
+                title: "Parent",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:00.000Z"),
+                },
+              },
+              {
+                id: "child-session",
+                projectID: "project-1",
+                directory: "/repo",
+                parentID: "parent-session",
+                title: "Child",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:01.000Z"),
+                },
+              },
+            ],
+            error: undefined,
+          };
+        },
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "parent-session": { type: "idle" },
+              "child-session": { type: "idle" },
+            },
+            error: undefined,
+          };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return {
+            data: [
+              {
+                id: "perm-1",
+                sessionID: "child-session",
+                permission: "read",
+                patterns: ["**/.env"],
+                metadata: { source: "history" },
+                always: [],
+              },
+            ],
+            error: undefined,
+          };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => parentChildClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const snapshots = await adapter.listSessionRuntimeSnapshots({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      directories: ["/repo"],
+    });
+
+    expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(snapshots).toMatchObject([
+      {
+        ref: {
+          externalSessionId: "parent-session",
+          workingDirectory: "/repo",
+        },
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+      {
+        parentExternalSessionId: "parent-session",
+        ref: {
+          externalSessionId: "child-session",
+          workingDirectory: "/repo",
+        },
+        pendingApprovals: [expectedReadApproval],
+        pendingQuestions: [],
+      },
+    ]);
+  });
+
   test("readSessionRuntimeSnapshot trusts runtime idle after the runtime lists the session", async () => {
     const mock = makeMockClient();
     const idleStatusClient = {

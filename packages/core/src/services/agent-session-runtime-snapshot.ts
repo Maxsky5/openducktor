@@ -6,6 +6,7 @@ import type {
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
+  ExternalSessionId,
 } from "../types/agent-orchestrator";
 
 export type AgentSessionRuntimeActivity = AgentSessionActivity;
@@ -47,6 +48,7 @@ export const agentSessionStatusFromActivity = (
 };
 
 export type AgentSessionRuntimeSnapshotSource = {
+  parentExternalSessionId?: ExternalSessionId;
   title: string;
   startedAt: string;
   runtimeActivity: AgentSessionRuntimeActivity;
@@ -75,6 +77,9 @@ export const toAgentSessionRuntimeSnapshot = (
     availability: "runtime",
     classification,
     ref,
+    ...(snapshot.parentExternalSessionId
+      ? { parentExternalSessionId: snapshot.parentExternalSessionId }
+      : {}),
     title: snapshot.title,
     startedAt: snapshot.startedAt,
     pendingApprovals: snapshot.pendingApprovals,

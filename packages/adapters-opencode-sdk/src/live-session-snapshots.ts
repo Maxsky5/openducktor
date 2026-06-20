@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { readStringProp } from "./guards";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import { isLocalSessionBusy, isUserMessageSendInFlight } from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
@@ -226,6 +227,11 @@ const requireSessionTitle = (title: unknown, sessionId: string): string => {
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing title.`);
 };
 
+const readParentExternalSessionId = (session: unknown): string | undefined => {
+  const parentId = readStringProp(session, ["parentID", "parentId", "parent_id"])?.trim();
+  return parentId || undefined;
+};
+
 const mergeOpencodePendingInputBySession = (
   entries: OpencodeLiveSessionPendingInputBySessionId[],
 ): OpencodeLiveSessionPendingInputBySessionId => {
@@ -296,8 +302,10 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   return filteredSessions.map((session) => {
     const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
     const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
+    const parentExternalSessionId = readParentExternalSessionId(session);
     return {
       externalSessionId: session.id,
+      ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
       title: requireSessionTitle(session.title, session.id),
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),

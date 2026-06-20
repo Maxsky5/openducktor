@@ -46,6 +46,7 @@ const createTaskSessionRecords = (
 const createRuntimeSnapshot = ({
   runtimeKind,
   externalSessionId,
+  parentExternalSessionId,
   pendingApprovals = [],
   pendingQuestions = [],
   runtimeActivity = "running",
@@ -53,6 +54,7 @@ const createRuntimeSnapshot = ({
 }: {
   runtimeKind: RuntimeKind;
   externalSessionId: string;
+  parentExternalSessionId?: string;
   pendingApprovals?: AgentPendingApprovalRequest[];
   pendingQuestions?: AgentPendingQuestionRequest[];
   runtimeActivity?: "running" | "idle";
@@ -66,6 +68,7 @@ const createRuntimeSnapshot = ({
       externalSessionId,
     },
     snapshot: {
+      ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
       title: `${runtimeKind} session`,
       startedAt: "2026-06-11T08:00:00.000Z",
       runtimeActivity,
@@ -835,6 +838,110 @@ describe("repo session read model", () => {
     const session = getReadModelSession(idleRead, record.externalSessionId);
     expect(session?.status).toBe("idle");
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
+  });
+
+  test("projects child runtime pending input onto a persisted parent session after reload", async () => {
+    const parentRecord = createRecord({ externalSessionId: "parent-session" });
+    const tasks = createTaskSessionRecords([parentRecord]);
+    const childApproval = {
+      requestId: "child-approval",
+      requestType: "permission_grant",
+      title: "Approve permission",
+      summary: "Approval request.",
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    } satisfies AgentPendingApprovalRequest;
+    const childQuestion = {
+      requestId: "child-question",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+    } satisfies AgentPendingQuestionRequest;
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
+      repoPath: "/repo",
+      tasks,
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "idle",
+        }),
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: "child-session",
+          parentExternalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "idle",
+          pendingApprovals: [childApproval],
+          pendingQuestions: [childQuestion],
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimeSnapshots,
+    });
+
+    const parentSession = getReadModelSession(readModel, parentRecord.externalSessionId);
+    expect(parentSession?.status).toBe("idle");
+    expect(parentSession?.pendingApprovals).toEqual([childApproval]);
+    expect(parentSession?.pendingQuestions).toEqual([childQuestion]);
+    expect(getReadModelSession(readModel, "child-session")).toBeNull();
+    expect(readModel.liveSessionRefs).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: parentRecord.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: parentRecord.workingDirectory,
+      },
+    ]);
+  });
+
+  test("does not project child pending input when the child session is materialized", async () => {
+    const parentRecord = createRecord({ externalSessionId: "parent-session" });
+    const childRecord = createRecord({ externalSessionId: "child-session" });
+    const tasks = createTaskSessionRecords([parentRecord, childRecord]);
+    const childQuestion = {
+      requestId: "child-question",
+      questions: [],
+    } satisfies AgentPendingQuestionRequest;
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
+      repoPath: "/repo",
+      tasks,
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "idle",
+        }),
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: childRecord.externalSessionId,
+          parentExternalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "idle",
+          pendingQuestions: [childQuestion],
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimeSnapshots,
+    });
+
+    expect(
+      getReadModelSession(readModel, parentRecord.externalSessionId)?.pendingQuestions,
+    ).toEqual([]);
+    expect(getReadModelSession(readModel, childRecord.externalSessionId)?.pendingQuestions).toEqual(
+      [childQuestion],
+    );
   });
 
   test("keeps pending input in runtime snapshot order", async () => {
