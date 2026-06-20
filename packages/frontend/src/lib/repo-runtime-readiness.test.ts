@@ -3,6 +3,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduck
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import {
   deriveRepoRuntimeReadiness,
+  deriveSnapshotReadableRepoRuntimeKinds,
   inactiveRepoRuntimeReadinessTarget,
   repoRuntimeReadinessTargetForRuntime,
   repoRuntimeReadinessTargetForRuntimeSet,
@@ -293,5 +294,26 @@ describe("repo runtime readiness", () => {
       message: "Select a repository to use agent chat.",
       isLoadingChecks: false,
     });
+  });
+
+  test("derives snapshot-readable runtime kinds without requiring the whole set to be ready", () => {
+    const snapshotReadableRuntimeKinds = deriveSnapshotReadableRepoRuntimeKinds({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      runtimeKinds: ["opencode", "codex"],
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+        codex: createRepoRuntimeHealthFixture({
+          status: "error",
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            detail: "Codex startup failed.",
+          },
+        }),
+      },
+    });
+
+    expect(snapshotReadableRuntimeKinds).toEqual(["opencode"]);
   });
 });

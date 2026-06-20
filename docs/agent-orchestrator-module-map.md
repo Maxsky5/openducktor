@@ -843,9 +843,9 @@ session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
 `useTaskSessionRecords` is the only hook that fans out per-task session-record
 queries for repo startup. `useRepoSessionReadModel` consumes that result, asks
-repo runtime readiness for the required persisted runtime set, and owns repo
-session projection/commit. It must not interpret runtime health directly. Task
-reset pages must not call a session refresh command after reset. Reset
+repo runtime readiness which persisted runtime kinds are snapshot-readable, and
+owns repo session projection/commit. It must not interpret runtime health
+directly. Task reset pages must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
 model reacts to that owned query data.
 Local session projection during repo reads is owned by
@@ -860,8 +860,8 @@ unlisted session ref whose observer state can be cleared.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
-4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
+4. `readRepoRuntimeSessionSnapshots` scans each snapshot-readable runtime kind and working directory once.
+5. `buildRepoSessionReadModel` commits every persisted session record once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter requires an already-live repo runtime route
    and may prepare only session-local adapter state before events can flow.

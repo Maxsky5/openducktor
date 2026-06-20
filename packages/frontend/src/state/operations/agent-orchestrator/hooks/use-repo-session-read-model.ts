@@ -1,13 +1,10 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import {
-  inactiveRepoRuntimeReadinessTarget,
-  repoRuntimeReadinessTargetForRuntimeSet,
-} from "@/lib/repo-runtime-readiness";
-import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { useSnapshotReadableRepoRuntimeKinds } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   type AgentSessionReadModelLoadState,
@@ -77,19 +74,16 @@ export const useRepoSessionReadModel = ({
       ),
     ).sort();
   }, [taskSessionRecordsState]);
-  const runtimeTarget = useMemo(
-    () =>
-      taskSessionRecordsState.kind === "ready"
-        ? repoRuntimeReadinessTargetForRuntimeSet(requiredRuntimeKinds)
-        : inactiveRepoRuntimeReadinessTarget,
-    [requiredRuntimeKinds, taskSessionRecordsState.kind],
-  );
-  const runtimeReadiness = useRepoRuntimeReadiness({
+  const snapshotReadableRuntimeKinds = useSnapshotReadableRepoRuntimeKinds({
     hasWorkspace: workspaceRepoPath !== null,
-    runtimeTarget,
+    runtimeKinds: requiredRuntimeKinds,
   });
-  const runtimeReadinessState = runtimeReadiness.state;
-  const runtimeReadinessMessage = runtimeReadiness.message ?? "";
+  const snapshotRuntimeKindKey = snapshotReadableRuntimeKinds.join("|");
+  const snapshotRuntimeKinds = useMemo<RuntimeKind[]>(
+    () =>
+      snapshotRuntimeKindKey === "" ? [] : (snapshotRuntimeKindKey.split("|") as RuntimeKind[]),
+    [snapshotRuntimeKindKey],
+  );
 
   useEffect(() => {
     if (!workspaceRepoPath || isLoadingTasks) {
@@ -124,24 +118,12 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
-      if (runtimeReadinessState === "checking") {
-        setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
-        return;
-      }
-      if (runtimeReadinessState === "blocked") {
-        setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(
-            workspaceRepoPath,
-            `Failed to load agent session read model for repo '${workspaceRepoPath}': ${runtimeReadinessMessage}`,
-          ),
-        );
-        return;
-      }
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       try {
         const didLoadSessionReadModel = await loadRepoSessionReadModel({
           repoPath: workspaceRepoPath,
           taskSessionRecords: taskSessionRecordsState.records,
+          snapshotRuntimeKinds,
           adapter: agentEngine,
           commitSessionCollection,
           observeAgentSession,
@@ -175,8 +157,7 @@ export const useRepoSessionReadModel = ({
     observeAgentSession,
     clearSessionObservationState,
     commitSessionCollection,
-    runtimeReadinessState,
-    runtimeReadinessMessage,
+    snapshotRuntimeKinds,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,

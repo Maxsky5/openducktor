@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -12,6 +13,7 @@ type ClearSessionObservationState = (sessions: readonly AgentSessionRef[]) => vo
 export const loadRepoSessionReadModel = async ({
   repoPath,
   taskSessionRecords,
+  snapshotRuntimeKinds,
   adapter,
   commitSessionCollection,
   observeAgentSession,
@@ -20,6 +22,7 @@ export const loadRepoSessionReadModel = async ({
 }: {
   repoPath: string;
   taskSessionRecords: TaskSessionRecords;
+  snapshotRuntimeKinds?: readonly RuntimeKind[];
   adapter: SessionLoaderAdapter;
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
@@ -33,6 +36,7 @@ export const loadRepoSessionReadModel = async ({
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks: taskSessionRecords,
+    ...(snapshotRuntimeKinds ? { runtimeKinds: snapshotRuntimeKinds } : {}),
     listSessionRuntimeSnapshots: (input) => adapter.listSessionRuntimeSnapshots(input),
   });
   if (isStaleRepoOperation()) {

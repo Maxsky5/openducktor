@@ -125,6 +125,35 @@ const blockedRepoRuntimeReadiness = (
   isLoadingChecks,
 });
 
+const readyRuntimeKindsFromEntries = (runtimeEntries: RuntimeReadinessEntry[]): RuntimeKind[] =>
+  runtimeEntries
+    .filter((entry) => entry.readiness === "ready")
+    .map((entry) => entry.definition.kind)
+    .sort();
+
+export const deriveSnapshotReadableRepoRuntimeKinds = ({
+  hasActiveWorkspace,
+  runtimeDefinitions,
+  runtimeHealthByRuntime,
+  runtimeKinds,
+}: {
+  hasActiveWorkspace: boolean;
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  runtimeKinds: readonly RuntimeKind[];
+}): RuntimeKind[] => {
+  if (!hasActiveWorkspace || runtimeKinds.length === 0) {
+    return [];
+  }
+
+  const requiredRuntimeKinds = new Set(runtimeKinds);
+  const runtimeEntries = toRuntimeReadinessEntries(
+    runtimeDefinitions.filter((definition) => requiredRuntimeKinds.has(definition.kind)),
+    runtimeHealthByRuntime,
+  );
+  return readyRuntimeKindsFromEntries(runtimeEntries);
+};
+
 export const deriveRepoRuntimeReadiness = ({
   hasActiveWorkspace,
   runtimeDefinitions,

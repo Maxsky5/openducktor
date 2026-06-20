@@ -11,16 +11,22 @@ export type RepoRuntimeSessionSnapshots = Map<string, AgentSessionRuntimeSnapsho
 export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
   tasks,
+  runtimeKinds,
   listSessionRuntimeSnapshots,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords;
+  runtimeKinds?: readonly RuntimeKind[];
   listSessionRuntimeSnapshots: AgentEnginePort["listSessionRuntimeSnapshots"];
 }): Promise<RepoRuntimeSessionSnapshots> => {
+  const runtimeKindFilter = runtimeKinds ? new Set(runtimeKinds) : null;
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   for (const { record } of tasks.records) {
     const identity = toPersistedSessionIdentity(record);
     const runtimeKind = identity.runtimeKind;
+    if (runtimeKindFilter && !runtimeKindFilter.has(runtimeKind)) {
+      continue;
+    }
     const directory = normalizeWorkingDirectory(identity.workingDirectory);
     const directories = directoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
     directories.add(directory);

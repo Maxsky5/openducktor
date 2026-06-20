@@ -1,7 +1,9 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { useCallback } from "react";
 import {
   allRepoRuntimeReadinessTarget,
   deriveRepoRuntimeReadiness,
+  deriveSnapshotReadableRepoRuntimeKinds,
   type RepoRuntimeReadinessSnapshot,
   type RepoRuntimeReadinessTarget,
 } from "@/lib/repo-runtime-readiness";
@@ -13,6 +15,11 @@ import {
 type UseRepoRuntimeReadinessArgs = {
   hasWorkspace: boolean;
   runtimeTarget?: RepoRuntimeReadinessTarget;
+};
+
+type UseSnapshotReadableRepoRuntimeKindsArgs = {
+  hasWorkspace: boolean;
+  runtimeKinds: readonly RuntimeKind[];
 };
 
 export type RepoRuntimeReadiness = RepoRuntimeReadinessSnapshot & {
@@ -44,4 +51,19 @@ export function useRepoRuntimeReadiness({
     ...readiness,
     refreshChecks,
   };
+}
+
+export function useSnapshotReadableRepoRuntimeKinds({
+  hasWorkspace,
+  runtimeKinds,
+}: UseSnapshotReadableRepoRuntimeKindsArgs): RuntimeKind[] {
+  const { allRuntimeDefinitions } = useRuntimeAvailabilityContext();
+  const { runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
+
+  return deriveSnapshotReadableRepoRuntimeKinds({
+    hasActiveWorkspace: hasWorkspace,
+    runtimeDefinitions: allRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    runtimeKinds,
+  });
 }
