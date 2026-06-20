@@ -29,6 +29,7 @@ type UseAgentStudioSendActionArgs = {
   selectedSessionModel: AgentSessionState["selectedModel"];
   sessionState: AgentStudioSendActionState;
   isSessionModelCatalogLoading: boolean;
+  isSelectedSessionModelSendable: boolean;
   agentStudioReady: boolean;
   canStartNewSession: boolean;
   reusablePrompts: ReusablePrompt[];
@@ -46,6 +47,7 @@ export function useAgentStudioSendAction({
   selectedSessionModel,
   sessionState,
   isSessionModelCatalogLoading,
+  isSelectedSessionModelSendable,
   agentStudioReady,
   canStartNewSession,
   reusablePrompts,
@@ -93,6 +95,9 @@ export function useAgentStudioSendAction({
       if (isSessionModelCatalogLoading && selectedSessionModel === null) {
         return false;
       }
+      if (!isSelectedSessionModelSendable) {
+        return false;
+      }
 
       const messagePartsResult = resolveAgentStudioSendDraftParts({
         draft,
@@ -138,6 +143,7 @@ export function useAgentStudioSendAction({
       isSending,
       isStarting,
       isSessionModelCatalogLoading,
+      isSelectedSessionModelSendable,
       role,
       selectedModelDescriptor,
       selectedSessionModel,

@@ -184,6 +184,7 @@ const createBaseArgs = (): HookArgs => {
     },
     sessionsForTask: [],
     selectedTask: createTaskCardFixture(),
+    isSelectedSessionModelSendable: true,
     agentStudioReady: true,
     isActiveTaskReady: true,
     selectionForNewSession: {

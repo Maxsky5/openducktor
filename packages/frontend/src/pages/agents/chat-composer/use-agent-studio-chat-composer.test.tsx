@@ -543,6 +543,65 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("repairs a stale loaded-session model exactly once", async () => {
+    const staleSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "missing",
+      modelId: "missing-model",
+    };
+    const repairedSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const repoDefaultSelection = { ...repairedSelection, variant: "", profileId: "" };
+    const staleSession = createLoadedSession({
+      externalSessionId: "stale-session",
+      selectedModel: staleSelection,
+    });
+    const repairedSession = createLoadedSession({
+      externalSessionId: "stale-session",
+      selectedModel: repairedSelection,
+    });
+    const updateAgentSessionModel = mock(() => {});
+    const baseOverrides = {
+      repoSettings: createRepoSettings(repoDefaultSelection),
+      sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      updateAgentSessionModel,
+    };
+    const harness = createHookHarness(
+      createBaseProps({
+        ...baseOverrides,
+        loadedSession: staleSession,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
+
+      expect(harness.getLatest().selectedModelSelection).toEqual(repairedSelection);
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(
+        toAgentSessionIdentity(staleSession),
+        repairedSelection,
+      );
+
+      await harness.update(
+        createBaseProps({
+          ...baseOverrides,
+          loadedSession: repairedSession,
+        }),
+      );
+      await harness.waitFor((state) => state.isSelectedSessionModelSendable);
+
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses selected session runtime capabilities while the full session object is still loading", async () => {
     const harness = createHookHarness(
       createBaseProps({
@@ -1207,7 +1266,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("preserves loaded session model when catalog cannot produce a replacement", async () => {
+  test("marks loaded session model unsendable when catalog cannot produce a replacement", async () => {
     const updateAgentSessionModel = mock(() => {});
     const loadedSession = createLoadedSession();
 
@@ -1221,22 +1280,16 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-      expect(harness.getLatest().selectedModelSelection).toEqual({
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec-agent",
-      });
+      expect(harness.getLatest().selectedModelSelection).toBeNull();
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("normalizes loaded session model for display without automatic session-model writes", async () => {
+  test("normalizes loaded session model and repairs the durable session model", async () => {
     const updateAgentSessionModel = mock(
       (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
     );
@@ -1269,7 +1322,15 @@ describe("useAgentStudioChatComposer", () => {
         variant: "default",
         profileId: "spec-agent",
       });
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
     } finally {
       await harness.unmount();
     }

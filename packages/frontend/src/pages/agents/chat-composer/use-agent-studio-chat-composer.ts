@@ -9,7 +9,7 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
@@ -31,7 +31,7 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
@@ -65,6 +65,7 @@ type UseAgentStudioChatComposerArgs = {
 type AgentStudioChatComposerState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
+  isSelectedSessionModelSendable: boolean;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -130,6 +131,7 @@ export function useAgentStudioChatComposer({
   const sessionModelCatalog = selectedSession.runtimeData.modelCatalog;
   const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
+  const lastSessionModelRepairKeyRef = useRef<string | null>(null);
   const repoReadinessState = selectedSession.runtimeReadiness.state;
   const isRepoRuntimeReady = repoReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
@@ -249,10 +251,17 @@ export function useAgentStudioChatComposer({
     });
   }, [composerCatalog, roleDefaultSelection, syncDraftSelection]);
 
-  const { selectionCatalog, selectedModelSelection, selectionForNewSession } = useMemo(() => {
-    const source: ChatComposerModelSelectionSource = hasSessionTarget
+  const {
+    selectionCatalog,
+    selectedModelSelection,
+    selectionForNewSession,
+    sessionModelRepairSelection,
+    isSelectedSessionModelSendable,
+  } = useMemo(() => {
+    const source: ChatComposerModelSelectionSource = selectedSessionIdentity
       ? {
           kind: "session",
+          sessionRuntimeKind: selectedSessionIdentity.runtimeKind,
           modelCatalog: sessionModelCatalog,
           selectedSessionModel,
           draftSelection,
@@ -271,12 +280,32 @@ export function useAgentStudioChatComposer({
   }, [
     composerCatalog,
     draftSelection,
-    hasSessionTarget,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     roleDefaultSelection,
+    selectedSessionIdentity,
     selectedSessionModel,
     sessionModelCatalog,
   ]);
+  useEffect(() => {
+    if (!loadedSessionIdentity || !sessionModelRepairSelection) {
+      lastSessionModelRepairKeyRef.current = null;
+      return;
+    }
+    const repairKey = JSON.stringify([
+      agentSessionIdentityKey(loadedSessionIdentity),
+      sessionModelRepairSelection.runtimeKind ?? "",
+      sessionModelRepairSelection.providerId,
+      sessionModelRepairSelection.modelId,
+      sessionModelRepairSelection.variant ?? "",
+      sessionModelRepairSelection.profileId ?? "",
+    ]);
+    if (lastSessionModelRepairKeyRef.current === repairKey) {
+      return;
+    }
+    lastSessionModelRepairKeyRef.current = repairKey;
+    updateAgentSessionModel(loadedSessionIdentity, sessionModelRepairSelection);
+  }, [loadedSessionIdentity, sessionModelRepairSelection, updateAgentSessionModel]);
+
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({
@@ -322,6 +351,7 @@ export function useAgentStudioChatComposer({
   return {
     selectionForNewSession,
     selectedModelSelection,
+    isSelectedSessionModelSendable,
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsProfiles,

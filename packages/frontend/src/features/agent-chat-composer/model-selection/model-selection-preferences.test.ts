@@ -313,7 +313,7 @@ describe("model-selection-preferences", () => {
     });
   });
 
-  test("resolves chat composer selections for a loaded session without replacing unknown session model", () => {
+  test("resolves stale loaded-session models to an explicit repair selection", () => {
     const draftSelection = {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -335,6 +335,7 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
+          sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel: unknownSessionModel,
           draftSelection,
@@ -343,8 +344,37 @@ describe("model-selection-preferences", () => {
       }),
     ).toEqual({
       selectionCatalog: CATALOG,
-      selectedModelSelection: unknownSessionModel,
+      selectedModelSelection: roleDefaultSelection,
       selectionForNewSession: draftSelection,
+      sessionModelRepairSelection: roleDefaultSelection,
+      isSelectedSessionModelSendable: false,
+    });
+  });
+
+  test("does not invent a loaded-session model when the persisted session has none", () => {
+    const roleDefaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionRuntimeKind: "opencode",
+          modelCatalog: CATALOG,
+          selectedSessionModel: null,
+          draftSelection: null,
+        },
+        roleDefaultSelection,
+      }),
+    ).toEqual({
+      selectionCatalog: CATALOG,
+      selectedModelSelection: null,
+      selectionForNewSession: roleDefaultSelection,
+      sessionModelRepairSelection: null,
+      isSelectedSessionModelSendable: true,
     });
   });
 
@@ -369,6 +399,8 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: roleDefaultSelection,
       selectionForNewSession: roleDefaultSelection,
+      sessionModelRepairSelection: null,
+      isSelectedSessionModelSendable: true,
     });
 
     expect(
@@ -385,6 +417,8 @@ describe("model-selection-preferences", () => {
       selectionCatalog: null,
       selectedModelSelection: null,
       selectionForNewSession: null,
+      sessionModelRepairSelection: null,
+      isSelectedSessionModelSendable: true,
     });
   });
 });

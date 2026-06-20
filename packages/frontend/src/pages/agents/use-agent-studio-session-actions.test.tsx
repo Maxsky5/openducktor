@@ -337,6 +337,7 @@ const createBaseArgs = (): HookArgs => {
     selectedModelDescriptor: null,
     sessionsForTask: [],
     selectedTask: createTask(),
+    isSelectedSessionModelSendable: true,
     agentStudioReady: true,
     isActiveTaskReady: true,
     selectionForNewSession: {

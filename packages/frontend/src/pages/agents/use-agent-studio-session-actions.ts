@@ -52,6 +52,7 @@ type UseAgentStudioSessionActionsArgs = {
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
+  isSelectedSessionModelSendable: boolean;
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
@@ -107,6 +108,7 @@ export function useAgentStudioSessionActions({
   selectedModelDescriptor,
   sessionsForTask,
   selectedTask,
+  isSelectedSessionModelSendable,
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
@@ -185,6 +187,7 @@ export function useAgentStudioSessionActions({
     selectedSessionModel: selectedSession.selectedModel,
     sessionState,
     isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
+    isSelectedSessionModelSendable,
     agentStudioReady,
     canStartNewSession,
     reusablePrompts,

@@ -86,6 +86,7 @@ const createBaseArgs = (): HookArgs => ({
   selectedSessionModel: null,
   sessionState: createSessionState(),
   isSessionModelCatalogLoading: false,
+  isSelectedSessionModelSendable: true,
   agentStudioReady: true,
   canStartNewSession: true,
   reusablePrompts: [],
@@ -163,6 +164,27 @@ describe("useAgentStudioSendAction", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       { kind: "text", text: "follow up" },
     ]);
+
+    await harness.unmount();
+  });
+
+  test("blocks sends while the selected session model is not sendable", async () => {
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      isSelectedSessionModelSendable: false,
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createDraft("hello"))).resolves.toBe(false);
+    });
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

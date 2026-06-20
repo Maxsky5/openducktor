@@ -2,6 +2,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import {
   coerceVisibleSelectionToCatalog,
+  isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
@@ -97,6 +98,8 @@ export type ChatComposerModelSelections = {
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   selectionForNewSession: AgentModelSelection | null;
+  sessionModelRepairSelection: AgentModelSelection | null;
+  isSelectedSessionModelSendable: boolean;
 };
 
 export type ChatComposerModelSelectionSource =
@@ -108,6 +111,7 @@ export type ChatComposerModelSelectionSource =
     }
   | {
       kind: "session";
+      sessionRuntimeKind: RuntimeKind;
       modelCatalog: AgentModelCatalog | null;
       selectedSessionModel: AgentModelSelection | null;
       draftSelection: AgentModelSelection | null;
@@ -123,15 +127,20 @@ export const resolveChatComposerModelSelections = ({
   if (source.kind === "session") {
     const selectionCatalog = source.modelCatalog;
     const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+    const selectedSessionSelection = resolveLoadedSessionSelection({
+      selectionCatalog,
+      selectedSessionModel: source.selectedSessionModel,
+      roleDefaultSelection,
+      sessionRuntimeKind: source.sessionRuntimeKind,
+    });
 
     return {
       selectionCatalog,
-      selectedModelSelection:
-        resolveLoadedSessionVisibleSelection(selectionCatalog, source.selectedSessionModel) ??
-        roleDefaultSelection ??
-        fallbackCatalogSelection,
+      selectedModelSelection: selectedSessionSelection.selectedModelSelection,
       selectionForNewSession:
         source.draftSelection ?? roleDefaultSelection ?? fallbackCatalogSelection,
+      sessionModelRepairSelection: selectedSessionSelection.repairSelection,
+      isSelectedSessionModelSendable: selectedSessionSelection.isSendable,
     };
   }
 
@@ -149,6 +158,8 @@ export const resolveChatComposerModelSelections = ({
       source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
     selectionForNewSession:
       source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
+    sessionModelRepairSelection: null,
+    isSelectedSessionModelSendable: true,
   };
 };
 
@@ -167,14 +178,104 @@ const resolveNewSessionRoleDefaultSelection = ({
   return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
 };
 
-const resolveLoadedSessionVisibleSelection = (
-  selectionCatalog: AgentModelCatalog | null,
-  selectedSessionModel: AgentModelSelection | null,
-): AgentModelSelection | null => {
-  if (!selectedSessionModel) {
+type LoadedSessionSelection = {
+  selectedModelSelection: AgentModelSelection | null;
+  repairSelection: AgentModelSelection | null;
+  isSendable: boolean;
+};
+
+const coerceSessionSelectionToCatalog = ({
+  selectionCatalog,
+  selection,
+  sessionRuntimeKind,
+}: {
+  selectionCatalog: AgentModelCatalog;
+  selection: AgentModelSelection | null;
+  sessionRuntimeKind: RuntimeKind;
+}): AgentModelSelection | null => {
+  if (!selection) {
     return null;
   }
-  return (
-    coerceVisibleSelectionToCatalog(selectionCatalog, selectedSessionModel) ?? selectedSessionModel
+  if (selection.runtimeKind && selection.runtimeKind !== sessionRuntimeKind) {
+    return null;
+  }
+
+  return coerceVisibleSelectionToCatalog(selectionCatalog, {
+    ...selection,
+    runtimeKind: sessionRuntimeKind,
+  });
+};
+
+const pickSessionCatalogDefaultSelection = (
+  selectionCatalog: AgentModelCatalog,
+  sessionRuntimeKind: RuntimeKind,
+): AgentModelSelection | null => {
+  const fallbackSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+  if (!fallbackSelection || fallbackSelection.runtimeKind !== sessionRuntimeKind) {
+    return null;
+  }
+  return fallbackSelection;
+};
+
+const resolveLoadedSessionSelection = ({
+  selectionCatalog,
+  selectedSessionModel,
+  roleDefaultSelection,
+  sessionRuntimeKind,
+}: {
+  selectionCatalog: AgentModelCatalog | null;
+  selectedSessionModel: AgentModelSelection | null;
+  roleDefaultSelection: AgentModelSelection | null;
+  sessionRuntimeKind: RuntimeKind;
+}): LoadedSessionSelection => {
+  if (!selectedSessionModel) {
+    return {
+      selectedModelSelection: null,
+      repairSelection: null,
+      isSendable: true,
+    };
+  }
+
+  if (!selectionCatalog) {
+    return {
+      selectedModelSelection: selectedSessionModel,
+      repairSelection: null,
+      isSendable: true,
+    };
+  }
+
+  const normalizedSessionSelection = coerceSessionSelectionToCatalog({
+    selectionCatalog,
+    selection: selectedSessionModel,
+    sessionRuntimeKind,
+  });
+  const fallbackRoleDefaultSelection = coerceSessionSelectionToCatalog({
+    selectionCatalog,
+    selection: roleDefaultSelection,
+    sessionRuntimeKind,
+  });
+  const fallbackCatalogSelection = pickSessionCatalogDefaultSelection(
+    selectionCatalog,
+    sessionRuntimeKind,
   );
+  const selectedModelSelection =
+    normalizedSessionSelection ?? fallbackRoleDefaultSelection ?? fallbackCatalogSelection;
+
+  if (!selectedModelSelection) {
+    return {
+      selectedModelSelection: null,
+      repairSelection: null,
+      isSendable: false,
+    };
+  }
+
+  const repairSelection = isSameSelection(selectedSessionModel, selectedModelSelection)
+    ? null
+    : selectedModelSelection;
+
+  return {
+    selectedModelSelection,
+    repairSelection,
+    isSendable: repairSelection === null,
+  };
 };

@@ -234,6 +234,7 @@ export function useAgentStudioOrchestrationController({
   const {
     selectionForNewSession,
     selectedModelSelection,
+    isSelectedSessionModelSendable,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsProfiles,
@@ -301,6 +302,7 @@ export function useAgentStudioOrchestrationController({
     selectedModelDescriptor,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,
+    isSelectedSessionModelSendable,
     agentStudioReady,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
