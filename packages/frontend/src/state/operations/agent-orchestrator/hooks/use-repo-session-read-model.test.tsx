@@ -27,7 +27,10 @@ import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
-import { useRepoSessionReadModel } from "./use-repo-session-read-model";
+import {
+  type RepoSessionReadModelState,
+  useRepoSessionReadModel,
+} from "./use-repo-session-read-model";
 
 const record: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -149,6 +152,12 @@ const createHarnessState = () => {
   };
 };
 
+const isReadModelReady = (state: RepoSessionReadModelState): boolean =>
+  state.sessionReadModelLoadState.kind === "ready";
+
+const isReadModelFailed = (state: RepoSessionReadModelState): boolean =>
+  state.sessionReadModelLoadState.kind === "failed";
+
 describe("useRepoSessionReadModel", () => {
   test("does not reload the repo session read model when task metadata changes but task ids do not", async () => {
     const state = createHarnessState();
@@ -156,7 +165,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
@@ -174,7 +183,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       await state.updateReadModelHarness(harness, ["task-2", "task-1"]);
 
@@ -190,7 +199,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
@@ -219,7 +228,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
 
@@ -253,12 +262,71 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       await state.updateReadModelHarness(harness, ["task-1", "task-2"]);
       await harness.waitFor(() => state.listSessionRuntimeSnapshots.mock.calls.length === 2);
 
-      expect(harness.getLatest().kind).toBe("ready");
+      expect(harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("recovers from a transient snapshot failure when explicitly reloaded", async () => {
+    const state = createHarnessState();
+    let snapshotAttempts = 0;
+    state.listSessionRuntimeSnapshots.mockImplementation(async () => {
+      snapshotAttempts += 1;
+      if (snapshotAttempts === 1) {
+        throw new Error("temporary runtime startup race");
+      }
+
+      return [
+        toAgentSessionRuntimeSnapshot({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: record.workingDirectory,
+            externalSessionId: record.externalSessionId,
+          },
+          snapshot: {
+            title: "OpenCode Builder",
+            startedAt: record.startedAt,
+            runtimeActivity: "running",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+      ];
+    });
+    const harness = state.createReadModelHarness(["task-1"]);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(isReadModelFailed);
+
+      expect(harness.getLatest().sessionReadModelLoadState).toEqual(
+        expect.objectContaining({
+          kind: "failed",
+          message: expect.stringContaining("temporary runtime startup race"),
+        }),
+      );
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
+
+      await harness.run((readModel) => {
+        readModel.reloadSessionReadModel();
+      });
+      await harness.waitFor(isReadModelReady);
+
+      expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(2);
+      expect(state.getSession(record.externalSessionId)).toEqual(
+        expect.objectContaining({
+          externalSessionId: record.externalSessionId,
+          status: "running",
+          runtimeKind: "opencode",
+        }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -286,7 +354,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots).not.toHaveBeenCalled();
       expect(state.getSession(record.externalSessionId)).toEqual(
@@ -299,7 +367,7 @@ describe("useRepoSessionReadModel", () => {
 
       state.setRuntimeHealth();
       await state.updateReadModelHarness(harness, ["task-1"]);
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
@@ -324,9 +392,9 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
-      expect(harness.getLatest()).toEqual(
+      expect(harness.getLatest().sessionReadModelLoadState).toEqual(
         expect.objectContaining({
           kind: "ready",
         }),
@@ -392,7 +460,7 @@ describe("useRepoSessionReadModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((loadState) => loadState.kind === "ready");
+      await harness.waitFor(isReadModelReady);
 
       expect(state.listSessionRuntimeSnapshots.mock.calls).toHaveLength(1);
       expect(state.listSessionRuntimeSnapshots.mock.calls[0]?.[0]).toEqual(

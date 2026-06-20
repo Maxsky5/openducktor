@@ -2,7 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { useSnapshotReadableRepoRuntimeKinds } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
@@ -33,6 +33,11 @@ type UseRepoSessionReadModelArgs = {
   queryClient: QueryClient;
 };
 
+export type RepoSessionReadModelState = {
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  reloadSessionReadModel: () => void;
+};
+
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
   taskIds,
@@ -44,9 +49,15 @@ export const useRepoSessionReadModel = ({
   observeAgentSession,
   clearSessionObservationState,
   queryClient,
-}: UseRepoSessionReadModelArgs): AgentSessionReadModelLoadState => {
+}: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
+  const [reloadGeneration, setReloadGeneration] = useState(0);
+  const latestReloadGenerationRef = useRef(reloadGeneration);
+  latestReloadGenerationRef.current = reloadGeneration;
+  const reloadSessionReadModel = useCallback(() => {
+    setReloadGeneration((current) => current + 1);
+  }, []);
   const currentSessionReadModelLoadState = useMemo(
     () =>
       currentAgentSessionReadModelLoadState({
@@ -97,7 +108,9 @@ export const useRepoSessionReadModel = ({
       currentWorkspaceRepoPathRef,
     });
 
-    const isStaleRepoOperation = (): boolean => cancelled || isRepoStale();
+    const effectReloadGeneration = reloadGeneration;
+    const isStaleRepoOperation = (): boolean =>
+      cancelled || isRepoStale() || latestReloadGenerationRef.current !== effectReloadGeneration;
 
     const loadSessionReadModel = async (): Promise<void> => {
       if (isStaleRepoOperation()) {
@@ -158,6 +171,7 @@ export const useRepoSessionReadModel = ({
     clearSessionObservationState,
     commitSessionCollection,
     snapshotRuntimeKinds,
+    reloadGeneration,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     isLoadingTasks,
@@ -165,5 +179,11 @@ export const useRepoSessionReadModel = ({
     workspaceRepoPath,
   ]);
 
-  return currentSessionReadModelLoadState;
+  return useMemo(
+    () => ({
+      sessionReadModelLoadState: currentSessionReadModelLoadState,
+      reloadSessionReadModel,
+    }),
+    [currentSessionReadModelLoadState, reloadSessionReadModel],
+  );
 };

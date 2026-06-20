@@ -174,7 +174,7 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
-  const currentSessionReadModelLoadState = useRepoSessionReadModel({
+  const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     taskIds,
     isLoadingTasks,
@@ -250,9 +250,10 @@ export function useAgentOrchestratorOperations({
   );
   const readModelState = useMemo<AgentSessionReadModelStateContextValue>(
     () => ({
-      sessionReadModelLoadState: currentSessionReadModelLoadState,
+      sessionReadModelLoadState: currentSessionReadModel.sessionReadModelLoadState,
+      reloadSessionReadModel: currentSessionReadModel.reloadSessionReadModel,
     }),
-    [currentSessionReadModelLoadState],
+    [currentSessionReadModel],
   );
   const operations = useMemo<AgentOperationsContextValue>(
     () =>

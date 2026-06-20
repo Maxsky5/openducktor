@@ -15,6 +15,7 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
@@ -123,6 +124,7 @@ export function useAgentStudioChatModel({
   const subagentPendingQuestionCountBySessionKey =
     selectedSession.pendingInput.subagentPendingQuestionCountBySessionKey;
   const selectedSessionState = selectedSession.selectedSession;
+  const { sessionReadModelLoadState, reloadSessionReadModel } = useAgentSessionReadModelState();
   const selectedSessionIdentity = selectedSessionState.identity;
   const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
@@ -192,6 +194,25 @@ export function useAgentStudioChatModel({
       sessionActions.startLaunchKickoff,
     ],
   );
+  const failedTranscriptAction = useMemo(() => {
+    if (
+      selectedSessionTranscriptState.kind !== "failed" ||
+      selectedSessionState.loadedSession !== null ||
+      sessionReadModelLoadState.kind !== "failed"
+    ) {
+      return null;
+    }
+
+    return {
+      label: "Retry",
+      onAction: reloadSessionReadModel,
+    };
+  }, [
+    reloadSessionReadModel,
+    selectedSessionState.loadedSession,
+    selectedSessionTranscriptState.kind,
+    sessionReadModelLoadState.kind,
+  ]);
 
   const composerConfig = useMemo(
     () => ({
@@ -305,6 +326,7 @@ export function useAgentStudioChatModel({
     sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
+    failedTranscriptAction,
   });
   const composerModel = surfaceModel.composer;
 

@@ -44,11 +44,19 @@ export type AgentChatThreadSession = AgentSessionIdentity & {
   messages: SessionMessagesState;
 };
 
+export type AgentChatTranscriptNoticeAction = {
+  label: string;
+  onAction: () => void;
+  disabled?: boolean;
+  isPending?: boolean;
+};
+
 export type AgentChatTranscriptNotice = {
   kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
   severity: "loading" | "error";
   title: string;
   description: string;
+  action?: AgentChatTranscriptNoticeAction;
 };
 
 export type AgentChatThreadModel = {

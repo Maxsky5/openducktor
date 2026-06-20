@@ -162,6 +162,7 @@ export type SpecStateContextValue = {
 
 export type AgentSessionReadModelStateContextValue = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  reloadSessionReadModel: () => void;
 };
 
 export type AgentOperationsContextValue = {

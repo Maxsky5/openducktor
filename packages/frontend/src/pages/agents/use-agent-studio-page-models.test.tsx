@@ -14,6 +14,7 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { AgentSessionReadModelStateContext } from "@/state/app-state-contexts";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -21,6 +22,7 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
+import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -42,6 +44,7 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
+const reloadSessionReadModel = () => undefined;
 
 const draftScopeFixture = (taskId: string): AgentChatDraftScope => ({
   taskId,
@@ -324,7 +327,19 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
 };
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioPageModels, initialProps);
+  createSharedHookHarness(useAgentStudioPageModels, initialProps, {
+    wrapper: ({ children }) =>
+      createElement(
+        AgentSessionReadModelStateContext.Provider,
+        {
+          value: {
+            sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo"),
+            reloadSessionReadModel,
+          },
+        },
+        children,
+      ),
+  });
 
 const createAgentChatThreadElement = (model: AgentChatModel) =>
   createElement(

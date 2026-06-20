@@ -67,6 +67,7 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
 }): ReactElement {
   const isLoadingNotice = notice.severity === "loading";
   const isRuntimeBlocked = notice.kind === "runtime_blocked";
+  const action = notice.action;
 
   return (
     <div className="sticky top-0 z-20 mb-4">
@@ -96,7 +97,19 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
           </p>
           <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
         </div>
-        {isRuntimeBlocked ? (
+        {action ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            disabled={action.disabled}
+            onClick={action.onAction}
+          >
+            <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
+            {action.label}
+          </Button>
+        ) : isRuntimeBlocked ? (
           <Button
             type="button"
             size="sm"

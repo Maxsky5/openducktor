@@ -497,6 +497,7 @@ const renderPage = async (
                               value={{
                                 sessionReadModelLoadState:
                                   readyAgentSessionReadModelLoadState("/repo"),
+                                reloadSessionReadModel: () => undefined,
                               }}
                             >
                               <RuntimeDefinitionsContext.Provider

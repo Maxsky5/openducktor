@@ -3,7 +3,11 @@ import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentChatThreadSession, AgentChatTranscriptNotice } from "./agent-chat.types";
+import type {
+  AgentChatThreadSession,
+  AgentChatTranscriptNotice,
+  AgentChatTranscriptNoticeAction,
+} from "./agent-chat.types";
 
 export type AgentChatThreadState = {
   threadSession: AgentChatThreadSession | null;
@@ -17,14 +21,17 @@ type ProjectAgentChatThreadStateArgs = {
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
+  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 };
 
 const deriveAgentChatTranscriptNotice = ({
   transcriptState,
   runtimeReadiness,
+  failedTranscriptAction,
 }: {
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
+  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 }): AgentChatTranscriptNotice | null => {
   if (
     transcriptState.kind === "runtime_waiting" &&
@@ -68,6 +75,7 @@ const deriveAgentChatTranscriptNotice = ({
       severity: "error",
       title: "Failed to load session",
       description: transcriptState.message,
+      ...(failedTranscriptAction ? { action: failedTranscriptAction } : {}),
     };
   }
 
@@ -82,6 +90,7 @@ export const projectAgentChatThreadState = ({
   session,
   transcriptState,
   runtimeReadiness,
+  failedTranscriptAction,
 }: ProjectAgentChatThreadStateArgs): AgentChatThreadState => {
   const threadSession = hidesExistingSessionTranscript(transcriptState) ? null : session;
   const shouldResetTranscriptWindow =
@@ -89,6 +98,7 @@ export const projectAgentChatThreadState = ({
   const transcriptNotice = deriveAgentChatTranscriptNotice({
     transcriptState,
     runtimeReadiness,
+    failedTranscriptAction,
   });
 
   return {

@@ -473,12 +473,14 @@ and selected-session runtime data only.
 Build-tool worktree refresh is not a transcript surface. It observes build
 session messages and `historyLoadState` only; do not pass transcript loading
 state through the shell to suppress historical tool completions.
-Repo-session read-model loading is exposed as one
-`sessionReadModelLoadState` value. Do not split it back into independent
-loading and error fields; selected-session view projection is the only selected
-session layer that interprets read-model load state into transcript state.
-Expose that value only through `AgentSessionReadModelStateContext`; do not put it
-back on aggregate agent state or operations values.
+Repo-session read-model loading is exposed through one read-model state context:
+`sessionReadModelLoadState` plus the explicit owner command
+`reloadSessionReadModel`. Do not split it back into independent loading and
+error fields or caller-owned retry loops; selected-session view projection is
+the only selected session layer that interprets read-model load state into
+transcript state. Expose this surface only through
+`AgentSessionReadModelStateContext`; do not put it back on aggregate agent state
+or operations values.
 `useAgentOrchestratorOperations` returns explicit owned buckets only:
 `sessionStore`, `operations`, and `readModelState`. Do not reintroduce a
 legacy aggregate hook result that spreads operation methods and session snapshots
@@ -914,6 +916,7 @@ Use these compact tests as the first-line safety net:
 | Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
 | User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
+| Transient repo read-model startup failure can recover without polling | `hooks/use-repo-session-read-model.test.tsx` |
 | Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |

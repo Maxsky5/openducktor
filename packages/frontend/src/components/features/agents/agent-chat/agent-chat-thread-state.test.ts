@@ -140,6 +140,31 @@ describe("projectAgentChatThreadState", () => {
     });
   });
 
+  test("adds an explicit action to failed transcript notices when provided", () => {
+    const retry = () => {};
+    const state = projectAgentChatThreadState({
+      sessionKey: null,
+      session: null,
+      transcriptState: buildThreadTranscriptState({ kind: "failed" }),
+      runtimeReadiness: readyRuntimeReadiness,
+      failedTranscriptAction: {
+        label: "Retry",
+        onAction: retry,
+      },
+    });
+
+    expect(state.transcriptNotice).toEqual({
+      kind: "session_failed",
+      severity: "error",
+      title: "Failed to load session",
+      description: "The selected conversation could not be loaded.",
+      action: {
+        label: "Retry",
+        onAction: retry,
+      },
+    });
+  });
+
   test("does not let blocked runtime readiness hide a renderable transcript", () => {
     const session = buildSession();
     const state = projectAgentChatThreadState({

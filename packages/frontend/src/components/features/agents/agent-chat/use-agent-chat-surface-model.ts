@@ -10,6 +10,7 @@ import type {
   AgentChatEmptyStateModel,
   AgentChatSurfaceModel,
   AgentChatThreadSession,
+  AgentChatTranscriptNoticeAction,
 } from "./agent-chat.types";
 import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 import {
@@ -46,6 +47,7 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
+  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 };
 
 export function useAgentChatSurfaceModel({
@@ -66,6 +68,7 @@ export function useAgentChatSurfaceModel({
   sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
+  failedTranscriptAction,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const threadState = projectAgentChatThreadState({
@@ -73,6 +76,7 @@ export function useAgentChatSurfaceModel({
     session,
     transcriptState,
     runtimeReadiness,
+    failedTranscriptAction,
   });
   const isSessionWorking = isAgentSessionActivityWorking(threadState.threadSession?.activityState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
