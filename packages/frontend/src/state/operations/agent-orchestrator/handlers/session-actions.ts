@@ -157,6 +157,7 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
+    isSessionObserved: (identity) => sessionObserversRef.current.has(identity),
   });
 
   return {

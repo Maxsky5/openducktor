@@ -686,7 +686,10 @@ Selected-session model fallback is exposed separately as `selectedSessionModel`
 and remains display-only until the user changes the model.
 An explicit session model action requires that selected session to be loaded.
 Missing loaded-session state is a caller invariant error, not a no-op model
-update.
+update. Session model actions persist the selected model before touching the
+runtime adapter, because selected model is durable session context. Runtime model
+sync is attempted only for observed sessions; unobserved idle or stopped session
+shells keep the durable choice for the next send/start preparation.
 
 Invariant: build-tools worktree reads are owned by
 `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`.
