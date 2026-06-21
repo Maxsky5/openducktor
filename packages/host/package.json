@@ -15,7 +15,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "drizzle-orm": "0.45.2",
-    "effect": "^3.21.3"
+    "effect": "^3.21.4"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
