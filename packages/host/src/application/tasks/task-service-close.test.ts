@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { GitBranch, RepoConfig, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  GitBranch,
+  RepoConfig,
+  TaskCard,
+  TaskMetadataPayload,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -18,7 +24,6 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",
@@ -66,9 +71,26 @@ const repoConfig: RepoConfig = {
   agentDefaults: {},
 };
 
-const createTaskStore = (tasks: TaskCard[], calls: string[] = []): TaskStorePort =>
+const createMetadata = (agentSessions: AgentSessionRecord[] = []): TaskMetadataPayload => ({
+  spec: { markdown: "spec", updatedAt: "2026-05-10T10:00:00.000Z" },
+  plan: { markdown: "plan", updatedAt: "2026-05-10T10:00:00.000Z" },
+  qaReport: {
+    markdown: "qa",
+    verdict: "approved",
+    updatedAt: "2026-05-10T10:00:00.000Z",
+  },
+  agentSessions,
+});
+
+const createTaskStore = (
+  tasks: TaskCard[],
+  calls: string[] = [],
+  sessionsByTaskId: Record<string, AgentSessionRecord[]> = {},
+): TaskStorePort =>
   ({
     listTasks: () => Effect.succeed(tasks),
+    getTaskMetadata: (input: { taskId: string }) =>
+      Effect.succeed(createMetadata(sessionsByTaskId[input.taskId] ?? [])),
     transitionTask: (input: { taskId: string; status: TaskCard["status"] }) => {
       const { taskId, status } = input;
       calls.push(`transition:${taskId}:${status}`);
@@ -201,21 +223,16 @@ describe("TaskService.closeTask", () => {
   });
 
   test("requires live activity guard when workflow sessions exist", async () => {
+    const buildSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "build",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+      selectedModel: null,
+    };
     const service = createTaskService({
-      taskStore: createTaskStore([
-        task({
-          agentSessions: [
-            {
-              externalSessionId: "session-1",
-              role: "build",
-              runtimeKind: "opencode",
-              startedAt: "2026-05-10T10:00:00.000Z",
-              workingDirectory: "/worktrees/repo/task-1",
-              selectedModel: null,
-            },
-          ],
-        }),
-      ]),
+      taskStore: createTaskStore([task()], [], { "task-1": [buildSession] }),
     });
 
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
@@ -327,28 +344,20 @@ describe("TaskService.closeTask", () => {
 
   test("dedupes task and session worktree paths before cleanup", async () => {
     const calls: string[] = [];
+    const buildSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "build",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1/",
+      selectedModel: null,
+    };
     const activityGuard: TaskActivityGuardPort = {
       ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
       ensureNoActiveTaskResetActivity: () => Effect.succeed(undefined),
     };
     const service = createTaskService({
-      taskStore: createTaskStore(
-        [
-          task({
-            agentSessions: [
-              {
-                externalSessionId: "session-1",
-                role: "build",
-                runtimeKind: "opencode",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                workingDirectory: "/worktrees/repo/task-1/",
-                selectedModel: null,
-              },
-            ],
-          }),
-        ],
-        calls,
-      ),
+      taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({
@@ -398,6 +407,14 @@ describe("TaskService.closeTask", () => {
 
   test("uses the active workflow guard when workflow sessions exist", async () => {
     const calls: string[] = [];
+    const qaSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "qa",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+      selectedModel: null,
+    };
     const activityGuard: TaskActivityGuardPort = {
       ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
       ensureNoActiveTaskResetActivity: (input) => {
@@ -406,20 +423,7 @@ describe("TaskService.closeTask", () => {
       },
     };
     const service = createTaskService({
-      taskStore: createTaskStore([
-        task({
-          agentSessions: [
-            {
-              externalSessionId: "session-1",
-              role: "qa",
-              runtimeKind: "opencode",
-              startedAt: "2026-05-10T10:00:00.000Z",
-              workingDirectory: "/worktrees/repo/task-1",
-              selectedModel: null,
-            },
-          ],
-        }),
-      ]),
+      taskStore: createTaskStore([task()], calls, { "task-1": [qaSession] }),
       taskActivityGuard: activityGuard,
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),

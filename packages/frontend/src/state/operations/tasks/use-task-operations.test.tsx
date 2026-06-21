@@ -1859,7 +1859,7 @@ describe("use-task-operations", () => {
       {
         args: {
           activeWorkspace: createActiveWorkspace("/repo"),
-          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
         },
       },
       { wrapper },

@@ -138,6 +138,7 @@ const createTasksStateValue = (): TasksStateContextValue => ({
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: null,
   deleteTask: async () => undefined,
+  closeTask: async () => undefined,
   resetTaskImplementation: async () => undefined,
   resetTask: async () => undefined,
   transitionTask: async () => undefined,
