@@ -1,17 +1,19 @@
 import { toast } from "sonner";
-import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  closesQueuedSessionEvents,
+  createSessionEventBatcher,
+  isImmediateSessionEvent,
+  type QueuedSessionEvent,
+} from "./session-event-batching";
 import type {
-  AttachAgentSessionListenerParams,
+  ObserveAgentSessionParams,
   SessionEvent,
-  SessionEventHandlerContext,
+  SessionEventContext,
 } from "./session-event-types";
-import { createSessionEventHandlerContext } from "./session-event-types";
+import { createSessionEventContext } from "./session-event-types";
 import {
   handleAssistantMessage,
-  handlePermissionRequired,
-  handlePermissionResolved,
-  handleQuestionRequired,
-  handleQuestionResolved,
   handleSessionCompacted,
   handleSessionCompactionStarted,
   handleSessionError,
@@ -23,18 +25,14 @@ import {
   handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
+import {
+  handlePermissionRequired,
+  handlePermissionResolved,
+  handleQuestionRequired,
+  handleQuestionResolved,
+} from "./session-pending-input";
 
 const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
-
-const hasSessionStateChanges = (current: object, next: object): boolean => {
-  for (const key of Object.keys(next) as Array<keyof typeof next>) {
-    if (next[key] !== current[key]) {
-      return true;
-    }
-  }
-
-  return false;
-};
 
 const handleMcpReconnectStarted = (
   event: Extract<SessionEvent, { type: "mcp_reconnect_started" }>,
@@ -45,80 +43,139 @@ const handleMcpReconnectStarted = (
   });
 };
 
-const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
+const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): void => {
   switch (event.type) {
     case "session_started":
-      handleSessionStarted(context.lifecycle, event);
+      handleSessionStarted(context, event);
       return;
     case "assistant_delta":
-      handleAssistantDelta(context.parts, event);
+      handleAssistantDelta(context, event);
       return;
     case "assistant_part":
-      handleAssistantPart(context.parts, event);
+      handleAssistantPart(context, event);
       return;
     case "assistant_message":
-      handleAssistantMessage(context.lifecycle, event);
+      handleAssistantMessage(context, event);
       return;
     case "user_message":
-      handleUserMessage(context.lifecycle, event);
+      handleUserMessage(context, event);
       return;
     case "session_status":
-      handleSessionStatus(context.lifecycle, event);
+      handleSessionStatus(context, event);
       return;
     case "approval_required":
-      handlePermissionRequired(context.lifecycle, event);
+      handlePermissionRequired(context, event);
       return;
     case "approval_resolved":
-      handlePermissionResolved(context.lifecycle, event);
+      handlePermissionResolved(context, event);
       return;
     case "mcp_reconnect_started":
       handleMcpReconnectStarted(event);
       return;
     case "question_required":
-      handleQuestionRequired(context.lifecycle, event);
+      handleQuestionRequired(context, event);
       return;
     case "question_resolved":
-      handleQuestionResolved(context.lifecycle, event);
+      handleQuestionResolved(context, event);
       return;
     case "session_todos_updated":
-      handleSessionTodosUpdated(context.lifecycle, event);
+      handleSessionTodosUpdated(context, event);
       return;
     case "session_compaction_started":
-      handleSessionCompactionStarted(context.lifecycle, event);
+      handleSessionCompactionStarted(context, event);
       return;
     case "session_compacted":
-      handleSessionCompacted(context.lifecycle, event);
+      handleSessionCompacted(context, event);
       return;
     case "session_error":
-      handleSessionError(context.lifecycle, event);
+      handleSessionError(context, event);
       return;
     case "session_idle":
-      handleSessionIdle(context.lifecycle, event);
+      handleSessionIdle(context, event);
       return;
     case "session_finished":
-      handleSessionFinished(context.lifecycle, event);
-      return;
-    case "tool_call":
-    case "tool_result":
+      handleSessionFinished(context, event);
       return;
   }
 };
 
-export const attachAgentSessionListener = (
-  context: AttachAgentSessionListenerParams,
-): (() => void) => {
-  const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
-    current: {} as Record<string, string>,
-  };
-  const eventContext = {
+const isObservedSessionMounted = ({
+  sessionRef,
+  readSession,
+}: Pick<ObserveAgentSessionParams, "sessionRef" | "readSession">): boolean =>
+  readSession(sessionRef) !== null;
+
+const applyQueuedSessionEvents = (
+  context: ObserveAgentSessionParams,
+  readyEvents: readonly QueuedSessionEvent[],
+): void => {
+  let nextSession = context.readSession(context.sessionRef);
+  if (!nextSession) {
+    return;
+  }
+  const queuedContext = createSessionEventContext({
     ...context,
-    contextUsageMessageIdBySessionRef,
-  };
-  const handlerContext = createSessionEventHandlerContext(eventContext);
+    readSession: (identity) => {
+      if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
+        return nextSession;
+      }
+      return context.readSession(identity);
+    },
+    ensureSession: (identity, createSession) => {
+      if (!matchesAgentSessionIdentity(identity, context.sessionRef)) {
+        return context.ensureSession(identity, createSession);
+      }
+      if (!nextSession) {
+        nextSession = createSession();
+      }
+      return nextSession;
+    },
+    updateSession: (targetSessionIdentity, updater, options) => {
+      if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
+        return context.updateSession(targetSessionIdentity, updater, options);
+      }
+      if (options?.persist === true) {
+        throw new Error(
+          `Queued session event for '${context.sessionRef.externalSessionId}' requested durable persistence.`,
+        );
+      }
+      if (!nextSession) {
+        return null;
+      }
+
+      nextSession = updater(nextSession);
+      return nextSession;
+    },
+  });
+
+  for (const queuedEvent of readyEvents) {
+    handleSessionEvent(queuedContext, queuedEvent);
+  }
+
+  const committedSession = nextSession;
+  if (!committedSession) {
+    return;
+  }
+
+  context.updateSession(context.sessionRef, () => committedSession);
+};
+
+export const listenToAgentSessionEvents = async (
+  context: ObserveAgentSessionParams,
+): Promise<() => void> => {
+  const handlerContext = createSessionEventContext(context);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
   const batcher = createSessionEventBatcher();
-  let queuedEvents: SessionEvent[] = [];
+  let queuedEvents: QueuedSessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const clearQueuedEvents = (): void => {
+    queuedEvents = [];
+    if (batchTimeoutId !== null) {
+      clearTimeout(batchTimeoutId);
+      batchTimeoutId = null;
+    }
+  };
 
   const flushQueuedEvents = (): void => {
     if (batchTimeoutId !== null) {
@@ -127,6 +184,11 @@ export const attachAgentSessionListener = (
     }
 
     if (queuedEvents.length === 0) {
+      return;
+    }
+
+    if (!isObservedSessionMounted(context)) {
+      clearQueuedEvents();
       return;
     }
 
@@ -141,65 +203,7 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const batchedSessionsRef = {
-      current: context.sessionsRef.current,
-    };
-    let shouldPersistBufferedSession = false;
-    let hasBufferedSessionUpdate = false;
-    const batchedHandlerContext = createSessionEventHandlerContext({
-      ...eventContext,
-      sessionsRef: batchedSessionsRef,
-      updateSession: (externalSessionId, updater, options) => {
-        if (externalSessionId !== context.externalSessionId) {
-          context.updateSession(externalSessionId, updater, options);
-          return;
-        }
-
-        const current = batchedSessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-
-        const next = updater(current);
-        if (next === current || !hasSessionStateChanges(current, next)) {
-          return;
-        }
-
-        hasBufferedSessionUpdate = true;
-        if (options?.persist === true) {
-          shouldPersistBufferedSession = true;
-        }
-        batchedSessionsRef.current = {
-          ...batchedSessionsRef.current,
-          [externalSessionId]: next,
-        };
-      },
-    });
-
-    for (const queuedEvent of readyEvents) {
-      handleSessionEvent(batchedHandlerContext, queuedEvent);
-    }
-
-    if (!hasBufferedSessionUpdate) {
-      if (queuedEvents.length > 0) {
-        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-      }
-      return;
-    }
-
-    const nextSession = batchedSessionsRef.current[context.externalSessionId];
-    if (!nextSession) {
-      if (queuedEvents.length > 0) {
-        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-      }
-      return;
-    }
-
-    context.updateSession(
-      context.externalSessionId,
-      () => nextSession,
-      shouldPersistBufferedSession ? { persist: true } : undefined,
-    );
+    applyQueuedSessionEvents(context, readyEvents);
 
     if (queuedEvents.length > 0) {
       scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
@@ -220,17 +224,24 @@ export const attachAgentSessionListener = (
     }, delayMs);
   };
 
-  const unsubscribe = context.adapter.subscribeEvents(context.externalSessionId, (event) => {
+  const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
+    if (!isObservedSessionMounted(context)) {
+      clearQueuedEvents();
+      return;
+    }
+
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);
+      if (closesQueuedSessionEvents(event)) {
+        clearQueuedEvents();
+      }
       return;
     }
 
     queuedEvents.push(event);
     scheduleQueuedFlush();
   });
-
   return () => {
     flushQueuedEvents();
     unsubscribe();

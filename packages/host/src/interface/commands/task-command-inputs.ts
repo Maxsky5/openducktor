@@ -30,7 +30,6 @@ import {
   parsePullRequestContent,
   parseRequiredMarkdown,
   parseTaskDirectMergeInput,
-  parseTaskIdList,
   parseTransitionStatus,
   parseUpdatePatch,
   requireRecord,
@@ -55,16 +54,6 @@ export const parseListTasksInput = (input: unknown): ListTasksInput => {
   const repoPath = requireString(record.repoPath, "repoPath");
   const doneVisibleDays = optionalNonNegativeInteger(record.doneVisibleDays, "doneVisibleDays");
   return doneVisibleDays === undefined ? { repoPath } : { repoPath, doneVisibleDays };
-};
-
-export const parseAgentSessionsListBulkInput = (
-  input: unknown,
-): { repoPath: string; taskIds: string[] } => {
-  const record = requireRecord(input, "agent_sessions_list_bulk input");
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskIds: parseTaskIdList(record.taskIds, "taskIds"),
-  };
 };
 
 export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsertInput => {

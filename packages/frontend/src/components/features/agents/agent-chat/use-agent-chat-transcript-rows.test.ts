@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { act } from "react";
+import { render } from "@testing-library/react";
+import { createElement } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { buildMessage, buildQuestionRequest, buildSession } from "./agent-chat-test-fixtures";
+import type { AgentChatThreadSession } from "./agent-chat.types";
+import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 
 (
@@ -13,56 +16,23 @@ import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type HarnessProps = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
-  shouldPauseDerivation: boolean;
 };
 
 type HookResult = ReturnType<typeof useAgentChatTranscriptRows>;
 
-const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-let nextAnimationFrameId = 1;
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const flushAnimationFrames = async (): Promise<void> => {
-  if (animationFrameCallbacks.size === 0) {
-    return;
-  }
-
-  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-  animationFrameCallbacks.clear();
-
-  await act(async () => {
-    for (const callback of queuedCallbacks) {
-      callback(16);
-    }
-    await flush();
-  });
-  await flushAnimationFrames();
-};
-
-const waitForTimers = async (remainingTicks = 20): Promise<void> => {
-  if (remainingTicks <= 0) {
-    return;
-  }
-
-  await act(async () => {
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-    await flush();
-  });
-  await waitForTimers(remainingTicks - 1);
-};
+const animationFrameDriver = createAnimationFrameTestDriver();
 
 const flushTranscriptDerivation = async (): Promise<void> => {
-  await flushAnimationFrames();
-  await waitForTimers();
+  await animationFrameDriver.flushFrames();
+  await animationFrameDriver.flushTimers(20);
 };
 
-const createLargeSession = (externalSessionId: string, messageCount = 160): AgentSessionState => {
+const createLargeSession = (
+  externalSessionId: string,
+  messageCount = 500,
+): AgentChatThreadSession => {
   const messages = Array.from({ length: messageCount }, (_, index) => {
     const turnIndex = Math.floor(index / 2);
     if (index % 2 === 0) {
@@ -89,27 +59,12 @@ const mountHarness = async (props: HarnessProps) => {
 };
 
 describe("useAgentChatTranscriptRows", () => {
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-
   beforeEach(() => {
-    animationFrameCallbacks.clear();
-    nextAnimationFrameId = 1;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    animationFrameDriver.install();
   });
 
   afterEach(() => {
-    animationFrameCallbacks.clear();
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
   });
 
   test("starts cache-miss sessions with lightweight rows until post-paint derivation completes", async () => {
@@ -117,7 +72,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toEqual([]);
@@ -136,19 +90,18 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session: firstSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     await harness.update({
       session: secondSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 
     const rowKeys = harness.getLatest().transcriptState.rows.map((row) => row.key);
+    const secondSessionKey = agentSessionIdentityKey(secondSession);
     expect(rowKeys.length).toBeGreaterThan(0);
-    expect(rowKeys.every((key) => key.startsWith("session-stale-b:"))).toBe(true);
+    expect(rowKeys.every((key) => key.startsWith(`${secondSessionKey}:`))).toBe(true);
     await harness.unmount();
   });
 
@@ -157,16 +110,14 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     await harness.update({
       session: {
         ...session,
-        pendingQuestions: [buildQuestionRequest({ requestId: "question-same-revision" })],
+        title: "Updated title with the same transcript revision",
       },
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 
@@ -176,7 +127,7 @@ describe("useAgentChatTranscriptRows", () => {
   });
 
   test("keeps active-session rows visible while an updated transcript revision is deriving", async () => {
-    const messages = Array.from({ length: 160 }, (_, index) =>
+    const messages = Array.from({ length: 500 }, (_, index) =>
       buildMessage("user", `Message ${index + 1}`, { id: `message-${index + 1}` }),
     );
     const session = buildSession({
@@ -186,7 +137,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     const resolvedRows = harness.getLatest().transcriptState.rows;
@@ -201,7 +151,6 @@ describe("useAgentChatTranscriptRows", () => {
         ),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
@@ -210,7 +159,7 @@ describe("useAgentChatTranscriptRows", () => {
   });
 
   test("reuses cached rows when switching back to an equivalent SessionMessagesState", async () => {
-    const messages = Array.from({ length: 160 }, (_, index) =>
+    const messages = Array.from({ length: 500 }, (_, index) =>
       buildMessage(index % 2 === 0 ? "user" : "assistant", `Message ${index + 1}`, {
         id: `message-${index + 1}`,
       }),
@@ -223,7 +172,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session: firstSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     const cachedRows = harness.getLatest().transcriptState.rows;
@@ -231,7 +179,6 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.update({
       session: secondSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     await harness.update({
@@ -240,7 +187,6 @@ describe("useAgentChatTranscriptRows", () => {
         messages: createSessionMessagesState("session-cache-reuse", messages, 1),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(cachedRows);
@@ -248,28 +194,84 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.unmount();
   });
 
-  test("detects same-array same-count raw message mutation on session object replacement", async () => {
-    const messages = [buildMessage("assistant", "Before", { id: "assistant-1" })];
+  test("shows cached rows on the first render when switching back to an unchanged idle session", async () => {
+    const firstMessages = Array.from({ length: 500 }, (_, index) =>
+      buildMessage(index % 2 === 0 ? "user" : "assistant", `First ${index + 1}`, {
+        id: `first-message-${index + 1}`,
+      }),
+    );
+    const firstSession = buildSession({
+      externalSessionId: "session-cache-visible-a",
+      status: "idle",
+      messages: createSessionMessagesState("session-cache-visible-a", firstMessages, 1),
+    });
+    const secondSession = createLargeSession("session-cache-visible-b");
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptRows(props));
+      return null;
+    };
+
+    const rendered = render(
+      createElement(Probe, {
+        session: firstSession,
+        showThinkingMessages: true,
+      }),
+    );
+
+    await flushTranscriptDerivation();
+    const cachedRows = observedStates.at(-1)?.transcriptState.rows;
+    expect(cachedRows?.length).toBeGreaterThan(0);
+
+    rendered.rerender(
+      createElement(Probe, {
+        session: secondSession,
+        showThinkingMessages: true,
+      }),
+    );
+    await flushTranscriptDerivation();
+
+    const observationsBeforeSwitchBack = observedStates.length;
+    rendered.rerender(
+      createElement(Probe, {
+        session: buildSession({
+          ...firstSession,
+          messages: createSessionMessagesState("session-cache-visible-a", firstMessages, 1),
+        }),
+        showThinkingMessages: true,
+      }),
+    );
+
+    const firstRenderAfterSwitchBack = observedStates[observationsBeforeSwitchBack];
+    expect(firstRenderAfterSwitchBack?.transcriptState.rows).toBe(cachedRows);
+    expect(firstRenderAfterSwitchBack?.isTranscriptRowsMissing).toBe(false);
+
+    rendered.unmount();
+  });
+
+  test("updates rows when the session receives a new message state", async () => {
     const session = buildSession({
-      externalSessionId: "session-raw-replacement",
-      messages,
+      externalSessionId: "session-state-replacement",
+      messages: createSessionMessagesState("session-state-replacement", [
+        buildMessage("assistant", "Before", { id: "assistant-1" }),
+      ]),
     });
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     expect(harness.getLatest().transcriptState.rows[1]?.kind).toBe("message");
-
-    messages[0] = buildMessage("assistant", "After", { id: "assistant-1" });
 
     await harness.update({
       session: buildSession({
         ...session,
-        messages,
+        messages: createSessionMessagesState(
+          "session-state-replacement",
+          [buildMessage("assistant", "After", { id: "assistant-1" })],
+          session.messages.version + 1,
+        ),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 

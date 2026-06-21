@@ -1,24 +1,18 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import type { NavigateToTaskIntent } from "./agent-studio-types";
-import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
+import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agent-studio-task-tabs-list";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
   persistedActiveTaskId: string | null;
-  intentActiveTaskId: string | null;
-  tabsStorageHydratedWorkspaceId: string | null;
-  clearComposerInput: () => void;
-  onContextSwitchIntent: (() => void) | undefined;
-  navigateToTaskIntent: NavigateToTaskIntent;
+  loadedTabsStorageWorkspaceId: string | null;
+  selectTask: (taskId: string) => void;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
-  setIntentActiveTaskId: SetState<string | null>;
 };
 
 type UseTaskTabSelectionResult = {
@@ -29,21 +23,16 @@ type UseTaskTabSelectionResult = {
 
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
     persistedActiveTaskId,
-    intentActiveTaskId,
-    tabsStorageHydratedWorkspaceId,
-    clearComposerInput,
-    onContextSwitchIntent,
-    navigateToTaskIntent,
+    loadedTabsStorageWorkspaceId,
+    selectTask,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   } = args;
-  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
 
   const tabTaskIds = useMemo(
     () => ensureActiveTaskTab(openTaskTabs, taskId),
@@ -52,9 +41,6 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   const appliedFallbackKeyRef = useRef<string | null>(null);
 
   const activeTaskTabId = useMemo(() => {
-    if (intentActiveTaskId && tabTaskIds.includes(intentActiveTaskId)) {
-      return intentActiveTaskId;
-    }
     if (taskId && tabTaskIds.includes(taskId)) {
       return taskId;
     }
@@ -62,21 +48,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
       return persistedActiveTaskId;
     }
     return tabTaskIds[0] ?? "";
-  }, [intentActiveTaskId, persistedActiveTaskId, tabTaskIds, taskId]);
-
-  useEffect(() => {
-    if (!intentActiveTaskId) {
-      return;
-    }
-    if (!tabTaskIds.includes(intentActiveTaskId) || taskId === intentActiveTaskId) {
-      setIntentActiveTaskId(null);
-    }
-  }, [intentActiveTaskId, setIntentActiveTaskId, tabTaskIds, taskId]);
+  }, [persistedActiveTaskId, tabTaskIds, taskId]);
 
   useEffect(() => {
     if (
       !activeWorkspaceId ||
-      tabsStorageHydratedWorkspaceId !== activeWorkspaceId ||
+      loadedTabsStorageWorkspaceId !== activeWorkspaceId ||
       isRepoNavigationBoundaryPending
     ) {
       return;
@@ -96,22 +73,22 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
       return;
     }
     appliedFallbackKeyRef.current = fallbackKey;
-    navigateToTaskIntent(fallbackTaskId);
+    selectTask(fallbackTaskId);
   }, [
     activeWorkspaceId,
     isRepoNavigationBoundaryPending,
-    navigateToTaskIntent,
     persistedActiveTaskId,
+    selectTask,
     tabTaskIds,
-    tabsStorageHydratedWorkspaceId,
+    loadedTabsStorageWorkspaceId,
     taskId,
   ]);
 
   useEffect(() => {
-    if (!activeWorkspace || taskId || isRepoNavigationBoundaryPending) {
+    if (!activeWorkspaceId || taskId || isRepoNavigationBoundaryPending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeWorkspace, isRepoNavigationBoundaryPending, taskId]);
+  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {
@@ -122,9 +99,6 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return;
       }
 
-      onContextSwitchIntent?.();
-      clearComposerInput();
-      setIntentActiveTaskId(nextTaskId);
       setOpenTaskTabs((current) => {
         if (current.includes(nextTaskId)) {
           return current;
@@ -132,17 +106,9 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return [...current, nextTaskId];
       });
       setPersistedActiveTaskId(nextTaskId);
-      navigateToTaskIntent(nextTaskId);
+      selectTask(nextTaskId);
     },
-    [
-      activeTaskTabId,
-      clearComposerInput,
-      navigateToTaskIntent,
-      onContextSwitchIntent,
-      setIntentActiveTaskId,
-      setOpenTaskTabs,
-      setPersistedActiveTaskId,
-    ],
+    [activeTaskTabId, selectTask, setOpenTaskTabs, setPersistedActiveTaskId],
   );
 
   return {

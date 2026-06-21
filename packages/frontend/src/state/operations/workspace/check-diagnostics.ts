@@ -1,11 +1,7 @@
 import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
-import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
+import { classifyRepoRuntimeHealth } from "@/lib/repo-runtime-health";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
@@ -17,12 +13,6 @@ export type DiagnosticsToastIssue = {
   title: string;
   description: string;
   severity: DiagnosticsToastSeverity;
-};
-
-export type DiagnosticsRetryPlan = {
-  retryRuntimeCheck: boolean;
-  retryTaskStoreCheck: boolean;
-  retryRuntimeHealth: boolean;
 };
 
 type DiagnosticsIssueMeta = {
@@ -46,17 +36,6 @@ type BuildDiagnosticsToastIssuesArgs = {
   taskStoreCheckError: string | null;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
-};
-
-type BuildDiagnosticsRetryPlanArgs = {
-  activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeCheckFetching: boolean;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheckFetching: boolean;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  runtimeHealthFetching: boolean;
 };
 
 const CLI_TOOLS_ISSUE_META: DiagnosticsIssueMeta = {
@@ -104,72 +83,14 @@ export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): Task
   taskStoreError: taskStoreCheckError,
 });
 
-export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
+export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
   return (
-    runtimeCheck !== null &&
-    (!runtimeCheck.gitOk ||
-      !runtimeCheck.ghOk ||
-      !runtimeCheck.ghAuthOk ||
-      runtimeCheck.runtimes.some((entry) => entry.enabled !== false && !entry.ok))
+    runtimeCheck !== null && (!runtimeCheck.gitOk || !runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
   );
 };
 
 export const hasTaskStoreCheckFailure = (taskStoreCheck: TaskStoreCheck | null): boolean => {
   return taskStoreCheck !== null && !isRepoStoreReady(taskStoreCheck);
-};
-
-export const buildRuntimeHealthErrorMap = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthError: string,
-  checkedAt: string,
-): RepoRuntimeHealthMap => {
-  return runtimeDefinitions.reduce<RepoRuntimeHealthMap>((runtimeHealthMap, definition) => {
-    runtimeHealthMap[definition.kind] = {
-      status: "error",
-      checkedAt,
-      runtime: {
-        status: "error",
-        stage: "startup_failed",
-        observation: null,
-        instance: null,
-        startedAt: null,
-        updatedAt: checkedAt,
-        elapsedMs: null,
-        attempts: null,
-        detail: runtimeHealthError,
-        failureKind: "error",
-        failureReason: null,
-      },
-      mcp: {
-        supported: true,
-        status: "error",
-        serverName: ODT_MCP_SERVER_NAME,
-        serverStatus: null,
-        toolIds: [],
-        detail: runtimeHealthError,
-        failureKind: "error",
-      },
-    } satisfies RepoRuntimeHealthCheck;
-    return runtimeHealthMap;
-  }, {});
-};
-
-type TimeoutMessageOptions = {
-  availabilityVerb?: AvailabilityVerb;
-};
-
-export const buildTimeoutToastDescription = (
-  label: string,
-  detail: string | null,
-  options?: TimeoutMessageOptions,
-): string => {
-  const availabilityVerb = options?.availabilityVerb ?? "is";
-
-  if (!detail) {
-    return `${label} ${availabilityVerb} not yet available. Retrying automatically.`;
-  }
-
-  return `${label} ${availabilityVerb} not yet available. Retrying automatically. Latest detail: ${detail}`;
 };
 
 const buildErrorToastDescription = (label: string, detail: string | null): string => {
@@ -205,14 +126,36 @@ const buildDiagnosticsIssueCandidate = (
   };
 };
 
+export const getCliToolsCheckFailureDetail = (
+  runtimeCheck: RuntimeCheck | null,
+  runtimeCheckError: string | null,
+): string | null => {
+  if (runtimeCheckError) {
+    return runtimeCheckError;
+  }
+  if (!runtimeCheck) {
+    return null;
+  }
+  if (!runtimeCheck.gitOk) {
+    return runtimeCheck.errors[0] ?? "Git is unavailable.";
+  }
+  if (!runtimeCheck.ghOk) {
+    return runtimeCheck.ghAuthError ?? runtimeCheck.errors[0] ?? "GitHub CLI is unavailable.";
+  }
+  if (!runtimeCheck.ghAuthOk) {
+    return runtimeCheck.ghAuthError ?? "GitHub CLI authentication is unavailable.";
+  }
+  return null;
+};
+
 const getRuntimeCheckIssueCandidate = (
   runtimeCheck: RuntimeCheck | null,
   runtimeCheckError: string | null,
   runtimeCheckFailureKind: RepoRuntimeFailureKind,
 ): DiagnosticsIssueCandidate | null => {
-  const detail = runtimeCheckError ?? runtimeCheck?.errors[0] ?? runtimeCheck?.ghAuthError ?? null;
+  const detail = getCliToolsCheckFailureDetail(runtimeCheck, runtimeCheckError);
   const failureKind =
-    runtimeCheckFailureKind ?? (hasRuntimeCheckFailure(runtimeCheck) ? "error" : null);
+    runtimeCheckFailureKind ?? (hasCliToolCheckFailure(runtimeCheck) ? "error" : null);
   return buildDiagnosticsIssueCandidate(CLI_TOOLS_ISSUE_META, detail, failureKind);
 };
 
@@ -247,22 +190,28 @@ const getRuntimeHealthIssueCandidates = (
       continue;
     }
 
-    const runtimeIssue = buildDiagnosticsIssueCandidate(
-      {
-        id: `diagnostics:runtime:${definition.kind}`,
-        label: `${definition.label} runtime`,
-        availabilityVerb: "is",
-      },
-      runtimeHealth.runtime.detail,
-      runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
-    );
+    const runtimeIssue =
+      classifyRepoRuntimeHealth(runtimeHealth) === "blocked"
+        ? buildDiagnosticsIssueCandidate(
+            {
+              id: `diagnostics:runtime:${definition.kind}`,
+              label: `${definition.label} runtime`,
+              availabilityVerb: "is",
+            },
+            runtimeHealth.runtime.detail,
+            runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
+          )
+        : null;
 
     if (runtimeIssue !== null) {
       issueCandidates.push(runtimeIssue);
       continue;
     }
 
-    if (!definition.capabilities.optionalSurfaces.supportsMcpStatus) {
+    if (
+      runtimeHealth.runtime.status !== "ready" ||
+      !definition.capabilities.optionalSurfaces.supportsMcpStatus
+    ) {
       continue;
     }
 
@@ -309,70 +258,4 @@ export const buildDiagnosticsToastIssues = ({
     }
     return issues;
   }, []);
-};
-
-const hasRuntimeHealthTimeoutIssue = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap,
-): boolean => {
-  return runtimeDefinitions.some((definition) => {
-    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-    if (!runtimeHealth) {
-      return false;
-    }
-
-    return (
-      (runtimeHealth.runtime.status !== "error" &&
-        runtimeHealth.runtime.failureKind === "timeout") ||
-      (definition.capabilities.optionalSurfaces.supportsMcpStatus &&
-        runtimeHealth.mcp?.status !== "error" &&
-        runtimeHealth.mcp?.failureKind === "timeout")
-    );
-  });
-};
-
-export const hasDiagnosticsRetryingState = ({
-  runtimeDefinitions,
-  runtimeCheckFailureKind,
-  taskStoreCheckFailureKind,
-  runtimeHealthByRuntime,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-}): boolean => {
-  return (
-    runtimeCheckFailureKind === "timeout" ||
-    taskStoreCheckFailureKind === "timeout" ||
-    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime)
-  );
-};
-
-export const buildDiagnosticsRetryPlan = ({
-  activeWorkspace,
-  runtimeDefinitions,
-  runtimeCheckFailureKind,
-  runtimeCheckFetching,
-  taskStoreCheckFailureKind,
-  taskStoreCheckFetching,
-  runtimeHealthByRuntime,
-  runtimeHealthFetching,
-}: BuildDiagnosticsRetryPlanArgs): DiagnosticsRetryPlan => {
-  const retryRuntimeCheck = runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching;
-  const retryTaskStoreCheck =
-    activeWorkspace !== null && taskStoreCheckFailureKind === "timeout" && !taskStoreCheckFetching;
-  const retryRuntimeHealth =
-    activeWorkspace !== null &&
-    runtimeDefinitions.length > 0 &&
-    // Transient startup polling now lives in the runtime-health query refetchInterval.
-    // Keep the timeout retry here so stalled probes still force a fresh invalidation.
-    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
-    !runtimeHealthFetching;
-
-  return {
-    retryRuntimeCheck,
-    retryTaskStoreCheck,
-    retryRuntimeHealth,
-  };
 };

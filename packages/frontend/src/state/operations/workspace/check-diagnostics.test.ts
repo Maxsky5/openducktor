@@ -7,10 +7,8 @@ import {
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  buildDiagnosticsRetryPlan,
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
-  buildRuntimeHealthErrorMap,
   buildTaskStoreCheckErrorState,
 } from "./check-diagnostics";
 
@@ -96,6 +94,81 @@ describe("check-diagnostics helpers", () => {
     expect(issues).toHaveLength(2);
   });
 
+  test("does not toast passive runtime startup observations", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeWorkspace: createActiveWorkspace("/repo"),
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: null,
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            observation: null,
+            instance: null,
+            startedAt: null,
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            detail: "Runtime has not been started yet.",
+            failureKind: "error",
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: null,
+            failureKind: null,
+          },
+        }),
+      },
+    });
+
+    expect(issues).toEqual([]);
+  });
+
+  test("does not toast transient MCP timeout observations", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeWorkspace: createActiveWorkspace("/repo"),
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: null,
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+          },
+          mcp: {
+            supported: true,
+            status: "reconnecting",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "The operation was aborted due to timeout",
+            failureKind: "timeout",
+          },
+        }),
+      },
+    });
+
+    expect(issues).toEqual([]);
+  });
+
   test("restores unhealthy cli and task-store payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
@@ -157,122 +230,5 @@ describe("check-diagnostics helpers", () => {
         }),
       ]),
     );
-  });
-
-  test("computes retry plan per diagnostics family", () => {
-    expect(
-      buildDiagnosticsRetryPlan({
-        activeWorkspace: createActiveWorkspace("/repo"),
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeCheckFailureKind: "timeout",
-        runtimeCheckFetching: false,
-        taskStoreCheckFailureKind: "error",
-        taskStoreCheckFetching: false,
-        runtimeHealthByRuntime: buildRuntimeHealthErrorMap(
-          [OPENCODE_RUNTIME_DESCRIPTOR],
-          "runtime health failed",
-          "2026-02-22T08:00:00.000Z",
-        ),
-        runtimeHealthFetching: false,
-      }),
-    ).toEqual({
-      retryRuntimeCheck: true,
-      retryTaskStoreCheck: false,
-      retryRuntimeHealth: false,
-    });
-
-    expect(
-      buildDiagnosticsRetryPlan({
-        activeWorkspace: createActiveWorkspace("/repo"),
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeCheckFailureKind: null,
-        runtimeCheckFetching: false,
-        taskStoreCheckFailureKind: "timeout",
-        taskStoreCheckFetching: true,
-        runtimeHealthByRuntime: {
-          opencode: makeRepoHealth({
-            status: "checking",
-            mcp: {
-              supported: true,
-              status: "checking",
-              serverName: "openducktor",
-              serverStatus: null,
-              toolIds: [],
-              detail: "OpenCode startup probe failed reason=timeout after 15000ms",
-              failureKind: "timeout",
-            },
-          }),
-        },
-        runtimeHealthFetching: false,
-      }),
-    ).toEqual({
-      retryRuntimeCheck: false,
-      retryTaskStoreCheck: false,
-      retryRuntimeHealth: true,
-    });
-
-    expect(
-      buildDiagnosticsRetryPlan({
-        activeWorkspace: createActiveWorkspace("/repo"),
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeCheckFailureKind: null,
-        runtimeCheckFetching: false,
-        taskStoreCheckFailureKind: null,
-        taskStoreCheckFetching: false,
-        runtimeHealthByRuntime: {
-          opencode: makeRepoHealth({
-            status: "checking",
-            runtime: {
-              status: "ready",
-              stage: "runtime_ready",
-            },
-            mcp: {
-              supported: true,
-              status: "checking",
-              serverName: "openducktor",
-              serverStatus: null,
-              toolIds: [],
-              detail: "Checking OpenDucktor MCP",
-              failureKind: null,
-            },
-          }),
-        },
-        runtimeHealthFetching: false,
-      }),
-    ).toEqual({
-      retryRuntimeCheck: false,
-      retryTaskStoreCheck: false,
-      retryRuntimeHealth: false,
-    });
-
-    expect(
-      buildDiagnosticsRetryPlan({
-        activeWorkspace: createActiveWorkspace("/repo"),
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeCheckFailureKind: null,
-        runtimeCheckFetching: false,
-        taskStoreCheckFailureKind: null,
-        taskStoreCheckFetching: false,
-        runtimeHealthByRuntime: {
-          opencode: makeRepoHealth({
-            status: "error",
-            mcp: {
-              supported: true,
-              status: "error",
-              serverName: "openducktor",
-              serverStatus: null,
-              toolIds: [],
-              detail: "OpenCode MCP timed out after retries",
-              failureKind: "timeout",
-            },
-          }),
-        },
-        runtimeHealthFetching: false,
-      }),
-    ).toEqual({
-      retryRuntimeCheck: false,
-      retryTaskStoreCheck: false,
-      retryRuntimeHealth: false,
-    });
   });
 });

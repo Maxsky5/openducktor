@@ -1,6 +1,7 @@
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentRole, AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
@@ -18,6 +19,27 @@ export const defaultRepoRuntimeInput = {
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo",
 };
+
+export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessionRef => ({
+  repoPath: "/repo",
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+});
+
+export const sessionRuntimeRef = (
+  externalSessionId = "session-opencode-1",
+  overrides: Partial<AgentSessionRuntimeRef> = {},
+): AgentSessionRuntimeRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "spec" satisfies AgentRole,
+  systemPrompt: "system prompt",
+  ...overrides,
+});
 
 const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind) => ({
   kind: runtimeKind,
@@ -38,8 +60,6 @@ export class OpencodeSdkAdapter extends BaseOpencodeSdkAdapter {
   constructor(options: ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0] = {}) {
     super({
       repoRuntimeResolver: {
-        ensureRepoRuntime: async ({ repoPath, runtimeKind }) =>
-          createDefaultRuntimeSummary(repoPath, runtimeKind),
         requireRepoRuntime: async ({ repoPath, runtimeKind }) =>
           createDefaultRuntimeSummary(repoPath, runtimeKind),
       },

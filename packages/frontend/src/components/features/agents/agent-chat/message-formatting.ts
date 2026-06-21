@@ -2,11 +2,12 @@ import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
+import { SYSTEM_PROMPT_PREFIX } from "@/state/operations/agent-orchestrator/support/session-prompt";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { stripToolPrefix } from "./tool-text-utils";
 
-export const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+export { SYSTEM_PROMPT_PREFIX };
 
 const MESSAGE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",

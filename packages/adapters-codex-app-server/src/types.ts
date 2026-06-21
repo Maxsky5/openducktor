@@ -1,9 +1,7 @@
 import type {
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
-  RepoRuntimeRef,
   RuntimeDescriptor,
-  RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type {
   AgentEvent,
@@ -17,7 +15,8 @@ import type {
   AgentSessionSummary,
   AgentSkillCatalog,
   ForkAgentSessionInput,
-  LiveAgentSessionStatus,
+  RepoRuntimeRef,
+  RepoRuntimeRouteResolution,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -59,9 +58,7 @@ export type CodexAppServerStreamEvent = {
 };
 
 export type CodexRepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRuntimeById?(ref: RepoRuntimeRef, runtimeId: string): Promise<RuntimeInstanceSummary>;
+  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 
 export type CodexModelCatalogRecord = {
@@ -253,8 +250,6 @@ export type CodexSessionState = {
   taskId: string;
   liveStatus?: {
     classification: AgentSessionActivity;
-    status: LiveAgentSessionStatus;
-    agentSessionStatus: "running" | "idle";
   };
 };
 

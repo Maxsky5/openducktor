@@ -1,12 +1,14 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
   AgentModelSelection,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
@@ -14,9 +16,16 @@ import type {
   AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionState,
+  SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { AgentRoleOption } from "./agent-chat.types";
+import type {
+  AgentChatThreadModel,
+  AgentChatThreadSession,
+  AgentRoleOption,
+} from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
+import { toAgentChatThreadSession } from "./agent-chat-thread-session";
+import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -43,25 +52,6 @@ const baseTask: TaskCard = {
   },
   createdAt: "2026-02-20T10:00:00.000Z",
   updatedAt: "2026-02-20T10:00:00.000Z",
-};
-
-const baseCatalog: AgentModelCatalog = {
-  models: [
-    {
-      id: "openai/gpt-5.3-codex",
-      providerId: "openai",
-      providerName: "OpenAI",
-      modelId: "gpt-5.3-codex",
-      modelName: "GPT-5.3 Codex",
-      variants: ["high", "low"],
-      contextWindow: 400_000,
-      outputLimit: 128_000,
-    },
-  ],
-  defaultModelsByProvider: {
-    openai: "gpt-5.3-codex",
-  },
-  profiles: [{ name: "Hephaestus (Deep Agent)", mode: "primary", color: "#f59e0b" }],
 };
 
 const baseSelection: AgentModelSelection = {
@@ -91,23 +81,16 @@ const baseMessage: AgentChatMessage = {
 const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
   taskId: "task-1",
-  repoPath: "/repo",
+  runtimeKind: "opencode",
   role: "spec",
   status: "running",
   startedAt: "2026-02-20T10:00:30.000Z",
-  runtimeId: "runtime-1",
   workingDirectory: "/repo",
-  messages: [baseMessage],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
+  historyLoadState: "not_requested",
+  messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
-  modelCatalog: baseCatalog,
   selectedModel: baseSelection,
-  isLoadingModelCatalog: false,
 };
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
@@ -122,18 +105,78 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
-  const repoPath = overrides.repoPath ?? baseSession.repoPath ?? "/repo";
-  const { repoPath: _baseRepoPath, ...baseRepoSession } = baseSession;
-  const { repoPath: _overrideRepoPath, ...overrideSession } = overrides;
+type AgentChatThreadSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: SessionMessagesState | AgentChatMessage[];
+};
 
-  return createRepoScopedAgentSessionState(
-    {
-      ...baseRepoSession,
-      ...overrideSession,
-    },
-    repoPath,
-  );
+export const buildSession = (
+  overrides: AgentChatThreadSessionOverrides = {},
+): AgentChatThreadSession => {
+  const { messages: overrideMessages, ...overrideSessionFields } = overrides;
+  const session = {
+    ...baseSession,
+    ...overrideSessionFields,
+  };
+  const sourceMessages = overrideMessages ?? baseSession.messages;
+  const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
+
+  return toAgentChatThreadSession({
+    ...session,
+    messages,
+  });
+};
+
+type TranscriptStateFixtureInput =
+  | AgentSessionTranscriptState
+  | { kind: "failed"; message?: string };
+
+export const buildThreadTranscriptState = (
+  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
+): AgentSessionTranscriptState =>
+  transcriptState.kind === "failed"
+    ? {
+        kind: "failed",
+        message: transcriptState.message ?? "The selected conversation could not be loaded.",
+      }
+    : transcriptState;
+
+type AgentChatThreadProjectionFields =
+  | "displayedSessionKey"
+  | "shouldResetTranscriptWindow"
+  | "transcriptNotice";
+type AgentChatThreadFixtureDefaults =
+  | "pendingApprovalRequests"
+  | "pendingQuestionRequests"
+  | "todos"
+  | "sessionAccentColor";
+
+export type AgentChatThreadModelInput = Omit<
+  AgentChatThreadModel,
+  AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults
+> &
+  Partial<
+    Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
+  >;
+
+export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
+  const threadState = projectAgentChatThreadState({
+    sessionKey:
+      model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
+    session: model.session,
+    transcriptState: model.transcriptState,
+    runtimeReadiness: model.runtimeReadiness,
+  });
+
+  return {
+    ...model,
+    session: threadState.threadSession,
+    displayedSessionKey: threadState.displayedSessionKey,
+    shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
+    transcriptNotice: threadState.transcriptNotice,
+    pendingApprovalRequests: model.pendingApprovalRequests ?? [],
+    pendingQuestionRequests: model.pendingQuestionRequests ?? [],
+    todos: model.todos ?? [],
+  };
 };
 
 export const buildMessage = (

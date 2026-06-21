@@ -1,15 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createSessionMessagesFixture,
+  type SessionMessagesFixtureInput,
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "./agent-tool-messages";
 import { createSessionMessagesState } from "./support/messages";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesFixtureInput) => ({
   externalSessionId: "session-1",
-  messages,
+  messages: createSessionMessagesFixture("session-1", messages),
 });
 
 const baseTodoToolMessage = (overrides = {}) => ({

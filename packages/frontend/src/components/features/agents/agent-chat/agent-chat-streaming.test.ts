@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolveActiveStreamingAssistantMessageId } from "./agent-chat-streaming";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import { buildMessage, buildQuestionRequest, buildSession } from "./agent-chat-test-fixtures";
 
 describe("resolveActiveStreamingAssistantMessageId", () => {
   test("returns the trailing non-final assistant row while a session is running", () => {
@@ -20,6 +20,25 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
     });
 
     expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-live");
+  });
+
+  test("treats starting sessions as working when resolving the live assistant row", () => {
+    const session = buildSession({
+      status: "starting",
+      messages: [
+        buildMessage("assistant", "Preparing the workspace", {
+          id: "assistant-starting",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+          },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+
+    expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-starting");
   });
 
   test("keeps tracking a live non-final assistant row after later tool rows are appended", () => {
@@ -81,6 +100,25 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
     });
 
     expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-subtask-live");
+  });
+
+  test("does not mark non-final assistant rows as streaming while waiting for input", () => {
+    const session = buildSession({
+      status: "running",
+      messages: [
+        buildMessage("assistant", "Choose how to proceed", {
+          id: "assistant-waiting-input",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+          },
+        }),
+      ],
+      pendingQuestions: [buildQuestionRequest()],
+    });
+
+    expect(resolveActiveStreamingAssistantMessageId(session)).toBeNull();
   });
 
   test("does not mark non-final assistant rows as streaming after the session stops", () => {

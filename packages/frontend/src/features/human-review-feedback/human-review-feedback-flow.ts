@@ -4,7 +4,9 @@ import type {
   SessionStartExistingSessionOption,
 } from "@/features/session-start";
 import { buildReusableSessionOptions } from "@/features/session-start";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
 export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is required.";
@@ -15,7 +17,7 @@ export type HumanReviewFeedbackStartRequest = {
   launchActionId: SessionLaunchActionId;
   initialStartMode?: "fresh" | "reuse" | "fork";
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initialSourceExternalSessionId?: string;
+  initialSourceSession?: AgentSessionIdentity;
   postStartAction: "kickoff";
   message: string;
   beforeStartAction: {
@@ -35,7 +37,7 @@ type SubmitHumanReviewFeedbackInput = {
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
-  ) => Promise<string | undefined>;
+  ) => Promise<unknown | undefined>;
 };
 
 const buildRequestChangesSessionRequest = (
@@ -47,7 +49,7 @@ const buildRequestChangesSessionRequest = (
     sessions: builderSessions,
     role: "build",
   });
-  const latestBuilderSessionId = builderSessions[0]?.externalSessionId;
+  const latestBuilderSession = builderSessions[0];
 
   return {
     taskId: state.taskId,
@@ -55,7 +57,9 @@ const buildRequestChangesSessionRequest = (
     launchActionId: "build_after_human_request_changes",
     ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
     existingSessionOptions,
-    ...(latestBuilderSessionId ? { initialSourceExternalSessionId: latestBuilderSessionId } : {}),
+    ...(latestBuilderSession
+      ? { initialSourceSession: toAgentSessionIdentity(latestBuilderSession) }
+      : {}),
     postStartAction: "kickoff",
     message: feedback,
     beforeStartAction: {
@@ -82,10 +86,10 @@ export const submitHumanReviewFeedback = async ({
     return { outcome: "cancelled" };
   }
 
-  const externalSessionId = await startRequestChangesSession(
+  const startResult = await startRequestChangesSession(
     buildRequestChangesSessionRequest(state, builderSessions, trimmedMessage),
   );
-  if (!externalSessionId) {
+  if (!startResult) {
     return { outcome: "cancelled" };
   }
 

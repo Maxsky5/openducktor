@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import {
@@ -8,31 +8,26 @@ import {
 import type {
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import type { ActiveWorkspace } from "../../types/state-slices";
-import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
-import {
-  resolveAgentStudioBuilderSessionForTask,
-  resolveAgentStudioBuilderSessionsForTask,
-} from "./agents-page-selection";
+import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
+import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
+import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
-  viewTaskId: string;
-  viewSelectedTask: TaskCard | null;
-  viewActiveSession: AgentSessionSummary | null;
-  activeSession: AgentSessionSummary | null;
-  selectedSessionById: AgentSessionSummary | null;
-  viewSessionsForTask: AgentSessionSummary[];
-  sessionsForTask: AgentSessionSummary[];
+  view: Pick<
+    AgentStudioSelectionControllerResult["view"],
+    "taskId" | "role" | "selectedTask" | "selectedSession" | "sessionsForTask"
+  >;
 };
 
 type UseAgentStudioRebaseConflictResolutionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceId: string | null;
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
-  onContextSwitchIntent: () => void;
   startSessionRequest: (
     request: SessionStartLaunchRequest & {
       role: "build";
@@ -41,9 +36,9 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       message: string;
       targetWorkingDirectory?: string | null;
       existingSessionOptions?: SessionStartExistingSessionOption[];
-      initialSourceExternalSessionId?: string | null;
+      initialSourceSession?: AgentSessionIdentity | null;
     },
-  ) => Promise<string | undefined>;
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -52,10 +47,9 @@ type UseAgentStudioRebaseConflictResolutionResult = {
 };
 
 export function useAgentStudioRebaseConflictResolution({
-  activeWorkspace,
+  workspaceId,
   selection,
   scheduleQueryUpdate,
-  onContextSwitchIntent,
   startSessionRequest,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
@@ -72,87 +66,49 @@ export function useAgentStudioRebaseConflictResolution({
         ...(request.existingSessionOptions.length > 0
           ? { existingSessionOptions: request.existingSessionOptions }
           : {}),
-        ...(request.initialSourceExternalSessionId !== undefined
-          ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
+        ...(request.initialSourceSession !== undefined
+          ? { initialSourceSession: request.initialSourceSession }
           : {}),
       }),
     [startSessionRequest],
   );
 
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeWorkspace,
+    workspaceId,
     startConflictResolutionSession,
     loadPromptOverrides,
   });
-  const {
-    viewTaskId,
-    viewSelectedTask,
-    viewActiveSession,
-    activeSession,
-    selectedSessionById,
-    viewSessionsForTask,
-    sessionsForTask,
-  } = selection;
+  const { view } = selection;
 
   const handleResolveRebaseConflict = useCallback(
     async (conflict: GitConflict): Promise<boolean> => {
-      if (!viewTaskId) {
+      if (!view.taskId) {
         throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
-        taskId: viewTaskId,
-        viewActiveSession,
-        activeSession,
-        selectedSessionById,
-        viewSessionsForTask,
-        sessionsForTask,
+        taskId: view.taskId,
+        candidateSessions: [view.selectedSession.loadedSession, ...view.sessionsForTask],
       });
-      const defaultBuilderSession = resolveAgentStudioBuilderSessionForTask({
-        taskId: viewTaskId,
-        viewActiveSession,
-        activeSession,
-        selectedSessionById,
-        viewSessionsForTask,
-        sessionsForTask,
-      });
+      const defaultBuilderSession = builderSessions[0] ?? null;
 
       return handleResolveGitConflict(conflict, {
-        taskId: viewTaskId,
-        task: viewSelectedTask,
+        taskId: view.taskId,
+        task: view.selectedTask,
         builderSessions,
-        currentViewSessionId:
-          viewActiveSession?.role === "build" ? viewActiveSession.externalSessionId : null,
-        onOpenSession: (externalSessionId) => {
-          const session = builderSessions.find(
-            (entry) => entry.externalSessionId === externalSessionId,
-          );
-          if (
-            viewActiveSession?.externalSessionId !== externalSessionId ||
-            viewActiveSession?.role !== "build"
-          ) {
-            onContextSwitchIntent();
-          }
+        currentViewSession: view.role === "build" ? view.selectedSession.identity : null,
+        onOpenSession: (session) => {
+          const builderSession =
+            builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
           scheduleQueryUpdate({
-            task: viewTaskId,
-            session: externalSessionId,
-            agent: session?.role ?? defaultBuilderSession?.role ?? "build",
+            task: view.taskId,
+            session: agentSessionIdentityKey(session),
+            agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },
       });
     },
-    [
-      activeSession,
-      handleResolveGitConflict,
-      onContextSwitchIntent,
-      scheduleQueryUpdate,
-      selectedSessionById,
-      sessionsForTask,
-      viewActiveSession,
-      viewSelectedTask,
-      viewSessionsForTask,
-      viewTaskId,
-    ],
+    [handleResolveGitConflict, scheduleQueryUpdate, view],
   );
 
   return {

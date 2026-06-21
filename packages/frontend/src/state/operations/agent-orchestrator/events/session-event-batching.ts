@@ -1,258 +1,169 @@
 import type { SessionEvent } from "./session-event-types";
 
-type SessionEventBatchRule<TEvent extends SessionEvent = SessionEvent> = {
-  immediate: boolean;
-  dedupeKey?: (event: TEvent) => string | null;
-  merge?: (previous: TEvent, next: TEvent) => TEvent;
-  supersedes?: (candidate: SessionEvent, incoming: TEvent) => boolean;
-  minEmitIntervalMs?: number | ((event: TEvent) => number | null);
-};
+const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
+  "user_message",
+  "approval_required",
+  "approval_resolved",
+  "mcp_reconnect_started",
+  "question_required",
+  "question_resolved",
+  "session_compaction_started",
+  "session_compacted",
+  "session_error",
+  "session_idle",
+  "session_finished",
+] as const satisfies readonly SessionEvent["type"][];
 
-type SessionEventBatchRules = {
-  [TType in SessionEvent["type"]]: SessionEventBatchRule<Extract<SessionEvent, { type: TType }>>;
-};
-
-type SessionEventOfType<TType extends SessionEvent["type"]> = Extract<
+type ImmediateSessionEvent = Extract<
   SessionEvent,
-  { type: TType }
+  { type: (typeof IMMEDIATE_SESSION_EVENT_TYPE_LIST)[number] }
 >;
 
+export type QueuedSessionEvent = Exclude<SessionEvent, ImmediateSessionEvent>;
+
 type QueuedSessionEventEntry = {
-  key: string | null;
-  event: SessionEvent;
+  key: string;
+  event: QueuedSessionEvent;
 };
 
-const rebuildKeyIndex = (entries: QueuedSessionEventEntry[]): Map<string, number> => {
-  const nextIndex = new Map<string, number>();
+const IMMEDIATE_SESSION_EVENT_TYPES = new Set<SessionEvent["type"]>(
+  IMMEDIATE_SESSION_EVENT_TYPE_LIST,
+);
 
-  for (let index = 0; index < entries.length; index += 1) {
-    const key = entries[index]?.key;
-    if (key) {
-      nextIndex.set(key, index);
-    }
+const minAssistantPartEmitIntervalMs = (
+  event: Extract<QueuedSessionEvent, { type: "assistant_part" }>,
+): number | null => {
+  if (event.part.kind === "text" || event.part.kind === "reasoning") {
+    return event.part.completed ? null : 500;
   }
-
-  return nextIndex;
+  if (event.part.kind === "tool") {
+    return event.part.status === "completed" || event.part.status === "error" ? null : 400;
+  }
+  return null;
 };
 
-const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
-  session_started: {
-    immediate: false,
-    dedupeKey: () => "session_started",
-  },
-  assistant_delta: {
-    immediate: false,
-    dedupeKey: (event) => `assistant_delta:${event.channel}:${event.messageId}`,
-    merge: (previous, next) => ({
-      ...next,
-      delta: `${previous.delta}${next.delta}`,
-    }),
-    minEmitIntervalMs: 500,
-  },
-  assistant_part: {
-    immediate: false,
-    dedupeKey: (event) =>
-      `assistant_part:${event.part.kind}:${event.part.messageId}:${event.part.partId}`,
-    minEmitIntervalMs: (event) => {
-      if (event.part.kind === "text" || event.part.kind === "reasoning") {
-        return event.part.completed ? 0 : 500;
-      }
-      if (event.part.kind === "tool") {
-        return event.part.status === "completed" || event.part.status === "error" ? 0 : 400;
-      }
-      return 0;
-    },
-  },
-  assistant_message: {
-    immediate: false,
-    dedupeKey: (event) => `assistant_message:${event.messageId}`,
-    supersedes: (candidate, incoming) => {
-      if (candidate.type === "assistant_delta") {
-        return candidate.messageId === incoming.messageId;
-      }
-
-      if (candidate.type === "assistant_part") {
-        return candidate.part.messageId === incoming.messageId && candidate.part.kind === "text";
-      }
-
-      return false;
-    },
-    minEmitIntervalMs: 500,
-  },
-  user_message: {
-    immediate: true,
-  },
-  session_status: {
-    immediate: false,
-    dedupeKey: () => "session_status",
-  },
-  approval_required: {
-    immediate: true,
-  },
-  approval_resolved: {
-    immediate: true,
-  },
-  mcp_reconnect_started: {
-    immediate: true,
-  },
-  question_required: {
-    immediate: true,
-  },
-  question_resolved: {
-    immediate: true,
-  },
-  session_todos_updated: {
-    immediate: false,
-    dedupeKey: () => "session_todos_updated",
-  },
-  session_compaction_started: {
-    immediate: true,
-  },
-  session_compacted: {
-    immediate: true,
-  },
-  session_error: {
-    immediate: true,
-  },
-  session_idle: {
-    immediate: true,
-  },
-  session_finished: {
-    immediate: true,
-  },
-  tool_call: {
-    immediate: false,
-    dedupeKey: (event) => `tool_call:${event.call.tool}:${JSON.stringify(event.call.args)}`,
-    minEmitIntervalMs: 400,
-  },
-  tool_result: {
-    immediate: false,
-    dedupeKey: (event) => `tool_result:${event.tool}:${event.success}:${event.message}`,
-    minEmitIntervalMs: 400,
-  },
+const assertUnhandledQueuedSessionEvent = (event: never): never => {
+  throw new Error(`Unhandled queued session event '${JSON.stringify(event)}'.`);
 };
 
-const isSessionEventType = <TType extends SessionEvent["type"]>(
-  event: SessionEvent,
-  type: TType,
-): event is SessionEventOfType<TType> => event.type === type;
-
-const withTypedSessionEvent = <T>(
-  event: SessionEvent,
-  callback: <TType extends SessionEvent["type"]>(
-    typedEvent: SessionEventOfType<TType>,
-    rule: SessionEventBatchRules[TType],
-  ) => T,
-): T => {
+const queuedSessionEventKey = (event: QueuedSessionEvent): string => {
   switch (event.type) {
     case "session_started":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_started);
+      return "session_started";
     case "assistant_delta":
-      return callback(event, SESSION_EVENT_BATCH_RULES.assistant_delta);
+      return `assistant_delta:${event.channel}:${event.messageId}`;
     case "assistant_part":
-      return callback(event, SESSION_EVENT_BATCH_RULES.assistant_part);
+      return `assistant_part:${event.part.kind}:${event.part.messageId}:${event.part.partId}`;
     case "assistant_message":
-      return callback(event, SESSION_EVENT_BATCH_RULES.assistant_message);
-    case "user_message":
-      return callback(event, SESSION_EVENT_BATCH_RULES.user_message);
+      return `assistant_message:${event.messageId}`;
     case "session_status":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_status);
-    case "approval_required":
-      return callback(event, SESSION_EVENT_BATCH_RULES.approval_required);
-    case "approval_resolved":
-      return callback(event, SESSION_EVENT_BATCH_RULES.approval_resolved);
-    case "mcp_reconnect_started":
-      return callback(event, SESSION_EVENT_BATCH_RULES.mcp_reconnect_started);
-    case "question_required":
-      return callback(event, SESSION_EVENT_BATCH_RULES.question_required);
-    case "question_resolved":
-      return callback(event, SESSION_EVENT_BATCH_RULES.question_resolved);
+      return "session_status";
     case "session_todos_updated":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_todos_updated);
-    case "session_compaction_started":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_compaction_started);
-    case "session_compacted":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_compacted);
-    case "session_error":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_error);
-    case "session_idle":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_idle);
-    case "session_finished":
-      return callback(event, SESSION_EVENT_BATCH_RULES.session_finished);
-    case "tool_call":
-      return callback(event, SESSION_EVENT_BATCH_RULES.tool_call);
-    case "tool_result":
-      return callback(event, SESSION_EVENT_BATCH_RULES.tool_result);
+      return "session_todos_updated";
+    default:
+      return assertUnhandledQueuedSessionEvent(event);
   }
 };
 
-export const isImmediateSessionEvent = (event: SessionEvent): boolean => {
-  return SESSION_EVENT_BATCH_RULES[event.type].immediate;
+const queuedSessionEventMinEmitIntervalMs = (event: QueuedSessionEvent): number | null => {
+  switch (event.type) {
+    case "assistant_delta":
+    case "assistant_message":
+      return 500;
+    case "assistant_part":
+      return minAssistantPartEmitIntervalMs(event);
+    case "session_started":
+    case "session_status":
+    case "session_todos_updated":
+      return null;
+    default:
+      return assertUnhandledQueuedSessionEvent(event);
+  }
 };
 
-const mergeQueuedSessionEvents = (events: SessionEvent[]): QueuedSessionEventEntry[] => {
+const mergeQueuedSessionEvent = (
+  previous: QueuedSessionEvent,
+  event: QueuedSessionEvent,
+): QueuedSessionEvent => {
+  if (previous.type === "assistant_delta" && event.type === "assistant_delta") {
+    return {
+      ...event,
+      delta: `${previous.delta}${event.delta}`,
+    };
+  }
+
+  return event;
+};
+
+const shouldDropQueuedCandidate = (
+  event: QueuedSessionEvent,
+  candidate: QueuedSessionEvent,
+): boolean => {
+  if (event.type !== "assistant_message") {
+    return false;
+  }
+
+  if (candidate.type === "assistant_delta") {
+    return candidate.messageId === event.messageId;
+  }
+
+  if (candidate.type === "assistant_part") {
+    return candidate.part.messageId === event.messageId && candidate.part.kind === "text";
+  }
+
+  return false;
+};
+
+export const isImmediateSessionEvent = (event: SessionEvent): event is ImmediateSessionEvent => {
+  return IMMEDIATE_SESSION_EVENT_TYPES.has(event.type);
+};
+
+export const closesQueuedSessionEvents = (event: ImmediateSessionEvent): boolean =>
+  event.type === "session_error" ||
+  event.type === "session_finished" ||
+  event.type === "session_idle";
+
+const mergeQueuedSessionEvents = (events: QueuedSessionEvent[]): QueuedSessionEventEntry[] => {
   const entries: QueuedSessionEventEntry[] = [];
-  let keyIndex = new Map<string, number>();
 
   for (const event of events) {
-    withTypedSessionEvent(event, (typedEvent, rule) => {
-      if (rule.supersedes) {
-        let removed = false;
-        for (let index = entries.length - 1; index >= 0; index -= 1) {
-          const candidate = entries[index]?.event;
-          if (!candidate || !rule.supersedes(candidate, typedEvent)) {
-            continue;
-          }
-
-          entries.splice(index, 1);
-          removed = true;
-        }
-
-        if (removed) {
-          keyIndex = rebuildKeyIndex(entries);
-        }
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const candidate = entries[index]?.event;
+      if (candidate && shouldDropQueuedCandidate(event, candidate)) {
+        entries.splice(index, 1);
       }
+    }
 
-      const key = rule.dedupeKey?.(typedEvent) ?? null;
-      if (!key) {
-        entries.push({ key: null, event: typedEvent });
-        return;
-      }
+    const key = queuedSessionEventKey(event);
+    const existingIndex = entries.findIndex((entry) => entry.key === key);
+    if (existingIndex === -1) {
+      entries.push({ key, event });
+      continue;
+    }
 
-      const existingIndex = keyIndex.get(key);
-      if (existingIndex === undefined) {
-        keyIndex.set(key, entries.length);
-        entries.push({ key, event: typedEvent });
-        return;
-      }
+    const previous = entries[existingIndex]?.event;
+    if (!previous) {
+      entries[existingIndex] = { key, event };
+      continue;
+    }
 
-      const previous = entries[existingIndex]?.event;
-      if (!previous) {
-        entries[existingIndex] = { key, event: typedEvent };
-        return;
-      }
-
-      entries[existingIndex] = {
-        key,
-        event:
-          rule.merge && isSessionEventType(previous, typedEvent.type)
-            ? rule.merge(previous, typedEvent)
-            : typedEvent,
-      };
-    });
+    entries[existingIndex] = {
+      key,
+      event: mergeQueuedSessionEvent(previous, event),
+    };
   }
 
   return entries;
 };
 
 export type PreparedQueuedSessionEvents = {
-  readyEvents: SessionEvent[];
-  deferredEvents: SessionEvent[];
+  readyEvents: QueuedSessionEvent[];
+  deferredEvents: QueuedSessionEvent[];
   nextDelayMs: number | null;
 };
 
 export type SessionEventBatcher = {
-  prepareQueuedSessionEvents: (events: SessionEvent[]) => PreparedQueuedSessionEvents;
+  prepareQueuedSessionEvents: (events: QueuedSessionEvent[]) => PreparedQueuedSessionEvents;
 };
 
 type CreateSessionEventBatcherOptions = {
@@ -268,44 +179,37 @@ export const createSessionEventBatcher = (
   return {
     prepareQueuedSessionEvents: (events) => {
       const mergedEntries = mergeQueuedSessionEvents(events);
-      const readyEvents: SessionEvent[] = [];
-      const deferredEvents: SessionEvent[] = [];
+      const readyEvents: QueuedSessionEvent[] = [];
+      const deferredEvents: QueuedSessionEvent[] = [];
       let nextDelayMs: number | null = null;
       const emittedAtMs = nowMs();
 
       for (const entry of mergedEntries) {
-        withTypedSessionEvent(entry.event, (typedEvent, rule) => {
-          const minEmitIntervalMs =
-            typeof rule.minEmitIntervalMs === "function"
-              ? rule.minEmitIntervalMs(typedEvent)
-              : (rule.minEmitIntervalMs ?? null);
+        const minEmitIntervalMs = queuedSessionEventMinEmitIntervalMs(entry.event);
 
-          if (!entry.key || !minEmitIntervalMs) {
-            readyEvents.push(typedEvent);
-            if (entry.key) {
-              lastEmittedAtByKey.set(entry.key, emittedAtMs);
-            }
-            return;
-          }
+        if (!minEmitIntervalMs) {
+          lastEmittedAtByKey.set(entry.key, emittedAtMs);
+          readyEvents.push(entry.event);
+          continue;
+        }
 
-          const lastEmittedAt = lastEmittedAtByKey.get(entry.key);
-          if (lastEmittedAt === undefined) {
-            lastEmittedAtByKey.set(entry.key, emittedAtMs);
-            readyEvents.push(typedEvent);
-            return;
-          }
+        const lastEmittedAt = lastEmittedAtByKey.get(entry.key);
+        if (lastEmittedAt === undefined) {
+          lastEmittedAtByKey.set(entry.key, emittedAtMs);
+          readyEvents.push(entry.event);
+          continue;
+        }
 
-          const elapsedMs = emittedAtMs - lastEmittedAt;
-          if (elapsedMs >= minEmitIntervalMs) {
-            lastEmittedAtByKey.set(entry.key, emittedAtMs);
-            readyEvents.push(typedEvent);
-            return;
-          }
+        const elapsedMs = emittedAtMs - lastEmittedAt;
+        if (elapsedMs >= minEmitIntervalMs) {
+          lastEmittedAtByKey.set(entry.key, emittedAtMs);
+          readyEvents.push(entry.event);
+          continue;
+        }
 
-          deferredEvents.push(typedEvent);
-          const remainingMs = minEmitIntervalMs - elapsedMs;
-          nextDelayMs = nextDelayMs === null ? remainingMs : Math.min(nextDelayMs, remainingMs);
-        });
+        deferredEvents.push(entry.event);
+        const remainingMs = minEmitIntervalMs - elapsedMs;
+        nextDelayMs = nextDelayMs === null ? remainingMs : Math.min(nextDelayMs, remainingMs);
       }
 
       return {

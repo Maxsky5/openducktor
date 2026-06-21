@@ -15,7 +15,6 @@ import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } fr
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
   runtimeKind: "opencode",
-  runtimeId: "runtime-build",
   workingDirectory: "/tmp/repo/worktree",
 };
 
@@ -105,7 +104,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-build",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(buildStartCalls).toBe(1);
@@ -132,7 +130,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(raceResult).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-build",
       workingDirectory: "/tmp/repo/worktree",
     });
     await expect(runtimePromise).resolves.toEqual(raceResult);
@@ -210,29 +207,10 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-shared",
       workingDirectory: "/tmp/repo/conflict-worktree",
     });
     expect(buildStartCalls).toBe(0);
     expect(repoRuntimeEnsureCalls).toBe(1);
-  });
-
-  test("invalidates runtime readiness through the injected query client", async () => {
-    const invalidateQueries = mock(async () => undefined);
-
-    const ensureRuntime = createEnsureRuntime({
-      hostClient: runtimeHost,
-      queryClient: { invalidateQueries },
-      repoConfigLoader,
-      refreshTaskData: async () => {},
-    });
-
-    await ensureRuntime("/tmp/repo", "task-1", "build", {
-      workspaceId: "workspace-1",
-      targetWorkingDirectory: "/tmp/repo/conflict-worktree",
-    });
-
-    expect(invalidateQueries).toHaveBeenCalledTimes(2);
   });
 
   test("uses task worktree for qa when builder worktree exists", async () => {
@@ -260,7 +238,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-shared",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(continuationCalls).toBe(1);

@@ -1,0 +1,528 @@
+import { describe, expect, test } from "bun:test";
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
+import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import {
+  findSessionMessageForTest,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createTaskCardFixture } from "../test-utils";
+import {
+  buildSession,
+  createSessionActions,
+  createSessionsRef,
+  createSessionTurnStateFixture,
+  getSession,
+} from "./session-actions.test-helpers";
+
+const acceptedUserMessage = (
+  input: SendAgentUserMessageInput,
+  messageId = "accepted-user-message",
+): AcceptedAgentUserMessage => ({
+  type: "user_message",
+  externalSessionId: input.externalSessionId,
+  timestamp: "2026-02-22T08:00:01.000Z",
+  messageId,
+  message: serializeAgentUserMessagePartsToText(input.parts),
+  parts: [],
+  state: "read",
+  ...(input.model ? { model: input.model } : {}),
+});
+
+describe("agent-orchestrator/handlers/session-actions send", () => {
+  test("stores accepted user messages from the runtime send result", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    adapter.readSessionRuntimeSnapshot = async () => {
+      throw new Error("send must not probe runtime snapshots");
+    };
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      expect(input.systemPrompt).toContain("Implement the task");
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      expect(sendCalls).toBe(1);
+      expect(getSession(sessionsRef)?.status).toBe("running");
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        expect.objectContaining({
+          id: "accepted-user-message",
+          role: "user",
+          content: "hello",
+        }),
+      ]);
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("releases held starting sessions to running when sending starts", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    const committedStatuses: AgentSessionState["status"][] = [];
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      updateSession: (identity, updater) => {
+        const current = getAgentSession(sessionsRef.current, identity);
+        if (!current) {
+          return null;
+        }
+        const next = updater(current);
+        if (current.status === "starting") {
+          expect(next.status).not.toBe("idle");
+        }
+        committedStatuses.push(next.status);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, next);
+        return next;
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      expect(sendCalls).toBe(1);
+      expect(committedStatuses).not.toContain("idle");
+      expect(getSession(sessionsRef)?.status).toBe("running");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("releases held starting sessions to idle when pending input prevents sending", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "starting",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      }),
+    ]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => {
+        throw new Error("runtime unavailable");
+      },
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      expect(sendCalls).toBe(0);
+      expect(getSession(sessionsRef)?.status).toBe("idle");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("marks held starting sessions as failed when send preparation fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => {
+        throw new Error("runtime unavailable");
+      },
+    });
+
+    try {
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("runtime unavailable");
+
+      expect(sendCalls).toBe(0);
+      expect(getSession(sessionsRef)?.status).toBe("error");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("does not load requested history before sending to a runtime session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const callOrder: string[] = [];
+    adapter.sendUserMessage = async (input) => {
+      callOrder.push("send");
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "not_requested",
+        messages: [],
+      }),
+    ]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadSourceSession: async () => {
+        callOrder.push("load");
+        return null;
+      },
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      expect(callOrder).toEqual(["send"]);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "hello",
+        }),
+      ]);
+      expect(getSession(sessionsRef)?.historyLoadState).toBe("not_requested");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("does not send free-form messages while waiting for pending input", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      }),
+    ]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: " hello " }]);
+      expect(sendCalls).toBe(0);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("rejects send when role is unavailable for the current task", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", role: "build", taskId: "task-1" }),
+    ]);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "open",
+            agentWorkflows: {
+              spec: { required: true, canSkip: false, available: true, completed: false },
+              planner: { required: true, canSkip: false, available: false, completed: false },
+              builder: { required: true, canSkip: false, available: false, completed: false },
+              qa: { required: true, canSkip: false, available: false, completed: false },
+            },
+          }),
+        ],
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
+      expect(sendCalls).toBe(0);
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("marks session as error when send fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    adapter.sendUserMessage = async () => {
+      throw new Error("send failed");
+    };
+
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.assistantTurnTiming.recordTurnUserMessageTimestamp(sessionKey, 1);
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+      sessionTurnState: sessionTurnState.sessionTurnState,
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      expect(getSession(sessionsRef)?.status).toBe("error");
+      const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
+        message.content.includes("Failed to send message:"),
+      );
+      expect(failureMessage?.content).toContain("Failed to send message:");
+      expect(failureMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      });
+      expect(
+        sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
+      ).toBeUndefined();
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeUndefined();
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("preserves active turn transcript and timing for busy queued sends", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const sendCalls: Array<{
+      externalSessionId: string;
+      parts: { kind: string; text?: string }[];
+    }> = [];
+    adapter.sendUserMessage = async (input) => {
+      sendCalls.push({
+        externalSessionId: input.externalSessionId,
+        parts: input.parts.map((part) =>
+          part.kind === "text" ? { kind: part.kind, text: part.text } : { kind: part.kind },
+        ),
+      });
+      return acceptedUserMessage(input);
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+      }),
+    ]);
+    const messagesBeforeSend = getSession(sessionsRef).messages;
+    let recordUserAnchorCalls = 0;
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.turnMetadata.recordModel(sessionKey, {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [] },
+      sessionTurnState: {
+        ...sessionTurnState.sessionTurnState,
+        timing: {
+          ...sessionTurnState.sessionTurnState.timing,
+          recordTurnUserMessageTimestamp: () => {
+            recordUserAnchorCalls += 1;
+            return 1234;
+          },
+          readTurnUserMessageStartedAtMs: () => 1234,
+        },
+      },
+      ensureRuntime: async () => {
+        throw new Error("running sessions must send without preparation");
+      },
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "queued follow-up" },
+      ]);
+
+      expect(sendCalls).toEqual([
+        { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
+      ]);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        ...sessionMessagesToArray({ externalSessionId: "session-1", messages: messagesBeforeSend }),
+        expect.objectContaining({
+          role: "user",
+          content: "queued follow-up",
+        }),
+      ]);
+      expect(recordUserAnchorCalls).toBe(0);
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("keeps the active turn running when a busy queued send fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    adapter.sendUserMessage = async () => {
+      throw new Error("queued send failed");
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+      }),
+    ]);
+    const messagesBeforeSend = getSession(sessionsRef).messages;
+    let recordUserAnchorCalls = 0;
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const sessionTurnState = createSessionTurnStateFixture();
+    sessionTurnState.turnMetadata.recordModel(sessionKey, {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [] },
+      sessionTurnState: {
+        ...sessionTurnState.sessionTurnState,
+        timing: {
+          ...sessionTurnState.sessionTurnState.timing,
+          recordTurnUserMessageTimestamp: () => {
+            recordUserAnchorCalls += 1;
+            return 1234;
+          },
+          readTurnUserMessageStartedAtMs: () => 1234,
+        },
+      },
+      ensureRuntime: async () => {
+        throw new Error("running sessions must send without preparation");
+      },
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "queued follow-up" },
+      ]);
+
+      expect(getSession(sessionsRef)?.status).toBe("running");
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        ...sessionMessagesToArray({ externalSessionId: "session-1", messages: messagesBeforeSend }),
+        expect.objectContaining({
+          content: expect.stringContaining("Failed to send message:"),
+        }),
+      ]);
+      const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
+        message.content.includes("Failed to send message:"),
+      );
+      expect(failureMessage?.content).toContain("Failed to send message:");
+      expect(failureMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      });
+      expect(recordUserAnchorCalls).toBe(0);
+      expect(sessionTurnState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+});

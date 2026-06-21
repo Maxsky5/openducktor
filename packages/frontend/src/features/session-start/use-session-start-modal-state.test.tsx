@@ -1,10 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createChecksStateContextValue,
   createDeferred,
+  createRepoRuntimeHealthContextValue,
+  createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "../../pages/agents/agent-studio-test-utils";
@@ -13,6 +18,9 @@ import { useSessionStartModalState } from "./use-session-start-modal-state";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useSessionStartModalState>[0];
+type HookHarnessArgs = HookArgs & {
+  runtimeDefinitions: RuntimeDescriptor[];
+};
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -136,6 +144,17 @@ const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   supportedStartModes: ["fork"],
 });
 
+const SESSION_START_TEST_RUNTIME_DEFINITIONS: RuntimeDescriptor[] = [
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  ALTERNATE_RUNTIME_DESCRIPTOR,
+  REUSE_RUNTIME_DESCRIPTOR,
+  FORK_RUNTIME_DESCRIPTOR,
+  FRESH_RUNTIME_DESCRIPTOR,
+  REUSE_ONLY_RUNTIME_DESCRIPTOR,
+  FORK_ONLY_RUNTIME_DESCRIPTOR,
+];
+
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
@@ -168,15 +187,62 @@ const createRepoSettings = (
   },
 });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSessionStartModalState, initialProps);
+const createReadyRuntimeHealthMap = (
+  runtimeDefinitions: RuntimeDescriptor[],
+): RepoRuntimeHealthMap => {
+  const definitionsByKind = new Map<RuntimeKind, RuntimeDescriptor>();
+  for (const definition of [...SESSION_START_TEST_RUNTIME_DEFINITIONS, ...runtimeDefinitions]) {
+    definitionsByKind.set(definition.kind, definition);
+  }
 
-const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: {
-    workspaceId: "workspace-repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
-  },
+  return Object.fromEntries(
+    Array.from(definitionsByKind.values()).map((definition) => [
+      definition.kind,
+      createRepoRuntimeHealthFixture({ status: "ready" }),
+    ]),
+  ) as RepoRuntimeHealthMap;
+};
+
+const createHookHarness = (
+  initialProps: HookHarnessArgs,
+  options?: Parameters<typeof createSharedHookHarness>[2],
+) => {
+  const { runtimeDefinitions, ...hookProps } = initialProps;
+  const runtimeDefinitionsContextRef = options?.runtimeDefinitionsContextRef ?? {
+    current:
+      options?.runtimeDefinitionsContext ??
+      createRuntimeDefinitionsContextValue({
+        runtimeDefinitions,
+        availableRuntimeDefinitions: runtimeDefinitions,
+      }),
+  };
+  const checksStateContext = options?.checksStateContext ?? createChecksStateContextValue();
+  const repoRuntimeHealthContext =
+    options?.repoRuntimeHealthContext ??
+    createRepoRuntimeHealthContextValue({
+      runtimeHealthByRuntime: createReadyRuntimeHealthMap(runtimeDefinitions),
+    });
+  const harness = createSharedHookHarness(useSessionStartModalState, hookProps, {
+    ...options,
+    runtimeDefinitionsContextRef,
+    checksStateContext,
+    repoRuntimeHealthContext,
+  });
+  return {
+    ...harness,
+    update: async (nextProps: HookHarnessArgs): Promise<void> => {
+      runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: nextProps.runtimeDefinitions,
+        availableRuntimeDefinitions: nextProps.runtimeDefinitions,
+      });
+      const { runtimeDefinitions: _runtimeDefinitions, ...nextHookProps } = nextProps;
+      await harness.update(nextHookProps);
+    },
+  };
+};
+
+const createBaseProps = (overrides: Partial<HookHarnessArgs> = {}): HookHarnessArgs => ({
+  workspaceRepoPath: "/repo",
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },
@@ -205,14 +271,21 @@ const createExistingSessionWithModel = ({
   description = "Reusable builder session",
   label = "Builder session",
   runtimeKind,
+  sourceExternalSessionId,
   value,
 }: {
   description?: string;
   label?: string;
   runtimeKind: RuntimeKind;
+  sourceExternalSessionId?: string;
   value: string;
 }) => ({
   value,
+  sourceSession: {
+    externalSessionId: sourceExternalSessionId ?? value,
+    runtimeKind,
+    workingDirectory: "/repo/worktree",
+  },
   label,
   description,
   runtimeKind,
@@ -226,6 +299,57 @@ const createExistingSessionWithModel = ({
 });
 
 describe("useSessionStartModalState", () => {
+  test("waits for runtime readiness before loading the modal catalog", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const repoRuntimeHealthContextRef = {
+      current: createRepoRuntimeHealthContextValue({
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture({
+            status: "not_started",
+            runtime: {
+              status: "not_started",
+              stage: "idle",
+              detail: "Runtime has not been started yet.",
+            },
+          }),
+        },
+      }),
+    };
+    const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
+      loadCatalog,
+    });
+    const harness = createHookHarness(props, { repoRuntimeHealthContextRef });
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        initialStartMode: "fresh",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(loadCatalog).not.toHaveBeenCalled();
+    expect(harness.getLatest().isCatalogLoading).toBe(true);
+
+    repoRuntimeHealthContextRef.current = createRepoRuntimeHealthContextValue({
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
+    });
+    await harness.update(props);
+
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+  });
+
   test("initializes selection from repo role defaults", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -542,6 +666,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-1",
+            sourceSession: {
+              externalSessionId: "session-build-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Latest builder session",
             selectedModel: null,
@@ -563,6 +692,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-pr",
+            sourceSession: {
+              externalSessionId: "session-build-pr",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session PR",
             description: "Builder session for PR generation",
             selectedModel: null,
@@ -735,13 +869,16 @@ describe("useSessionStartModalState", () => {
       variant: "high",
       profileId: "spec-agent",
     });
-    expect(loadCatalog).toHaveBeenCalledWith("/repo", "opencode");
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
 
     await harness.unmount();
   });
 
   test("loads the selected runtime catalog instead of reusing the initial catalog", async () => {
-    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
       return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
     });
     const harness = createHookHarness(
@@ -774,7 +911,10 @@ describe("useSessionStartModalState", () => {
       state.modelOptions.some((option) => option.label === "GPT-5.4 Mini"),
     );
     expect(harness.getLatest().modelOptions.map((option) => option.label)).not.toContain("GPT-5");
-    expect(loadCatalog).toHaveBeenCalledWith("/repo", "codex");
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
 
     await harness.unmount();
   });
@@ -849,16 +989,30 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-2",
+            sourceSession: {
+              externalSessionId: "session-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "QA session 2",
             description: "Second session",
           },
           {
             value: "session-1",
+            sourceSession: {
+              externalSessionId: "session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "QA session 1",
             description: "First session",
           },
         ],
-        initialSourceExternalSessionId: "session-1",
+        initialSourceSession: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start QA Session",
       });
@@ -866,7 +1020,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-1");
 
     await harness.unmount();
   });
@@ -885,6 +1039,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-fallback",
+            sourceSession: {
+              externalSessionId: "session-fallback",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session fallback",
             description: "Fallback builder session",
             selectedModel: {
@@ -896,14 +1055,18 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "missing-session",
+        initialSourceSession: {
+          externalSessionId: "missing-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-fallback");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-fallback");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -934,7 +1097,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("");
 
     await harness.unmount();
   });
@@ -957,6 +1120,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-newer",
+            sourceSession: {
+              externalSessionId: "session-newer",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -969,6 +1137,11 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-older",
+            sourceSession: {
+              externalSessionId: "session-older",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -980,7 +1153,11 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "session-older",
+        initialSourceSession: {
+          externalSessionId: "session-older",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -997,7 +1174,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-newer");
+      harness.getLatest().handleSelectSourceSessionValue("session-newer");
     });
 
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
@@ -1030,6 +1207,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-pr-2",
+            sourceSession: {
+              externalSessionId: "session-pr-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -1042,6 +1224,11 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-pr-1",
+            sourceSession: {
+              externalSessionId: "session-pr-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -1053,7 +1240,11 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "session-pr-1",
+        initialSourceSession: {
+          externalSessionId: "session-pr-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -1061,7 +1252,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["reuse", "fork"]);
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-1");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -1075,7 +1266,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fork");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-1");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1086,10 +1277,10 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-pr-2");
+      harness.getLatest().handleSelectSourceSessionValue("session-pr-2");
     });
 
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-2");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-2");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1104,7 +1295,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-2");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-2");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1118,7 +1309,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
-    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => ({
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => ({
       ...CATALOG,
       runtime:
         runtimeKind === FORK_RUNTIME_KIND ? FORK_RUNTIME_DESCRIPTOR : REUSE_RUNTIME_DESCRIPTOR,
@@ -1279,6 +1470,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-with-model",
+            sourceSession: {
+              externalSessionId: "session-with-model",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session with model",
             description: "Session with persisted model",
             selectedModel: {
@@ -1291,12 +1487,21 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-without-model",
+            sourceSession: {
+              externalSessionId: "session-without-model",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session without model",
             description: "Session without persisted model",
             selectedModel: null,
           },
         ],
-        initialSourceExternalSessionId: "session-with-model",
+        initialSourceSession: {
+          externalSessionId: "session-with-model",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -1311,7 +1516,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-without-model");
+      harness.getLatest().handleSelectSourceSessionValue("session-without-model");
     });
 
     expect(harness.getLatest().selection).toBeNull();
@@ -1333,6 +1538,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-valid",
+            sourceSession: {
+              externalSessionId: "session-valid",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session valid",
             description: "Valid builder session",
             selectedModel: {
@@ -1350,10 +1560,10 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("missing-session");
+      harness.getLatest().handleSelectSourceSessionValue("missing-session");
     });
 
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-valid");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-valid");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "anthropic",

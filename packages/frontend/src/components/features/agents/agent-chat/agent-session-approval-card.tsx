@@ -64,14 +64,20 @@ export function AgentSessionApprovalCard({
   const canReply = supportedOutcomes.length > 0;
   const missingCapabilityMessage = runtimeSupportedReplyOutcomes
     ? "This runtime does not support any declared approval outcomes for this request."
-    : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or reattach the session, then try again.";
+    : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or open the session again, then try again.";
+  const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
 
   return (
     <section className="rounded-xl border border-warning-border bg-warning-surface shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-warning-border px-3 py-1.5">
-        <div className="flex items-center gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-warning-border px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
           <ShieldAlert className="size-4 text-warning-muted" />
           <p className="text-[13px] font-semibold text-foreground">Approval required</p>
+          {sourceLabel ? (
+            <span className="rounded-full border border-warning-border bg-background px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+              {sourceLabel}
+            </span>
+          ) : null}
         </div>
         <p className="text-[11px] font-medium text-muted-foreground">Action required</p>
       </header>

@@ -23,7 +23,7 @@ export type UseAgentStudioDiffDataInput = {
   defaultTargetBranch: GitTargetBranch;
   preconditionError?: string | null;
   branchIdentityKey?: string | null;
-  enablePolling: boolean;
+  enableScheduledRefresh: boolean;
 };
 
 export type DiffScopeState = {

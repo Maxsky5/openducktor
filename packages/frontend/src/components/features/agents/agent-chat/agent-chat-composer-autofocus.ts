@@ -1,11 +1,11 @@
 export type ComposerAutofocusState = {
-  lastDisplayedSessionId: string | null;
-  pendingAutofocusSessionId: string | null;
+  lastDisplayedSessionKey: string | null;
+  pendingAutofocusSessionKey: string | null;
   waitAnchor: Element | null;
 };
 
 export type ComposerAutofocusSnapshot = {
-  displayedSessionId: string | null;
+  displayedSessionKey: string | null;
   isComposerInteractive: boolean;
   activeElement: Element | null;
   focusInsideComposer: boolean;
@@ -17,8 +17,8 @@ export type ComposerAutofocusResult = {
 };
 
 export const createComposerAutofocusState = (): ComposerAutofocusState => ({
-  lastDisplayedSessionId: null,
-  pendingAutofocusSessionId: null,
+  lastDisplayedSessionKey: null,
+  pendingAutofocusSessionKey: null,
   waitAnchor: null,
 });
 
@@ -26,7 +26,7 @@ const clearComposerAutofocusState = (): ComposerAutofocusState => createComposer
 
 const completeComposerAutofocusState = (state: ComposerAutofocusState): ComposerAutofocusState => ({
   ...state,
-  pendingAutofocusSessionId: null,
+  pendingAutofocusSessionKey: null,
   waitAnchor: null,
 });
 
@@ -52,9 +52,9 @@ export const resolveComposerAutofocus = (
   state: ComposerAutofocusState,
   snapshot: ComposerAutofocusSnapshot,
 ): ComposerAutofocusResult => {
-  const { displayedSessionId, isComposerInteractive, activeElement, focusInsideComposer } =
+  const { displayedSessionKey, isComposerInteractive, activeElement, focusInsideComposer } =
     snapshot;
-  if (!displayedSessionId) {
+  if (!displayedSessionKey) {
     return {
       nextState: clearComposerAutofocusState(),
       shouldFocus: false,
@@ -62,12 +62,12 @@ export const resolveComposerAutofocus = (
   }
 
   let nextState = state;
-  if (state.lastDisplayedSessionId !== displayedSessionId) {
+  if (state.lastDisplayedSessionKey !== displayedSessionKey) {
     if (isComposerInteractive) {
       return {
         nextState: {
-          lastDisplayedSessionId: displayedSessionId,
-          pendingAutofocusSessionId: null,
+          lastDisplayedSessionKey: displayedSessionKey,
+          pendingAutofocusSessionKey: null,
           waitAnchor: null,
         },
         shouldFocus: true,
@@ -75,13 +75,13 @@ export const resolveComposerAutofocus = (
     }
 
     nextState = {
-      lastDisplayedSessionId: displayedSessionId,
-      pendingAutofocusSessionId: displayedSessionId,
+      lastDisplayedSessionKey: displayedSessionKey,
+      pendingAutofocusSessionKey: displayedSessionKey,
       waitAnchor: activeElement,
     };
   }
 
-  if (nextState.pendingAutofocusSessionId !== displayedSessionId || !isComposerInteractive) {
+  if (nextState.pendingAutofocusSessionKey !== displayedSessionKey || !isComposerInteractive) {
     return {
       nextState,
       shouldFocus: false,

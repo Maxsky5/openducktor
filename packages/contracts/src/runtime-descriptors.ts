@@ -47,7 +47,6 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportedStartModes: ["fresh", "reuse", "fork"],
     supportsSessionFork: true,
     forkTargets: ["session"],
-    supportsAttachLiveSessions: true,
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
@@ -59,8 +58,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     stableItemIds: false,
     stableItemOrder: true,
     exposesCompletionState: false,
-    hydratedEventTypes: ["message", "tool_call", "tool_result"],
-    limitations: ["OpenCode session history is hydrated at message-level fidelity."],
+    limitations: ["OpenCode session history is loaded at message-level fidelity."],
   },
   approvals: {
     supportedRequestTypes: ["permission_grant", "runtime_tool"],
@@ -117,7 +115,6 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportedStartModes: ["fresh", "reuse", "fork"],
     supportsSessionFork: true,
     forkTargets: ["session"],
-    supportsAttachLiveSessions: true,
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
@@ -129,7 +126,6 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     stableItemIds: true,
     stableItemOrder: true,
     exposesCompletionState: false,
-    hydratedEventTypes: ["message", "tool_call"],
     limitations: [],
   },
   approvals: {

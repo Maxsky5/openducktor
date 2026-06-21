@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 
@@ -117,67 +117,3 @@ export const invalidateRepoTaskQueries = (
   repoPath: string,
 ): Promise<unknown> =>
   invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" });
-
-export const upsertAgentSessionInRepoTaskData = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-  session: AgentSessionRecord,
-): void => {
-  const updateTasks = (current: TaskCard[] | undefined): TaskCard[] | undefined => {
-    if (!current) {
-      return current;
-    }
-
-    let didChange = false;
-    const nextTasks = current.map((task) => {
-      if (task.id !== taskId) {
-        return task;
-      }
-
-      const currentAgentSessions = task.agentSessions ?? [];
-      const existingIndex = currentAgentSessions.findIndex(
-        (entry) => entry.externalSessionId === session.externalSessionId,
-      );
-      const existingSession =
-        existingIndex === -1 ? null : (currentAgentSessions[existingIndex] ?? null);
-      if (existingSession === session) {
-        return task;
-      }
-
-      const nextAgentSessions =
-        existingIndex === -1
-          ? [...currentAgentSessions, session]
-          : currentAgentSessions.map((entry, index) => (index === existingIndex ? session : entry));
-
-      didChange = true;
-      return {
-        ...task,
-        agentSessions: nextAgentSessions,
-      };
-    });
-
-    return didChange ? nextTasks : current;
-  };
-
-  const updateRepoTaskData = (current: RepoTaskData | undefined): RepoTaskData | undefined => {
-    if (!current) {
-      return current;
-    }
-
-    const nextTasks = updateTasks(current.tasks);
-    if (!nextTasks || nextTasks === current.tasks) {
-      return current;
-    }
-
-    return { ...current, tasks: nextTasks };
-  };
-
-  queryClient.setQueriesData<RepoTaskData | undefined>(
-    {
-      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
-      exact: false,
-    },
-    updateRepoTaskData,
-  );
-};

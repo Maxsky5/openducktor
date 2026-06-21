@@ -3,17 +3,20 @@ import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { forEachSessionMessageFrom } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
+import {
+  findFirstChangedSessionMessageIndex,
+  forEachSessionMessageFrom,
+} from "@/state/operations/agent-orchestrator/support/messages";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {
-  activeWorkspace?: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
   taskId: string;
-  activeSession: AgentSessionState | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  loadedSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
 };
 
@@ -23,19 +26,19 @@ type WorkflowDocumentTarget = {
   inputKey: "markdown" | "reportMarkdown";
 };
 
-const shouldReplayWorkflowDocumentMessagesForAliasHydration = ({
-  activeSession,
+const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
+  loadedSession,
   workflowAliasMetadataReady,
   previousWorkflowAliasMetadataReady,
 }: {
-  activeSession: AgentSessionState | null;
+  loadedSession: AgentSessionState | null;
   workflowAliasMetadataReady: boolean;
   previousWorkflowAliasMetadataReady: boolean;
 }): boolean => {
   return Boolean(
-    activeSession &&
-      activeSession.role !== "build" &&
-      activeSession.runtimeKind &&
+    loadedSession &&
+      loadedSession.role !== "build" &&
+      loadedSession.runtimeKind &&
       workflowAliasMetadataReady &&
       !previousWorkflowAliasMetadataReady,
   );
@@ -77,28 +80,31 @@ const resolveWorkflowDocumentTarget = (
 };
 
 export function useAgentStudioDocuments({
-  activeWorkspace = null,
+  workspaceRepoPath,
   taskId,
-  activeSession,
+  selectedSessionIdentity,
+  loadedSession,
   selectedTask,
 }: UseAgentStudioDocumentsArgs): {
   specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
   planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
   qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
 } {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
     taskId || null,
     true,
     workspaceRepoPath ?? "",
   );
-  const workflowToolAliasesByCanonical = activeSession?.runtimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, activeSession.runtimeKind)
+  const workflowToolAliasesByCanonical = loadedSession?.runtimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, loadedSession.runtimeKind)
         ?.workflowToolAliasesByCanonical
     : undefined;
 
-  const documentContextKey = `${taskId}:${activeSession?.externalSessionId ?? ""}`;
+  const selectedSessionKey = selectedSessionIdentity
+    ? agentSessionIdentityKey(selectedSessionIdentity)
+    : null;
+  const documentContextKey = `${taskId}:${selectedSessionKey ?? ""}`;
   const processedDocumentToolEventsRef = useRef<Set<string> | null>(null);
   if (processedDocumentToolEventsRef.current === null) {
     processedDocumentToolEventsRef.current = new Set<string>();
@@ -109,7 +115,7 @@ export function useAgentStudioDocuments({
     refreshedTaskVersionsRef.current = new Set<string>();
   }
   const refreshedTaskVersions = refreshedTaskVersionsRef.current;
-  const previousSessionIdRef = useRef<string | null>(null);
+  const previousSessionKeyRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
@@ -141,7 +147,7 @@ export function useAgentStudioDocuments({
 
     documentToolEvents.clear();
     taskVersions.clear();
-    previousSessionIdRef.current = null;
+    previousSessionKeyRef.current = null;
     previousMessagesRef.current = null;
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
   }, [documentContextKey]);
@@ -151,15 +157,15 @@ export function useAgentStudioDocuments({
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
     if (
-      shouldReplayWorkflowDocumentMessagesForAliasHydration({
-        activeSession,
+      shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady({
+        loadedSession,
         workflowAliasMetadataReady,
         previousWorkflowAliasMetadataReady,
       })
     ) {
       previousMessagesRef.current = null;
     }
-  }, [activeSession, workflowAliasMetadataReady]);
+  }, [loadedSession, workflowAliasMetadataReady]);
 
   useEffect(() => {
     if (!taskId || taskDocumentVersionKey === null) {
@@ -177,29 +183,29 @@ export function useAgentStudioDocuments({
   }, [refreshedTaskVersions, reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
-    if (!activeSession || !taskId || !workspaceRepoPath) {
+    if (!loadedSession || !selectedSessionKey || !taskId || !workspaceRepoPath) {
       return;
     }
 
-    if (activeSession.role === "build") {
-      previousSessionIdRef.current = activeSession.externalSessionId;
-      previousMessagesRef.current = activeSession.messages;
+    if (loadedSession.role === "build") {
+      previousSessionKeyRef.current = selectedSessionKey;
+      previousMessagesRef.current = loadedSession.messages;
       return;
     }
 
     const firstChangedMessageIndex =
-      previousSessionIdRef.current !== activeSession.externalSessionId
+      previousSessionKeyRef.current !== selectedSessionKey
         ? 0
-        : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession);
+        : findFirstChangedSessionMessageIndex(previousMessagesRef.current, loadedSession);
 
     if (firstChangedMessageIndex < 0) {
-      previousSessionIdRef.current = activeSession.externalSessionId;
-      previousMessagesRef.current = activeSession.messages;
+      previousSessionKeyRef.current = selectedSessionKey;
+      previousMessagesRef.current = loadedSession.messages;
       return;
     }
 
-    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
-      const eventKey = `${activeSession.externalSessionId}:${message.id}`;
+    forEachSessionMessageFrom(loadedSession, firstChangedMessageIndex, (message) => {
+      const eventKey = `${selectedSessionKey}:${message.id}`;
       if (processedDocumentToolEvents.has(eventKey)) {
         return;
       }
@@ -253,16 +259,17 @@ export function useAgentStudioDocuments({
       }
     });
 
-    previousSessionIdRef.current = activeSession.externalSessionId;
-    previousMessagesRef.current = activeSession.messages;
+    previousSessionKeyRef.current = selectedSessionKey;
+    previousMessagesRef.current = loadedSession.messages;
   }, [
     workspaceRepoPath,
-    activeSession,
+    loadedSession,
     applyDocumentUpdate,
     processedDocumentToolEvents,
     planDoc,
     qaDoc,
     reloadDocument,
+    selectedSessionKey,
     specDoc,
     taskId,
     workflowToolAliasesByCanonical,

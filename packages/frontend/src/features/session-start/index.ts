@@ -1,4 +1,4 @@
-export { executeSessionStart } from "./session-start-execution";
+export { createSessionStartGate, type SessionStartGate } from "./session-start-gate";
 export {
   defaultSessionLaunchActionForRole,
   getSessionLaunchAction,
@@ -14,11 +14,14 @@ export {
 export { resolveLaunchStartMode } from "./session-start-mode";
 export {
   buildSessionStartModalRequest,
-  executeSessionStartFromDecision,
+  createSessionStartWorkflowRunner,
   type ResolvedSessionStartDecision,
+  type RunSessionStartWorkflow,
+  type RunSessionStartWorkflowInput,
   type SessionStartFlowRequest,
   type SessionStartLaunchRequest,
 } from "./session-start-orchestration";
+export { sessionStartPostActionErrorTitle } from "./session-start-post-action-errors";
 export {
   buildGitConflictResolutionPrompt,
   firstLaunchAction,
@@ -54,3 +57,4 @@ export {
 } from "./use-session-start-modal-coordinator";
 export type { SessionStartModalDecision } from "./use-session-start-modal-runner";
 export { useSessionStartModalRunner } from "./use-session-start-modal-runner";
+export { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";

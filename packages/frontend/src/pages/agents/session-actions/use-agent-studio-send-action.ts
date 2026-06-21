@@ -1,57 +1,57 @@
-import type { ReusablePrompt, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
-import { useCallback, useRef, useState } from "react";
-import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
+import type { ReusablePrompt } from "@openducktor/contracts";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import { useCallback } from "react";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import type { SessionStartWorkflowResult } from "@/features/session-start";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
-  type AgentChatComposerDraft,
-  draftHasMeaningfulContent,
-  draftHasSlashCommandSegment,
-  resolveDraftToUserMessageParts,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+  buildAgentStudioSessionActivityKey,
+  useAgentStudioAsyncActivityTracker,
+} from "../use-agent-studio-async-activity";
+import { resolveAgentStudioSendDraftParts } from "./agent-studio-send-draft";
 import {
-  buildAgentStudioAsyncActivityContextKey,
-  canStartSessionForRole,
-  decrementActivityCountRecord,
-  incrementActivityCountRecord,
-} from "../use-agent-studio-session-action-helpers";
+  canResolveAgentStudioSendTargetSession,
+  resolveAgentStudioSendTargetSession,
+} from "./agent-studio-send-target";
+import type { AgentStudioSessionActionState } from "./agent-studio-session-action-state";
+
+type AgentStudioSendActionState = Pick<
+  AgentStudioSessionActionState,
+  "isWaitingInput" | "canQueueBusyFollowups" | "busySendBlockedReason"
+>;
 
 type UseAgentStudioSendActionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceId: string | null;
   taskId: string;
   role: AgentRole;
-  activeExternalSessionId: string | null;
-  activeSessionIsLoadingModelCatalog: boolean;
-  activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionModel: AgentSessionState["selectedModel"];
+  sessionState: AgentStudioSendActionState;
+  isSessionModelCatalogLoading: boolean;
+  isSelectedSessionModelSendable: boolean;
   agentStudioReady: boolean;
-  canQueueBusyFollowups: boolean;
+  canStartNewSession: boolean;
   reusablePrompts: ReusablePrompt[];
   isStarting: boolean;
-  isWaitingInput: boolean;
-  busySendBlockedReason: string | null;
-  selectedTask: TaskCard | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  startSession: () => Promise<string | undefined>;
+  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
 };
 
 export function useAgentStudioSendAction({
-  activeWorkspace,
+  workspaceId,
   taskId,
   role,
-  activeExternalSessionId,
-  activeSessionIsLoadingModelCatalog,
-  activeSessionSelectedModel,
+  selectedSessionIdentity,
+  selectedSessionModel,
+  sessionState,
+  isSessionModelCatalogLoading,
+  isSelectedSessionModelSendable,
   agentStudioReady,
-  canQueueBusyFollowups,
+  canStartNewSession,
   reusablePrompts,
   isStarting,
-  isWaitingInput,
-  busySendBlockedReason,
-  selectedTask,
   selectedModelDescriptor,
   sendAgentMessage,
   startSession,
@@ -59,143 +59,102 @@ export function useAgentStudioSendAction({
   isSending: boolean;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
 } {
-  const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
-    Record<string, number>
-  >({});
-  const inFlightContextsRef = useRef<Set<string> | null>(null);
-  if (inFlightContextsRef.current === null) {
-    inFlightContextsRef.current = new Set<string>();
-  }
-  const inFlightContexts = inFlightContextsRef.current;
-  const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-    activeWorkspace,
+  const {
+    begin: beginSendingActivity,
+    hasInFlight: hasSendingActivityInFlight,
+    isActive: isSendingActivityActive,
+  } = useAgentStudioAsyncActivityTracker();
+  const activeComposerContextKey = buildAgentStudioSessionActivityKey({
+    workspaceId,
     taskId,
     role,
-    externalSessionId: activeExternalSessionId,
+    session: selectedSessionIdentity,
   });
-  const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
+  const isSending = isSendingActivityActive(activeComposerContextKey);
 
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups && (isSending || inFlightContexts.has(activeComposerContextKey))) ||
+        (!sessionState.canQueueBusyFollowups &&
+          (isSending || hasSendingActivityInFlight(activeComposerContextKey))) ||
         isStarting ||
         !agentStudioReady ||
-        isWaitingInput ||
-        busySendBlockedReason
+        sessionState.isWaitingInput ||
+        sessionState.busySendBlockedReason
       ) {
         return false;
       }
-      if (!activeExternalSessionId && !canStartSessionForRole(selectedTask, role)) {
+      if (
+        !canResolveAgentStudioSendTargetSession({
+          selectedSessionIdentity,
+          canStartNewSession,
+        })
+      ) {
         return false;
       }
-      if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {
+      if (isSessionModelCatalogLoading && selectedSessionModel === null) {
+        return false;
+      }
+      if (!isSelectedSessionModelSendable) {
         return false;
       }
 
-      let reusablePromptMessageParts: AgentUserMessagePart[] | null;
-      try {
-        reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
-          draft,
-          reusablePrompts,
-        );
-      } catch {
+      const messagePartsResult = resolveAgentStudioSendDraftParts({
+        draft,
+        reusablePrompts,
+        selectedModelDescriptor,
+      });
+      if (!messagePartsResult || !taskId) {
         return false;
       }
-
-      if ((draft.attachments ?? []).length > 0) {
-        if (draftHasSlashCommandSegment(draft)) {
-          return false;
-        }
-
-        const attachmentErrors = validateComposerAttachments(
-          draft.attachments ?? [],
-          selectedModelDescriptor?.attachmentSupport,
-        );
-        if (Object.keys(attachmentErrors).length > 0) {
-          return false;
-        }
-      }
-
-      if (!draftHasMeaningfulContent(draft) || !taskId) {
-        return false;
-      }
-      const sendContextKeys = new Set<string>([activeComposerContextKey]);
-      inFlightContexts.add(activeComposerContextKey);
-      setSendingActivityCountByContext((current) =>
-        incrementActivityCountRecord(current, activeComposerContextKey),
-      );
+      const activity = beginSendingActivity(activeComposerContextKey);
 
       try {
-        let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
-        if (!targetExternalSessionId) {
-          targetExternalSessionId = await startSession();
-        }
-
-        if (!targetExternalSessionId) {
+        const targetSession = await resolveAgentStudioSendTargetSession({
+          selectedSessionIdentity,
+          canStartNewSession,
+          startSession,
+        });
+        if (!targetSession) {
           return false;
         }
 
-        const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-          activeWorkspace,
+        const targetComposerContextKey = buildAgentStudioSessionActivityKey({
+          workspaceId,
           taskId,
           role,
-          externalSessionId: targetExternalSessionId,
+          session: targetSession,
         });
-        if (!sendContextKeys.has(targetComposerContextKey)) {
-          sendContextKeys.add(targetComposerContextKey);
-          inFlightContexts.add(targetComposerContextKey);
-          setSendingActivityCountByContext((current) =>
-            incrementActivityCountRecord(current, targetComposerContextKey),
-          );
-        }
-        await sendAgentMessage(
-          targetExternalSessionId,
-          reusablePromptMessageParts ??
-            (await resolveDraftToUserMessageParts(draft, async (attachment) => {
-              if (attachment.file) {
-                return stageLocalAttachmentFile(attachment.file);
-              }
-              if (attachment.path) {
-                return attachment.path;
-              }
-              throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
-            })),
-        );
+        activity.add(targetComposerContextKey);
+        const messageParts = await messagePartsResult;
+        await sendAgentMessage(targetSession, messageParts);
         return true;
       } finally {
-        for (const contextKey of sendContextKeys) {
-          inFlightContexts.delete(contextKey);
-        }
-        setSendingActivityCountByContext((current) => {
-          let next = current;
-          for (const contextKey of sendContextKeys) {
-            next = decrementActivityCountRecord(next, contextKey);
-          }
-          return next;
-        });
+        activity.finish();
       }
     },
     [
-      activeWorkspace,
       activeComposerContextKey,
-      activeExternalSessionId,
-      activeSessionIsLoadingModelCatalog,
-      activeSessionSelectedModel,
       agentStudioReady,
-      canQueueBusyFollowups,
-      inFlightContexts,
+      beginSendingActivity,
+      canStartNewSession,
+      hasSendingActivityInFlight,
       reusablePrompts,
       isSending,
       isStarting,
-      isWaitingInput,
-      busySendBlockedReason,
+      isSessionModelCatalogLoading,
+      isSelectedSessionModelSendable,
       role,
-      selectedTask,
-      selectedModelDescriptor?.attachmentSupport,
+      selectedModelDescriptor,
+      selectedSessionModel,
       sendAgentMessage,
       startSession,
+      sessionState.busySendBlockedReason,
+      sessionState.canQueueBusyFollowups,
+      sessionState.isWaitingInput,
+      selectedSessionIdentity,
       taskId,
+      workspaceId,
     ],
   );
 

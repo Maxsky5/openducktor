@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { createSessionCacheEffects } from "./session-cache-effects";
 
@@ -42,6 +41,24 @@ describe("createSessionCacheEffects", () => {
     ).toEqual([sessionRecord]);
   });
 
+  test("fails instead of silently dropping a session record without an active workspace", async () => {
+    const queryClient = createQueryClient();
+    const upsert = mock(async () => undefined);
+    const effects = createSessionCacheEffects({
+      workspaceRepoPath: null,
+      queryClient,
+      hostPort: { agentSessionUpsert: upsert },
+    });
+
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toThrow(
+      "Active workspace repo path is unavailable.",
+    );
+    expect(upsert).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toBeUndefined();
+  });
+
   test("invalidates stop-related queries on the injected query client", async () => {
     const queryClient = createQueryClient();
     const invalidatedKeys: unknown[] = [];
@@ -59,11 +76,9 @@ describe("createSessionCacheEffects", () => {
     await effects.invalidateSessionStopQueries({
       repoPath: "/repo",
       taskId: "task-1",
-      runtimeKind: "opencode",
     });
 
     expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoDataPrefix("/repo"));
     expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
-    expect(invalidatedKeys).toContainEqual(runtimeQueryKeys.list("opencode", "/repo"));
   });
 });

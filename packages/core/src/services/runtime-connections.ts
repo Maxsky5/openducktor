@@ -1,4 +1,10 @@
+import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { RepoRuntimeRef } from "../types/agent-orchestrator";
+
+export type RepoRuntimeRouteResolution = Pick<
+  RuntimeInstanceSummary,
+  "kind" | "runtimeId" | "repoPath" | "runtimeRoute"
+>;
 
 export const requireRepoRuntimeRef = (
   ref: Partial<RepoRuntimeRef> | null | undefined,

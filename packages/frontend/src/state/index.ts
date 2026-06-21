@@ -1,11 +1,9 @@
 export {
   AppStateProvider,
-  useAgentActivitySessions,
   useAgentOperations,
   useAgentSession,
+  useAgentSessionReadModelState,
   useAgentSessionSummaries,
-  useAgentSessions,
-  useAgentState,
   useChecksState,
   useSpecState,
   useTasksState,

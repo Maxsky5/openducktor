@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSkillReference,
   AgentSlashCommand,
@@ -12,15 +13,22 @@ import type {
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+
 export type AgentRoleOption = {
   role: AgentRole;
   label: string;
   icon: LucideIcon;
   disabled?: boolean;
 };
-
-export type AgentChatMode = "interactive" | "non_interactive";
 
 export type AgentChatEmptyStateModel = {
   title: string;
@@ -30,25 +38,44 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
+export type AgentChatThreadSession = AgentSessionIdentity & {
+  title?: string;
+  activityState: AgentSessionActivityState | null;
+  messages: SessionMessagesState;
+};
+
+export type AgentChatTranscriptNoticeAction = {
+  label: string;
+  onAction: () => void;
+  disabled?: boolean;
+  isPending?: boolean;
+};
+
+export type AgentChatTranscriptNotice = {
+  kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
+  severity: "loading" | "error";
+  title: string;
+  description: string;
+  action?: AgentChatTranscriptNoticeAction;
+};
+
 export type AgentChatThreadModel = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
+  displayedSessionKey: string | null;
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
-  isSessionViewLoading: boolean;
-  isSessionHistoryLoading: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  readinessState: "ready" | "checking" | "blocked";
   isInteractionEnabled: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  onRefreshChecks: () => void;
-  emptyState?: AgentChatEmptyStateModel | null;
+  emptyState: AgentChatEmptyStateModel | null;
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
-  subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
-  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
-  subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
-  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
+  subagentPendingApprovalCountBySessionKey?: Record<string, number>;
+  subagentPendingQuestionCountBySessionKey?: Record<string, number>;
+  todos: readonly AgentSessionTodoItem[];
+  sessionAccentColor?: string | undefined;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
@@ -57,7 +84,9 @@ export type AgentChatThreadModel = {
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
-  sessionRuntimeDataError: string | null;
+  sessionAuxiliaryError: string | null;
+  shouldResetTranscriptWindow: boolean;
+  transcriptNotice: AgentChatTranscriptNotice | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -67,7 +96,7 @@ export type AgentChatThreadModel = {
 
 export type AgentChatComposerModel = {
   taskId: string;
-  displayedSessionId: string | null;
+  displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
@@ -120,13 +149,11 @@ export type AgentChatComposerModel = {
 };
 
 export type AgentChatSurfaceModel = {
-  mode: AgentChatMode;
   chatSettings: ChatSettings;
   thread: AgentChatThreadModel;
   composer?: AgentChatComposerModel;
 };
 
 export type AgentChatModel = AgentChatSurfaceModel & {
-  mode: "interactive";
   composer: AgentChatComposerModel;
 };

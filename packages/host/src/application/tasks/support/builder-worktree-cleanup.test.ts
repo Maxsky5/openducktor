@@ -26,7 +26,10 @@ import {
 } from "./builder-worktree-cleanup";
 import { requireBuildStartDependencies } from "./required-task-dependencies";
 
-const taskStoreWithTasks = (tasks: ReturnType<typeof task>[]): RealTaskStorePort =>
+const taskStoreWithTasks = (
+  tasks: ReturnType<typeof task>[],
+  sessionsByTaskId: Record<string, ReturnType<typeof createAgentSessionRecord>[]> = {},
+): RealTaskStorePort =>
   ({
     clearAgentSessionsByRoles: () => Effect.dieMessage("unexpected clearAgentSessionsByRoles"),
     clearQaReports: () => Effect.dieMessage("unexpected clearQaReports"),
@@ -35,7 +38,12 @@ const taskStoreWithTasks = (tasks: ReturnType<typeof task>[]): RealTaskStorePort
     deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
     diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
     getTask: () => Effect.dieMessage("unexpected getTask"),
-    getTaskMetadata: () => Effect.dieMessage("unexpected getTaskMetadata"),
+    getTaskMetadata: ({ taskId }) =>
+      Effect.succeed({
+        spec: { markdown: "" },
+        plan: { markdown: "" },
+        agentSessions: sessionsByTaskId[taskId] ?? [],
+      }),
     listPullRequestSyncCandidates: () =>
       Effect.dieMessage("unexpected listPullRequestSyncCandidates"),
     listTasks: () => Effect.succeed(tasks),
@@ -72,17 +80,15 @@ describe("builder worktree cleanup", () => {
           ),
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
         },
-        taskStoreWithTasks([
-          task({
-            agentSessions: [
-              createAgentSessionRecord({
-                externalSessionId: "session-newer",
-                startedAt: "2026-05-10T11:00:00.000Z",
-                workingDirectory: "/worktrees/repo/session-newer",
-              }),
-            ],
-          }),
-        ]),
+        taskStoreWithTasks([task()], {
+          "task-1": [
+            createAgentSessionRecord({
+              externalSessionId: "session-newer",
+              startedAt: "2026-05-10T11:00:00.000Z",
+              workingDirectory: "/worktrees/repo/session-newer",
+            }),
+          ],
+        }),
         "/repo",
         "task-1",
         "odt/task-1",
@@ -102,22 +108,20 @@ describe("builder worktree cleanup", () => {
           settingsConfig: createBuildSettingsConfig(new Set()),
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
         },
-        taskStoreWithTasks([
-          task({
-            agentSessions: [
-              createAgentSessionRecord({
-                externalSessionId: "session-old",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                workingDirectory: "/worktrees/repo/session-old",
-              }),
-              createAgentSessionRecord({
-                externalSessionId: "session-new",
-                startedAt: "2026-05-10T11:00:00.000Z",
-                workingDirectory: "/worktrees/repo/session-new",
-              }),
-            ],
-          }),
-        ]),
+        taskStoreWithTasks([task()], {
+          "task-1": [
+            createAgentSessionRecord({
+              externalSessionId: "session-old",
+              startedAt: "2026-05-10T10:00:00.000Z",
+              workingDirectory: "/worktrees/repo/session-old",
+            }),
+            createAgentSessionRecord({
+              externalSessionId: "session-new",
+              startedAt: "2026-05-10T11:00:00.000Z",
+              workingDirectory: "/worktrees/repo/session-new",
+            }),
+          ],
+        }),
         "/repo",
         "task-1",
         "odt/task-1",
@@ -145,27 +149,25 @@ describe("builder worktree cleanup", () => {
           ),
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
         },
-        taskStoreWithTasks([
-          task({
-            agentSessions: [
-              createAgentSessionRecord({
-                externalSessionId: "session-empty",
-                startedAt: "2026-05-10T12:00:00.000Z",
-                workingDirectory: " ",
-              }),
-              createAgentSessionRecord({
-                externalSessionId: "session-detached",
-                startedAt: "2026-05-10T11:00:00.000Z",
-                workingDirectory: "/worktrees/repo/detached",
-              }),
-              createAgentSessionRecord({
-                externalSessionId: "session-wrong-branch",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                workingDirectory: "/worktrees/repo/wrong-branch",
-              }),
-            ],
-          }),
-        ]),
+        taskStoreWithTasks([task()], {
+          "task-1": [
+            createAgentSessionRecord({
+              externalSessionId: "session-empty",
+              startedAt: "2026-05-10T12:00:00.000Z",
+              workingDirectory: " ",
+            }),
+            createAgentSessionRecord({
+              externalSessionId: "session-detached",
+              startedAt: "2026-05-10T11:00:00.000Z",
+              workingDirectory: "/worktrees/repo/detached",
+            }),
+            createAgentSessionRecord({
+              externalSessionId: "session-wrong-branch",
+              startedAt: "2026-05-10T10:00:00.000Z",
+              workingDirectory: "/worktrees/repo/wrong-branch",
+            }),
+          ],
+        }),
         "/repo",
         "task-1",
         "odt/task-1",

@@ -1,25 +1,30 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
-  DEFAULT_RUNTIME_KIND,
   filterRuntimeDefinitionsForStartMode,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
-import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
+import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeCatalogQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
 
 type UseSessionStartModalRuntimeStateArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
-  loadCatalog: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
+  loadCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedStartMode: AgentSessionStartMode;
+  workspaceRepoPath: string | null;
 };
 
 type UseSessionStartModalRuntimeStateResult = {
@@ -32,15 +37,22 @@ type UseSessionStartModalRuntimeStateResult = {
   setRequestedRuntimeKind: (runtimeKind: RuntimeKind | null) => void;
 };
 
+const skippedSessionStartCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+  skippedQueryOptions<AgentModelCatalog>({
+    queryKey: runtimeRef
+      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+      : runtimeCatalogQueryKeys.all,
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
 export function useSessionStartModalRuntimeState({
-  activeWorkspace,
   initialCatalog,
   isOpen,
   loadCatalog,
   runtimeDefinitions,
   selectedStartMode,
+  workspaceRepoPath,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
 
   const eligibleRuntimeDefinitions = useMemo(
@@ -69,6 +81,10 @@ export function useSessionStartModalRuntimeState({
         : null,
     [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
+  const selectedRuntimeReadiness = useRepoRuntimeReadiness({
+    hasWorkspace: workspaceRepoPath !== null,
+    runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedRuntimeKind),
+  });
 
   const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
     setRequestedRuntimeKindState(runtimeKind);
@@ -77,30 +93,28 @@ export function useSessionStartModalRuntimeState({
   const usesInitialCatalog =
     initialCatalog !== undefined &&
     (initialCatalog === null || initialCatalog.runtime?.kind === selectedRuntimeKind);
+  const selectedRepoRuntimeRef = useMemo<RepoRuntimeRef | null>(() => {
+    if (!workspaceRepoPath || !selectedRuntimeKind) {
+      return null;
+    }
+    return {
+      repoPath: workspaceRepoPath,
+      runtimeKind: selectedRuntimeKind,
+    };
+  }, [selectedRuntimeKind, workspaceRepoPath]);
 
-  const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(
-      workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-      loadCatalog,
-    ),
-    enabled:
-      !usesInitialCatalog && Boolean(workspaceRepoPath) && isOpen && selectedRuntimeKind !== null,
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!workspaceRepoPath) {
-        throw new Error("No repository selected.");
-      }
-      if (!selectedRuntimeKind) {
-        throw new Error("Select a runtime before loading model catalogs.");
-      }
-      return loadCatalog(workspaceRepoPath, selectedRuntimeKind);
-    },
-  });
+  const canLoadCatalog = selectedRuntimeReadiness.state === "ready";
+  const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
+  const catalogQuery = useQuery(
+    !usesInitialCatalog && selectedRepoRuntimeRef && isOpen && canLoadCatalog
+      ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalog)
+      : skippedSessionStartCatalogQueryOptions(selectedRepoRuntimeRef),
+  );
 
   const catalog = usesInitialCatalog ? initialCatalog : (catalogQuery.data ?? null);
   const isCatalogLoading =
     !usesInitialCatalog && isOpen && workspaceRepoPath !== null && selectedRuntimeKind !== null
-      ? catalogQuery.isLoading
+      ? isWaitingForRuntime || catalogQuery.isLoading
       : false;
 
   return {

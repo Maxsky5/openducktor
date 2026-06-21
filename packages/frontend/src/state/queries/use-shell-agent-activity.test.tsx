@@ -1,56 +1,82 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
-import { hostClient as host } from "@/lib/host-client";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import {
-  type AgentActivitySessionSummary,
-  type AgentSessionSummary,
-  type AgentSessionsById,
-  type AgentSessionsStore,
-  toAgentActivitySessionSummary,
+import { EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT } from "@/state/agent-session-visible-pending-input";
+import type {
+  AgentActivitySessionsSnapshot,
+  AgentSessionSummary,
+  AgentSessionsStore,
 } from "@/state/agent-sessions-store";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { AgentSessionsContext, TasksStateContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { TasksStateContextValue } from "@/types/state-slices";
+import { useShellAgentActivity } from "./use-shell-agent-activity";
 
 enableReactActEnvironment();
 
-const actualAppStateProviderModule = await import("../app-state-provider");
-const actualShellAgentActivityModule = await import("./use-shell-agent-activity");
-
 type HookArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceRepoPath: string | null;
 };
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: `workspace:${repoPath}`,
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
-const createActivitySession = (
-  overrides: Partial<AgentSessionState> = {},
-): AgentActivitySessionSummary =>
-  toAgentActivitySessionSummary(
-    createAgentSessionFixture({
-      status: "running",
-      ...overrides,
-    }),
-  );
+const createActivitySession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
+  const session = createAgentSessionFixture({
+    status: "running",
+    ...overrides,
+  });
+  if (session.role === null) {
+    throw new Error("Activity session fixtures must be workflow sessions.");
+  }
+  return {
+    externalSessionId: session.externalSessionId,
+    ...(session.title ? { title: session.title } : {}),
+    taskId: session.taskId,
+    role: session.role,
+    activityState: getAgentSessionActivityStateFromSession(session),
+    startedAt: session.startedAt,
+    workingDirectory: session.workingDirectory,
+    selectedModel: session.selectedModel,
+    runtimeKind: session.runtimeKind,
+    pendingApprovalCount: session.pendingApprovals.length,
+    pendingQuestionCount: session.pendingQuestions.length,
+  };
+};
 
 const createActivityStore = (
-  initialSessions: AgentActivitySessionSummary[],
+  workspaceRepoPath: string | null,
+  initialSessions: AgentSessionSummary[],
 ): AgentSessionsStore & {
-  setActivitySessions: (nextSessions: AgentActivitySessionSummary[]) => void;
+  setActivitySnapshot: (
+    nextWorkspaceRepoPath: string | null,
+    nextSessions: AgentSessionSummary[],
+  ) => void;
 } => {
   let activitySessions = initialSessions;
+  let activityWorkspaceRepoPath: string | null = workspaceRepoPath;
+  let activitySnapshot: AgentActivitySessionsSnapshot = {
+    workspaceRepoPath: activityWorkspaceRepoPath,
+    sessions: activitySessions,
+  };
   const listeners = new Set<() => void>();
+
+  const updateSnapshot = (): void => {
+    activitySnapshot = {
+      workspaceRepoPath: activityWorkspaceRepoPath,
+      sessions: activitySessions,
+    };
+  };
+
+  const notify = (): void => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
 
   return {
     subscribe: (listener) => {
@@ -59,39 +85,82 @@ const createActivityStore = (
         listeners.delete(listener);
       };
     },
-    getSessionsSnapshot: (): AgentSessionState[] => [],
-    getSessionSummariesSnapshot: (): AgentSessionSummary[] => [],
-    getActivitySessionsSnapshot: (): AgentActivitySessionSummary[] => activitySessions,
-    getSessionsByIdSnapshot: (): AgentSessionsById => ({}),
+    getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
-    setSessionsById: (): void => {
-      throw new Error("setSessionsById is not used in this test");
+    getVisiblePendingInputSnapshot: () => EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT,
+    commitSessionCollection: () => {
+      throw new Error("commitSessionCollection is not used in this test");
     },
-    setActivitySessions: (nextSessions) => {
+    setSessionCollection: (): void => {
+      throw new Error("setSessionCollection is not used in this test");
+    },
+    replaceSession: (): void => {
+      throw new Error("replaceSession is not used in this test");
+    },
+    removeSession: (): void => {
+      throw new Error("removeSession is not used in this test");
+    },
+    updateSession: (): AgentSessionState | null => {
+      throw new Error("updateSession is not used in this test");
+    },
+    resetWorkspace: (workspaceRepoPath): void => {
+      activityWorkspaceRepoPath = workspaceRepoPath;
+      activitySessions = [];
+      updateSnapshot();
+      notify();
+    },
+    setActivitySnapshot: (nextWorkspaceRepoPath, nextSessions) => {
+      activityWorkspaceRepoPath = nextWorkspaceRepoPath;
       activitySessions = nextSessions;
-      for (const listener of listeners) {
-        listener();
-      }
+      updateSnapshot();
+      notify();
     },
   };
 };
 
 let currentVisibleTasks: Array<{ id: string; title: string }> = [];
-let currentActivitySessions: AgentActivitySessionSummary[] = [];
-let useShellAgentActivity: typeof import("./use-shell-agent-activity").useShellAgentActivity;
-const originalTasksList = host.tasksList;
 
-const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySessionSummary[]) => {
+const createTasksStateValue = (): TasksStateContextValue => ({
+  isForegroundLoadingTasks: false,
+  isRefreshingTasksInBackground: false,
+  tasks: currentVisibleTasks as TasksStateContextValue["tasks"],
+  isLoadingTasks: false,
+  createTask: async () => undefined,
+  updateTask: async () => undefined,
+  setTaskTargetBranch: async () => undefined,
+  refreshTasks: async () => undefined,
+  syncPullRequests: async () => undefined,
+  linkMergedPullRequest: async () => undefined,
+  cancelLinkMergedPullRequest: () => undefined,
+  unlinkPullRequest: async () => undefined,
+  detectingPullRequestTaskId: null,
+  linkingMergedPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  pendingMergedPullRequest: null,
+  deleteTask: async () => undefined,
+  resetTaskImplementation: async () => undefined,
+  resetTask: async () => undefined,
+  transitionTask: async () => undefined,
+  humanApproveTask: async () => undefined,
+  humanRequestChangesTask: async () => undefined,
+});
+
+const createHarness = (initialProps: HookArgs, initialSessions: AgentSessionSummary[]) => {
   const queryClient = createQueryClient();
-  const sessionStore = createActivityStore(initialSessions);
-  currentActivitySessions = initialSessions;
+  const sessionStore = createActivityStore(initialProps.activeWorkspaceRepoPath, initialSessions);
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <TasksStateContext.Provider value={createTasksStateValue()}>
+        <AgentSessionsContext.Provider value={sessionStore}>
+          {children}
+        </AgentSessionsContext.Provider>
+      </TasksStateContext.Provider>
+    </QueryClientProvider>
   );
 
   const sharedHarness = createSharedHookHarness(
-    (props: HookArgs) => useShellAgentActivity(props.activeWorkspace),
+    (props: HookArgs) => useShellAgentActivity(props.activeWorkspaceRepoPath),
     initialProps,
     { wrapper },
   );
@@ -102,48 +171,23 @@ const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySes
   };
 };
 
-beforeEach(async () => {
+beforeEach(() => {
   currentVisibleTasks = [];
-  currentActivitySessions = [];
-  host.tasksList = async () => currentVisibleTasks as never;
-  mock.module("../app-state-provider", () => ({
-    ...actualAppStateProviderModule,
-    useAgentActivitySessions: () => currentActivitySessions,
-    useTasksState: () => ({ tasks: currentVisibleTasks }),
-  }));
-  ({ useShellAgentActivity } = await import("./use-shell-agent-activity"));
-});
-
-afterEach(async () => {
-  host.tasksList = originalTasksList;
-  currentActivitySessions = [];
-  await restoreMockedModules([
-    ["../app-state-provider", async () => actualAppStateProviderModule],
-    ["./use-shell-agent-activity", async () => actualShellAgentActivityModule],
-  ]);
 });
 
 describe("useShellAgentActivity", () => {
-  test("shows only active sessions for the current repo", async () => {
-    const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo") }, [
+  test("shows active sessions from the current workspace session store", async () => {
+    const harness = createHarness({ activeWorkspaceRepoPath: "/repo" }, [
       createActivitySession({
         externalSessionId: "session-1",
         taskId: "task-1",
-        repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
       createActivitySession({
         externalSessionId: "session-2",
         taskId: "task-2",
-        repoPath: "/repo",
         status: "stopped",
         startedAt: "2026-03-17T09:00:00.000Z",
-      }),
-      createActivitySession({
-        externalSessionId: "session-3",
-        taskId: "task-3",
-        repoPath: "/other-repo",
-        startedAt: "2026-03-17T08:00:00.000Z",
       }),
     ]);
 
@@ -168,11 +212,10 @@ describe("useShellAgentActivity", () => {
   });
 
   test("updates when the workspace clears and when active sessions change", async () => {
-    const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo") }, [
+    const harness = createHarness({ activeWorkspaceRepoPath: "/repo" }, [
       createActivitySession({
         externalSessionId: "session-1",
         taskId: "task-1",
-        repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -182,7 +225,7 @@ describe("useShellAgentActivity", () => {
     try {
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("task-1");
 
-      await harness.update({ activeWorkspace: null });
+      await harness.update({ activeWorkspaceRepoPath: null });
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 0,
         waitingForInputCount: 0,
@@ -190,14 +233,13 @@ describe("useShellAgentActivity", () => {
         waitingForInputSessions: [],
       });
 
-      await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
+      await harness.update({ activeWorkspaceRepoPath: "/repo" });
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("task-1");
 
       await harness.run(() => {
-        harness.sessionStore.setActivitySessions([]);
-        currentActivitySessions = [];
+        harness.sessionStore.setActivitySnapshot("/repo", []);
       });
-      await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
+      await harness.update({ activeWorkspaceRepoPath: "/repo" });
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 0,
         waitingForInputCount: 0,
@@ -210,11 +252,10 @@ describe("useShellAgentActivity", () => {
   });
 
   test("does not expose previous repo activity during a direct repo-to-repo switch", async () => {
-    const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo-a") }, [
+    const harness = createHarness({ activeWorkspaceRepoPath: "/repo-a" }, [
       createActivitySession({
         externalSessionId: "session-a",
         taskId: "task-a",
-        repoPath: "/repo-a",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -224,7 +265,10 @@ describe("useShellAgentActivity", () => {
     try {
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("task-a");
 
-      await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
+      await harness.update({ activeWorkspaceRepoPath: "/repo-b" });
+      await harness.run(() => {
+        harness.sessionStore.setActivitySnapshot("/repo-b", []);
+      });
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 0,
         waitingForInputCount: 0,
@@ -237,14 +281,12 @@ describe("useShellAgentActivity", () => {
           createActivitySession({
             externalSessionId: "session-b",
             taskId: "task-b",
-            repoPath: "/repo-b",
             startedAt: "2026-03-17T11:00:00.000Z",
           }),
         ];
-        harness.sessionStore.setActivitySessions(nextSessions);
-        currentActivitySessions = nextSessions;
+        harness.sessionStore.setActivitySnapshot("/repo-b", nextSessions);
       });
-      await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
+      await harness.update({ activeWorkspaceRepoPath: "/repo-b" });
 
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 1,

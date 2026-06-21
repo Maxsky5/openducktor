@@ -1,7 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { buildAgentSystemPrompt } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX, buildAgentSystemPrompt } from "@openducktor/core";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
 type SessionPromptTask = Pick<
   TaskCard,
@@ -15,16 +15,8 @@ type SessionPromptInput = {
 };
 
 type SessionPromptContext = {
-  promptOverrides: RepoPromptOverrides;
   systemPrompt: string;
 };
-
-type LoadSessionPromptInputsInput = {
-  workspaceId: string;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-};
-
-type CreateSessionPromptContextInput = SessionPromptInput;
 
 type SessionHeaderInput = {
   externalSessionId: string;
@@ -33,11 +25,20 @@ type SessionHeaderInput = {
   includeSystemPrompt?: boolean;
 };
 
-export const buildSessionSystemPrompt = ({
-  role,
-  task,
-  promptOverrides,
-}: SessionPromptInput): string =>
+type LoadSessionPromptContextInput = Pick<SessionPromptInput, "role" | "task"> & {
+  workspaceId: string;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+};
+
+export const SYSTEM_PROMPT_PREFIX = AGENT_SESSION_SYSTEM_PROMPT_PREFIX;
+const SYSTEM_PROMPT_MESSAGE_ID_PREFIX = "history:system-prompt:";
+
+export const isSessionSystemPromptMessage = (message: AgentChatMessage): boolean =>
+  message.role === "system" &&
+  (message.id.startsWith(SYSTEM_PROMPT_MESSAGE_ID_PREFIX) ||
+    message.content.startsWith(SYSTEM_PROMPT_PREFIX));
+
+const buildSessionSystemPrompt = ({ role, task, promptOverrides }: SessionPromptInput): string =>
   buildAgentSystemPrompt({
     role,
     task: {
@@ -51,24 +52,15 @@ export const buildSessionSystemPrompt = ({
     overrides: promptOverrides,
   });
 
-export const loadSessionPromptInputs = async ({
+export const loadSessionPromptContext = async ({
   workspaceId,
+  role,
+  task,
   loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput): Promise<Pick<SessionPromptContext, "promptOverrides">> => {
+}: LoadSessionPromptContextInput): Promise<SessionPromptContext> => {
   const promptOverrides = await loadRepoPromptOverrides(workspaceId);
 
   return {
-    promptOverrides,
-  };
-};
-
-export const createSessionPromptContext = ({
-  role,
-  task,
-  promptOverrides,
-}: CreateSessionPromptContextInput): SessionPromptContext => {
-  return {
-    promptOverrides,
     systemPrompt: buildSessionSystemPrompt({
       role,
       task,
@@ -77,34 +69,13 @@ export const createSessionPromptContext = ({
   };
 };
 
-export const loadSessionPromptContext = async ({
-  workspaceId,
-  role,
-  task,
-  loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput & {
-  role: AgentRole;
-  task: SessionPromptTask;
-}): Promise<SessionPromptContext> => {
-  const { promptOverrides } = await loadSessionPromptInputs({
-    workspaceId,
-    loadRepoPromptOverrides,
-  });
-
-  return createSessionPromptContext({
-    role,
-    task,
-    promptOverrides,
-  });
-};
-
 export const buildSessionHeaderMessages = ({
   externalSessionId,
   systemPrompt,
   startedAt,
   includeSystemPrompt = true,
-}: SessionHeaderInput): AgentSessionState["messages"] => {
-  if (!includeSystemPrompt) {
+}: SessionHeaderInput): AgentChatMessage[] => {
+  if (!includeSystemPrompt || systemPrompt.trim().length === 0) {
     return [];
   }
 
@@ -112,7 +83,7 @@ export const buildSessionHeaderMessages = ({
     {
       id: `history:system-prompt:${externalSessionId}`,
       role: "system",
-      content: `System prompt:\n\n${systemPrompt}`,
+      content: `${SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
       timestamp: startedAt,
     },
   ];

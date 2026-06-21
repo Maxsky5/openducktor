@@ -1,12 +1,12 @@
-import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  agentSessionQueryKeys,
+  invalidateAgentSessionListQuery,
   upsertAgentSessionRecordInQuery,
 } from "@/state/queries/agent-sessions";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { invalidateRepoTaskQueries, upsertAgentSessionInRepoTaskData } from "@/state/queries/tasks";
+import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
+import { requireWorkspaceRepoPath } from "./session-invariants";
 
 type CreateSessionCacheEffectsArgs = {
   workspaceRepoPath: string | null;
@@ -23,39 +23,21 @@ export const createSessionCacheEffects = ({
     taskId: string,
     record: AgentSessionRecord,
   ): Promise<void> => {
-    if (!workspaceRepoPath) {
-      return;
-    }
-    await hostPort.agentSessionUpsert(workspaceRepoPath, taskId, record);
-    upsertAgentSessionRecordInQuery(queryClient, workspaceRepoPath, taskId, record);
-    upsertAgentSessionInRepoTaskData(queryClient, workspaceRepoPath, taskId, record);
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
+    await hostPort.agentSessionUpsert(repoPath, taskId, record);
+    upsertAgentSessionRecordInQuery(queryClient, repoPath, taskId, record);
   };
 
   const invalidateSessionStopQueries = async ({
     repoPath,
     taskId,
-    runtimeKind,
   }: {
     repoPath: string;
     taskId: string;
-    runtimeKind?: RuntimeKind;
   }): Promise<void> => {
     await Promise.all([
       invalidateRepoTaskQueries(queryClient, repoPath),
-      queryClient.invalidateQueries({
-        queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-        exact: true,
-        refetchType: "none",
-      }),
-      ...(runtimeKind
-        ? [
-            queryClient.invalidateQueries({
-              queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
-              exact: true,
-              refetchType: "none",
-            }),
-          ]
-        : []),
+      invalidateAgentSessionListQuery(queryClient, repoPath, taskId),
     ]);
   };
 

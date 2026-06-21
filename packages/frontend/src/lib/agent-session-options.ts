@@ -1,25 +1,33 @@
 import type { AgentRole } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 
-export type AgentSessionOptionSummary = Pick<
-  AgentSessionState,
-  "externalSessionId" | "role" | "startedAt" | "status"
->;
+export type AgentSessionRecencySummary = AgentSessionIdentity &
+  Pick<AgentSessionState, "startedAt">;
+
+export type AgentSessionOptionSummary = AgentSessionRecencySummary &
+  Pick<AgentSessionState, "role"> & {
+    activityState: AgentSessionActivityState;
+  };
 
 export const compareAgentSessionRecency = (
-  a: AgentSessionOptionSummary,
-  b: AgentSessionOptionSummary,
+  a: AgentSessionRecencySummary,
+  b: AgentSessionRecencySummary,
 ): number => {
   if (a.startedAt !== b.startedAt) {
     return a.startedAt > b.startedAt ? -1 : 1;
   }
-  if (a.externalSessionId === b.externalSessionId) {
+  const leftIdentityKey = agentSessionIdentityKey(a);
+  const rightIdentityKey = agentSessionIdentityKey(b);
+  if (leftIdentityKey === rightIdentityKey) {
     return 0;
   }
-  return a.externalSessionId > b.externalSessionId ? -1 : 1;
+  return leftIdentityKey > rightIdentityKey ? -1 : 1;
 };
 
-export const buildRoleSessionSequenceById = (
+export const buildRoleSessionSequenceByIdentity = (
   sessions: AgentSessionOptionSummary[],
 ): Map<string, number> => {
   return new Map(
@@ -28,12 +36,14 @@ export const buildRoleSessionSequenceById = (
         if (a.startedAt !== b.startedAt) {
           return a.startedAt < b.startedAt ? -1 : 1;
         }
-        if (a.externalSessionId === b.externalSessionId) {
+        const leftIdentityKey = agentSessionIdentityKey(a);
+        const rightIdentityKey = agentSessionIdentityKey(b);
+        if (leftIdentityKey === rightIdentityKey) {
           return 0;
         }
-        return a.externalSessionId < b.externalSessionId ? -1 : 1;
+        return leftIdentityKey < rightIdentityKey ? -1 : 1;
       })
-      .map((session, index) => [session.externalSessionId, index + 1]),
+      .map((session, index) => [agentSessionIdentityKey(session), index + 1]),
   );
 };
 
@@ -54,5 +64,7 @@ export const formatAgentSessionOptionDescription = (session: AgentSessionOptionS
   const startedAtLabel = Number.isNaN(startedAt.getTime())
     ? session.startedAt
     : startedAt.toLocaleString();
-  return `${startedAtLabel} · ${session.status} · ${session.externalSessionId.slice(0, 8)}`;
+  return `${startedAtLabel} · ${formatAgentSessionActivityStateLabel(
+    session.activityState,
+  )} · ${session.externalSessionId.slice(0, 8)}`;
 };

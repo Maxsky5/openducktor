@@ -7,22 +7,30 @@ import { useTaskDocuments } from "@/components/features/task-details/use-task-do
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
+import { getAgentSession } from "@/state/agent-session-collection";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
 import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import {
-  attachAgentSessionListener,
+  listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
+import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
+import { createSessionTurnMetadata } from "../agent-orchestrator/support/session-turn-metadata";
+import {
+  createAgentSessionCollectionRefFixture,
+  replaceAgentSessionFixture,
+  updateAgentSessionFixture,
+} from "../agent-orchestrator/test-utils";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -103,25 +111,17 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   taskId: "A",
-  repoPath: overrides.repoPath ?? "/repo",
   role: "build",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
   contextUsage: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
   ...overrides,
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
 const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>
@@ -754,7 +754,7 @@ describe("use-task-operations", () => {
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: agentSessionQueryKeys.list("/repo", "A"),
         exact: true,
-        refetchType: "none",
+        refetchType: "active",
       });
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: documentQueryKeys.qaReport("/repo", "A"),
@@ -1830,7 +1830,7 @@ describe("use-task-operations", () => {
     const runsList = mock(async (): Promise<RunSummary[]> => []);
     const adapterHandlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         adapterHandlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1851,24 +1851,14 @@ describe("use-task-operations", () => {
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildAgentSession(),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildAgentSession({ externalSessionId: "session-1" }),
+    ]);
     const updateSession = (
-      externalSessionId: string,
+      identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return updateAgentSessionFixture(sessionsRef, identity, updater);
     };
 
     try {
@@ -1881,20 +1871,36 @@ describe("use-task-operations", () => {
         1000,
       );
 
-      const unsubscribe = attachAgentSessionListener({
+      const unsubscribe = await listenToAgentSessionEvents({
         adapter,
-        repoPath: "/repo",
-        externalSessionId: "session-1",
-        sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
-        turnStartedAtBySessionRef: { current: {} },
+        sessionRef: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+        turnMetadata: createSessionTurnMetadata(),
+        readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+        ensureSession: (identity, createSession) => {
+          const current = getAgentSession(sessionsRef.current, identity);
+          if (current) {
+            return current;
+          }
+          const nextSession = createSession();
+          sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, nextSession);
+          return nextSession;
+        },
         updateSession,
+        updateSessionTodos: () => {},
+        isSessionObserved: (identity) => identity.externalSessionId === "session-1",
+        buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
+        recordTurnActivityTimestamp: () => {},
+        recordTurnUserMessageTimestamp: () => {},
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: harness.getLatest().operations.refreshTaskData,
+        readOnlyApprovalAutoRejectSafe: false,
+        workflowToolAliasesByCanonical: undefined,
       });
 
       try {

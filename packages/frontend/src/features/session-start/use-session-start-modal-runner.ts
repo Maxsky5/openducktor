@@ -15,7 +15,8 @@ import {
   targetBranchFromSelection,
   taskTargetBranchValidationError,
 } from "@/lib/target-branch";
-import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
@@ -29,13 +30,13 @@ export type SessionStartModalDecision =
     }
   | {
       startMode: "reuse";
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
       targetBranch?: GitTargetBranch;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
       targetBranch?: GitTargetBranch;
     };
 
@@ -80,12 +81,16 @@ const requireSelectedModel = (
   );
 };
 
-const requireSourceSessionId = (
-  sourceExternalSessionId: string | null,
+const requireSourceSession = (
+  sourceSessionOptionValue: string | null,
+  existingSessionOptions: SessionStartExistingSessionOption[],
   request: SessionStartDecisionRequestContext,
-): string => {
-  if (sourceExternalSessionId) {
-    return sourceExternalSessionId;
+): AgentSessionIdentity => {
+  const sourceSessionOption = existingSessionOptions.find(
+    (option) => option.value === sourceSessionOptionValue,
+  );
+  if (sourceSessionOption) {
+    return sourceSessionOption.sourceSession;
   }
 
   throw new Error(
@@ -95,10 +100,12 @@ const requireSourceSessionId = (
 
 export const buildSessionStartModalDecision = ({
   input,
+  existingSessionOptions,
   requestContext,
   selectedModel,
 }: {
   input: SessionStartDecisionInput;
+  existingSessionOptions: SessionStartExistingSessionOption[];
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
@@ -106,14 +113,15 @@ export const buildSessionStartModalDecision = ({
     input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {
-    const sourceExternalSessionId = requireSourceSessionId(
-      input.sourceExternalSessionId,
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
       requestContext,
     );
 
     return {
       startMode: "reuse",
-      sourceExternalSessionId,
+      sourceSession,
       ...buildTargetBranchFields(),
     };
   }
@@ -121,15 +129,16 @@ export const buildSessionStartModalDecision = ({
   const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
 
   if (input.startMode === "fork") {
-    const sourceExternalSessionId = requireSourceSessionId(
-      input.sourceExternalSessionId,
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
       requestContext,
     );
 
     return {
       startMode: "fork",
       selectedModel: resolvedSelectedModel,
-      sourceExternalSessionId,
+      sourceSession,
       ...buildTargetBranchFields(),
     };
   }
@@ -144,8 +153,7 @@ export const buildSessionStartModalDecision = ({
 export const requireSourceSessionRuntimeKind = (
   sourceSession: SessionStartExistingSessionOption | null | undefined,
 ): RuntimeKind => {
-  const runtimeKind =
-    sourceSession?.runtimeKind ?? sourceSession?.selectedModel?.runtimeKind ?? null;
+  const runtimeKind = sourceSession?.sourceSession.runtimeKind ?? null;
   if (runtimeKind) {
     return runtimeKind;
   }
@@ -184,13 +192,13 @@ export const assertRuntimeSupportsSelectedStartMode = ({
 };
 
 export function useSessionStartModalRunner({
-  activeWorkspace,
   branches = [],
   repoSettings,
+  workspaceRepoPath,
 }: {
-  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
+  workspaceRepoPath: string | null;
 }): {
   sessionStartModal: SessionStartModalModel | null;
   runSessionStartRequest: <T>(
@@ -220,23 +228,23 @@ export function useSessionStartModalRunner({
     availableStartModes,
     selectedStartMode,
     existingSessionOptions,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     showTargetBranchSelector,
     targetBranchOptions,
     selectedTargetBranch,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
-    activeWorkspace,
     branches,
     repoSettings,
+    workspaceRepoPath,
   });
 
   selectionRef.current = selection;
@@ -307,13 +315,14 @@ export function useSessionStartModalRunner({
       try {
         const decision = buildSessionStartModalDecision({
           input,
+          existingSessionOptions,
           requestContext,
           selectedModel: selectionRef.current,
         });
 
         if (decision.startMode === "reuse") {
           const sourceOption = existingSessionOptions.find(
-            (option) => option.value === decision.sourceExternalSessionId,
+            (option) => option.value === input.sourceSessionOptionValue,
           );
           const sourceRuntimeKind = requireSourceSessionRuntimeKind(sourceOption);
 
@@ -384,12 +393,12 @@ export function useSessionStartModalRunner({
       availableStartModes,
       selectedStartMode,
       existingSessionOptions,
-      selectedSourceSessionId,
+      selectedSourceSessionValue,
       showTargetBranchSelector,
       targetBranchOptions,
       selectedTargetBranch,
       onSelectStartMode: handleSelectStartMode,
-      onSelectSourceSession: handleSelectSourceSession,
+      onSelectSourceSessionValue: handleSelectSourceSessionValue,
       onSelectTargetBranch: handleSelectTargetBranch,
       onSelectRuntime: handleSelectRuntime,
       onSelectAgent: handleSelectAgent,
@@ -417,7 +426,7 @@ export function useSessionStartModalRunner({
     handleSelectModel,
     handleSelectTargetBranch,
     handleSelectRuntime,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectStartMode,
     handleSelectVariant,
     intent,
@@ -429,7 +438,7 @@ export function useSessionStartModalRunner({
     runtimeOptions,
     selectedTargetBranch,
     selectedRuntimeKind,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     selectedStartMode,
     showTargetBranchSelector,
     selection,

@@ -1,11 +1,6 @@
-import type {
-  AgentSessionRecord,
-  RuntimeInstanceSummary,
-  RuntimeRoute,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 export type CreateRuntimeTaskActivityGuardInput = {
@@ -14,36 +9,6 @@ export type CreateRuntimeTaskActivityGuardInput = {
 type ActiveWorkEvidence = {
   activeSessionRoles: string[];
 };
-const routeIndexKey = (runtimeKind: string): string => runtimeKind.trim();
-const collectRuntimeRoutes = (runtimeRegistry: RuntimeRegistryPort, repoPath: string) =>
-  Effect.gen(function* () {
-    const normalizedRepoPath = normalizePathForComparison(repoPath);
-    const routesByKind = new Map<string, RuntimeRoute>();
-    for (const runtime of yield* runtimeRegistry.listRuntimesByRepo({ repoPath })) {
-      if (!isWorkspaceRepoRuntime(runtime, normalizedRepoPath)) {
-        continue;
-      }
-      const key = routeIndexKey(runtime.kind);
-      if (routesByKind.has(key)) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtimeTaskActivityGuard.collectRuntimeRoutes",
-            message: `Multiple live ${runtime.kind} repo runtimes found for repo '${repoPath}'; cannot resolve session probe route`,
-            details: { repoPath, runtimeKind: runtime.kind },
-          }),
-        );
-      }
-      routesByKind.set(key, runtime.runtimeRoute);
-    }
-    return routesByKind;
-  });
-const isWorkspaceRepoRuntime = (
-  runtime: RuntimeInstanceSummary,
-  normalizedRepoPath: string,
-): boolean =>
-  normalizePathForComparison(runtime.repoPath) === normalizedRepoPath &&
-  runtime.role === "workspace" &&
-  runtime.taskId === null;
 const uniqueSorted = (values: Iterable<string>): string[] => [...new Set(values)].sort();
 const collectActiveWorkEvidence = (
   runtimeRegistry: RuntimeRegistryPort,
@@ -53,7 +18,6 @@ const collectActiveWorkEvidence = (
 ) =>
   Effect.gen(function* () {
     const allowedRoles = new Set(sessionRoles.map((role) => role.trim()).filter(Boolean));
-    const runtimeRoutes = yield* collectRuntimeRoutes(runtimeRegistry, repoPath);
     const activeRoles: string[] = [];
     for (const session of sessions) {
       const role = session.role.trim();
@@ -65,17 +29,9 @@ const collectActiveWorkEvidence = (
         continue;
       }
       const runtimeKind = session.runtimeKind.trim();
-      const runtimeRoute = runtimeRoutes.get(routeIndexKey(runtimeKind));
-      if (!runtimeRoute) {
-        continue;
-      }
-      if (!runtimeRegistry.probeSessionStatus) {
-        activeRoles.push(role);
-        continue;
-      }
       const probe = yield* runtimeRegistry.probeSessionStatus({
         runtimeKind,
-        runtimeRoute,
+        repoPath,
         externalSessionId,
         workingDirectory: session.workingDirectory,
       });
@@ -98,35 +54,25 @@ export const createRuntimeTaskActivityGuard = ({
         taskId: string;
         evidence: ActiveWorkEvidence;
       }> = [];
-      for (const taskId of input.taskIds) {
-        const task = input.tasks.find((candidate) => candidate.id === taskId);
-        if (!task) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Task ${taskId} was not provided for activity guard checks.`,
-              field: "taskIds",
-              details: { taskId },
-            }),
-          );
-        }
+      for (const task of input.taskSessions) {
         const evidence = yield* collectActiveWorkEvidence(
           runtimeRegistry,
           input.repoPath,
-          task.agentSessions ?? [],
+          task.sessions,
           ["build", "qa"],
         ).pipe(
           Effect.mapError(
             (error) =>
               new HostOperationError({
                 operation: "runtimeTaskActivityGuard.ensureNoActiveTaskDeleteRuns",
-                message: `Failed checking active task work before deleting ${taskId}`,
+                message: `Failed checking active task work before deleting ${task.taskId}`,
                 cause: error,
-                details: { taskId },
+                details: { taskId: task.taskId },
               }),
           ),
         );
         if (evidence.activeSessionRoles.length > 0) {
-          activeTasks.push({ taskId, evidence });
+          activeTasks.push({ taskId: task.taskId, evidence });
         }
       }
       if (activeTasks.length === 0) {

@@ -1,47 +1,32 @@
-import type {
-  RuntimeApprovalReplyOutcome,
-  RuntimeDescriptor,
-  RuntimeKind,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  getAgentSessionWaitingInputPlaceholder,
+  hasAgentSessionPendingApprovals,
+  hasAgentSessionPendingQuestions,
+} from "@/lib/agent-session-waiting-input";
+import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStudioReadinessState } from "../agent-studio-task-hydration-state";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
-  type AgentStudioSessionContextUsage,
   buildActiveDocumentForRole,
   buildWorkflowModelContext,
-  toChatContextUsage,
   type WorkflowModelContext,
 } from "../use-agent-studio-page-model-builders";
+import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
-
-type SelectedSessionRuntimeReadinessContext = {
-  readinessState: AgentStudioReadinessState;
-  isReady: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
-
-type SelectedSessionComposerActiveSession =
-  | (Pick<
-      AgentSessionState,
-      | "externalSessionId"
-      | "selectedModel"
-      | "isLoadingModelCatalog"
-      | "pendingApprovals"
-      | "pendingQuestions"
-    > & {
-      runtimeKind: RuntimeKind | null;
-    })
-  | null;
+const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
+const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuestionRequest[];
+type PendingInputRequest = AgentApprovalRequest | AgentQuestionRequest;
 
 type SelectedSessionPendingQuestionsContext = {
   canSubmit: boolean;
@@ -57,49 +42,17 @@ type SelectedSessionApprovalsContext = {
 };
 
 export type SelectedSessionDocumentsContext = {
-  activeDocumentRole: AgentRole;
   activeDocument: AgentStudioWorkspaceDocument | null;
-  hasDocumentPanel: boolean;
-};
-
-export type SelectedSessionRightPanelContext = {
-  role: AgentRole;
-  hasTaskContext: boolean;
-  hasDocumentPanel: boolean;
-  hasBuildToolsPanel: boolean;
-};
-
-export type SelectedSessionChatContext = {
-  emptyState: NonNullable<AgentChatModel["thread"]["emptyState"]> | null;
-  contextUsage: AgentChatModel["composer"]["contextUsage"];
-  activeComposerSession: SelectedSessionComposerActiveSession;
-  composerReadOnly: boolean;
-  composerReadOnlyReason: string | null;
-};
-
-export type SelectedSessionRuntimeContext = {
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeReadiness: SelectedSessionRuntimeReadinessContext;
-  sessionRuntimeDataError: string | null;
-  isTaskHydrating: boolean;
-  isSessionHistoryHydrated: boolean;
-  isSessionHistoryHydrating: boolean;
-  isSessionHistoryHydrationFailed: boolean;
-  isSessionSelectionResolving: boolean;
-  isWaitingForRuntimeReadiness: boolean;
 };
 
 export type SelectedSessionPendingInputContext = {
+  waitingInputPlaceholder: string | null;
+  pendingApprovalRequests: readonly AgentApprovalRequest[];
+  pendingQuestionRequests: readonly AgentQuestionRequest[];
   pendingQuestions: SelectedSessionPendingQuestionsContext;
   approvals: SelectedSessionApprovalsContext;
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
-    | undefined;
-  subagentPendingApprovalCountByExternalSessionId: Record<string, number>;
-  subagentPendingQuestionsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
-    | undefined;
-  subagentPendingQuestionCountByExternalSessionId: Record<string, number>;
+  subagentPendingApprovalCountBySessionKey: Record<string, number>;
+  subagentPendingQuestionCountBySessionKey: Record<string, number>;
 };
 
 export type AgentStudioSelectedSessionContext = {
@@ -107,13 +60,9 @@ export type AgentStudioSelectedSessionContext = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  allSessionSummaries: AgentSessionSummary[];
-  activeSession: AgentSessionState | null;
+  selectedSession: AgentStudioSelectedSessionState;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
-  rightPanel: SelectedSessionRightPanelContext;
-  chat: SelectedSessionChatContext;
-  runtime: SelectedSessionRuntimeContext;
   pendingInput: SelectedSessionPendingInputContext;
 };
 
@@ -123,35 +72,13 @@ export type AgentStudioSelectedSessionContextInput = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  activeSession: AgentSessionState | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  sessionRuntimeDataError: string | null;
+  selectedSession: AgentStudioSelectedSessionState;
   hasActiveGitConflict: boolean;
-  isTaskHydrating: boolean;
-  isSessionHistoryHydrated: boolean;
-  isSessionHistoryHydrating: boolean;
-  isSessionSelectionResolving: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  isSessionHistoryHydrationFailed: boolean;
-  activeSessionContextUsage: AgentStudioSessionContextUsage;
   documents: AgentStudioDocumentsContext;
-  readiness: {
-    agentStudioReadinessState: AgentStudioReadinessState;
-    agentStudioReady: boolean;
-    agentStudioBlockedReason: string | null;
-    isLoadingChecks: boolean;
-    refreshChecks: () => Promise<void>;
-  };
   sessionActions: {
-    isStarting: boolean;
     isSessionWorking: boolean;
-    canKickoffNewSession: boolean;
-    kickoffLabel: string;
-    startLaunchKickoff: () => Promise<void>;
     onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
     isSubmittingQuestionByRequestId: Record<string, boolean>;
-  };
-  approvals: {
     isSubmittingApprovalByRequestId: Record<string, boolean>;
     approvalReplyErrorByRequestId: Record<string, string>;
     onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
@@ -159,84 +86,58 @@ export type AgentStudioSelectedSessionContextInput = {
   roleLabelByRole: Record<AgentRole, string>;
 };
 
-const arePendingInputCountMapsEqual = (
-  left: Record<string, number>,
-  right: Record<string, number>,
-): boolean => {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
+const resolvePendingInputChildSession = (
+  selectedSessionIdentity: AgentSessionIdentity | null,
+  request: PendingInputRequest,
+): AgentSessionIdentity | null => {
+  if (request.source?.kind !== "subagent") {
+    return null;
+  }
+  if (request.responseSession) {
+    return request.responseSession;
+  }
+  if (!selectedSessionIdentity) {
+    return null;
   }
 
-  return leftKeys.every((key) => left[key] === right[key]);
+  return resolveAgentPendingInputParticipants(selectedSessionIdentity, request)
+    .subagentChildSession;
 };
 
-export const keepStablePendingInputCounts = (
-  previous: Record<string, number>,
-  next: Record<string, number>,
-): Record<string, number> => {
-  if (arePendingInputCountMapsEqual(previous, next)) {
-    return previous;
-  }
-
-  return next;
-};
-
-const buildSubagentPendingApprovalCountByExternalSessionId = (
+const buildSubagentPendingInputCountBySessionKey = (
   sessions: AgentSessionSummary[],
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
-    | undefined,
+  readPendingInputCount: (session: AgentSessionSummary) => number,
+  selectedSessionIdentity: AgentSessionIdentity | null,
+  pendingRequests: readonly PendingInputRequest[],
+  emptyCounts: Record<string, number>,
 ): Record<string, number> => {
   const next: Record<string, number> = {};
+  const setMaxCount = (key: string, count: number): void => {
+    next[key] = Math.max(next[key] ?? 0, count);
+  };
+
   for (const session of sessions) {
-    const pendingApprovalCount = session.pendingApprovals.length;
-    if (pendingApprovalCount > 0) {
-      next[session.externalSessionId] = pendingApprovalCount;
+    const count = readPendingInputCount(session);
+    if (count > 0) {
+      setMaxCount(agentSessionIdentityKey(session), count);
     }
   }
 
-  if (subagentPendingApprovalsByExternalSessionId) {
-    for (const [externalSessionId, pendingApprovals] of Object.entries(
-      subagentPendingApprovalsByExternalSessionId,
-    )) {
-      const pendingApprovalCount = pendingApprovals.length;
-      if (pendingApprovalCount > 0) {
-        next[externalSessionId] = pendingApprovalCount;
-      }
+  const projectedCountsBySessionKey = new Map<string, number>();
+  for (const request of pendingRequests) {
+    const responseSession = resolvePendingInputChildSession(selectedSessionIdentity, request);
+    if (!responseSession) {
+      continue;
     }
+    const sessionKey = agentSessionIdentityKey(responseSession);
+    const count = projectedCountsBySessionKey.get(sessionKey) ?? 0;
+    projectedCountsBySessionKey.set(sessionKey, count + 1);
+  }
+  for (const [sessionKey, count] of projectedCountsBySessionKey) {
+    setMaxCount(sessionKey, count);
   }
 
-  return Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS;
-};
-
-const buildSubagentPendingQuestionCountByExternalSessionId = (
-  sessions: AgentSessionSummary[],
-  subagentPendingQuestionsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
-    | undefined,
-): Record<string, number> => {
-  const next: Record<string, number> = {};
-  for (const session of sessions) {
-    const pendingQuestionCount = session.pendingQuestions.length;
-    if (pendingQuestionCount > 0) {
-      next[session.externalSessionId] = pendingQuestionCount;
-    }
-  }
-
-  if (subagentPendingQuestionsByExternalSessionId) {
-    for (const [externalSessionId, pendingQuestions] of Object.entries(
-      subagentPendingQuestionsByExternalSessionId,
-    )) {
-      const pendingQuestionCount = pendingQuestions.length;
-      if (pendingQuestionCount > 0) {
-        next[externalSessionId] = pendingQuestionCount;
-      }
-    }
-  }
-
-  return Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS;
+  return Object.keys(next).length > 0 ? next : emptyCounts;
 };
 
 export const buildAgentStudioSelectedSessionContext = ({
@@ -245,112 +146,59 @@ export const buildAgentStudioSelectedSessionContext = ({
   selectedTask,
   sessionsForTask,
   allSessionSummaries,
-  activeSession,
-  runtimeDefinitions,
-  sessionRuntimeDataError,
+  selectedSession,
   hasActiveGitConflict,
-  isTaskHydrating,
-  isSessionHistoryHydrated,
-  isSessionHistoryHydrating,
-  isSessionSelectionResolving,
-  isWaitingForRuntimeReadiness,
-  isSessionHistoryHydrationFailed,
-  activeSessionContextUsage,
   documents,
-  readiness,
   sessionActions,
-  approvals,
   roleLabelByRole,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
-  const workflowActiveSession = activeSession
-    ? {
-        externalSessionId: activeSession.externalSessionId,
-        role: activeSession.role,
-      }
-    : null;
+  const { identity: selectedSessionIdentity, loadedSession } = selectedSession;
   const workflow = buildWorkflowModelContext({
     selectedTask,
     sessionsForTask,
-    activeSession: workflowActiveSession,
+    selectedSessionIdentity,
     role,
     isSessionWorking: sessionActions.isSessionWorking,
     hasActiveGitConflict,
     roleLabelByRole,
   });
-  const activeDocumentRole = activeSession?.role ?? role;
   const activeDocument = taskId
     ? buildActiveDocumentForRole({
-        activeRole: activeDocumentRole,
+        activeRole: role,
         specDoc: documents.specDoc,
         planDoc: documents.planDoc,
         qaDoc: documents.qaDoc,
       })
     : null;
-  const canKickoff = sessionActions.canKickoffNewSession && workflow.selectedRoleAvailable;
-  const composerReadOnly = !activeSession && !workflow.selectedRoleAvailable;
-  const emptyState = buildSelectedSessionChatEmptyState({
-    taskId,
-    isStarting: sessionActions.isStarting,
-    canKickoff,
-    kickoffLabel: sessionActions.kickoffLabel,
-    startLaunchKickoff: sessionActions.startLaunchKickoff,
+  const pendingApprovalRequests =
+    loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVAL_REQUESTS;
+  const pendingQuestionRequests =
+    loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS;
+  const hasPendingQuestions = hasAgentSessionPendingQuestions({
+    pendingQuestions: pendingQuestionRequests,
   });
-  const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
-  const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
+  const hasPendingApprovals = hasAgentSessionPendingApprovals({
+    pendingApprovals: pendingApprovalRequests,
+  });
+  const waitingInputPlaceholder = getAgentSessionWaitingInputPlaceholder({
+    pendingApprovals: pendingApprovalRequests,
+    pendingQuestions: pendingQuestionRequests,
+  });
 
   return {
     taskId,
     role,
     selectedTask,
     sessionsForTask,
-    allSessionSummaries,
-    activeSession,
+    selectedSession,
     workflow,
     documents: {
-      activeDocumentRole,
       activeDocument,
-      hasDocumentPanel: Boolean(activeDocument),
-    },
-    rightPanel: {
-      role,
-      hasTaskContext: Boolean(taskId),
-      hasDocumentPanel: Boolean(activeDocument),
-      hasBuildToolsPanel: role === "build",
-    },
-    chat: {
-      emptyState,
-      contextUsage: toChatContextUsage(activeSessionContextUsage),
-      activeComposerSession: activeSession
-        ? {
-            externalSessionId: activeSession.externalSessionId,
-            runtimeKind: activeSession.runtimeKind ?? null,
-            selectedModel: activeSession.selectedModel,
-            isLoadingModelCatalog: activeSession.isLoadingModelCatalog,
-            pendingApprovals: activeSession.pendingApprovals,
-            pendingQuestions: activeSession.pendingQuestions,
-          }
-        : null,
-      composerReadOnly,
-      composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
-    },
-    runtime: {
-      runtimeDefinitions,
-      runtimeReadiness: {
-        readinessState: readiness.agentStudioReadinessState,
-        isReady: readiness.agentStudioReady,
-        blockedReason: readiness.agentStudioBlockedReason,
-        isLoadingChecks: readiness.isLoadingChecks,
-        refreshChecks: readiness.refreshChecks,
-      },
-      sessionRuntimeDataError,
-      isTaskHydrating,
-      isSessionHistoryHydrated,
-      isSessionHistoryHydrating,
-      isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed,
     },
     pendingInput: {
+      waitingInputPlaceholder,
+      pendingApprovalRequests,
+      pendingQuestionRequests,
       pendingQuestions: {
         canSubmit: hasPendingQuestions,
         isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,
@@ -358,65 +206,25 @@ export const buildAgentStudioSelectedSessionContext = ({
       },
       approvals: {
         canReply: hasPendingApprovals,
-        isSubmittingByRequestId: approvals.isSubmittingApprovalByRequestId,
-        errorByRequestId: approvals.approvalReplyErrorByRequestId,
-        onReply: approvals.onReplyApproval,
+        isSubmittingByRequestId: sessionActions.isSubmittingApprovalByRequestId,
+        errorByRequestId: sessionActions.approvalReplyErrorByRequestId,
+        onReply: sessionActions.onReplyApproval,
       },
-      subagentPendingApprovalsByExternalSessionId:
-        activeSession?.subagentPendingApprovalsByExternalSessionId,
-      subagentPendingApprovalCountByExternalSessionId:
-        buildSubagentPendingApprovalCountByExternalSessionId(
-          allSessionSummaries,
-          activeSession?.subagentPendingApprovalsByExternalSessionId,
-        ),
-      subagentPendingQuestionsByExternalSessionId:
-        activeSession?.subagentPendingQuestionsByExternalSessionId,
-      subagentPendingQuestionCountByExternalSessionId:
-        buildSubagentPendingQuestionCountByExternalSessionId(
-          allSessionSummaries,
-          activeSession?.subagentPendingQuestionsByExternalSessionId,
-        ),
+      subagentPendingApprovalCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
+        allSessionSummaries,
+        (session) => session.pendingApprovalCount,
+        selectedSessionIdentity,
+        pendingApprovalRequests,
+        EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
+      ),
+      subagentPendingQuestionCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
+        allSessionSummaries,
+        (session) => session.pendingQuestionCount,
+        selectedSessionIdentity,
+        pendingQuestionRequests,
+        EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+      ),
     },
-  };
-};
-
-const buildSelectedSessionChatEmptyState = ({
-  taskId,
-  isStarting,
-  canKickoff,
-  kickoffLabel,
-  startLaunchKickoff,
-}: {
-  taskId: string;
-  isStarting: boolean;
-  canKickoff: boolean;
-  kickoffLabel: string;
-  startLaunchKickoff: () => Promise<void>;
-}): NonNullable<AgentChatModel["thread"]["emptyState"]> | null => {
-  if (!taskId) {
-    return {
-      title: "Select a task to begin.",
-    };
-  }
-
-  if (isStarting) {
-    return {
-      title: "Initializing session...",
-    };
-  }
-
-  if (canKickoff) {
-    return {
-      title: "Send a message to start a new session automatically.",
-      actionLabel: kickoffLabel,
-      onAction: (): void => {
-        void startLaunchKickoff();
-      },
-    };
-  }
-
-  return {
-    title: "Send a message to start a new session automatically.",
   };
 };
 

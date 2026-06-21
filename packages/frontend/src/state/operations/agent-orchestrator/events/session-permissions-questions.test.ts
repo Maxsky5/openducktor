@@ -1,257 +1,72 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
+  createSessionsRef,
+  createSessionUpdater,
+  findSession,
   getSessionMessages,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type SessionEvent,
-  type SessionEventAdapter,
+  type SessionUpdateFn,
 } from "./session-events-test-harness";
-
-type SessionsRef = { current: Record<string, AgentSessionState> };
-
-const attachTestSessionListener = (input: {
-  externalSessionId: string;
-  sessionsRef: SessionsRef;
-}): ((event: SessionEvent) => void) => {
-  const handlers: Array<(event: SessionEvent) => void> = [];
-  const adapter: SessionEventAdapter = {
-    subscribeEvents: (_externalSessionId, handler) => {
-      handlers.push(handler);
-      return () => {};
-    },
-    replyApproval: async () => {},
-  };
-  const updateSession = (
-    externalSessionId: string,
-    updater: (current: AgentSessionState) => AgentSessionState,
-  ) => {
-    const current = input.sessionsRef.current[externalSessionId];
-    if (!current) {
-      return;
-    }
-    input.sessionsRef.current = {
-      ...input.sessionsRef.current,
-      [externalSessionId]: updater(current),
-    };
-  };
-
-  attachAgentSessionListener({
-    adapter,
-    repoPath: "/tmp/repo",
-    externalSessionId: input.externalSessionId,
-    sessionsRef: input.sessionsRef,
-    draftRawBySessionRef: { current: {} },
-    draftSourceBySessionRef: { current: {} },
-    turnStartedAtBySessionRef: { current: {} },
-    updateSession,
-    resolveTurnDurationMs: () => undefined,
-    clearTurnDuration: () => {},
-    refreshTaskData: async () => {},
-    resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-  });
-
-  const handleEvent = handlers[0];
-  if (!handleEvent) {
-    throw new Error("Expected session event handler to be registered");
-  }
-  return handleEvent;
-};
+import {
+  approvalRequiredEvent,
+  buildParentSessionWithSubagent,
+  buildParentSubagentMessage,
+  linkedChildApprovalEvent,
+  linkedChildQuestionEvent,
+  listensToSessions,
+  opencodeSessionIdentity,
+  startTestSessionObserver,
+} from "./session-permissions-questions.test-helpers";
 
 describe("agent-orchestrator session permissions and questions", () => {
-  test("auto-rejects mutating permissions for read-only roles", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
-      Promise.resolve(),
-    );
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
-        return () => {};
-      },
-      replyApproval,
-    };
-
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "spec" }),
-      },
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "session-1",
-      requestId: "perm-1",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["edit file"],
-      action: { name: "write" },
-      mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      metadata: { tool: "edit" },
-      timestamp: "2026-02-22T08:00:05.000Z",
-    });
-
-    await Promise.resolve();
-
-    expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
-    expect(
-      getSessionMessages(sessionsRef).some((message) =>
-        message.content.includes("Auto-rejected mutating approval"),
-      ),
-    ).toBe(true);
-  });
-
-  test("patches the parent subagent row when a child permission event has linkage", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
+  test("patches the parent subagent row when a child permission event has linkage", async () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-1";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Inspect repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-1",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-            },
-          ],
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          role: "build",
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-1",
+        prompt: "Inspect repo",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        role: "build",
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-child-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
+    handleEvent(
+      linkedChildApprovalEvent({
+        externalSessionId: "external-child-session",
+        requestId: "perm-child-1",
+        subagentCorrelationKey,
+      }),
+    );
 
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-child-session",
-      requestId: "perm-child-1",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    });
-
-    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toEqual([
+    expect(findSession(sessionsRef, "external-child-session")?.pendingApprovals).toMatchObject([
       {
         requestId: "perm-child-1",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
+        requestType: "permission_grant",
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+          subagentCorrelationKey,
+        },
+      },
+    ]);
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toMatchObject([
+      {
+        requestId: "perm-child-1",
+        responseSession: opencodeSessionIdentity("external-child-session"),
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+          subagentCorrelationKey,
+        },
       },
     ]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
@@ -261,29 +76,9 @@ describe("agent-orchestrator session permissions and questions", () => {
       externalSessionId: "external-child-session",
       status: "running",
     });
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-1",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
   });
 
-  test("clears child and parent subagent approval overlay when permission is resolved", () => {
+  test("clears child approval when permission is resolved", async () => {
     const pendingApproval = {
       requestId: "perm-child-1",
       requestType: "permission_grant" as const,
@@ -297,23 +92,18 @@ describe("agent-orchestrator session permissions and questions", () => {
         "reject" as const,
       ],
     };
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          subagentPendingApprovalsByExternalSessionId: {
-            "external-child-session": [pendingApproval],
-          },
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          role: "build",
-          pendingApprovals: [pendingApproval],
-        }),
-      },
-    };
-    const handleEvent = attachTestSessionListener({
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        role: "build",
+        pendingApprovals: [pendingApproval],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -328,13 +118,48 @@ describe("agent-orchestrator session permissions and questions", () => {
       subagentCorrelationKey: "part:assistant-parent:subtask-1",
     });
 
-    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toEqual([]);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
+    expect(findSession(sessionsRef, "external-child-session")?.pendingApprovals).toEqual([]);
   });
 
-  test("clears child and parent subagent question overlay when question is resolved", () => {
+  test("clears parent-held child approval when the child session is still unloaded", async () => {
+    const pendingApproval = {
+      requestId: "perm-child-1",
+      requestType: "permission_grant" as const,
+      title: "Approve permission: read",
+      summary: "Approval request for read.",
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+        pendingApprovals: [pendingApproval],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+    });
+
+    handleEvent({
+      type: "approval_resolved",
+      externalSessionId: "external-parent-session",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: "perm-child-1",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+    });
+
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toEqual([]);
+  });
+
+  test("clears child question when question is resolved", async () => {
     const pendingQuestion = {
       requestId: "question-child-1",
       questions: [
@@ -345,23 +170,18 @@ describe("agent-orchestrator session permissions and questions", () => {
         },
       ],
     };
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          subagentPendingQuestionsByExternalSessionId: {
-            "external-child-session": [pendingQuestion],
-          },
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          role: "build",
-          pendingQuestions: [pendingQuestion],
-        }),
-      },
-    };
-    const handleEvent = attachTestSessionListener({
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        role: "build",
+        pendingQuestions: [pendingQuestion],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -376,99 +196,67 @@ describe("agent-orchestrator session permissions and questions", () => {
       subagentCorrelationKey: "part:assistant-parent:subtask-1",
     });
 
-    expect(sessionsRef.current["external-child-session"]?.pendingQuestions).toEqual([]);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId,
-    ).toBeUndefined();
+    expect(findSession(sessionsRef, "external-child-session")?.pendingQuestions).toEqual([]);
   });
 
-  test("deduplicates child permissions when subagent correlation arrives after the prompt", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
+  test("clears parent-held child question when the child session is still unloaded", async () => {
+    const pendingQuestion = {
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Confirm path",
+          question: "Which file?",
+          options: [{ label: "A", description: "Path A" }],
+        },
+      ],
     };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-delayed-permission";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Read omp.json file",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-delayed-permission",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Read omp.json file",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+        pendingQuestions: [pendingQuestion],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    const childPermission = {
-      type: "approval_required" as const,
+    handleEvent({
+      type: "question_resolved",
       externalSessionId: "external-parent-session",
-      requestId: "perm-child-delayed",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["omp.json"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: "question-child-1",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
-    };
+    });
+
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingQuestions).toEqual([]);
+  });
+
+  test("deduplicates child permissions when subagent correlation arrives after the prompt", async () => {
+    const subagentCorrelationKey = "part:assistant-parent:subtask-delayed-permission";
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-delayed-permission",
+        prompt: "Read omp.json file",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        role: "build",
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+    });
+
+    const childPermission = linkedChildApprovalEvent({
+      externalSessionId: "external-parent-session",
+      requestId: "perm-child-delayed",
+      affectedPaths: ["omp.json"],
+    });
 
     handleEvent(childPermission);
     const firstParentSubagentMeta = getSessionMessages(sessionsRef, "external-parent-session")[0]
@@ -482,37 +270,18 @@ describe("agent-orchestrator session permissions and questions", () => {
       throw new Error("Expected parent message to remain a subagent");
     }
     expect(firstParentSubagentMeta.externalSessionId).toBeUndefined();
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toHaveLength(1);
+    expect(findSession(sessionsRef, "external-child-session")?.pendingApprovals).toHaveLength(1);
     handleEvent({
       ...childPermission,
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-delayed",
-        requestType: "permission_grant",
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["omp.json"],
-        action: { name: "read" },
-        mutation: "read_only",
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
+      findSession(sessionsRef, "external-child-session")?.pendingApprovals.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["perm-child-delayed"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -522,108 +291,41 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("does not guess the parent subagent row when child permission lacks correlation and multiple rows are running", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
+  test("does not guess the parent subagent row when child permission lacks correlation and multiple rows are running", async () => {
     const firstCorrelationKey = "part:assistant-parent:subtask-first";
     const secondCorrelationKey = "part:assistant-parent:subtask-second";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${firstCorrelationKey}`,
-              role: "system",
-              content: "Subagent (explorer): Read omp.json file",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-first",
-                correlationKey: firstCorrelationKey,
-                status: "running",
-                agent: "explorer",
-                prompt: "Read omp.json file",
-              },
-            },
-            {
-              id: `subagent:${secondCorrelationKey}`,
-              role: "system",
-              content: "Subagent (explorer): Inspect repository",
-              timestamp: "2026-02-22T08:00:02.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-second",
-                correlationKey: secondCorrelationKey,
-                status: "running",
-                agent: "explorer",
-                prompt: "Inspect repository",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+        messages: [
+          buildParentSubagentMessage({
+            correlationKey: firstCorrelationKey,
+            partId: "subtask-first",
+            prompt: "Read omp.json file",
+            agent: "explorer",
+          }),
+          buildParentSubagentMessage({
+            correlationKey: secondCorrelationKey,
+            partId: "subtask-second",
+            prompt: "Inspect repository",
+            agent: "explorer",
+          }),
+        ],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-ambiguous",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["omp.json"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-    });
+    handleEvent(
+      linkedChildApprovalEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-ambiguous",
+        affectedPaths: ["omp.json"],
+      }),
+    );
 
     expect(
       getSessionMessages(sessionsRef, "external-parent-session").map((message) =>
@@ -632,56 +334,27 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toEqual([undefined, undefined]);
   });
 
-  test("does not patch a sole parent subagent row without a correlation key", () => {
+  test("does not patch a sole parent subagent row without a correlation key", async () => {
     const correlationKey = "part:assistant-parent:subtask-unlinked";
-    const sessionsRef: SessionsRef = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${correlationKey}`,
-              role: "system",
-              content: "Subagent (build): Inspect repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-unlinked",
-                correlationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const handleEvent = attachTestSessionListener({
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey,
+        partId: "subtask-unlinked",
+        prompt: "Inspect repo",
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
 
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-unlinked",
-      requestType: "permission_grant" as const,
-      title: "Approve permission: read",
-      summary: "Approval request for read.",
-      affectedPaths: ["omp.json"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-    });
+    handleEvent(
+      linkedChildApprovalEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-unlinked",
+        affectedPaths: ["omp.json"],
+      }),
+    );
 
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     const parentSubagentMeta = parentSubagentMessage?.meta;
@@ -690,363 +363,153 @@ describe("agent-orchestrator session permissions and questions", () => {
       throw new Error("Expected parent message to remain a subagent");
     }
     expect(parentSubagentMeta.externalSessionId).toBeUndefined();
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toHaveLength(1);
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toMatchObject([
+      {
+        requestId: "perm-child-unlinked",
+        requestType: "permission_grant",
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+        },
+      },
+    ]);
   });
 
-  test("patches the parent subagent row with the child external id when handled from parent context", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
+  test("patches the parent subagent row without materializing unloaded child state", async () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-parent-context";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Inspect repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-parent-context",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSessionOptions: unknown[] = [];
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-      options?: unknown,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-parent-context",
+        prompt: "Inspect repo",
+      }),
+    ]);
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return applySessionUpdate(identity, updater);
     };
 
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
+    handleEvent(
+      linkedChildApprovalEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-1",
+        subagentCorrelationKey,
+      }),
+    );
 
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-1",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    });
-
-    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toMatchObject([
       {
         requestId: "perm-child-1",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
-    expect(updateSessionOptions).toContainEqual({ persist: false });
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
-    expect(parentSubagentMessage?.meta).toMatchObject({
-      kind: "subagent",
-      correlationKey: subagentCorrelationKey,
-      externalSessionId: "external-child-session",
-    });
-  });
-
-  test("records linked child permission overlays when the child listener owns local pending state", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-attached-permission";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Edit files",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-attached-permission",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Edit files",
-              },
-            },
-          ],
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          purpose: "transcript",
-          pendingApprovals: [],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "external-parent-session",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "external-child-session",
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-attached",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    });
-
-    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
-    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toHaveLength(0);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-attached",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
-    expect(parentSubagentMessage?.meta).toMatchObject({
-      kind: "subagent",
-      correlationKey: subagentCorrelationKey,
-      externalSessionId: "external-child-session",
-    });
-  });
-
-  test("records child question overlays and patches the parent subagent row from parent context", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-question";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Ask user",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-question",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Ask user",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "external-parent-session",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "question_required",
-      externalSessionId: "external-parent-session",
-      requestId: "question-child-1",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "A", description: "Option A" }],
+        requestType: "permission_grant",
+        responseSession: opencodeSessionIdentity("external-child-session"),
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+          subagentCorrelationKey,
         },
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
+      },
+    ]);
+    expect(findSession(sessionsRef, "external-child-session")).toBeUndefined();
+    expect(updateSessionOptions).toContain(undefined);
+    expect(updateSessionOptions).not.toContainEqual({ persist: true });
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      externalSessionId: "external-child-session",
+    });
+  });
+
+  test("records linked child permission on the child and parent surface even when the child is observed", async () => {
+    const subagentCorrelationKey = "part:assistant-parent:subtask-active-permission";
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-active-permission",
+        prompt: "Edit files",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        pendingApprovals: [],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      isSessionObserved: listensToSessions("external-child-session"),
     });
 
-    expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
+    handleEvent(
+      linkedChildApprovalEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-active",
+        subagentCorrelationKey,
+      }),
+    );
+
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
+      findSession(sessionsRef, "external-parent-session")?.pendingApprovals.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["perm-child-active"]);
+    expect(
+      findSession(sessionsRef, "external-child-session")?.pendingApprovals.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["perm-child-active"]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      externalSessionId: "external-child-session",
+    });
+  });
+
+  test("records parent question state for an unloaded linked child question", async () => {
+    const subagentCorrelationKey = "part:assistant-parent:subtask-question";
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-question",
+        prompt: "Ask user",
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+    });
+
+    handleEvent(
+      linkedChildQuestionEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "question-child-1",
+        subagentCorrelationKey,
+      }),
+    );
+
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingQuestions).toMatchObject([
       {
         requestId: "question-child-1",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
+        responseSession: opencodeSessionIdentity("external-child-session"),
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+          subagentCorrelationKey,
+        },
       },
     ]);
+    expect(findSession(sessionsRef, "external-child-session")).toBeUndefined();
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1055,116 +518,43 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records linked child question overlays when the child listener owns local pending state", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-attached-question";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Ask user",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-attached-question",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Ask user",
-              },
-            },
-          ],
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          purpose: "transcript",
-          pendingQuestions: [],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+  test("records linked child question on the child and parent surface even when the child is observed", async () => {
+    const subagentCorrelationKey = "part:assistant-parent:subtask-active-question";
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-active-question",
+        prompt: "Ask user",
+      }),
+      buildSession({
+        externalSessionId: "external-child-session",
+        pendingQuestions: [],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "external-child-session",
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+      isSessionObserved: listensToSessions("external-child-session"),
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
+    handleEvent(
+      linkedChildQuestionEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "question-child-active",
+        subagentCorrelationKey,
+      }),
+    );
 
-    handleEvent({
-      type: "question_required",
-      externalSessionId: "external-parent-session",
-      requestId: "question-child-attached",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "A", description: "Option A" }],
-        },
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    });
-
-    expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
-    expect(sessionsRef.current["external-child-session"]?.pendingQuestions).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "question-child-attached",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
-      },
-    ]);
+      findSession(sessionsRef, "external-parent-session")?.pendingQuestions.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["question-child-active"]);
+    expect(
+      findSession(sessionsRef, "external-child-session")?.pendingQuestions.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["question-child-active"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1173,535 +563,118 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records parent-observed child questions without a correlation key as subagent pending questions", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          pendingQuestions: [],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+  test("records parent question state for an unloaded child without a correlation key", async () => {
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        pendingQuestions: [],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
+    handleEvent(
+      linkedChildQuestionEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "question-child-2",
+        timestamp: "2026-02-22T08:00:06.000Z",
+      }),
+    );
 
-    handleEvent({
-      type: "question_required",
-      externalSessionId: "external-parent-session",
-      requestId: "question-child-2",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "A", description: "Option A" }],
-        },
-      ],
-      timestamp: "2026-02-22T08:00:06.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-    } as SessionEvent);
-
-    expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingQuestions).toMatchObject([
       {
         requestId: "question-child-2",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
+        responseSession: opencodeSessionIdentity("external-child-session"),
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "external-parent-session",
+          childExternalSessionId: "external-child-session",
+        },
       },
     ]);
+    expect(findSession(sessionsRef, "external-child-session")).toBeUndefined();
   });
 
-  test("auto-rejects mutating child permissions observed from a read-only parent context", async () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyApproval = mock(async () => {});
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval,
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-parent-write";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Update repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-parent-write",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Update repo",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+  test("records linked child permission for Codex when parent-child evidence is provided", async () => {
+    const subagentCorrelationKey = "part:assistant-parent:codex-subtask";
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-child-session",
+        runtimeKind: "codex",
+        role: "build",
+      }),
+      buildSession({
+        externalSessionId: "external-parent-session",
+        runtimeKind: "codex",
+        role: "planner",
+        messages: [
+          buildParentSubagentMessage({
+            correlationKey: subagentCorrelationKey,
+            partId: "codex-subtask",
+            prompt: "Inspect repo",
+          }),
+        ],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+      isSessionObserved: listensToSessions("external-parent-session", "external-child-session"),
     });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
 
     handleEvent({
       type: "approval_required",
       externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
+      requestId: "codex-child-permission",
       requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "write" },
+      title: "Codex exec",
+      summary: "Codex requested exec.",
+      action: { name: "exec" },
       mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
+      supportedReplyOutcomes: ["approve_once" as const, "reject" as const],
+      metadata: { codexMethod: "exec" },
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
-    await Promise.resolve();
 
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
-    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
-    expect(parentSubagentMessage?.meta).toMatchObject({
-      kind: "subagent",
-      correlationKey: subagentCorrelationKey,
-      externalSessionId: "external-child-session",
-    });
+      findSession(sessionsRef, "external-parent-session")?.pendingApprovals.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["codex-child-permission"]);
+    expect(
+      findSession(sessionsRef, "external-child-session")?.pendingApprovals.map(
+        (request) => request.requestId,
+      ),
+    ).toEqual(["codex-child-permission"]);
   });
 
-  test("auto-rejects mutating child permissions from parent context when local child state has no listener", async () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyApproval = mock(async () => {});
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval,
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-detached-child-write";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Update repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-detached-child-write",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Update repo",
-              },
-            },
-          ],
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          role: "build",
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "external-parent-session",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "external-parent-session",
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-
-    const handleParentEvent = handlers[0];
-    if (!handleParentEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleParentEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "write" },
-      mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    });
-    await Promise.resolve();
-
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
-  });
-
-  test("lets attached child sessions own linked auto-reject replies", async () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyApproval = mock(async () => {});
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval,
-    };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Update repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-child-write",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Update repo",
-              },
-            },
-          ],
-        }),
-        "external-child-session": buildSession({
-          externalSessionId: "external-child-session",
-          role: "build",
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "external-parent-session",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "external-parent-session" ||
-        externalSessionId === "external-child-session",
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "external-child-session",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "external-parent-session" ||
-        externalSessionId === "external-child-session",
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-    });
-
-    const [handleParentEvent, handleChildEvent] = handlers;
-    if (!handleParentEvent || !handleChildEvent) {
-      throw new Error("Expected both session event handlers to be registered");
-    }
-    const event: SessionEvent = {
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "write" },
-      mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-child-session",
-      subagentCorrelationKey,
-    };
-
-    handleParentEvent(event);
-    expect(replyApproval).toHaveBeenCalledTimes(0);
-
-    handleChildEvent({ ...event, externalSessionId: "external-child-session" });
-    await Promise.resolve();
-
-    expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-child-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
-
-    handleParentEvent(event);
-
-    expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
-  });
-
-  test("does not patch the parent subagent row when linked permission lacks a child external id", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
+  test("does not patch the parent subagent row when linked permission lacks a child external id", async () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-missing-child";
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: `subagent:${subagentCorrelationKey}`,
-              role: "system",
-              content: "Subagent (build): Inspect repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-missing-child",
-                correlationKey: subagentCorrelationKey,
-                status: "running",
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-            },
-          ],
-        }),
-      },
-    };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const sessionsRef = createSessionsRef([
+      buildParentSessionWithSubagent({
+        correlationKey: subagentCorrelationKey,
+        partId: "subtask-missing-child",
+        prompt: "Inspect repo",
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-1",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"read"}`,
-      summary: `Approval request for ${"read"}.`,
-      affectedPaths: ["src/**"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      subagentCorrelationKey,
-    });
+    handleEvent(
+      approvalRequiredEvent({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-1",
+        parentExternalSessionId: "external-parent-session",
+        subagentCorrelationKey,
+      }),
+    );
 
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({

@@ -12,6 +12,7 @@ const COMMAND = {
   title: "compact",
   hints: ["compact"],
 };
+const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
 const FILE_REFERENCE = {
   id: "file-src-main",
@@ -68,7 +69,8 @@ const createSession = (overrides?: {
     },
     activeAssistantMessageId: null,
     pendingQueuedUserMessages: [],
-    hasIdleSinceActivity: true,
+    streamTurnStatus: "idle",
+    isSendingUserMessage: false,
   } as unknown as SessionRecord;
 
   return { session, command, promptAsync };
@@ -99,6 +101,7 @@ describe("message-execution", () => {
     expect(command).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       command: "compact",
       arguments: "summarize latest session",
       model: "openai/gpt-5",
@@ -256,6 +259,7 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       tools: {},
       parts: [{ type: "text", text: "plain follow-up" }],
     });
@@ -281,6 +285,7 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       tools: {},
       parts: [
         { type: "text", text: "check @src/main.ts please" },
@@ -322,6 +327,7 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       tools: {},
       parts: [
         { type: "text", text: "describe this" },
@@ -355,6 +361,7 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       tools: {},
       parts: [
         { type: "text", text: "review with @src/main.ts" },
@@ -485,6 +492,7 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
       tools: {},
       parts: [
         { type: "text", text: "@assets/diagram.svg and @recordings/demo.mov" },

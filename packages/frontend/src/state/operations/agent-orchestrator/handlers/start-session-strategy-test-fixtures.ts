@@ -1,4 +1,12 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
+import { createSessionStartGate } from "@/features/session-start/session-start-gate";
+import {
+  type AgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSession,
+  removeAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   RuntimeDependencies,
@@ -20,21 +28,35 @@ export const createStartSessionContextFixture = (
   workspaceId: "workspace-1",
   taskId: "task-1",
   role: "build",
+  holdForPostStartMessage: false,
   isStaleRepoOperation: () => false,
   ...overrides,
 });
 
 export const createSessionDependenciesFixture = (
-  overrides: Partial<SessionDependencies> = {},
-): SessionDependencies => ({
-  setSessionsById: () => {},
-  sessionsRef: { current: {} },
-  inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-  loadAgentSessions: async () => {},
-  persistSessionRecord: async () => {},
-  attachSessionListener: () => {},
-  ...overrides,
-});
+  overrides: Partial<SessionDependencies> & {
+    sessionsRef?: { current: AgentSessionCollection };
+  } = {},
+): SessionDependencies => {
+  const { sessionsRef: overrideSessionsRef, ...sessionOverrides } = overrides;
+  const sessionsRef = overrideSessionsRef ?? { current: emptyAgentSessionCollection() };
+  return {
+    replaceSession: (session) => {
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
+    },
+    removeSession: (identity) => {
+      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
+    },
+    readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
+    sessionStartGateRef: { current: createSessionStartGate() },
+    loadSourceSession: async ({ sourceSession }) =>
+      getAgentSession(sessionsRef.current, sourceSession),
+    loadAgentSessionHistory: async () => null,
+    persistSessionRecord: async () => {},
+    observeAgentSession: async () => undefined,
+    ...sessionOverrides,
+  };
+};
 
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
@@ -66,11 +88,8 @@ export const createBuildSessionFixture = (overrides = {}) =>
       status: "idle",
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",
-      runtimeId: null,
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,
-      promptOverrides: {},
-      isLoadingModelCatalog: false,
     },
     overrides,
   );

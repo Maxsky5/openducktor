@@ -1,148 +1,63 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { findAgentStudioSessionSummaryByKey } from "../agents-page-selection";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
-  applyAgentStudioSelectionQuery,
-  canStartSessionForRole,
-  type QueryUpdate,
-  shouldTriggerContextSwitchIntent,
-} from "../use-agent-studio-session-action-helpers";
+  type SelectAgentStudioSelection,
+  toAgentStudioSessionlessRoleSelection,
+  toAgentStudioSessionSelection,
+} from "../shell/agent-studio-selection-state";
 
-type SelectionIntentScheduler = (intent: {
-  taskId: string;
-  externalSessionId: string | null;
-  role: AgentRole;
-}) => void;
+type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
-  activeExternalSessionId: string | null;
-  activeSessionRole: AgentRole;
-  activeSessionExists: boolean;
-  agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
-  isSessionWorking: boolean;
   sessionsForTask: AgentSessionSummary[];
-  selectedTask: TaskCard | null;
-  updateQuery: (updates: QueryUpdate) => void;
-  scheduleSelectionIntent: SelectionIntentScheduler | undefined;
-  onContextSwitchIntent: (() => void) | undefined;
-};
-
-type ApplySelectionIntentParams = {
-  currentExternalSessionId: string | null;
-  currentRole: AgentRole;
-  nextTaskId: string;
-  nextExternalSessionId: string | null;
-  nextRole: AgentRole;
-  updateQuery: (updates: QueryUpdate) => void;
-  scheduleSelectionIntent: SelectionIntentScheduler | undefined;
-  onContextSwitchIntent: (() => void) | undefined;
-};
-
-const applySelectionIntent = ({
-  currentExternalSessionId,
-  currentRole,
-  nextTaskId,
-  nextExternalSessionId,
-  nextRole,
-  updateQuery,
-  scheduleSelectionIntent,
-  onContextSwitchIntent,
-}: ApplySelectionIntentParams): void => {
-  if (
-    shouldTriggerContextSwitchIntent({
-      currentExternalSessionId,
-      currentRole,
-      nextSessionId: nextExternalSessionId,
-      nextRole,
-    })
-  ) {
-    onContextSwitchIntent?.();
-  }
-
-  applyAgentStudioSelectionQuery(updateQuery, {
-    taskId: nextTaskId,
-    externalSessionId: nextExternalSessionId ?? undefined,
-    role: nextRole,
-  });
-  scheduleSelectionIntent?.({
-    taskId: nextTaskId,
-    externalSessionId: nextExternalSessionId,
-    role: nextRole,
-  });
+  canPrepareMessageFirstSession: CanPrepareMessageFirstSession;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export function useAgentStudioSelectionActions({
   taskId,
-  activeExternalSessionId,
-  activeSessionRole,
-  activeSessionExists,
-  agentStudioReady,
-  isActiveTaskHydrated,
-  isSessionWorking,
   sessionsForTask,
-  selectedTask,
-  updateQuery,
-  scheduleSelectionIntent,
-  onContextSwitchIntent,
+  canPrepareMessageFirstSession,
+  selectAgentStudioSelection,
 }: UseAgentStudioSelectionActionsArgs): {
-  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
 } {
+  const findSessionByValue = useCallback(
+    (sessionValue: string): AgentSessionSummary | null =>
+      findAgentStudioSessionSummaryByKey(sessionsForTask, sessionValue),
+    [sessionsForTask],
+  );
+
   const handleWorkflowStepSelect = useCallback(
-    (nextRole: AgentRole, externalSessionId: string | null): void => {
+    (nextRole: AgentRole, sessionValue: string | null): void => {
       if (!taskId) {
         return;
       }
 
-      if (!externalSessionId) {
-        applySelectionIntent({
-          currentExternalSessionId: activeExternalSessionId,
-          currentRole: activeSessionRole,
-          nextTaskId: taskId,
-          nextExternalSessionId: null,
-          nextRole,
-          updateQuery,
-          scheduleSelectionIntent,
-          onContextSwitchIntent,
-        });
+      if (!sessionValue) {
+        selectAgentStudioSelection(
+          toAgentStudioSessionlessRoleSelection({
+            taskId,
+            role: nextRole,
+          }),
+        );
         return;
       }
 
-      const session = sessionsForTask.find(
-        (entry) => entry.externalSessionId === externalSessionId,
-      );
-      if (!isWorkflowAgentSessionSummary(session)) {
+      const session = findSessionByValue(sessionValue);
+      if (!session) {
         return;
       }
 
-      applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
-        currentRole: activeSessionRole,
-        nextTaskId: session.taskId,
-        nextExternalSessionId: session.externalSessionId,
-        nextRole: session.role,
-        updateQuery,
-        scheduleSelectionIntent,
-        onContextSwitchIntent,
-      });
+      selectAgentStudioSelection(toAgentStudioSessionSelection(session));
     },
-    [
-      activeExternalSessionId,
-      activeSessionRole,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      sessionsForTask,
-      taskId,
-      updateQuery,
-    ],
+    [findSessionByValue, selectAgentStudioSelection, taskId],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -151,71 +66,30 @@ export function useAgentStudioSelectionActions({
         return;
       }
 
-      const selectedSession = sessionsForTask.find(
-        (entry) => entry.externalSessionId === nextValue,
-      );
-      if (!isWorkflowAgentSessionSummary(selectedSession)) {
+      const selectedSession = findSessionByValue(nextValue);
+      if (!selectedSession) {
         return;
       }
 
-      applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
-        currentRole: activeSessionRole,
-        nextTaskId: selectedSession.taskId,
-        nextExternalSessionId: selectedSession.externalSessionId,
-        nextRole: selectedSession.role,
-        updateQuery,
-        scheduleSelectionIntent,
-        onContextSwitchIntent,
-      });
+      selectAgentStudioSelection(toAgentStudioSessionSelection(selectedSession));
     },
-    [
-      activeExternalSessionId,
-      activeSessionRole,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      sessionsForTask,
-      taskId,
-      updateQuery,
-    ],
+    [findSessionByValue, selectAgentStudioSelection, taskId],
   );
 
   const handlePrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
-        return;
-      }
-      if (activeSessionExists && isSessionWorking) {
-        return;
-      }
-      if (!canStartSessionForRole(selectedTask, option.role)) {
+      if (!canPrepareMessageFirstSession(option)) {
         return;
       }
 
-      applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
-        currentRole: activeSessionRole,
-        nextTaskId: taskId,
-        nextExternalSessionId: null,
-        nextRole: option.role,
-        updateQuery,
-        scheduleSelectionIntent,
-        onContextSwitchIntent,
-      });
+      selectAgentStudioSelection(
+        toAgentStudioSessionlessRoleSelection({
+          taskId,
+          role: option.role,
+        }),
+      );
     },
-    [
-      activeExternalSessionId,
-      activeSessionExists,
-      activeSessionRole,
-      agentStudioReady,
-      isActiveTaskHydrated,
-      isSessionWorking,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      selectedTask,
-      taskId,
-      updateQuery,
-    ],
+    [canPrepareMessageFirstSession, selectAgentStudioSelection, taskId],
   );
 
   return {

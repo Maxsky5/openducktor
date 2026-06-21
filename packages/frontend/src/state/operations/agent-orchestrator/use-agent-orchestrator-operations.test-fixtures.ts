@@ -60,26 +60,14 @@ export const persistedSessionFixture: AgentSessionRecord = {
 
 export const taskFixtureWithPersistedBuildSession: TaskCard = {
   ...taskFixture,
-  agentSessions: [persistedSessionFixture],
 };
 
 export const taskFixture2WithPersistedBuildSession: TaskCard = {
   ...taskFixture2,
-  agentSessions: [
-    {
-      ...persistedSessionFixture,
-      externalSessionId: "external-2",
-    },
-  ],
 };
 
 export const buildBootstrapFixture = {
   runtimeKind: "opencode",
-  runtimeId: "runtime-build",
-  runtimeRoute: {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4444",
-  },
   workingDirectory: "/tmp/repo/worktree",
 } as const;
 

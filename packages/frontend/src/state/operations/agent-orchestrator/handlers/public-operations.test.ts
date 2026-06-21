@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "../support/messages";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
 const BUILD_SELECTION = {
@@ -10,12 +12,22 @@ const BUILD_SELECTION = {
   profileId: "build",
 };
 
+const SESSION_IDENTITY = {
+  externalSessionId: "session-1",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session-1",
+};
+
 type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
+type PublicAgentEngine = Parameters<typeof createOrchestratorPublicOperations>[0]["agentEngine"];
 
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
-    startAgentSession: async () => "session-started",
-    settleStartedAgentSession: () => {},
+    startAgentSession: async () => ({
+      externalSessionId: "session-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-started",
+    }),
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     updateAgentSessionModel: () => {},
@@ -25,75 +37,31 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const ensureSessionReadyForView = async (): Promise<boolean> => false;
-const attachRuntimeTranscriptSession = async (): Promise<void> => {};
+const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
+  loadSessionTodos: async () => [],
+  loadSessionHistory: async () => [],
+  subscribeEvents: async () => () => undefined,
+  ...overrides,
+});
 
-describe("agent-orchestrator-public-operations", () => {
-  test("shows toast and rethrows load errors", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {
-        throw new Error("load failed");
-      },
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
-      sessionActions: createSessionActions(),
-    });
-
-    try {
-      await expect(operations.loadAgentSessions("task-1")).rejects.toThrow("load failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to load agent sessions", {
-        description: "load failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
+const createPublicOperations = (
+  overrides: Partial<Parameters<typeof createOrchestratorPublicOperations>[0]> = {},
+) =>
+  createOrchestratorPublicOperations({
+    agentEngine: createAgentEngine(),
+    sessionActions: createSessionActions(),
+    loadAgentSessionHistory: async () => null,
+    ...overrides,
   });
 
+describe("agent-orchestrator-public-operations", () => {
   test("rethrows start errors without adding a toast", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         startAgentSession: async () => {
           throw new Error("start failed");
@@ -121,26 +89,8 @@ describe("agent-orchestrator-public-operations", () => {
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
           throw new Error("send failed");
@@ -150,7 +100,7 @@ describe("agent-orchestrator-public-operations", () => {
 
     try {
       await expect(
-        operations.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+        operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("send failed");
       expect(toastError).toHaveBeenCalledWith("Failed to send message", {
         description: "send failed",
@@ -165,26 +115,8 @@ describe("agent-orchestrator-public-operations", () => {
     const toastError = mock(() => "");
     toast.error = toastError;
 
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine(),
       sessionActions: createSessionActions({
         stopAgentSession: async () => {
           throw new Error("stop failed");
@@ -193,7 +125,7 @@ describe("agent-orchestrator-public-operations", () => {
     });
 
     try {
-      await expect(operations.stopAgentSession("session-1")).rejects.toThrow("stop failed");
+      await expect(operations.stopAgentSession(SESSION_IDENTITY)).rejects.toThrow("stop failed");
       expect(toastError).toHaveBeenCalledWith("Failed to stop agent session", {
         description: "stop failed",
       });
@@ -202,112 +134,107 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows session view readiness errors", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
+  test("delegates session reads directly to the agent engine", async () => {
+    const loadSessionTodos = mock(async () => []);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        loadSessionTodos,
+      }),
+      sessionActions: createSessionActions(),
+    });
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
 
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView: async () => {
-        throw new Error("prepare failed");
+    await operations.readSessionTodos(sessionRef);
+
+    expect(loadSessionTodos).toHaveBeenCalledWith(sessionRef);
+  });
+
+  test("forwards full session history inputs without stripping transient context", async () => {
+    const readSessionHistory = mock(async () => []);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        loadSessionHistory: readSessionHistory,
+      }),
+      sessionActions: createSessionActions(),
+    });
+
+    await operations.readSessionHistory({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
       },
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions: async () => {},
-      sessionActions: createSessionActions(),
+      limit: 50,
     });
 
-    try {
-      await expect(
-        operations.ensureSessionReadyForView({
-          taskId: "task-1",
-          externalSessionId: "session-1",
-          repoReadinessState: "ready",
-        }),
-      ).rejects.toThrow("prepare failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to prepare session", {
-        description: "prepare failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
+    expect(readSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
+      },
+      limit: 50,
+    });
   });
 
-  test("forwards explicit single-session removal without toast wrapping", async () => {
-    const removeAgentSession = mock(async () => {});
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
+  test("delegates session event subscriptions directly to the agent engine", async () => {
+    const unsubscribe = mock(() => undefined);
+    const subscribeEvents = mock(async () => unsubscribe);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        subscribeEvents,
       }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession,
-      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+    const listener = mock(() => undefined);
 
-    await operations.removeAgentSession("session-1");
+    const result = await operations.subscribeSessionEvents(sessionRef, listener);
 
-    expect(removeAgentSession).toHaveBeenCalledWith("session-1");
+    expect(subscribeEvents).toHaveBeenCalledWith(sessionRef, listener);
+    expect(result).toBe(unsubscribe);
   });
 
-  test("forwards explicit session removals without toast wrapping", async () => {
-    const removeAgentSessions = mock(async () => {});
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
-      removeAgentSession: async () => {},
-      removeAgentSessions,
-      sessionActions: createSessionActions(),
-    });
-
-    await operations.removeAgentSessions({ taskId: "task-1", roles: ["build", "qa"] });
-
-    expect(removeAgentSessions).toHaveBeenCalledWith({
+  test("exposes store-backed session history loading as a command", async () => {
+    const loadedSession: AgentSessionState = {
+      externalSessionId: SESSION_IDENTITY.externalSessionId,
       taskId: "task-1",
-      roles: ["build", "qa"],
+      role: "build",
+      status: "idle",
+      startedAt: "2026-06-12T08:00:00.000Z",
+      runtimeKind: SESSION_IDENTITY.runtimeKind,
+      workingDirectory: SESSION_IDENTITY.workingDirectory,
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState(SESSION_IDENTITY.externalSessionId),
+      contextUsage: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+    };
+    const loadAgentSessionHistory = mock(async () => loadedSession);
+    const operations = createPublicOperations({
+      loadAgentSessionHistory,
     });
+
+    const result = await operations.loadAgentSessionHistory(SESSION_IDENTITY);
+
+    expect(loadAgentSessionHistory).toHaveBeenCalledWith(SESSION_IDENTITY);
+    expect(result).toBe(loadedSession);
   });
 });

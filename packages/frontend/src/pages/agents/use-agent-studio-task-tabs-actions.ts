@@ -1,6 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback } from "react";
-import type { NavigateToTaskIntent } from "./agent-studio-types";
-import { closeTaskTab, reorderTaskTabs } from "./agents-page-session-tabs";
+import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -20,14 +19,11 @@ const focusTaskTabTrigger = (taskId: string): void => {
 type UseTaskTabActionsArgs = {
   tabTaskIds: string[];
   activeTaskTabId: string;
-  clearComposerInput: () => void;
-  onContextSwitchIntent: (() => void) | undefined;
   clearTaskSelection: () => void;
-  navigateToTaskIntent: NavigateToTaskIntent;
+  selectTask: (taskId: string) => void;
   handleSelectTab: (nextTaskId: string) => void;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
-  setIntentActiveTaskId: SetState<string | null>;
 };
 
 type UseTaskTabActionsResult = {
@@ -44,14 +40,11 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
   const {
     tabTaskIds,
     activeTaskTabId,
-    clearComposerInput,
-    onContextSwitchIntent,
     clearTaskSelection,
-    navigateToTaskIntent,
+    selectTask,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   } = args;
 
   const handleCreateTab = useCallback(
@@ -80,25 +73,18 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      clearComposerInput();
-      onContextSwitchIntent?.();
-      setIntentActiveTaskId(nextActiveTaskId ?? null);
-
       if (!nextActiveTaskId) {
         clearTaskSelection();
         return;
       }
 
       focusTaskTabTrigger(nextActiveTaskId);
-      navigateToTaskIntent(nextActiveTaskId);
+      selectTask(nextActiveTaskId);
     },
     [
       activeTaskTabId,
-      clearComposerInput,
       clearTaskSelection,
-      navigateToTaskIntent,
-      onContextSwitchIntent,
-      setIntentActiveTaskId,
+      selectTask,
       setOpenTaskTabs,
       setPersistedActiveTaskId,
       tabTaskIds,

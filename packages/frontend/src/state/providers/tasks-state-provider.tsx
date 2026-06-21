@@ -3,8 +3,8 @@ import { buildTasksStateValue } from "../app-state-context-values";
 import {
   TaskControlContext,
   type TaskControlContextValue,
-  TaskDataContext,
-  type TaskDataContextValue,
+  TaskSnapshotContext,
+  type TaskSnapshotContextValue,
   TasksStateContext,
   useActiveWorkspaceContext,
 } from "../app-state-contexts";
@@ -95,11 +95,12 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     ],
   );
 
-  const taskDataValue = useMemo<TaskDataContextValue>(
+  const taskSnapshotValue = useMemo<TaskSnapshotContextValue>(
     () => ({
       tasks,
+      isLoadingTasks,
     }),
-    [tasks],
+    [isLoadingTasks, tasks],
   );
 
   const taskControlValue = useMemo<TaskControlContextValue>(
@@ -113,10 +114,10 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   );
 
   return (
-    <TaskDataContext.Provider value={taskDataValue}>
+    <TaskSnapshotContext.Provider value={taskSnapshotValue}>
       <TaskControlContext.Provider value={taskControlValue}>
         <TasksStateContext.Provider value={tasksStateValue}>{children}</TasksStateContext.Provider>
       </TaskControlContext.Provider>
-    </TaskDataContext.Provider>
+    </TaskSnapshotContext.Provider>
   );
 }

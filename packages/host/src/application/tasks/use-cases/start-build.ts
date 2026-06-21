@@ -152,7 +152,7 @@ export const createTaskBuildStartUseCase = ({
         );
       }
 
-      const runtime = yield* dependencies.runtimeRegistry
+      yield* dependencies.runtimeRegistry
         .ensureWorkspaceRuntime({
           runtimeKind,
           repoPath: canonicalRepoPath,
@@ -181,7 +181,6 @@ export const createTaskBuildStartUseCase = ({
         try: () =>
           buildSessionBootstrapSchema.parse({
             runtimeKind,
-            runtimeId: runtime.runtimeId,
             workingDirectory: worktreePath,
           }),
         catch: (cause) =>

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
+import {
+  closesQueuedSessionEvents,
+  createSessionEventBatcher,
+  isImmediateSessionEvent,
+} from "./session-event-batching";
 import type { SessionEvent } from "./session-event-types";
 
 describe("session-event-batching", () => {
-  test("concatenates assistant deltas with the same message key before emitting", () => {
+  test("concatenates assistant deltas with the same message key before emitting", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -36,7 +40,7 @@ describe("session-event-batching", () => {
     ]);
   });
 
-  test("drops streamed text events that are superseded by a final assistant message", () => {
+  test("drops streamed text events that are superseded by a final assistant message", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -103,7 +107,7 @@ describe("session-event-batching", () => {
     ]);
   });
 
-  test("emits completed assistant parts immediately even inside the normal throttle window", () => {
+  test("emits completed assistant parts immediately even inside the normal throttle window", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
@@ -151,7 +155,7 @@ describe("session-event-batching", () => {
     expect(second.nextDelayMs).toBeNull();
   });
 
-  test("reports the shortest remaining delay across deferred event keys", () => {
+  test("reports the shortest remaining delay across deferred event keys", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
@@ -164,12 +168,18 @@ describe("session-event-batching", () => {
         message: "First",
       },
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_plan",
-          args: { taskId: "task-1", markdown: "# Plan" },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
     ] satisfies SessionEvent[]);
@@ -186,12 +196,18 @@ describe("session-event-batching", () => {
         message: "Second",
       },
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.150Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_plan",
-          args: { taskId: "task-1", markdown: "# Plan" },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
     ] satisfies SessionEvent[]);
@@ -201,7 +217,7 @@ describe("session-event-batching", () => {
     expect(prepared.nextDelayMs).toBe(250);
   });
 
-  test("classifies only configured session events as immediate", () => {
+  test("classifies only configured session events as immediate", async () => {
     expect(
       isImmediateSessionEvent({
         type: "user_message",
@@ -222,6 +238,43 @@ describe("session-event-batching", () => {
         messageId: "assistant-1",
         delta: "Hello",
         timestamp: "2026-02-22T08:00:01.000Z",
+      }),
+    ).toBe(false);
+  });
+
+  test("classifies turn-closing immediate events as queued-event boundaries", async () => {
+    expect(
+      closesQueuedSessionEvents({
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+      }),
+    ).toBe(true);
+    expect(
+      closesQueuedSessionEvents({
+        type: "session_finished",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        message: "done",
+      }),
+    ).toBe(true);
+    expect(
+      closesQueuedSessionEvents({
+        type: "session_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        message: "failed",
+      }),
+    ).toBe(true);
+    expect(
+      closesQueuedSessionEvents({
+        type: "user_message",
+        externalSessionId: "session-1",
+        messageId: "user-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        message: "Continue",
+        parts: [{ kind: "text", text: "Continue" }],
+        state: "read",
       }),
     ).toBe(false);
   });

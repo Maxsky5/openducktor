@@ -8,7 +8,7 @@ import { handleMessageUpdatedEvent } from "./message-events/updated";
 import type { EventStreamRuntime } from "./shared";
 
 export { emitSubagentPartsForSession } from "./message-events/assistant";
-export { reconcileUserMessageQueuedStates } from "./message-events/user";
+export { publishUserMessageReadStateChanges } from "./message-events/user";
 
 export const handleMessageEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (

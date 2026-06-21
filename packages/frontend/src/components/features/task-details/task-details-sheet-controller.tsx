@@ -1,10 +1,11 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { type ReactElement, type Ref, useImperativeHandle, useMemo, useState } from "react";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
@@ -19,12 +20,9 @@ type TaskDetailsSheetControllerProps = Omit<
 > & {
   allTasks: TaskCard[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 
@@ -32,6 +30,7 @@ export function TaskDetailsSheetController({
   activeWorkspace = null,
   allTasks,
   taskSessionsByTaskId,
+  historicalSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   workflowActionsEnabled,
   onOpenSession,
@@ -80,6 +79,9 @@ export function TaskDetailsSheetController({
 
   const activeTaskId = task ? taskId : null;
   const selectedTaskSessions = activeTaskId ? (taskSessionsByTaskId.get(activeTaskId) ?? []) : [];
+  const selectedHistoricalSessions = activeTaskId
+    ? (historicalSessionsByTaskId.get(activeTaskId) ?? [])
+    : [];
   const selectedActiveSessionContext = activeTaskId
     ? activeTaskSessionContextByTaskId.get(activeTaskId)
     : undefined;
@@ -90,12 +92,10 @@ export function TaskDetailsSheetController({
       task={task}
       allTasks={allTasks}
       taskSessions={selectedTaskSessions}
+      historicalSessions={selectedHistoricalSessions}
       hasActiveSession={Boolean(selectedActiveSessionContext)}
       {...(selectedActiveSessionContext?.role
         ? { activeSessionRole: selectedActiveSessionContext.role }
-        : {})}
-      {...(selectedActiveSessionContext?.presentationState
-        ? { activeSessionPresentationState: selectedActiveSessionContext.presentationState }
         : {})}
       open={open}
       onOpenChange={(nextOpen) => {

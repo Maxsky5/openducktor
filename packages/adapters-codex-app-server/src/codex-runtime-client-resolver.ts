@@ -1,13 +1,12 @@
 import {
-  type AttachAgentSessionInput,
+  type AgentSessionRuntimeRef,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
-  type ListLiveAgentSessionsInput,
-  type ListSessionPresenceInput,
+  type ListSessionRuntimeSnapshotsInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
   type LoadAgentSessionTodosInput,
-  type ReadSessionPresenceInput,
+  type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
   requireRepoRuntimeRef,
   type SearchAgentFilesInput,
@@ -15,21 +14,16 @@ import {
 } from "@openducktor/core";
 import { createCodexAppServerClient } from "./app-server-client";
 import { resolveCodexRuntimeClientInput } from "./runtime-connection";
-import type {
-  CodexAppServerAdapterOptions,
-  CodexAppServerClient,
-  CodexRepoRuntimeResolverPort,
-} from "./types";
+import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 type RuntimeClientInput =
   | ListAgentModelsInput
   | StartAgentSessionInput
   | ResumeAgentSessionInput
-  | AttachAgentSessionInput
+  | AgentSessionRuntimeRef
   | ForkAgentSessionInput
-  | ListLiveAgentSessionsInput
-  | ListSessionPresenceInput
-  | ReadSessionPresenceInput
+  | ListSessionRuntimeSnapshotsInput
+  | ReadSessionRuntimeSnapshotInput
   | LoadAgentSessionHistoryInput
   | LoadAgentSessionDiffInput
   | LoadAgentSessionTodosInput
@@ -56,7 +50,6 @@ export class CodexRuntimeClientResolver {
   async resolve(
     input: RuntimeClientInput,
     action: string,
-    options: { requireLive?: boolean } = {},
   ): Promise<{
     runtimeId: string;
     client: CodexAppServerClient;
@@ -76,12 +69,7 @@ export class CodexRuntimeClientResolver {
       repoPath: requestedRuntimeRef.repoPath,
       runtimeKind: requestedRuntimeRef.runtimeKind,
     };
-    const requestedRuntimeId = "runtimeId" in input ? input.runtimeId : undefined;
-    const runtime = requestedRuntimeId
-      ? await this.requireRuntimeById(resolver, runtimeRef, requestedRuntimeId)
-      : options.requireLive
-        ? await resolver.requireRepoRuntime(runtimeRef)
-        : await resolver.ensureRepoRuntime(runtimeRef);
+    const runtime = await resolver.requireRepoRuntime(runtimeRef);
 
     const { runtimeId } = resolveCodexRuntimeClientInput(
       runtime,
@@ -97,22 +85,5 @@ export class CodexRuntimeClientResolver {
       runtimeId,
       client: this.clientForRuntime(runtimeId),
     };
-  }
-
-  private async requireRuntimeById(
-    resolver: CodexRepoRuntimeResolverPort,
-    runtimeRef: RuntimeRef,
-    runtimeId: string,
-  ) {
-    if (resolver.requireRuntimeById) {
-      return resolver.requireRuntimeById(runtimeRef, runtimeId);
-    }
-    const runtime = await resolver.requireRepoRuntime(runtimeRef);
-    if (runtime.runtimeId !== runtimeId) {
-      throw new Error(
-        `No live Codex runtime found for repo '${runtimeRef.repoPath}' with runtime id '${runtimeId}'.`,
-      );
-    }
-    return runtime;
   }
 }

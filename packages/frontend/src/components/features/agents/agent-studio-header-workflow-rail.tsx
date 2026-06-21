@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
@@ -18,7 +19,7 @@ type WorkflowRailProps = {
   steps: AgentWorkflowStep[];
   selectedRole: AgentRole | null;
   agentStudioReady: boolean;
-  onStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onStepSelect: (role: AgentRole, sessionValue: string | null) => void;
 };
 
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
@@ -111,14 +112,17 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (attentionVariant === "blocked_task") {
     return "Task is blocked and waiting for user action";
   }
-  if (entry.state.liveSession === "running") {
+  if (
+    entry.state.liveSession !== "none" &&
+    isAgentSessionActivityWorking(entry.state.liveSession)
+  ) {
     return "Step in progress";
   }
   if (entry.state.liveSession === "error") {
     return "Latest session failed";
   }
   if (entry.state.tone === "failed") {
-    if (entry.externalSessionId) {
+    if (entry.sessionValue) {
       return "Open latest failed session for this role";
     }
     return "Step failed before a session could start";
@@ -126,7 +130,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.state.completion === "rejected") {
     return "Latest review rejected this task";
   }
-  if (entry.externalSessionId) {
+  if (entry.sessionValue) {
     return "Open latest relevant session for this role";
   }
   if (entry.state.tone === "available") {
@@ -147,10 +151,11 @@ function WorkflowStepButton({
   step: AgentWorkflowStep;
   isSelected: boolean;
   agentStudioReady: boolean;
-  onSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onSelect: (role: AgentRole, sessionValue: string | null) => void;
 }): ReactElement {
   const Icon = step.icon;
-  const shouldSpinInProgress = step.state.liveSession === "running";
+  const shouldSpinInProgress =
+    step.state.liveSession !== "none" && isAgentSessionActivityWorking(step.state.liveSession);
   const attentionVariant = getWorkflowStepAttentionVariant(step);
 
   return (
@@ -169,7 +174,7 @@ function WorkflowStepButton({
       aria-pressed={isSelected}
       title={workflowStepHint(step)}
       onClick={() => {
-        onSelect(step.role, step.externalSessionId);
+        onSelect(step.role, step.sessionValue);
       }}
     >
       <Icon className="size-4" />

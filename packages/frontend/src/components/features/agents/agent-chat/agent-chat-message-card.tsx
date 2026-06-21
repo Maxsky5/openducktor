@@ -1,45 +1,31 @@
-import type { RuntimeKind, RuntimeRef } from "@openducktor/contracts";
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
-
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
   sessionAgentColors?: Record<string, string>;
-  sessionWorkingDirectory?: string | null | undefined;
-  sessionRuntimeKind?: RuntimeKind | null | undefined;
-  sessionRuntimeRef?: RuntimeRef | null | undefined;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
+  sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount?: number;
-  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
-  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   isStreamingAssistantMessage = false,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
-  sessionRuntimeRef,
-  subagentPendingApprovals,
-  subagentPendingApprovalCount,
-  subagentPendingApprovalCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-  subagentPendingQuestions,
-  subagentPendingQuestionCount,
-  subagentPendingQuestionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+  sessionIdentity,
+  subagentPendingApprovalCount = 0,
+  subagentPendingQuestionCount = 0,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = use(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
+  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
+  const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
   const workflowToolAliasesByCanonical = sessionRuntimeKind
     ? findRuntimeDefinition(runtimeDefinitions, sessionRuntimeKind)?.workflowToolAliasesByCanonical
     : undefined;
@@ -49,17 +35,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     workflowToolAliasesByCanonical,
   });
-  const resolvedSubagentPendingApprovalCount =
-    subagentPendingApprovalCount ??
-    (message.meta?.kind === "subagent" && message.meta.externalSessionId
-      ? (subagentPendingApprovalCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
-      : 0);
-  const resolvedSubagentPendingQuestionCount =
-    subagentPendingQuestionCount ??
-    (message.meta?.kind === "subagent" && message.meta.externalSessionId
-      ? (subagentPendingQuestionCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
-      : 0);
-
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
       <MessageHeader
@@ -71,17 +46,15 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        sessionRuntimeRef={sessionRuntimeRef ?? null}
+        parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        subagentPendingApprovals={subagentPendingApprovals}
-        subagentPendingApprovalCount={resolvedSubagentPendingApprovalCount}
-        subagentPendingQuestions={subagentPendingQuestions}
-        subagentPendingQuestionCount={resolvedSubagentPendingQuestionCount}
+        subagentPendingApprovalCount={subagentPendingApprovalCount}
+        subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
     </article>
   );

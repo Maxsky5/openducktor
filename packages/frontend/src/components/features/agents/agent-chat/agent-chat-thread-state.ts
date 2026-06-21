@@ -1,77 +1,110 @@
-import type { AgentChatThreadModel } from "./agent-chat.types";
-
-type BuildAgentChatThreadStateArgs = Pick<
-  AgentChatThreadModel,
-  | "isSessionViewLoading"
-  | "isSessionHistoryLoading"
-  | "isWaitingForRuntimeReadiness"
-  | "readinessState"
-  | "blockedReason"
-> & {
-  isTranscriptRenderDeferred: boolean;
-  isTranscriptRowsMissing?: boolean;
-};
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import {
+  type AgentSessionTranscriptState,
+  isAgentSessionTranscriptLoading,
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type {
+  AgentChatThreadSession,
+  AgentChatTranscriptNotice,
+  AgentChatTranscriptNoticeAction,
+} from "./agent-chat.types";
 
 export type AgentChatThreadState = {
-  isTranscriptLoading: boolean;
-  hideTranscriptWhileDeferred: boolean;
-  statusOverlay: {
-    kind: "runtime_waiting" | "session_loading";
-    title: string;
-    description: string;
-  } | null;
-  showRuntimeBlockedCard: boolean;
+  threadSession: AgentChatThreadSession | null;
+  displayedSessionKey: string | null;
+  shouldResetTranscriptWindow: boolean;
+  transcriptNotice: AgentChatTranscriptNotice | null;
 };
 
-export const getAgentChatThreadState = ({
-  isSessionViewLoading,
-  isSessionHistoryLoading,
-  isWaitingForRuntimeReadiness,
-  readinessState,
-  blockedReason,
-  isTranscriptRenderDeferred,
-  isTranscriptRowsMissing = false,
-}: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
-  const isTranscriptLoading =
-    isSessionViewLoading ||
-    isSessionHistoryLoading ||
-    isTranscriptRenderDeferred ||
-    isTranscriptRowsMissing;
-  const hideTranscriptWhileDeferred = isTranscriptRenderDeferred;
-  const statusOverlay = (() => {
-    if (
-      isWaitingForRuntimeReadiness &&
-      (readinessState === "checking" || readinessState === "ready")
-    ) {
-      return {
-        kind: "runtime_waiting" as const,
-        title:
-          readinessState === "ready" ? "Session runtime is reconnecting" : "Runtime is starting",
-        description:
-          readinessState === "ready"
-            ? "Waiting for the selected session runtime to become available before loading this session."
-            : "Waiting for runtime and MCP health before loading this session.",
-      };
-    }
+type ProjectAgentChatThreadStateArgs = {
+  sessionKey: string | null;
+  session: AgentChatThreadSession | null;
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
+  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
+};
 
-    if (!isTranscriptLoading) {
-      return null;
-    }
-
+const deriveAgentChatTranscriptNotice = ({
+  transcriptState,
+  runtimeReadiness,
+  failedTranscriptAction,
+}: {
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
+  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
+}): AgentChatTranscriptNotice | null => {
+  if (
+    transcriptState.kind === "runtime_waiting" &&
+    runtimeReadiness.state === "blocked" &&
+    runtimeReadiness.message
+  ) {
     return {
-      kind: "session_loading" as const,
+      kind: "runtime_blocked",
+      severity: "error",
+      title: "Runtime unavailable",
+      description: runtimeReadiness.message,
+    };
+  }
+
+  if (transcriptState.kind === "runtime_waiting") {
+    return {
+      kind: "runtime_waiting",
+      severity: "loading",
+      title: "Runtime is starting",
+      description:
+        runtimeReadiness.message ??
+        "Waiting for runtime and MCP health before loading this session.",
+    };
+  }
+
+  if (transcriptState.kind === "session_loading") {
+    return {
+      kind: "session_loading",
+      severity: "loading",
       title: "Loading session",
       description:
-        isSessionHistoryLoading || isTranscriptRenderDeferred || isTranscriptRowsMissing
+        transcriptState.reason === "history"
           ? "Loading the selected conversation."
           : "Preparing the selected session view.",
     };
-  })();
+  }
+
+  if (transcriptState.kind === "failed") {
+    return {
+      kind: "session_failed",
+      severity: "error",
+      title: "Failed to load session",
+      description: transcriptState.message,
+      ...(failedTranscriptAction ? { action: failedTranscriptAction } : {}),
+    };
+  }
+
+  return null;
+};
+
+const hidesExistingSessionTranscript = (transcriptState: AgentSessionTranscriptState): boolean =>
+  transcriptState.kind === "empty" || transcriptState.kind === "failed";
+
+export const projectAgentChatThreadState = ({
+  sessionKey,
+  session,
+  transcriptState,
+  runtimeReadiness,
+  failedTranscriptAction,
+}: ProjectAgentChatThreadStateArgs): AgentChatThreadState => {
+  const threadSession = hidesExistingSessionTranscript(transcriptState) ? null : session;
+  const shouldResetTranscriptWindow =
+    isAgentSessionTranscriptLoading(transcriptState) && threadSession === null;
+  const transcriptNotice = deriveAgentChatTranscriptNotice({
+    transcriptState,
+    runtimeReadiness,
+    failedTranscriptAction,
+  });
 
   return {
-    isTranscriptLoading,
-    hideTranscriptWhileDeferred,
-    statusOverlay,
-    showRuntimeBlockedCard: readinessState === "blocked" && Boolean(blockedReason),
+    threadSession,
+    displayedSessionKey: sessionKey,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
   };
 };

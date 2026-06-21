@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -9,6 +10,12 @@ import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioHeaderModel>[0];
+
+const specSessionSelectorValue = agentSessionIdentityKey({
+  externalSessionId: "session-1",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/worktree",
+});
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedTask: {
@@ -38,7 +45,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     createdAt: "2026-02-22T12:00:00.000Z",
   },
   onOpenTaskDetails: mock(() => {}),
-  activeSession: { status: "running" },
+  selectedRole: "spec",
   sessionsForTaskLength: 1,
   agentStudioReady: true,
   isStarting: false,
@@ -73,27 +80,26 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
         liveSession: "none",
       },
     },
-    selectedInteractionRole: "spec",
     workflowSessionByRole: {
       spec: {
         role: "spec",
         externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
         startedAt: "2026-02-22T12:00:00.000Z",
-        status: "running",
+        activityState: "running",
         taskId: "task-1",
-        pendingApprovals: [],
-        pendingQuestions: [],
       },
       planner: null,
       build: null,
       qa: null,
     },
-    sessionSelectorAutofocusByValue: { "session-1": true },
-    sessionSelectorValue: "session-1",
+    sessionSelectorAutofocusByValue: { [specSessionSelectorValue]: true },
+    sessionSelectorValue: specSessionSelectorValue,
     sessionSelectorGroups: [
       {
         label: "Spec",
-        options: [{ value: "session-1", label: "Spec session" }],
+        options: [{ value: specSessionSelectorValue, label: "Spec session" }],
       },
     ],
     sessionCreateOptions: [],
@@ -149,9 +155,11 @@ describe("useAgentStudioHeaderModel", () => {
     const model = harness.getLatest();
     expect(model.taskTitle).toBe("Task 1");
     expect(model.selectedRole).toBe("spec");
-    expect(model.workflowSteps[0]?.externalSessionId).toBe("session-1");
+    expect(model.workflowSteps[0]?.sessionValue).toBe(specSessionSelectorValue);
     expect(model.sessionSelector.disabled).toBe(false);
-    expect(model.sessionSelector.shouldAutofocusComposerForValue("session-1")).toBe(true);
+    expect(model.sessionSelector.shouldAutofocusComposerForValue(specSessionSelectorValue)).toBe(
+      true,
+    );
     expect(model.sessionCreateOptions).toEqual([sessionCreateOption]);
     expect(model.quickActions).toEqual([quickAction]);
     expect(model.primaryQuickAction).toEqual(quickAction);
@@ -174,7 +182,6 @@ describe("useAgentStudioHeaderModel", () => {
     const harness = createHookHarness(
       createHookArgs({
         selectedTask: null,
-        activeSession: null,
         sessionsForTaskLength: 0,
       }),
     );

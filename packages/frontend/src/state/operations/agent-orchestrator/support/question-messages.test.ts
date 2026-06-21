@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  createSessionMessagesFixture,
+  type SessionMessagesFixtureInput,
+  sessionMessageAt,
+} from "@/test-utils/session-message-test-helpers";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { annotateQuestionToolMessage } from "./question-messages";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesFixtureInput) => ({
   externalSessionId: "session-1",
-  messages,
+  messages: createSessionMessagesFixture("session-1", messages),
 });
 
 describe("agent-orchestrator-question-messages", () => {

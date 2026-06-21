@@ -1,13 +1,15 @@
-import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, ReusablePrompt } from "@openducktor/contracts";
 import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import type { SessionRuntimeQueryInput } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
-import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
-import { repoRuntimeSlashCommandsQueryOptions } from "@/state/queries/runtime-catalog";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeSlashCommandsQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
+import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
@@ -24,36 +26,24 @@ export const mergeSlashCommands = (
   ];
 };
 
+const skippedSlashCommandsQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+  skippedQueryOptions<AgentSlashCommandCatalog>({
+    queryKey: runtimeRef
+      ? runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef)
+      : runtimeCatalogQueryKeys.all,
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
 export const useChatComposerSlashCommands = ({
-  hasActiveSession,
-  activeExternalSessionId,
-  activeSessionStatus,
-  activeSessionRuntimeQueryInput,
-  activeSessionRuntimeQueryError,
+  promptInputRuntime,
   runtimeSupportsSlashCommands,
-  workspaceRepoPath,
-  selectedRuntimeKind,
   reusablePrompts,
   loadSlashCommandsForRepo,
-  readSessionSlashCommands,
 }: {
-  hasActiveSession: boolean;
-  activeExternalSessionId: string | null;
-  activeSessionStatus: AgentSessionState["status"] | null;
-  activeSessionRuntimeQueryInput: SessionRuntimeQueryInput | null;
-  activeSessionRuntimeQueryError: string | null;
+  promptInputRuntime: ChatComposerPromptInputRuntime;
   runtimeSupportsSlashCommands: boolean;
-  workspaceRepoPath: string | null;
-  selectedRuntimeKind: RuntimeKind | null;
   reusablePrompts: ReusablePrompt[];
-  loadSlashCommandsForRepo: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionSlashCommands?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
+  loadSlashCommandsForRepo: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
 }): {
   supportsSlashCommands: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;
@@ -61,42 +51,15 @@ export const useChatComposerSlashCommands = ({
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
 } => {
-  const activeSessionSlashCommandsQuery = useQuery({
-    ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
-      ? sessionSlashCommandsQueryOptions(
-          activeSessionRuntimeQueryInput.repoPath,
-          activeSessionRuntimeQueryInput.runtimeKind,
-          readSessionSlashCommands,
-        )
-      : {
-          queryKey: ["agent-session-runtime", "slash-commands", "", DEFAULT_RUNTIME_KIND] as const,
-          queryFn: async (): Promise<AgentSlashCommandCatalog> => {
-            throw new Error("Session slash commands query is disabled.");
-          },
-        }),
-    enabled:
-      runtimeSupportsSlashCommands &&
-      hasActiveSession &&
-      activeSessionStatus !== "starting" &&
-      activeSessionRuntimeQueryInput !== null &&
-      activeSessionRuntimeQueryError === null &&
-      readSessionSlashCommands !== undefined,
-  });
-  const repoSlashCommandsQuery = useQuery({
-    ...repoRuntimeSlashCommandsQueryOptions(
-      workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-      loadSlashCommandsForRepo,
-    ),
-    enabled:
-      runtimeSupportsSlashCommands &&
-      workspaceRepoPath !== null &&
-      activeExternalSessionId === null &&
-      selectedRuntimeKind !== null,
-  });
-  const runtimeSlashCommandCatalog = hasActiveSession
-    ? (activeSessionSlashCommandsQuery.data ?? null)
-    : (repoSlashCommandsQuery.data ?? null);
+  const runtimeRef =
+    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
+  const slashCommandsQuery = useQuery(
+    runtimeSupportsSlashCommands && runtimeRef
+      ? repoRuntimeSlashCommandsQueryOptions(runtimeRef, loadSlashCommandsForRepo)
+      : skippedSlashCommandsQueryOptions(runtimeRef),
+  );
+  const runtimeSlashCommandCatalog =
+    promptInputRuntime.state === "available" ? (slashCommandsQuery.data ?? null) : null;
   const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
@@ -113,20 +76,15 @@ export const useChatComposerSlashCommands = ({
     () => ({ commands: slashCommands }),
     [slashCommands],
   );
-  const slashCommandsError = runtimeSupportsSlashCommands
-    ? hasActiveSession
-      ? activeSessionSlashCommandsQuery.error instanceof Error
-        ? activeSessionSlashCommandsQuery.error.message
-        : null
-      : repoSlashCommandsQuery.error instanceof Error
-        ? repoSlashCommandsQuery.error.message
-        : null
-    : null;
-  const isSlashCommandsLoading = runtimeSupportsSlashCommands
-    ? hasActiveSession
-      ? activeSessionSlashCommandsQuery.isLoading
-      : repoSlashCommandsQuery.isLoading
-    : false;
+  let slashCommandsError: string | null = null;
+  let isSlashCommandsLoading = false;
+  if (runtimeSupportsSlashCommands && promptInputRuntime.state === "unavailable") {
+    slashCommandsError = promptInputRuntime.error;
+  } else if (runtimeSupportsSlashCommands && promptInputRuntime.state === "available") {
+    slashCommandsError =
+      slashCommandsQuery.error instanceof Error ? slashCommandsQuery.error.message : null;
+    isSlashCommandsLoading = slashCommandsQuery.isLoading;
+  }
 
   return {
     supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0,

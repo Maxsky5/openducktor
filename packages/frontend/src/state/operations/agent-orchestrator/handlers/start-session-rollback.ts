@@ -1,12 +1,33 @@
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import type {
   RuntimeDependencies,
   SessionDependencies,
+  SessionStartTags,
   StartedSessionContext,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
-import { createSessionStartTags } from "./start-session-support";
+
+const toStartedSessionIdentity = (startedCtx: StartedSessionContext): AgentSessionIdentity => ({
+  externalSessionId: startedCtx.summary.externalSessionId,
+  runtimeKind: startedCtx.summary.runtimeKind,
+  workingDirectory: startedCtx.summary.workingDirectory,
+});
+
+const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
+  return {
+    ...toStartedSessionIdentity(startedCtx),
+    repoPath: startedCtx.repoPath,
+  };
+};
+
+const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTags => ({
+  repoPath: startedCtx.repoPath,
+  taskId: startedCtx.taskId,
+  role: startedCtx.role,
+  externalSessionId: startedCtx.summary.externalSessionId,
+});
 
 export const stopSessionOnStaleAndThrow = async ({
   reason,
@@ -17,11 +38,11 @@ export const stopSessionOnStaleAndThrow = async ({
   runtime: RuntimeDependencies;
   startedCtx: StartedSessionContext;
 }): Promise<never> => {
-  const tags = createSessionStartTags(startedCtx);
+  const tags = toStartedSessionTags(startedCtx);
   try {
     await runOrchestratorTask(
       reason,
-      async () => runtime.adapter.stopSession(tags.externalSessionId),
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
       {
         tags,
       },
@@ -47,20 +68,13 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   runtime: RuntimeDependencies;
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
-  session.setSessionsById((current) => {
-    if (!(externalSessionId in current)) {
-      return current;
-    }
-    const next = { ...current };
-    delete next[externalSessionId];
-    return next;
-  });
+  session.removeSession(toStartedSessionIdentity(startedCtx));
 
   try {
     await runOrchestratorTask(
       "start-session-stop-after-persist-failure",
-      async () => runtime.adapter.stopSession(externalSessionId),
-      { tags: createSessionStartTags(startedCtx) },
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
+      { tags: toStartedSessionTags(startedCtx) },
     );
   } catch (stopError) {
     throw new Error(
@@ -89,9 +103,13 @@ export const rollbackStartedSessionBeforeRegistration = async ({
   const externalSessionId = startedCtx.summary.externalSessionId;
 
   try {
-    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(externalSessionId), {
-      tags: createSessionStartTags(startedCtx),
-    });
+    await runOrchestratorTask(
+      reason,
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
+      {
+        tags: toStartedSessionTags(startedCtx),
+      },
+    );
   } catch (stopError) {
     throw new Error(
       `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,

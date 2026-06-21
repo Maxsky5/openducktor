@@ -284,7 +284,13 @@ export const describeTaskStorePortContract = (
         externalSessionId: "build-session",
         role: "build",
         startedAt: "2026-06-10T12:00:00.000Z",
-        workingDirectory: "/repos/fairnest/worktrees/build-session-updated",
+        workingDirectory: buildSession.workingDirectory,
+      });
+      const sameExternalIdOtherWorktreeSession = createAgentSessionRecord({
+        externalSessionId: "build-session",
+        role: "build",
+        startedAt: "2026-06-10T12:30:00.000Z",
+        workingDirectory: "/repos/fairnest/worktrees/build-session-other",
       });
 
       await run(store.upsertAgentSession({ repoPath, taskId: task.id, session: buildSession }));
@@ -292,11 +298,24 @@ export const describeTaskStorePortContract = (
       await run(
         store.upsertAgentSession({ repoPath, taskId: task.id, session: updatedBuildSession }),
       );
-      await expect(run(store.getTask({ repoPath, taskId: task.id }))).resolves.toMatchObject({
+      await run(
+        store.upsertAgentSession({
+          repoPath,
+          taskId: task.id,
+          session: sameExternalIdOtherWorktreeSession,
+        }),
+      );
+      await expect(
+        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+      ).resolves.toMatchObject({
         agentSessions: [
           expect.objectContaining({
             externalSessionId: "build-session",
-            workingDirectory: "/repos/fairnest/worktrees/build-session-updated",
+            workingDirectory: "/repos/fairnest/worktrees/build-session-other",
+          }),
+          expect.objectContaining({
+            externalSessionId: "build-session",
+            workingDirectory: buildSession.workingDirectory,
           }),
           expect.objectContaining({ externalSessionId: "qa-session" }),
         ],
@@ -309,7 +328,9 @@ export const describeTaskStorePortContract = (
           roles: [" build ", ""],
         }),
       );
-      await expect(run(store.getTask({ repoPath, taskId: task.id }))).resolves.toMatchObject({
+      await expect(
+        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+      ).resolves.toMatchObject({
         agentSessions: [expect.objectContaining({ externalSessionId: "qa-session" })],
       });
     });

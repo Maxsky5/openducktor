@@ -1382,22 +1382,23 @@ describe("HostClient", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
-      if (command === "runtime_startup_status") {
+      if (command === "runtime_require") {
         return {
-          runtimeKind: "opencode",
+          kind: "opencode",
+          runtimeId: "runtime-main",
           repoPath: "/repo",
-          stage: "waiting_for_runtime",
-          runtime: null,
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4180",
+          },
           startedAt: "2026-02-17T12:00:00Z",
-          updatedAt: "2026-02-17T12:00:05Z",
-          elapsedMs: 5000,
-          attempts: 4,
-          failureKind: null,
-          failureReason: null,
-          detail: null,
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
-      if (command === "repo_runtime_health") {
+      if (command === "repo_runtime_health" || command === "repo_runtime_health_status") {
         return {
           status: "ready",
           runtime: {
@@ -1438,47 +1439,6 @@ describe("HostClient", () => {
           checkedAt: "2026-02-17T12:00:05Z",
         };
       }
-      if (command === "repo_runtime_health_status") {
-        return {
-          status: "checking",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-            observation: "observed_existing_runtime",
-            instance: {
-              kind: "opencode",
-              runtimeId: "runtime-main",
-              repoPath: "/repo",
-              taskId: null,
-              role: "workspace",
-              workingDirectory: "/repo",
-              runtimeRoute: {
-                type: "local_http",
-                endpoint: "http://127.0.0.1:4444",
-              },
-              startedAt: "2026-02-17T12:00:00Z",
-              descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-            },
-            startedAt: "2026-02-17T12:00:00Z",
-            updatedAt: "2026-02-17T12:00:05Z",
-            elapsedMs: 5000,
-            attempts: 4,
-            detail: null,
-            failureKind: null,
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "checking",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "Checking OpenDucktor MCP",
-            failureKind: null,
-          },
-          checkedAt: "2026-02-17T12:00:05Z",
-        };
-      }
       if (command === "runtime_stop") {
         return { ok: true };
       }
@@ -1489,7 +1449,7 @@ describe("HostClient", () => {
     const qaTarget = await client.taskWorktreeGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
-    const startupStatus = await client.runtimeStartupStatus("/repo", "opencode");
+    const required = await client.runtimeRequire("/repo", "opencode");
     const repoRuntimeHealth = await client.repoRuntimeHealth("/repo", "opencode");
     const repoRuntimeHealthStatus = await client.repoRuntimeHealthStatus("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
@@ -1509,16 +1469,17 @@ describe("HostClient", () => {
     expect(ensured.descriptor.workflowToolAliasesByCanonical).toEqual(
       OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
     );
-    expect(startupStatus.stage).toBe("waiting_for_runtime");
+    expect(required.runtimeId).toBe("runtime-main");
     expect(repoRuntimeHealth.mcp?.status).toBe("connected");
-    expect(repoRuntimeHealthStatus.mcp?.status).toBe("checking");
+    expect(repoRuntimeHealthStatus.runtime.stage).toBe("runtime_ready");
+    expect(repoRuntimeHealthStatus.mcp?.status).toBe("connected");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
       "task_worktree_get",
       "runtime_list",
       "runtime_ensure",
-      "runtime_startup_status",
+      "runtime_require",
       "repo_runtime_health",
       "repo_runtime_health_status",
       "runtime_stop",
@@ -1528,6 +1489,14 @@ describe("HostClient", () => {
       runtimeKind: "opencode",
     });
     expect(calls[3]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[4]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[5]?.args).toEqual({
       repoPath: "/repo",
       runtimeKind: "opencode",
     });

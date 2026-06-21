@@ -1,4 +1,4 @@
-import type { RuntimeRef } from "@openducktor/contracts";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import {
   memo,
@@ -6,19 +6,15 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentSessionAccentColor } from "../agent-accent-color";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { toRuntimeRef } from "./agent-chat-runtime-ref";
-import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
@@ -26,96 +22,121 @@ import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
-import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transcript";
-import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
+import { getSubagentMessageSessionKey } from "./subagent-session-key";
+import {
+  type AgentChatRenderedTurn,
+  useAgentChatRenderedTranscript,
+} from "./use-agent-chat-rendered-transcript";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
-import { useAgentChatRowStaging } from "./use-agent-chat-row-staging";
-import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
-import { useAgentChatTurnStaging } from "./use-agent-chat-turn-staging";
-import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
-  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeRef: RuntimeRef | null;
-  subagentPendingApprovals: AgentSessionState["pendingApprovals"];
+  sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount: number;
-  subagentPendingQuestions: AgentSessionState["pendingQuestions"];
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
 
 type AgentChatTranscriptProps = {
   activeStreamingAssistantMessageId: string | null;
-  hasSession: boolean;
   emptyState: AgentChatThreadModel["emptyState"];
   isStarting: boolean;
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
-  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeRef: RuntimeRef | null;
-  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
-  subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
-  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
-  subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
+  sessionIdentity: AgentSessionIdentity | null;
+  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
   allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  statusOverlay: {
-    kind: "runtime_waiting" | "session_loading";
-    title: string;
-    description: string;
-  } | null;
-  showRuntimeBlockedCard: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  onRefreshChecks: () => void;
-  showSessionLoadingOverlay: boolean;
+  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
+  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 };
 
-const AgentChatStatusOverlay = memo(function AgentChatStatusOverlay({
-  title,
-  description,
+const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
+  notice,
+  runtimeReadiness,
 }: {
-  title: string;
-  description: string;
+  notice: NonNullable<AgentChatThreadModel["transcriptNotice"]>;
+  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 }): ReactElement {
+  const isLoadingNotice = notice.severity === "loading";
+  const isRuntimeBlocked = notice.kind === "runtime_blocked";
+  const action = notice.action;
+
   return (
     <div className="sticky top-0 z-20 mb-4">
-      <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
-        <div className="mt-0.5 rounded-full bg-muted p-2 text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
+      <div
+        className={cn(
+          "mx-auto flex max-w-3xl items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm backdrop-blur",
+          isLoadingNotice
+            ? "border-border bg-card/95 supports-[backdrop-filter]:bg-card/85"
+            : "border-destructive-border bg-destructive-surface text-destructive-muted",
+        )}
+      >
+        <div
+          className={cn(
+            "mt-0.5 rounded-full p-2",
+            isLoadingNotice ? "bg-muted text-muted-foreground" : "text-destructive-muted",
+          )}
+        >
+          {isLoadingNotice ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <AlertTriangle className="size-4" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">{title}</p>
-          <p className="text-muted-foreground">{description}</p>
+          <p className={cn("font-medium", isLoadingNotice ? "text-foreground" : "")}>
+            {notice.title}
+          </p>
+          <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
         </div>
+        {action ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            disabled={action.disabled}
+            onClick={action.onAction}
+          >
+            <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
+            {action.label}
+          </Button>
+        ) : isRuntimeBlocked ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            disabled={runtimeReadiness.isLoadingChecks}
+            onClick={() => {
+              void runtimeReadiness.refreshChecks();
+            }}
+          >
+            <RefreshCcw
+              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
+            />
+            Recheck
+          </Button>
+        ) : null}
       </div>
     </div>
   );
 });
 
-type AgentChatRenderedTurn = {
-  key: string;
-  rows: AgentChatWindowRow[];
-  isActive: boolean;
-};
-
-const EMPTY_RENDERED_TURNS: AgentChatRenderedTurn[] = [];
-
 type AgentChatBottomStackProps = {
   externalSessionId: string;
-  pendingQuestions: AgentSessionState["pendingQuestions"];
-  pendingApprovals: AgentSessionState["pendingApprovals"];
-  todos: AgentSessionState["todos"];
-  sessionRuntimeDataError: string | null;
+  pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
+  pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
+  todos: readonly AgentSessionTodoItem[];
+  sessionAuxiliaryError: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
@@ -130,8 +151,6 @@ type AgentChatBottomStackProps = {
   onToggleTodoPanel: () => void;
 };
 
-const EMPTY_PENDING_APPROVALS: AgentSessionState["pendingApprovals"] = [];
-const EMPTY_PENDING_QUESTIONS: AgentSessionState["pendingQuestions"] = [];
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 500px",
@@ -152,54 +171,34 @@ const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowR
 
 const readSubagentPendingApprovalCount = (
   row: AgentChatWindowRow,
-  countsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"],
+  countsBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"],
+  sessionIdentity: AgentSessionIdentity | null,
 ): number => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+  if (row.kind !== "message") {
     return 0;
   }
 
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
-};
-
-const readSubagentPendingApprovals = (
-  row: AgentChatWindowRow,
-  pendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"],
-): AgentSessionState["pendingApprovals"] => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
-    return EMPTY_PENDING_APPROVALS;
-  }
-
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId
-    ? (pendingApprovalsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_APPROVALS)
-    : EMPTY_PENDING_APPROVALS;
+  const sessionKey = getSubagentMessageSessionKey({
+    message: row.message,
+    parentSession: sessionIdentity,
+  });
+  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
 };
 
 const readSubagentPendingQuestionCount = (
   row: AgentChatWindowRow,
-  countsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"],
+  countsBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"],
+  sessionIdentity: AgentSessionIdentity | null,
 ): number => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+  if (row.kind !== "message") {
     return 0;
   }
 
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
-};
-
-const readSubagentPendingQuestions = (
-  row: AgentChatWindowRow,
-  pendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"],
-): AgentSessionState["pendingQuestions"] => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
-    return EMPTY_PENDING_QUESTIONS;
-  }
-
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId
-    ? (pendingQuestionsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_QUESTIONS)
-    : EMPTY_PENDING_QUESTIONS;
+  const sessionKey = getSubagentMessageSessionKey({
+    message: row.message,
+    parentSession: sessionIdentity,
+  });
+  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
 };
 
 const AgentChatThreadMotionRow = memo(
@@ -207,12 +206,8 @@ const AgentChatThreadMotionRow = memo(
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
-    sessionWorkingDirectory,
-    sessionRuntimeKind,
-    sessionRuntimeRef,
-    subagentPendingApprovals,
+    sessionIdentity,
     subagentPendingApprovalCount,
-    subagentPendingQuestions,
     subagentPendingQuestionCount,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
@@ -222,12 +217,8 @@ const AgentChatThreadMotionRow = memo(
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
           sessionAgentColors={sessionAgentColors}
-          sessionWorkingDirectory={sessionWorkingDirectory}
-          sessionRuntimeKind={sessionRuntimeKind}
-          sessionRuntimeRef={sessionRuntimeRef}
-          subagentPendingApprovals={subagentPendingApprovals}
+          sessionIdentity={sessionIdentity}
           subagentPendingApprovalCount={subagentPendingApprovalCount}
-          subagentPendingQuestions={subagentPendingQuestions}
           subagentPendingQuestionCount={subagentPendingQuestionCount}
         />
       </div>
@@ -235,12 +226,8 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
-      previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
-      previousProps.sessionRuntimeRef === nextProps.sessionRuntimeRef &&
-      previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
-      previousProps.subagentPendingApprovals === nextProps.subagentPendingApprovals &&
+      previousProps.sessionIdentity === nextProps.sessionIdentity &&
       previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
-      previousProps.subagentPendingQuestions === nextProps.subagentPendingQuestions &&
       previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
@@ -254,26 +241,18 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
-  sessionRuntimeRef,
-  subagentPendingApprovalsByExternalSessionId,
-  subagentPendingApprovalCountByExternalSessionId,
-  subagentPendingQuestionsByExternalSessionId,
-  subagentPendingQuestionCountByExternalSessionId,
+  sessionIdentity,
+  subagentPendingApprovalCountBySessionKey,
+  subagentPendingQuestionCountBySessionKey,
   resolveRowRef,
   allowTurnContainment,
 }: {
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
-  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
-  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeRef: RuntimeRef | null;
-  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
-  subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
-  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
-  subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
+  sessionIdentity: AgentSessionIdentity | null;
+  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   allowTurnContainment: boolean;
 }): ReactElement {
@@ -287,24 +266,16 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
           sessionAgentColors={sessionAgentColors}
-          sessionWorkingDirectory={sessionWorkingDirectory}
-          sessionRuntimeKind={sessionRuntimeKind}
-          sessionRuntimeRef={sessionRuntimeRef}
-          subagentPendingApprovals={readSubagentPendingApprovals(
-            row,
-            subagentPendingApprovalsByExternalSessionId,
-          )}
+          sessionIdentity={sessionIdentity}
           subagentPendingApprovalCount={readSubagentPendingApprovalCount(
             row,
-            subagentPendingApprovalCountByExternalSessionId,
-          )}
-          subagentPendingQuestions={readSubagentPendingQuestions(
-            row,
-            subagentPendingQuestionsByExternalSessionId,
+            subagentPendingApprovalCountBySessionKey,
+            sessionIdentity,
           )}
           subagentPendingQuestionCount={readSubagentPendingQuestionCount(
             row,
-            subagentPendingQuestionCountByExternalSessionId,
+            subagentPendingQuestionCountBySessionKey,
+            sessionIdentity,
           )}
           resolveRowRef={resolveRowRef}
         />
@@ -315,74 +286,38 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 
 const AgentChatTranscript = memo(function AgentChatTranscript({
   activeStreamingAssistantMessageId,
-  hasSession,
   emptyState,
   isStarting,
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
-  sessionRuntimeRef,
-  subagentPendingApprovalsByExternalSessionId,
-  subagentPendingApprovalCountByExternalSessionId,
-  subagentPendingQuestionsByExternalSessionId,
-  subagentPendingQuestionCountByExternalSessionId,
+  sessionIdentity,
+  subagentPendingApprovalCountBySessionKey,
+  subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
   allowTurnContainment,
   resolveRowRef,
-  statusOverlay,
-  showRuntimeBlockedCard,
-  blockedReason,
-  isLoadingChecks,
-  onRefreshChecks,
-  showSessionLoadingOverlay,
+  transcriptNotice,
+  runtimeReadiness,
 }: AgentChatTranscriptProps): ReactElement {
-  const visibleStatusOverlay =
-    statusOverlay !== null &&
-    (statusOverlay.kind === "runtime_waiting" || showSessionLoadingOverlay)
-      ? statusOverlay
-      : null;
+  const hasSession = sessionIdentity !== null;
 
   return (
     <div
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {visibleStatusOverlay ? (
-        <AgentChatStatusOverlay
-          title={visibleStatusOverlay.title}
-          description={visibleStatusOverlay.description}
-        />
-      ) : null}
-
-      {showRuntimeBlockedCard ? (
-        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-3 text-sm text-destructive-muted shadow-sm">
-          <div className="flex min-w-0 items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p className="min-w-0">{blockedReason}</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={isLoadingChecks}
-            onClick={onRefreshChecks}
-          >
-            <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />
-            Recheck
-          </Button>
-        </div>
+      {transcriptNotice ? (
+        <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
       ) : null}
 
       <div ref={messagesContentRef} className="space-y-1">
-        {!hasSession && !visibleStatusOverlay ? (
+        {!hasSession && !transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>{emptyState?.title ?? "No conversation available."}</p>
-            {emptyState?.actionLabel && emptyState.onAction ? (
+            <p>{emptyState.title}</p>
+            {emptyState.actionLabel && emptyState.onAction ? (
               <Button
                 type="button"
                 size="sm"
@@ -407,33 +342,19 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {hasSession
-          ? renderedTurns.map((turn) => (
-              <AgentChatTurnGroup
-                key={turn.key}
-                turn={turn}
-                activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-                sessionAgentColors={sessionAgentColors}
-                sessionWorkingDirectory={sessionWorkingDirectory}
-                sessionRuntimeKind={sessionRuntimeKind}
-                sessionRuntimeRef={sessionRuntimeRef}
-                subagentPendingApprovalsByExternalSessionId={
-                  subagentPendingApprovalsByExternalSessionId
-                }
-                subagentPendingApprovalCountByExternalSessionId={
-                  subagentPendingApprovalCountByExternalSessionId
-                }
-                subagentPendingQuestionsByExternalSessionId={
-                  subagentPendingQuestionsByExternalSessionId
-                }
-                subagentPendingQuestionCountByExternalSessionId={
-                  subagentPendingQuestionCountByExternalSessionId
-                }
-                resolveRowRef={resolveRowRef}
-                allowTurnContainment={allowTurnContainment}
-              />
-            ))
-          : null}
+        {renderedTurns.map((turn) => (
+          <AgentChatTurnGroup
+            key={turn.key}
+            turn={turn}
+            activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+            sessionAgentColors={sessionAgentColors}
+            sessionIdentity={sessionIdentity}
+            subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+            subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+            resolveRowRef={resolveRowRef}
+            allowTurnContainment={allowTurnContainment}
+          />
+        ))}
       </div>
     </div>
   );
@@ -444,7 +365,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   pendingQuestions,
   pendingApprovals,
   todos,
-  sessionRuntimeDataError,
+  sessionAuxiliaryError,
   canSubmitQuestionAnswers,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
@@ -491,9 +412,9 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         </div>
       ))}
 
-      {sessionRuntimeDataError ? (
+      {sessionAuxiliaryError ? (
         <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
-          {sessionRuntimeDataError}
+          {sessionAuxiliaryError}
         </div>
       ) : null}
 
@@ -511,22 +432,19 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
-    isSessionViewLoading,
-    isSessionHistoryLoading,
-    isWaitingForRuntimeReadiness,
-    readinessState,
+    displayedSessionKey,
+    runtimeReadiness,
     isInteractionEnabled,
-    blockedReason,
-    isLoadingChecks,
-    onRefreshChecks,
     emptyState,
     isStarting,
     isSending,
     sessionAgentColors,
-    subagentPendingApprovalsByExternalSessionId,
-    subagentPendingApprovalCountByExternalSessionId,
-    subagentPendingQuestionsByExternalSessionId,
-    subagentPendingQuestionCountByExternalSessionId,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
+    subagentPendingApprovalCountBySessionKey,
+    subagentPendingQuestionCountBySessionKey,
+    todos,
+    sessionAccentColor,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
@@ -535,124 +453,53 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
-    sessionRuntimeDataError,
+    sessionAuxiliaryError,
     isSessionWorking,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
     todoPanelCollapsed,
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const { showThinkingMessages } = useAgentChatSettings();
-  const activeExternalSessionId = session?.externalSessionId ?? null;
-  const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
-    activeExternalSessionId,
-    shouldDefer: isSessionViewLoading,
-  });
-  const { transcriptState, isTranscriptRowsMissing } = useAgentChatTranscriptRows({
-    session,
-    showThinkingMessages,
-    shouldPauseDerivation: isTranscriptRenderDeferred,
-  });
-  const { hideTranscriptWhileDeferred, statusOverlay, showRuntimeBlockedCard } =
-    getAgentChatThreadState({
-      isSessionViewLoading,
-      isSessionHistoryLoading,
-      isWaitingForRuntimeReadiness,
-      readinessState,
-      blockedReason,
-      isTranscriptRenderDeferred,
-      isTranscriptRowsMissing,
-    });
-
-  const shouldResetTranscriptWindowForLoading =
-    isSessionViewLoading ||
-    isSessionHistoryLoading ||
-    isTranscriptRenderDeferred ||
-    isTranscriptRowsMissing;
-  const rows = transcriptState.rows;
-  const transcriptTurns = transcriptState.turns;
-  const hasAttachmentMessages = transcriptState.hasAttachmentMessages;
-
-  const messagesContentRef = useRef<HTMLDivElement | null>(null);
+  const sessionIdentity = useMemo(
+    () => (session ? toAgentSessionIdentity(session) : null),
+    [session],
+  );
   const {
-    windowedRows,
-    windowedTurns,
-    windowStart,
+    messagesContentRef,
+    renderedTurns,
+    activeStreamingAssistantMessageId,
+    allowTurnContainment,
+    transcriptNotice: renderedTranscriptNotice,
     isNearBottom,
     isNearTop,
     scrollToBottom,
     scrollToTop,
-    scrollToBottomOnSend,
-    preserveScrollBeforeStagedPrepend,
-  } = useAgentChatWindow({
-    rows,
-    turns: transcriptTurns,
-    activeExternalSessionId,
-    isSessionViewLoading: shouldResetTranscriptWindowForLoading,
+  } = useAgentChatRenderedTranscript({
+    session,
+    displayedSessionKey,
     isSessionWorking,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
     messagesContainerRef,
-    messagesContentRef,
+    scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   });
 
-  useLayoutEffect(() => {
-    scrollToBottomOnSendRef.current = scrollToBottomOnSend;
-  }, [scrollToBottomOnSend, scrollToBottomOnSendRef]);
-
-  const sessionRuntimeKind = session?.runtimeKind ?? null;
-  const sessionRuntimeId = session?.runtimeId ?? null;
-  const sessionRuntimeRef = useMemo(
-    () => toRuntimeRef({ runtimeKind: sessionRuntimeKind, runtimeId: sessionRuntimeId }),
-    [sessionRuntimeId, sessionRuntimeKind],
-  );
-  const sessionSelectedModel = session?.selectedModel ?? null;
-  const sessionAccentColor = useMemo(() => {
-    const profileId = sessionSelectedModel?.profileId;
-    return resolveAgentSessionAccentColor({
-      agentName: profileId,
-      agentColors: sessionAgentColors,
-      runtimeKind: sessionRuntimeKind,
-    });
-  }, [sessionAgentColors, sessionRuntimeKind, sessionSelectedModel?.profileId]);
-  const sessionWorkingDirectory = session?.workingDirectory ?? null;
   // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
-  // under-measure rich attachment rows and break bottom pinning. Row/turn staging still applies so
-  // cached large transcripts do not remount hundreds of rows in one synchronous session switch.
-  const stagedTurns = useAgentChatTurnStaging({
-    activeExternalSessionId,
-    windowStart,
-    turns: windowedTurns,
-    onBeforePrepend: preserveScrollBeforeStagedPrepend,
-  });
-  const stagedTranscript = useAgentChatRowStaging({
-    activeExternalSessionId,
-    rows: windowedRows,
-    turns: stagedTurns,
-    onBeforePrepend: preserveScrollBeforeStagedPrepend,
-  });
-  const stagedRows = stagedTranscript.rows;
-  const stagedWindowTurns = stagedTranscript.turns;
-  const rowKeys = useMemo(() => stagedRows.map((row) => row.key), [stagedRows]);
+  // under-measure rich attachment rows and break bottom pinning.
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
   if (rowRefByKeyRef.current === null) {
     rowRefByKeyRef.current = new Map();
   }
   const rowRefByKey = rowRefByKeyRef.current;
-  const { registerRowElement } = useAgentChatRowMotion({
-    activeExternalSessionId,
-    rowKeys,
-    windowStart,
-  });
-  const hasVisibleTodo = session
-    ? getActionableSessionTodo(getVisibleSessionTodos(session.todos)) !== null
-    : false;
+  const { registerRowElement } = useAgentChatRowMotion();
+  const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
+  const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const hasBottomStack = Boolean(
-    session &&
-      (session.pendingQuestions.length > 0 ||
-        session.pendingApprovals.length > 0 ||
-        hasVisibleTodo ||
-        sessionRuntimeDataError),
+    session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError),
   );
 
   const resolveRowRef = useCallback(
@@ -670,26 +517,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   );
   // Keep the newest turn measured after completion too. Re-applying content-visibility to the
   // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
-  const latestUserTurnKey = useMemo(() => {
-    if (!session || !transcriptState.lastUserMessageId) {
-      return null;
-    }
-
-    return `${session.externalSessionId}:${transcriptState.lastUserMessageId}`;
-  }, [session, transcriptState.lastUserMessageId]);
-  const activeStreamingAssistantMessageId = transcriptState.activeStreamingAssistantMessageId;
-  const showSessionLoadingOverlay = useAgentChatLoadingOverlay({
-    externalSessionId: activeExternalSessionId,
-    isSessionViewLoading: statusOverlay?.kind === "session_loading",
-  });
-  const renderedTurns = useMemo(() => {
-    return stagedWindowTurns.map((turn) => ({
-      key: turn.key,
-      rows: stagedRows.slice(turn.start, turn.end + 1),
-      isActive: turn.key === latestUserTurnKey,
-    }));
-  }, [latestUserTurnKey, stagedRows, stagedWindowTurns]);
-  const allowTurnContainment = !hasAttachmentMessages;
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
 
@@ -739,45 +566,30 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
         activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-        hasSession={session !== null}
         emptyState={emptyState}
         isStarting={isStarting}
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
-        subagentPendingApprovalsByExternalSessionId={subagentPendingApprovalsByExternalSessionId}
-        subagentPendingApprovalCountByExternalSessionId={
-          subagentPendingApprovalCountByExternalSessionId
-        }
-        subagentPendingQuestionsByExternalSessionId={subagentPendingQuestionsByExternalSessionId}
-        subagentPendingQuestionCountByExternalSessionId={
-          subagentPendingQuestionCountByExternalSessionId
-        }
-        sessionWorkingDirectory={sessionWorkingDirectory}
-        sessionRuntimeKind={sessionRuntimeKind}
-        sessionRuntimeRef={sessionRuntimeRef}
+        subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+        subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+        sessionIdentity={sessionIdentity}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
-        renderedTurns={
-          rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : EMPTY_RENDERED_TURNS
-        }
+        renderedTurns={renderedTurns}
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
-        statusOverlay={statusOverlay}
-        showRuntimeBlockedCard={showRuntimeBlockedCard}
-        blockedReason={blockedReason}
-        isLoadingChecks={isLoadingChecks}
-        onRefreshChecks={onRefreshChecks}
-        showSessionLoadingOverlay={showSessionLoadingOverlay}
+        transcriptNotice={renderedTranscriptNotice}
+        runtimeReadiness={runtimeReadiness}
       />
 
       {hasBottomStack && session ? (
         <div ref={bottomStackRef}>
           <AgentChatBottomStack
             externalSessionId={session.externalSessionId}
-            pendingQuestions={session.pendingQuestions}
-            pendingApprovals={session.pendingApprovals}
-            todos={session.todos}
+            pendingQuestions={pendingQuestionRequests}
+            pendingApprovals={pendingApprovalRequests}
+            todos={todos}
             canSubmitQuestionAnswers={canSubmitQuestionAnswers}
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
@@ -786,7 +598,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}
-            sessionRuntimeDataError={sessionRuntimeDataError}
+            sessionAuxiliaryError={sessionAuxiliaryError}
             todoPanelCollapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}
             sessionAccentColor={sessionAccentColor}

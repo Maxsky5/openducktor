@@ -4,74 +4,31 @@ import type {
   TaskCard,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentModelSelection,
-  AgentRole,
-  AgentUserMessagePart,
-} from "@openducktor/core";
-import type {
-  AgentSessionLoadOptions,
-  AgentSessionState,
-  InitialSessionStatusReleasePolicy,
-} from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
+import type { SessionStartGate } from "@/features/session-start/session-start-gate";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
+import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { LoadSourceSession } from "../session-read-model/source-session-loader";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
-export type StartAgentSessionInput =
-  | {
-      taskId: string;
-      role: AgentRole;
-      selectedModel?: never;
-      startMode: "reuse";
-      sourceExternalSessionId: string;
-    }
-  | {
-      taskId: string;
-      role: AgentRole;
-      selectedModel: AgentModelSelection;
-      startMode: "fresh";
-      targetWorkingDirectory?: string | null;
-      /** Defaults to `after_listener_attach` for direct low-level starts. */
-      initialStatusRelease?: InitialSessionStatusReleasePolicy;
-    }
-  | {
-      taskId: string;
-      role: AgentRole;
-      selectedModel: AgentModelSelection;
-      startMode: "fork";
-      sourceExternalSessionId: string;
-      /** Defaults to `after_listener_attach` for direct low-level starts. */
-      initialStatusRelease?: InitialSessionStatusReleasePolicy;
-    };
-
-export type SessionStateById = Record<string, AgentSessionState>;
-export type SessionStateUpdater =
-  | SessionStateById
-  | ((current: SessionStateById) => SessionStateById);
+export type { StartAgentSessionInput, StartAgentSessionResult };
 
 export type SessionDependencies = {
-  setSessionsById: (updater: SessionStateUpdater) => void;
-  sessionsRef: { current: SessionStateById };
-  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  replaceSession: (session: AgentSessionState) => void;
+  removeSession: (identity: AgentSessionIdentity) => void;
+  readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
+  sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
+  loadSourceSession: LoadSourceSession;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
+  observeAgentSession: ObserveAgentSession;
 };
 
 export type RuntimeDependencies = {
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
-  ensureRuntime: (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    options?: {
-      workspaceId?: string | null;
-      targetWorkingDirectory?: string | null;
-      runtimeKind?: AgentModelSelection["runtimeKind"] | null;
-    },
-  ) => Promise<RuntimeInfo>;
+  ensureRuntime: EnsureRuntime;
 };
 
 export type TaskDependencies = {
@@ -82,7 +39,7 @@ export type TaskDependencies = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
+  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
 };
 
 export type ModelDependencies = {
@@ -90,9 +47,9 @@ export type ModelDependencies = {
 };
 
 export type RepoDependencies = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
+  workspaceId: string | null;
   repoEpochRef: { current: number };
-  activeWorkspaceRef?: { current: ActiveWorkspace | null };
   currentWorkspaceRepoPathRef: { current: string | null };
 };
 
@@ -119,6 +76,7 @@ export type StartSessionContext = {
   workspaceId: string;
   taskId: string;
   role: AgentRole;
+  holdForPostStartMessage: boolean;
   isStaleRepoOperation: RepoStaleGuard;
 };
 
@@ -131,39 +89,19 @@ export type StartSessionExecutionDependencies = Pick<
   "session" | "runtime" | "task" | "model"
 >;
 
-export type StartSessionCreationInput =
-  | {
-      startMode: "reuse";
-      selectedModel?: never;
-      sourceExternalSessionId: string;
-    }
-  | {
-      startMode: "fresh";
-      selectedModel: AgentModelSelection;
-      targetWorkingDirectory?: string | null;
-    }
-  | {
-      startMode: "fork";
-      selectedModel: AgentModelSelection;
-      sourceExternalSessionId: string;
-    };
-
-export type ResolvedRuntimeAndModel = {
-  taskCard: TaskCard;
+export type FreshStartRuntimeContext = {
   runtime: RuntimeInfo;
   systemPrompt: string;
-  promptOverrides: RepoPromptOverrides;
 };
 
 export type StartOrReuseResult =
   | {
       kind: "reused";
-      externalSessionId: string;
+      session: AgentSessionIdentity;
     }
   | {
       kind: "started";
       runtimeInfo: RuntimeInfo;
       taskCard: TaskCard;
       ctx: StartedSessionContext;
-      promptOverrides: RepoPromptOverrides;
     };

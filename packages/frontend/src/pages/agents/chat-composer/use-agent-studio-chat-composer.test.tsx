@@ -3,16 +3,32 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoRuntimeRef,
   type RuntimeDescriptor,
+  type RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentModelCatalog,
+  AgentModelSelection,
+} from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { getSessionMessagesSlice } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createSessionMessagesState,
+  getSessionMessagesSlice,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -25,11 +41,24 @@ enableReactActEnvironment();
 let messageCounter = 0;
 
 type HookArgs = Parameters<typeof useAgentStudioChatComposer>[0];
+type BasePropsOverrides = Partial<Omit<HookArgs, "selectedSession">> & {
+  selectedSession?: Partial<HookArgs["selectedSession"]>;
+  loadedSession?: AgentSessionState | null;
+  selectedSessionIdentity?: AgentSessionIdentity | null;
+  selectedSessionModel?: AgentSessionState["selectedModel"];
+  sessionRuntimeData?: HookArgs["selectedSession"]["runtimeData"];
+  repoReadinessState?: HookArgs["selectedSession"]["runtimeReadiness"]["state"];
+  selectedSessionSummary?: AgentSessionSummary | null;
+};
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
+const createSessionRuntimeData = (
+  overrides: Partial<HookArgs["selectedSession"]["runtimeData"]> = {},
+): HookArgs["selectedSession"]["runtimeData"] => ({
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+  error: null,
+  ...overrides,
 });
 
 const CATALOG: AgentModelCatalog = {
@@ -182,9 +211,12 @@ const createRepoSettings = (
   },
 });
 
-const createActiveSession = (overrides = {}) =>
+type CreateLoadedSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const createLoadedSession = (overrides: CreateLoadedSessionOverrides = {}) =>
   createAgentSessionFixture({
-    modelCatalog: CATALOG,
     selectedModel: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -215,6 +247,7 @@ const createHookHarness = (
       throw new Error("Test runtime catalog loader was not configured.");
     },
     loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -253,16 +286,76 @@ const createAssistantMessage = (
   };
 };
 
-const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: createActiveWorkspace("/repo"),
-  activeSession: null,
-  activeSessionSummary: null,
-  role: "spec",
-  reusablePrompts: [],
-  repoSettings: createRepoSettings(null),
-  updateAgentSessionModel: () => {},
-  loadCatalog: async () => CATALOG,
-  ...overrides,
+const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
+  const {
+    selectedSession: selectedSessionOverride,
+    loadedSession: loadedSessionOverride,
+    selectedSessionIdentity: selectedSessionIdentityOverride,
+    selectedSessionModel: selectedSessionModelOverride,
+    sessionRuntimeData: sessionRuntimeDataOverride,
+    repoReadinessState,
+    selectedSessionSummary: selectedSessionSummaryOverride,
+    role: roleOverride,
+    ...hookOverrides
+  } = overrides;
+  const loadedSession = "loadedSession" in overrides ? (loadedSessionOverride ?? null) : null;
+  const role = roleOverride ?? "spec";
+  const selectedSessionIdentity =
+    "selectedSessionIdentity" in overrides
+      ? (selectedSessionIdentityOverride ?? null)
+      : loadedSession
+        ? toAgentSessionIdentity(loadedSession)
+        : null;
+  const selectedSessionSummary =
+    "selectedSessionSummary" in overrides ? (selectedSessionSummaryOverride ?? null) : null;
+  const selectedSessionModel =
+    "selectedSessionModel" in overrides
+      ? (selectedSessionModelOverride ?? null)
+      : (loadedSession?.selectedModel ?? selectedSessionSummary?.selectedModel ?? null);
+
+  return {
+    workspaceRepoPath: "/repo",
+    selectedSession: {
+      identity: selectedSessionIdentity,
+      activityState: null,
+      selectedModel: selectedSessionModel,
+      loadedSession,
+      runtimeData: sessionRuntimeDataOverride ?? createSessionRuntimeData(),
+      runtimeReadiness: {
+        state: repoReadinessState ?? "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: { kind: "visible" },
+      ...selectedSessionOverride,
+    },
+    role,
+    reusablePrompts: [],
+    repoSettings: createRepoSettings(null),
+    updateAgentSessionModel: () => {},
+    loadCatalog: async () => CATALOG,
+    ...hookOverrides,
+  };
+};
+
+const createSelectedSessionSummary = ({
+  runtimeKind,
+  selectedModel,
+}: {
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentModelSelection;
+}): AgentSessionSummary => ({
+  externalSessionId: "external-1",
+  runtimeKind,
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "build",
+  activityState: "idle",
+  startedAt: "2026-02-20T10:00:00.000Z",
+  selectedModel,
+  pendingApprovalCount: 0,
+  pendingQuestionCount: 0,
 });
 
 describe("useAgentStudioChatComposer", () => {
@@ -335,6 +428,34 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("does not load the new-session catalog until the selected runtime is ready", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const expectedSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "build-agent",
+    } satisfies AgentModelSelection;
+    const harness = createHookHarness(
+      createBaseProps({
+        repoReadinessState: "checking",
+        repoSettings: createRepoSettings(expectedSelection),
+        loadCatalog,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+
+      expect(loadCatalog).not.toHaveBeenCalled();
+      expect(harness.getLatest().selectionForNewSession).toEqual(expectedSelection);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("preserves selected agent profile when catalog does not expose profile metadata", async () => {
     const harness = createHookHarness(
       createBaseProps({
@@ -381,19 +502,17 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps the selected session model while the full session object is still hydrating", async () => {
-    const catalogLoad = createDeferred<AgentModelCatalog>();
+  test("keeps the selected session model while selected-session runtime data loads", async () => {
+    const loadCatalog = mock(async () => CATALOG);
     const harness = createHookHarness(
       createBaseProps({
-        activeSession: null,
-        activeSessionSummary: {
+        loadedSession: null,
+        selectedSessionIdentity: {
           externalSessionId: "external-1",
-          repoPath: "/repo",
-          taskId: "task-1",
-          role: "spec",
-          status: "idle",
-          startedAt: "2026-02-20T10:00:00.000Z",
           workingDirectory: "/repo",
+          runtimeKind: "opencode",
+        },
+        selectedSessionSummary: createSelectedSessionSummary({
           runtimeKind: "opencode",
           selectedModel: {
             runtimeKind: "opencode",
@@ -401,53 +520,9 @@ describe("useAgentStudioChatComposer", () => {
             modelId: "claude-sonnet",
             profileId: "build-agent",
           },
-          pendingApprovals: [],
-          pendingQuestions: [],
-        },
-        loadCatalog: async () => catalogLoad.promise,
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
-      expect(harness.getLatest().selectedModelSelection).toEqual({
-        runtimeKind: "opencode",
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        profileId: "build-agent",
-      });
-
-      await harness.run(async () => {
-        catalogLoad.resolve(CATALOG);
-        await catalogLoad.promise;
-      });
-      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
-    } finally {
-      catalogLoad.resolve(CATALOG);
-      await harness.unmount();
-    }
-  });
-
-  test("does not query session slash commands until the active session exposes its runtime kind", async () => {
-    const readSessionSlashCommands = mock(async () => ({
-      commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
-    }));
-
-    const harness = createHookHarness(
-      createBaseProps({
-        activeSession: createActiveSession({
-          runtimeKind: null,
-          selectedModel: {
-            runtimeKind: "queued-runtime",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "default",
-            profileId: "spec-agent",
-          },
         }),
-        readSessionSlashCommands,
+        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
+        loadCatalog,
       }),
     );
 
@@ -455,7 +530,111 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(readSessionSlashCommands).not.toHaveBeenCalled();
+      expect(loadCatalog).toHaveBeenCalledTimes(0);
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("repairs a stale loaded-session model exactly once", async () => {
+    const staleSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "missing",
+      modelId: "missing-model",
+    };
+    const repairedSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const repoDefaultSelection = { ...repairedSelection, variant: "", profileId: "" };
+    const staleSession = createLoadedSession({
+      externalSessionId: "stale-session",
+      selectedModel: staleSelection,
+    });
+    const repairedSession = createLoadedSession({
+      externalSessionId: "stale-session",
+      selectedModel: repairedSelection,
+    });
+    const updateAgentSessionModel = mock(() => {});
+    const baseOverrides = {
+      repoSettings: createRepoSettings(repoDefaultSelection),
+      sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      updateAgentSessionModel,
+    };
+    const harness = createHookHarness(
+      createBaseProps({
+        ...baseOverrides,
+        loadedSession: staleSession,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
+
+      expect(harness.getLatest().selectedModelSelection).toEqual(repairedSelection);
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(
+        toAgentSessionIdentity(staleSession),
+        repairedSelection,
+      );
+
+      await harness.update(
+        createBaseProps({
+          ...baseOverrides,
+          loadedSession: repairedSession,
+        }),
+      );
+      await harness.waitFor((state) => state.isSelectedSessionModelSendable);
+
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses selected session runtime capabilities while the full session object is still loading", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession: null,
+        selectedSessionIdentity: {
+          externalSessionId: "external-codex",
+          workingDirectory: "/repo",
+          runtimeKind: "codex",
+        },
+        selectedSessionSummary: createSelectedSessionSummary({
+          runtimeKind: "codex",
+          selectedModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "build-agent",
+          },
+        }),
+        repoSettings: createRepoSettings(null, "opencode"),
+        loadCatalog: async () => CODEX_CATALOG,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+      expect(harness.getLatest().supportsSkillReferences).toBe(true);
+      expect(harness.getLatest().supportsProfiles).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -475,6 +654,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       expect(harness.getLatest().supportsFileSearch).toBe(true);
+      expect(harness.getLatest().supportsProfiles).toBe(true);
 
       let results: AgentFileSearchResult[] = [];
       await harness.run(async (state) => {
@@ -482,7 +662,39 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
-      expect(loadFileSearch).toHaveBeenCalledWith("/repo", "opencode", "src");
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+        "src",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("waits for runtime readiness before searching repo files", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        repoReadinessState: "checking",
+        loadFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
+        "File search is unavailable until the runtime is ready.",
+      );
+      expect(loadFileSearch).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -511,23 +723,69 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
-      expect(loadFileSearch).toHaveBeenCalledWith("/repo", "codex", "src");
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+        },
+        "src",
+      );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("uses the active session runtime for file search", async () => {
-    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const activeSession = createActiveSession({
+  test("uses selected-session identity for file search before the full session is loaded", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const selectedSessionIdentity = {
+      externalSessionId: "selected-codex-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/codex-worktree",
+    };
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession: null,
+        selectedSessionIdentity,
+        loadFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("src");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex-worktree",
+        },
+        "src",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the loaded session runtime for file search", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
-        readSessionFileSearch,
+        loadedSession,
+        loadFileSearch,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -544,10 +802,12 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
-      expect(readSessionFileSearch).toHaveBeenCalledWith(
-        "/repo",
-        "opencode",
-        "/repo/session-worktree",
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/session-worktree",
+        },
         "",
       );
     } finally {
@@ -555,27 +815,70 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("uses the active Codex session runtime and working directory for file search", async () => {
+  test("uses the selected-session identity as the prompt-input runtime target", async () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/opencode-worktree",
+    });
+    const selectedSessionIdentity = {
+      externalSessionId: "selected-codex-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/codex-worktree",
+    };
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        selectedSessionIdentity,
+        loadFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("src");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex-worktree",
+        },
+        "src",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the loaded Codex session runtime and working directory for file search", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const loadedSession = createLoadedSession({
       runtimeKind: "codex",
-      modelCatalog: CODEX_CATALOG,
       selectedModel: {
         runtimeKind: "codex",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
       },
-      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
       workingDirectory: "/repo/codex-worktree",
     });
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings(null, "opencode"),
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CODEX_CATALOG }),
         loadFileSearch,
-        readSessionFileSearch,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
@@ -592,29 +895,29 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
-      expect(readSessionFileSearch).toHaveBeenCalledWith(
-        "/repo",
-        "codex",
-        "/repo/codex-worktree",
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex-worktree",
+        },
         "",
       );
-      expect(loadFileSearch).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps active session runtime capabilities when that runtime is disabled", async () => {
-    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const activeSession = createActiveSession({
+  test("keeps loaded session runtime capabilities when that runtime is disabled", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
-        readSessionFileSearch,
+        loadedSession,
+        loadFileSearch,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -632,10 +935,12 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
-      expect(readSessionFileSearch).toHaveBeenCalledWith(
-        "/repo",
-        "opencode",
-        "/repo/session-worktree",
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/session-worktree",
+        },
         "src",
       );
     } finally {
@@ -643,18 +948,17 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("queries session slash commands for stdio OpenCode sessions", async () => {
-    const readSessionSlashCommands = mock(async () => ({
+  test("queries runtime slash commands for stdio OpenCode sessions", async () => {
+    const loadSlashCommands = mock(async () => ({
       commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
     }));
     const harness = createHookHarness(
       createBaseProps({
-        activeSession: createActiveSession({
+        loadedSession: createLoadedSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
-        readSessionSlashCommands,
+        loadSlashCommands,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -665,8 +969,11 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(readSessionSlashCommands).toHaveBeenCalledTimes(1);
-      expect(readSessionSlashCommands).toHaveBeenCalledWith("/repo", "opencode");
+      expect(loadSlashCommands).toHaveBeenCalledTimes(1);
+      expect(loadSlashCommands).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      });
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();
@@ -787,12 +1094,13 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("fails fast when active session file search is requested before runtime connection is ready", async () => {
-    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+  test("fails fast when a loaded session prompt-input runtime has no working directory", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const harness = createHookHarness(
       createBaseProps({
-        activeSession: createActiveSession({
-          runtimeKind: null,
+        loadedSession: createLoadedSession({
+          runtimeKind: "opencode",
+          workingDirectory: "   ",
           selectedModel: {
             runtimeKind: "opencode",
             providerId: "openai",
@@ -801,36 +1109,30 @@ describe("useAgentStudioChatComposer", () => {
             profileId: "spec-agent",
           },
         }),
-        readSessionFileSearch,
+        loadFileSearch,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       },
     );
 
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Active session runtime context is missing runtime kind.",
-      );
-      expect(readSessionFileSearch).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
+    await expect(harness.mount()).rejects.toThrow(
+      "Session workingDirectory is required to read selected session runtime data.",
+    );
+    expect(loadFileSearch).not.toHaveBeenCalled();
   });
 
-  test("propagates adapter errors when active session file search uses stdio OpenCode session", async () => {
-    const readSessionFileSearch = mock(async () => {
+  test("propagates adapter errors when loaded session file search uses stdio OpenCode session", async () => {
+    const loadFileSearch = mock(async () => {
       throw new Error("file search unavailable");
     });
     const harness = createHookHarness(
       createBaseProps({
-        activeSession: createActiveSession({
+        loadedSession: createLoadedSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
-        readSessionFileSearch,
+        loadFileSearch,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -842,11 +1144,13 @@ describe("useAgentStudioChatComposer", () => {
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
         "file search unavailable",
       );
-      expect(readSessionFileSearch).toHaveBeenCalledTimes(1);
-      expect(readSessionFileSearch).toHaveBeenCalledWith(
-        "/repo",
-        "opencode",
-        "/repo/session-worktree",
+      expect(loadFileSearch).toHaveBeenCalledTimes(1);
+      expect(loadFileSearch).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/session-worktree",
+        },
         "src",
       );
     } finally {
@@ -893,10 +1197,9 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("updates active session model when catalog ids differ from provider model option values", async () => {
+  test("updates loaded session model when catalog ids differ from provider model option values", async () => {
     const updateAgentSessionModel = mock(() => {});
-    const activeSession = createActiveSession({
-      modelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
+    const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -906,7 +1209,10 @@ describe("useAgentStudioChatComposer", () => {
     });
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
+        }),
         loadCatalog: async () => CATALOG_WITH_TRANSPORT_MODEL_IDS,
         updateAgentSessionModel,
       }),
@@ -918,7 +1224,7 @@ describe("useAgentStudioChatComposer", () => {
         harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
       });
 
-      expect(updateAgentSessionModel).toHaveBeenCalledWith(activeSession.externalSessionId, {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
         runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-sonnet",
@@ -929,13 +1235,13 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("routes selection updates to active sessions via callback", async () => {
+  test("routes selection updates to loaded sessions via callback", async () => {
     const updateAgentSessionModel = mock(() => {});
-    const activeSession = createActiveSession();
+    const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
         updateAgentSessionModel,
       }),
     );
@@ -948,7 +1254,7 @@ describe("useAgentStudioChatComposer", () => {
         harness.getLatest().handleSelectVariant("high");
       });
 
-      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -960,47 +1266,34 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("preserves active session model when catalog cannot produce a replacement", async () => {
+  test("marks loaded session model unsendable when catalog cannot produce a replacement", async () => {
     const updateAgentSessionModel = mock(() => {});
-    const activeSession = createActiveSession({
-      modelCatalog: EMPTY_CATALOG,
-    });
+    const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: EMPTY_CATALOG }),
         updateAgentSessionModel,
       }),
     );
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-      expect(harness.getLatest().selectedModelSelection).toEqual({
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec-agent",
-      });
+      expect(harness.getLatest().selectedModelSelection).toBeNull();
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("dedupes active session model repair writes while session state converges", async () => {
+  test("normalizes loaded session model and repairs the durable session model", async () => {
     const updateAgentSessionModel = mock(
       (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
     );
-    const firstUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
-      updateAgentSessionModel(...args);
-    };
-    const secondUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
-      updateAgentSessionModel(...args);
-    };
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -1012,24 +1305,26 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
-        updateAgentSessionModel: firstUpdateAgentSessionModel,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+        updateAgentSessionModel,
       }),
     );
 
     try {
       await harness.mount();
-      await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 1);
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "default");
 
-      await harness.update(
-        createBaseProps({
-          activeSession,
-          updateAgentSessionModel: secondUpdateAgentSessionModel,
-        }),
-      );
-
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -1041,16 +1336,14 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("does not load the repo composer catalog while an active session owns runtime catalog loading", async () => {
+  test("does not load the repo composer catalog while selected-session runtime data is loading", async () => {
     const loadCatalog = mock(async () => CATALOG);
-    const activeSession = createActiveSession({
-      modelCatalog: null,
-      isLoadingModelCatalog: true,
-    });
+    const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
         loadCatalog,
       }),
     );
@@ -1072,15 +1365,13 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps loading while no catalog source is available for an active session", async () => {
-    const activeSession = createActiveSession({
-      modelCatalog: null,
-      isLoadingModelCatalog: true,
-    });
+  test("keeps loading while no catalog source is available for a loaded session", async () => {
+    const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
         loadCatalog: async () => CATALOG,
       }),
     );
@@ -1096,21 +1387,19 @@ describe("useAgentStudioChatComposer", () => {
   test("invalidates composer catalog and ignores stale repo loads when active repo changes", async () => {
     const repoALoad = createDeferred<AgentModelCatalog>();
     const repoBLoad = createDeferred<AgentModelCatalog>();
-    const loadCatalog = mock(
-      (repoPath: string, _runtimeKind: string): Promise<AgentModelCatalog> => {
-        if (repoPath === "/repo-a") {
-          return repoALoad.promise;
-        }
-        if (repoPath === "/repo-b") {
-          return repoBLoad.promise;
-        }
-        return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
-      },
-    );
+    const loadCatalog = mock(({ repoPath }: RepoRuntimeRef): Promise<AgentModelCatalog> => {
+      if (repoPath === "/repo-a") {
+        return repoALoad.promise;
+      }
+      if (repoPath === "/repo-b") {
+        return repoBLoad.promise;
+      }
+      return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
+    });
 
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         loadCatalog,
       }),
     );
@@ -1121,14 +1410,24 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           loadCatalog,
         }),
       );
 
       expect(loadCatalog).toHaveBeenCalledTimes(2);
-      expect(loadCatalog.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
-      expect(loadCatalog.mock.calls[1]).toEqual(["/repo-b", "opencode"]);
+      expect(loadCatalog.mock.calls[0]).toEqual([
+        {
+          repoPath: "/repo-a",
+          runtimeKind: "opencode",
+        },
+      ]);
+      expect(loadCatalog.mock.calls[1]).toEqual([
+        {
+          repoPath: "/repo-b",
+          runtimeKind: "opencode",
+        },
+      ]);
 
       await harness.run(async () => {
         repoALoad.resolve(CATALOG);
@@ -1164,21 +1463,19 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("uses defaults from the newly selected repository after switching repos", async () => {
-    const loadCatalog = mock(
-      async (repoPath: string, _runtimeKind: string): Promise<AgentModelCatalog> => {
-        if (repoPath === "/repo-a") {
-          return CATALOG;
-        }
-        if (repoPath === "/repo-b") {
-          return ALTERNATE_CATALOG;
-        }
-        throw new Error(`Unexpected repo path: ${repoPath}`);
-      },
-    );
+    const loadCatalog = mock(async ({ repoPath }: RepoRuntimeRef): Promise<AgentModelCatalog> => {
+      if (repoPath === "/repo-a") {
+        return CATALOG;
+      }
+      if (repoPath === "/repo-b") {
+        return ALTERNATE_CATALOG;
+      }
+      throw new Error(`Unexpected repo path: ${repoPath}`);
+    });
 
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1206,7 +1503,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1242,7 +1539,7 @@ describe("useAgentStudioChatComposer", () => {
   test("does not reuse stale repo defaults while waiting for the next repo settings", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1266,7 +1563,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: null,
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -1283,7 +1580,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1311,7 +1608,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("derives context usage from latest assistant message with descriptor fallback", async () => {
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       messages: [
         createAssistantMessage({
           totalTokens: 12,
@@ -1328,13 +1625,14 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
       }),
     );
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 24,
         contextWindow: 200_000,
         outputLimit: 8_192,
@@ -1345,7 +1643,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("prefers live session context usage before final assistant completion", async () => {
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       contextUsage: {
         totalTokens: 35_022,
         contextWindow: 200_000,
@@ -1362,13 +1660,13 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
       }),
     );
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 35_022,
         contextWindow: 200_000,
         outputLimit: 8_192,
@@ -1379,7 +1677,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("recomputes context usage from messages after live usage ends", async () => {
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       contextUsage: {
         totalTokens: 35_022,
         contextWindow: 200_000,
@@ -1394,11 +1692,11 @@ describe("useAgentStudioChatComposer", () => {
       ],
     });
 
-    const harness = createHookHarness(createBaseProps({ activeSession }));
+    const harness = createHookHarness(createBaseProps({ loadedSession }));
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 35_022,
         contextWindow: 200_000,
         outputLimit: 8_192,
@@ -1406,14 +1704,14 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeSession: {
-            ...activeSession,
+          loadedSession: {
+            ...loadedSession,
             contextUsage: null,
           },
         }),
       );
 
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 12,
         contextWindow: 40_000,
         outputLimit: 1_000,
@@ -1424,10 +1722,9 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("merges incomplete idle live usage with assistant message metadata", async () => {
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       status: "idle",
       selectedModel: null,
-      modelCatalog: null,
       contextUsage: {
         totalTokens: 31,
       },
@@ -1442,7 +1739,7 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
         loadCatalog: async () => {
           throw new Error("catalog unavailable");
         },
@@ -1452,7 +1749,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 31,
         contextWindow: 40_000,
         outputLimit: 1_000,
@@ -1479,9 +1776,8 @@ describe("useAgentStudioChatComposer", () => {
         },
       ],
     };
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       status: "idle",
-      modelCatalog: catalogWithSelectionFallback,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -1499,11 +1795,18 @@ describe("useAgentStudioChatComposer", () => {
       ],
     });
 
-    const harness = createHookHarness(createBaseProps({ activeSession }));
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: catalogWithSelectionFallback,
+        }),
+      }),
+    );
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 31,
         contextWindow: 100_000,
         outputLimit: 4_096,
@@ -1531,8 +1834,7 @@ describe("useAgentStudioChatComposer", () => {
         },
       ],
     };
-    const activeSession = createActiveSession({
-      modelCatalog: catalogWithContextFallback,
+    const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -1547,13 +1849,14 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: catalogWithContextFallback }),
       }),
     );
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 33,
         contextWindow: 100_000,
       });
@@ -1563,7 +1866,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("uses an older assistant message for context usage when the latest tokenized one is incomplete", async () => {
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -1582,13 +1885,13 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession,
+        loadedSession,
       }),
     );
 
     try {
       await harness.mount();
-      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
         totalTokens: 11,
         contextWindow: 25_000,
       });
@@ -1597,7 +1900,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps live context usage stable when only session messages change", async () => {
+  test("keeps live context usage unchanged when only session messages change", async () => {
     const contextUsage = {
       totalTokens: 44,
       contextWindow: 150_000,
@@ -1605,22 +1908,22 @@ describe("useAgentStudioChatComposer", () => {
       providerId: "openai",
       modelId: "gpt-5",
     };
-    const activeSession = createActiveSession({
+    const loadedSession = createLoadedSession({
       contextUsage,
       messages: [createAssistantMessage({ totalTokens: 12, contextWindow: 10_000 })],
     });
-    const harness = createHookHarness(createBaseProps({ activeSession }));
+    const harness = createHookHarness(createBaseProps({ loadedSession }));
 
     try {
       await harness.mount();
-      const previousUsage = harness.getLatest().activeSessionContextUsage;
+      const previousUsage = harness.getLatest().selectedSessionContextUsage;
 
       await harness.update(
         createBaseProps({
-          activeSession: {
-            ...activeSession,
-            messages: [
-              ...getSessionMessagesSlice(activeSession, 0),
+          loadedSession: {
+            ...loadedSession,
+            messages: createSessionMessagesState(loadedSession.externalSessionId, [
+              ...getSessionMessagesSlice(loadedSession, 0),
               {
                 id: "tool-1",
                 role: "tool",
@@ -1635,20 +1938,20 @@ describe("useAgentStudioChatComposer", () => {
                   status: "running",
                 },
               },
-            ],
+            ]),
             contextUsage,
           },
         }),
       );
 
-      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual(previousUsage);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps fallback context usage stable when unrelated tail messages change", async () => {
-    const activeSession = createActiveSession({
+  test("keeps fallback context usage unchanged when unrelated tail messages change", async () => {
+    const loadedSession = createLoadedSession({
       contextUsage: null,
       messages: [
         createAssistantMessage({
@@ -1657,18 +1960,18 @@ describe("useAgentStudioChatComposer", () => {
         }),
       ],
     });
-    const harness = createHookHarness(createBaseProps({ activeSession }));
+    const harness = createHookHarness(createBaseProps({ loadedSession }));
 
     try {
       await harness.mount();
-      const previousUsage = harness.getLatest().activeSessionContextUsage;
+      const previousUsage = harness.getLatest().selectedSessionContextUsage;
 
       await harness.update(
         createBaseProps({
-          activeSession: {
-            ...activeSession,
-            messages: [
-              ...getSessionMessagesSlice(activeSession, 0),
+          loadedSession: {
+            ...loadedSession,
+            messages: createSessionMessagesState(loadedSession.externalSessionId, [
+              ...getSessionMessagesSlice(loadedSession, 0),
               {
                 id: "tool-tail-1",
                 role: "tool",
@@ -1683,13 +1986,58 @@ describe("useAgentStudioChatComposer", () => {
                   status: "completed",
                 },
               },
-            ],
+            ]),
             contextUsage: null,
           },
         }),
       );
 
-      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual(previousUsage);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("derives context usage from the selected session when identities share an external id", async () => {
+    const externalSessionId = "shared-external-session";
+    const firstMessages = createSessionMessagesState(externalSessionId, [
+      createAssistantMessage({
+        totalTokens: 21,
+        contextWindow: 48_000,
+      }),
+    ]);
+    const secondMessages = createSessionMessagesState(externalSessionId, [
+      createAssistantMessage({
+        totalTokens: 34,
+        contextWindow: 96_000,
+      }),
+    ]);
+    const firstSession = createLoadedSession({
+      externalSessionId,
+      workingDirectory: "/repo/worktree-a",
+      messages: firstMessages,
+    });
+    const secondSession = createLoadedSession({
+      externalSessionId,
+      workingDirectory: "/repo/worktree-b",
+      messages: secondMessages,
+    });
+    const harness = createHookHarness(createBaseProps({ loadedSession: firstSession }));
+
+    try {
+      await harness.mount();
+      const firstUsage = harness.getLatest().selectedSessionContextUsage;
+      expect(firstUsage).toEqual({
+        totalTokens: 21,
+        contextWindow: 48_000,
+      });
+
+      await harness.update(createBaseProps({ loadedSession: secondSession }));
+
+      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
+        totalTokens: 34,
+        contextWindow: 96_000,
+      });
     } finally {
       await harness.unmount();
     }

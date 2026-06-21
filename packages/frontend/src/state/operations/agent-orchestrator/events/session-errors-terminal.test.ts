@@ -1,13 +1,23 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
-  type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
+  createRecordingSessionTodosUpdater,
+  createSessionsRef,
+  createSessionUpdater,
+  findSession,
   getLastSessionMessage,
   getSessionMessages,
-  OPENCODE_RUNTIME_DESCRIPTOR,
+  listenToAgentSessionEvents,
   type SessionEventAdapter,
+  type SessionUpdateFn,
 } from "./session-events-test-harness";
+
+const flushAutoReject = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+};
 
 describe("agent-orchestrator session errors and terminal state", () => {
   test("keeps permission pending when auto-reject reply fails", async () => {
@@ -16,7 +26,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       Promise.reject(new Error("network down")),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -25,59 +35,41 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval,
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-parent-session": buildSession({
-          externalSessionId: "external-parent-session",
-          role: "planner",
-          messages: [
-            {
-              id: "subagent:part:assistant-parent:subtask-fail",
-              role: "system",
-              content: "Subagent (spec): Inspect repo",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "subagent",
-                partId: "subtask-fail",
-                correlationKey: "part:assistant-parent:subtask-fail",
-                status: "running",
-                agent: "spec",
-                prompt: "Inspect repo",
-              },
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-parent-session",
+        role: "planner",
+        messages: [
+          {
+            id: "subagent:part:assistant-parent:subtask-fail",
+            role: "system",
+            content: "Subagent (spec): Inspect repo",
+            timestamp: "2026-02-22T08:00:01.000Z",
+            meta: {
+              kind: "subagent",
+              partId: "subtask-fail",
+              correlationKey: "part:assistant-parent:subtask-fail",
+              status: "running",
+              agent: "spec",
+              prompt: "Inspect repo",
             },
-          ],
-        }),
-        "session-1": buildSession({ role: "spec" }),
-      },
-    };
+          },
+        ],
+      }),
+      buildSession({ role: "spec" }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -107,14 +99,16 @@ describe("agent-orchestrator session errors and terminal state", () => {
       subagentCorrelationKey: "part:assistant-parent:subtask-fail",
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.pendingApprovals[0]?.requestId).toBe("perm-fail");
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
     expect(
-      getSessionMessages(sessionsRef).some((message) =>
+      findSession(sessionsRef, "external-parent-session")?.pendingApprovals[0]?.requestId,
+    ).toBe("perm-fail");
+    expect(
+      getSessionMessages(sessionsRef, "external-parent-session").some((message) =>
         message.content.includes("Automatic approval rejection failed"),
       ),
     ).toBe(true);
@@ -132,7 +126,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -141,47 +135,26 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval,
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "spec",
-          promptOverrides: {
-            "permission.read_only.reject": {
-              template: "Rejected by policy {{unsupported.token}}",
-              baseVersion: 1,
-            },
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "spec",
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      buildReadOnlyApprovalRejectionMessage: async () => {
+        throw new Error("Unsupported prompt token {{unsupported.token}}");
+      },
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -208,11 +181,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:05.000Z",
     });
 
-    await Promise.resolve();
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(0);
-    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.pendingApprovals[0]?.requestId).toBe(
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals[0]?.requestId).toBe(
       "perm-template-fail",
     );
     expect(
@@ -222,10 +196,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     ).toBe(true);
   });
 
-  test("records session_error as an error notice and clears pending requests", () => {
+  test("records session_error as an error notice and clears pending requests", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -234,71 +208,53 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*.md"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*.md"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -313,9 +269,9 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.status).toBe("error");
-    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
-    expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("error");
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
     const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Aborted");
     expect(lastMessage?.meta).toEqual({
@@ -326,10 +282,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
-  test("normalizes JSON-wrapped session_error payloads before rendering the error notice", () => {
+  test("normalizes JSON-wrapped session_error payloads before rendering the error notice", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -338,41 +294,23 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -399,10 +337,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
-  test("renders a cancelled session notice when a user-requested stop aborts", () => {
+  test("renders a cancelled session notice when a user-requested stop aborts", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -411,74 +349,56 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          stopRequestedAt: "2026-02-22T08:00:09.000Z",
-          messages: [
-            {
-              id: "tool-running",
-              role: "tool",
-              content: "Tool todowrite running...",
-              timestamp: "2026-02-22T08:00:08.000Z",
-              meta: {
-                kind: "tool",
-                partId: "part-tool-running",
-                callId: "call-tool-running",
-                tool: "todowrite",
-                toolType: "todo",
-                status: "running",
-              },
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        stopRequestedAt: "2026-02-22T08:00:09.000Z",
+        messages: [
+          {
+            id: "tool-running",
+            role: "tool",
+            content: "Tool todowrite running...",
+            timestamp: "2026-02-22T08:00:08.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-tool-running",
+              callId: "call-tool-running",
+              tool: "todowrite",
+              toolType: "todo",
+              status: "running",
             },
-          ],
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*.md"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-        }),
-      },
-    };
+          },
+        ],
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*.md"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -510,17 +430,18 @@ describe("agent-orchestrator session errors and terminal state", () => {
     }
     expect(toolMessage.meta.status).toBe("error");
     expect(toolMessage.meta.error).toBe("Aborted");
-    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-    expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("stopped");
+    expect(findSession(sessionsRef, "session-1")?.stopRequestedAt).toBeNull();
     expect(
       getSessionMessages(sessionsRef).some((message) => message.content.includes("Session error:")),
     ).toBe(false);
   });
 
-  test("handles question/todo updates and terminal finish", () => {
+  test("handles question/todo updates and terminal finish", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -529,42 +450,25 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "build" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-    const updateSessionOptions: unknown[] = [];
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-      options?: unknown,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return applySessionUpdate(identity, updater);
     };
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -599,16 +503,18 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.todos).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
-    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-    expect(updateSessionOptions).toContainEqual({ persist: false });
+    expect(todosRecorder.getTodos()).toHaveLength(1);
+    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    expect(updateSessionOptions).toContain(undefined);
+    expect(updateSessionOptions).toContainEqual({ persist: true });
   });
 
-  test("renders a cancelled session notice when a user-requested stop finishes normally", () => {
+  test("does not update runtime todos when the observed session is gone", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -617,88 +523,114 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          stopRequestedAt: "2026-02-22T08:00:09.000Z",
-          messages: [
-            {
-              id: "tool-running",
-              role: "tool",
-              content: "Tool todowrite running...",
-              timestamp: "2026-02-22T08:00:08.000Z",
-              meta: {
-                kind: "tool",
-                partId: "part-tool-running",
-                callId: "call-tool-running",
-                tool: "todowrite",
-                toolType: "todo",
-                status: "running",
-              },
-            },
-          ],
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*.md"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    sessionsRef.current = createSessionsRef([]).current;
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_todos_updated",
+      externalSessionId: "session-1",
+      todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(todosRecorder.getTodos()).toEqual([]);
+  });
+
+  test("renders a cancelled session notice when a user-requested stop finishes normally", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        stopRequestedAt: "2026-02-22T08:00:09.000Z",
+        messages: [
+          {
+            id: "tool-running",
+            role: "tool",
+            content: "Tool todowrite running...",
+            timestamp: "2026-02-22T08:00:08.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-tool-running",
+              callId: "call-tool-running",
+              tool: "todowrite",
+              toolType: "todo",
+              status: "running",
+            },
+          },
+        ],
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*.md"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -730,16 +662,16 @@ describe("agent-orchestrator session errors and terminal state", () => {
     }
     expect(toolMessage.meta.status).toBe("error");
     expect(toolMessage.meta.error).toBe("Session stopped at your request.");
-    expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
-    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
-    expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
-    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    expect(findSession(sessionsRef, "session-1")?.stopRequestedAt).toBeNull();
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("stopped");
   });
 
-  test("keeps real failures on the error path even when stop intent was set", () => {
+  test("keeps real failures on the error path even when stop intent was set", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -748,42 +680,24 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          stopRequestedAt: "2026-02-22T08:00:09.000Z",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        stopRequestedAt: "2026-02-22T08:00:09.000Z",
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -798,7 +712,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.status).toBe("error");
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("error");
     expect(
       getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Session stopped at your request."),

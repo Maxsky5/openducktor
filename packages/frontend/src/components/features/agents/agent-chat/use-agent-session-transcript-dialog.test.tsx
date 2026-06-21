@@ -1,109 +1,112 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import { buildMessage, buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
 
-let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
-const removeAgentSession = mock(async () => {});
-let agentSessionState: Pick<AgentSessionState, "purpose" | "role"> | null = null;
 let latestDialogProps: {
-  externalSessionId: string | null;
-  source: RuntimeSessionTranscriptSource | null;
+  target: AgentSessionIdentity | null;
   title: string;
   description: string;
 } | null = null;
 
-const transcriptSource: RuntimeSessionTranscriptSource = {
-  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+const transcriptTarget: AgentSessionIdentity = {
+  externalSessionId: "session-child-1",
+  runtimeKind: "opencode",
   workingDirectory: "/repo-a",
 };
 
-const createThreadModel = (
-  overrides: Partial<AgentChatThreadModel> = {},
-): AgentChatThreadModel => ({
-  session: buildSession(),
-  isSessionWorking: false,
-  isSessionViewLoading: false,
-  isSessionHistoryLoading: false,
-  isWaitingForRuntimeReadiness: false,
-  readinessState: "ready",
-  isInteractionEnabled: true,
-  blockedReason: null,
-  isLoadingChecks: false,
-  onRefreshChecks: () => {},
-  isStarting: false,
-  isSending: false,
-  sessionAgentColors: {},
-  canSubmitQuestionAnswers: true,
-  isSubmittingQuestionByRequestId: {},
-  onSubmitQuestionAnswers: async () => {},
-  canReplyToApprovals: true,
-  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
-  isSubmittingApprovalByRequestId: {},
-  approvalReplyErrorByRequestId: {},
-  onReplyApproval: async () => {},
-  sessionRuntimeDataError: null,
-  todoPanelCollapsed: false,
-  onToggleTodoPanel: () => {},
-  messagesContainerRef: createRef<HTMLDivElement>(),
-  scrollToBottomOnSendRef: { current: null },
-  syncBottomAfterComposerLayoutRef: { current: null },
-  ...overrides,
-});
+const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): AgentChatThreadModel => {
+  const session = buildSession();
+
+  return {
+    session,
+    displayedSessionKey: agentSessionIdentityKey(session),
+    isSessionWorking: false,
+    transcriptState: buildThreadTranscriptState(),
+    runtimeReadiness: {
+      state: "ready",
+      message: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
+    isInteractionEnabled: true,
+    emptyState: null,
+    isStarting: false,
+    isSending: false,
+    sessionAgentColors: {},
+    pendingApprovalRequests: [],
+    pendingQuestionRequests: [],
+    todos: [],
+    canSubmitQuestionAnswers: true,
+    isSubmittingQuestionByRequestId: {},
+    onSubmitQuestionAnswers: async () => {},
+    canReplyToApprovals: true,
+    runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
+    sessionAuxiliaryError: null,
+    shouldResetTranscriptWindow: false,
+    transcriptNotice: null,
+    todoPanelCollapsed: false,
+    onToggleTodoPanel: () => {},
+    messagesContainerRef: createRef<HTMLDivElement>(),
+    scrollToBottomOnSendRef: { current: null },
+    syncBottomAfterComposerLayoutRef: { current: null },
+    ...overrides,
+  };
+};
 
 describe("AgentSessionTranscriptDialogHost", () => {
   beforeAll(async () => {
-    [actualAppStateProvider, actualTranscriptDialog] = await Promise.all([
-      import("@/state/app-state-provider"),
-      import("./agent-session-transcript-dialog"),
-    ]);
+    actualTranscriptDialog = await import("./agent-session-transcript-dialog");
   });
 
   beforeEach(() => {
     latestDialogProps = null;
-    removeAgentSession.mockClear();
-    agentSessionState = null;
-
-    mock.module("@/state/app-state-provider", () => ({
-      useActiveWorkspace: () => ({
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      }),
-      useAgentOperations: () => ({
-        removeAgentSession,
-      }),
-      useAgentSession: () => agentSessionState,
-    }));
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
-        externalSessionId: string | null;
-        source: RuntimeSessionTranscriptSource | null;
+        target: AgentSessionIdentity | null;
         title: string;
         description: string;
       }): ReactElement => {
         latestDialogProps = props;
-        return <div data-testid="session-dialog-props">{props.externalSessionId}</div>;
+        return <div data-testid="session-dialog-props">{props.target?.externalSessionId}</div>;
       },
     }));
   });
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["./agent-session-transcript-dialog", () => Promise.resolve(actualTranscriptDialog)],
     ]);
   });
+
+  const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
+    <ActiveWorkspaceContext.Provider
+      value={{
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        setActiveWorkspace: () => undefined,
+      }}
+    >
+      {children}
+    </ActiveWorkspaceContext.Provider>
+  );
 
   test("passes runtime transcript requests through without task context", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
@@ -120,8 +123,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           type="button"
           onClick={() => {
             openSessionTranscript({
-              externalSessionId: "session-child-1",
-              source: transcriptSource,
+              target: transcriptTarget,
               title: "Subagent activity",
               description: "View what this subagent did.",
             });
@@ -133,9 +135,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
     }
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(<OpenDialogButton />, { wrapper });
@@ -143,20 +147,14 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-1",
-        source: transcriptSource,
+        target: transcriptTarget,
         title: "Subagent activity",
         description: "View what this subagent did.",
       });
     });
   });
 
-  test("removes transcript-only sessions when the dialog closes", async () => {
-    agentSessionState = {
-      purpose: "transcript",
-      role: "build",
-    };
-
+  test("clears runtime transcript requests when the dialog closes", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
     );
@@ -172,8 +170,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             type="button"
             onClick={() => {
               openSessionTranscript({
-                externalSessionId: "session-child-1",
-                source: transcriptSource,
+                target: transcriptTarget,
               });
             }}
           >
@@ -187,68 +184,22 @@ describe("AgentSessionTranscriptDialogHost", () => {
     }
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(<DialogControls />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-child-1"));
+    await waitFor(() =>
+      expect(latestDialogProps?.target?.externalSessionId).toBe("session-child-1"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    await waitFor(() => expect(removeAgentSession).toHaveBeenCalledWith("session-child-1"));
-  });
-
-  test("keeps regular sessions when the dialog closes", async () => {
-    agentSessionState = {
-      purpose: "primary",
-      role: "build",
-    };
-
-    const { AgentSessionTranscriptDialogHost } = await import(
-      "./use-agent-session-transcript-dialog"
-    );
-    const { useAgentSessionTranscriptDialog } = await import(
-      "./agent-session-transcript-dialog-context"
-    );
-
-    function DialogControls(): ReactElement {
-      const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
-      return (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              openSessionTranscript({
-                externalSessionId: "session-build-1",
-                source: transcriptSource,
-              });
-            }}
-          >
-            Open
-          </button>
-          <button type="button" onClick={() => closeSessionTranscript()}>
-            Close
-          </button>
-        </>
-      );
-    }
-
-    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
-    );
-
-    render(<DialogControls />, { wrapper });
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-build-1"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => expect(removeAgentSession).not.toHaveBeenCalled());
+    await waitFor(() => expect(latestDialogProps?.target).toBeNull());
   });
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {
@@ -256,35 +207,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
       "./use-agent-session-transcript-dialog"
     );
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
-    const pendingApproval = {
-      requestId: "permission-1",
-      requestType: "permission_grant" as const,
-      title: "Approve permission: read",
-      summary: "Approval request for read.",
-      affectedPaths: ["~/maxsky5.omp.json"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-    };
-    const pendingQuestion = {
-      requestId: "question-1",
-      questions: [
-        {
-          header: "Confirm",
-          question: "Which file should the subagent inspect?",
-          options: [{ label: "omp.json", description: "Use the requested config file" }],
-        },
-      ],
-    };
-
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(
@@ -304,12 +232,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
           },
         })}
         sessionAgentColors={{}}
-        sessionRuntimeKind="opencode"
-        sessionRuntimeRef={{ kind: "opencode", runtimeId: "runtime-1" }}
-        sessionWorkingDirectory="/repo-a"
-        subagentPendingApprovals={[pendingApproval]}
+        sessionIdentity={{
+          externalSessionId: "session-parent",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        }}
         subagentPendingApprovalCount={1}
-        subagentPendingQuestions={[pendingQuestion]}
         subagentPendingQuestionCount={1}
       />,
       { wrapper },
@@ -321,13 +249,10 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-1",
-        source: {
-          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+        target: {
+          externalSessionId: "session-child-1",
+          runtimeKind: "opencode",
           workingDirectory: "/repo-a",
-          isLive: true,
-          pendingApprovals: [pendingApproval],
-          pendingQuestions: [pendingQuestion],
         },
         title: "Subagent activity",
         description: "View what this subagent did.",
@@ -335,20 +260,22 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   });
 
-  test("opens a linked subagent transcript from a Planner thread with its runtime ref", async () => {
+  test("opens a linked subagent transcript from a Planner thread with its runtime kind", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
     );
     const { AgentChatThread } = await import("./agent-chat-thread");
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>
-          <AgentChatSettingsProvider value={createChatSettingsFixture()}>
-            {children}
-          </AgentChatSettingsProvider>
-        </AgentSessionTranscriptDialogHost>
-      </QueryProvider>
+      <ActiveWorkspaceTestProvider>
+        <QueryProvider useIsolatedClient>
+          <AgentSessionTranscriptDialogHost>
+            <AgentChatSettingsProvider value={createChatSettingsFixture()}>
+              {children}
+            </AgentChatSettingsProvider>
+          </AgentSessionTranscriptDialogHost>
+        </QueryProvider>
+      </ActiveWorkspaceTestProvider>
     );
 
     render(
@@ -357,7 +284,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
           session: buildSession({
             role: "planner",
             runtimeKind: "opencode",
-            runtimeId: "runtime-planner-1",
             workingDirectory: "/repo-a",
             messages: [
               buildMessage("system", "Subagent (explorer): read file", {
@@ -385,11 +311,10 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-planner-1",
-        source: {
-          runtimeRef: { kind: "opencode", runtimeId: "runtime-planner-1" },
+        target: {
+          externalSessionId: "session-child-planner-1",
+          runtimeKind: "opencode",
           workingDirectory: "/repo-a",
-          isLive: true,
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

@@ -8,8 +8,8 @@ import type {
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
@@ -47,12 +47,11 @@ export const buildAgentStudioTaskTabsModel = (args: {
 export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
-  activeSession: Pick<AgentSessionState, "status"> | null;
   roleOptions: AgentRoleOption[];
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
   selectedRole: AgentRole | null;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
-  onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
@@ -70,7 +69,6 @@ export const buildAgentStudioHeaderModel = (args: {
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
-  sessionStatus: args.activeSession?.status ?? null,
   selectedRole: args.selectedRole,
   workflowSteps: args.roleOptions.map((entry) => {
     const workflowSession = args.workflowSessionByRole[entry.role];
@@ -79,7 +77,7 @@ export const buildAgentStudioHeaderModel = (args: {
       label: entry.label,
       icon: entry.icon,
       state: args.workflowStateByRole[entry.role],
-      externalSessionId: workflowSession?.externalSessionId ?? null,
+      sessionValue: workflowSession ? agentSessionIdentityKey(workflowSession) : null,
     };
   }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,

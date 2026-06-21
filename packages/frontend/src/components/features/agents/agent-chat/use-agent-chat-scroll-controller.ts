@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "rea
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
-  activeExternalSessionId: string | null;
+  displayedSessionKey: string | null;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   isSessionWorking: boolean;
@@ -21,7 +21,7 @@ type UseAgentChatScrollControllerResult = {
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
 
 export function useAgentChatScrollController({
-  activeExternalSessionId,
+  displayedSessionKey,
   messagesContainerRef,
   messagesContentRef,
   isSessionWorking,
@@ -45,7 +45,7 @@ export function useAgentChatScrollController({
   const userScrollIntentVersionRef = useRef(0);
   const autoScrollRef = useRef<{ time: number; top: number } | null>(null);
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeExternalSessionIdRef = useRef<string | null>(activeExternalSessionId);
+  const displayedSessionKeyRef = useRef<string | null>(displayedSessionKey);
 
   const updateNearEdges = useCallback((nearBottom: boolean, nearTop: boolean) => {
     const changed = nearBottomRef.current !== nearBottom || nearTopRef.current !== nearTop;
@@ -131,11 +131,11 @@ export function useAgentChatScrollController({
   }, []);
 
   useLayoutEffect(() => {
-    if (activeExternalSessionIdRef.current === activeExternalSessionId) {
+    if (displayedSessionKeyRef.current === displayedSessionKey) {
       return;
     }
 
-    activeExternalSessionIdRef.current = activeExternalSessionId;
+    displayedSessionKeyRef.current = displayedSessionKey;
     userScrollIntentVersionRef.current = 0;
     autoScrollRef.current = null;
     if (autoScrollTimerRef.current !== null) {
@@ -150,7 +150,7 @@ export function useAgentChatScrollController({
     if (container) {
       container.style.overflowAnchor = "none";
     }
-  }, [activeExternalSessionId, messagesContainerRef, applyUserScrolledState, updateNearEdges]);
+  }, [displayedSessionKey, messagesContainerRef, applyUserScrolledState, updateNearEdges]);
 
   const scrollToBottomNow = useCallback(
     (force: boolean) => {

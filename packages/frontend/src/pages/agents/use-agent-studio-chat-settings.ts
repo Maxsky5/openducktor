@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { ActiveWorkspace } from "@/types/state-slices";
 
 const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 
@@ -17,33 +16,33 @@ const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown):
   );
 };
 
-export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorkspace | null }): {
+export function useAgentStudioChatSettings(args: { workspaceRepoPath: string | null }): {
   chatSettings: ChatSettings;
   reusablePrompts: ReusablePrompt[];
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
 } {
-  const { activeWorkspace } = args;
-  const activeRepoPath = activeWorkspace?.repoPath ?? null;
+  const { workspaceRepoPath } = args;
+  const hasWorkspace = workspaceRepoPath !== null;
   const { chatSettings, chatSettingsError, retryChatSettingsLoad } = useWorkspaceChatSettings({
-    activeWorkspace,
+    hasWorkspace,
   });
 
   const { data: reusablePrompts, error: reusablePromptsError } = useQuery({
     ...settingsSnapshotQueryOptions(),
-    enabled: activeWorkspace !== null,
+    enabled: hasWorkspace,
     select: readReusablePrompts,
   });
 
   const settingsError = chatSettingsError ?? reusablePromptsError;
   const chatSettingsLoadError =
-    activeRepoPath && settingsError
-      ? createChatSettingsLoadError(activeRepoPath, settingsError)
+    workspaceRepoPath && settingsError
+      ? createChatSettingsLoadError(workspaceRepoPath, settingsError)
       : null;
 
   return {
     chatSettings,
-    reusablePrompts: activeWorkspace
+    reusablePrompts: hasWorkspace
       ? (reusablePrompts ?? DEFAULT_REUSABLE_PROMPTS)
       : DEFAULT_REUSABLE_PROMPTS,
     chatSettingsLoadError,

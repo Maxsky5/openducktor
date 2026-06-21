@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -31,28 +30,13 @@ afterEach(async () => {
 
 enableReactActEnvironment();
 
-type LegacyHookArgs = {
-  activeWorkspace?: ActiveWorkspace | null;
+type HookArgs = {
   workspaceRepoPath?: string | null;
 };
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
-const resolveActiveWorkspace = (props: LegacyHookArgs): ActiveWorkspace | null => {
-  if ("workspaceRepoPath" in props) {
-    return props.workspaceRepoPath ? createActiveWorkspace(props.workspaceRepoPath) : null;
-  }
-
-  return props.activeWorkspace ?? null;
-};
-
-const useChatSettingsHarness = (props: LegacyHookArgs) =>
+const useChatSettingsHarness = (props: HookArgs) =>
   useAgentStudioChatSettings({
-    activeWorkspace: resolveActiveWorkspace(props),
+    workspaceRepoPath: props.workspaceRepoPath ?? null,
   });
 
 const createSettingsSnapshot = (
@@ -83,7 +67,7 @@ const createSettingsSnapshot = (
   return snapshot as SettingsSnapshot;
 };
 
-const createHookHarness = (initialProps: LegacyHookArgs) =>
+const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useChatSettingsHarness, initialProps);
 
 describe("useAgentStudioChatSettings", () => {

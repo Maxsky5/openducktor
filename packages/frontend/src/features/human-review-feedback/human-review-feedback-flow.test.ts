@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentSessionSummaryFixture } from "@/test-utils/shared-test-fixtures";
 import {
   HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
   prepareHumanReviewFeedback,
@@ -9,8 +9,10 @@ import {
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
-const createBuilderSession = (overrides: Partial<AgentSessionState> = {}) =>
-  createAgentSessionFixture({
+const createBuilderSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+) =>
+  createAgentSessionSummaryFixture({
     role: "build",
     taskId: "TASK-1",
     ...overrides,
@@ -60,16 +62,15 @@ describe("human-review-feedback-flow", () => {
 
   test("submitHumanReviewFeedback builds a kickoff-based shared start-session request", async () => {
     const startRequestChangesSession = mock(async () => "session-new");
-    const builderSessions = [
-      createBuilderSession({
-        externalSessionId: "builder-session-2",
-        startedAt: "2026-03-20T12:00:00.000Z",
-      }),
-      createBuilderSession({
-        externalSessionId: "builder-session-1",
-        startedAt: "2026-03-19T12:00:00.000Z",
-      }),
-    ];
+    const latestBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-2",
+      startedAt: "2026-03-20T12:00:00.000Z",
+    });
+    const previousBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-1",
+      startedAt: "2026-03-19T12:00:00.000Z",
+    });
+    const builderSessions = [latestBuilderSession, previousBuilderSession];
 
     const result = await submitHumanReviewFeedback({
       state: createState({ message: "  Use the standard request-changes workflow.  " }),
@@ -83,7 +84,11 @@ describe("human-review-feedback-flow", () => {
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_after_human_request_changes",
-        initialSourceExternalSessionId: "builder-session-2",
+        initialSourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
         beforeStartAction: {
@@ -95,8 +100,22 @@ describe("human-review-feedback-flow", () => {
     expect(startRequestChangesSession).toHaveBeenCalledWith(
       expect.objectContaining({
         existingSessionOptions: [
-          expect.objectContaining({ value: "builder-session-2" }),
-          expect.objectContaining({ value: "builder-session-1" }),
+          expect.objectContaining({
+            value: agentSessionIdentityKey(latestBuilderSession),
+            sourceSession: {
+              externalSessionId: "builder-session-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          }),
+          expect.objectContaining({
+            value: agentSessionIdentityKey(previousBuilderSession),
+            sourceSession: {
+              externalSessionId: "builder-session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          }),
         ],
       }),
     );

@@ -1,22 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
-import type { AgentEvent, RuntimeKind } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
+  RuntimeKind,
+} from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 
 type TestAdapterInternals = {
-  sessions: Map<
-    string,
-    {
-      pendingSubagentInputEventsByExternalSessionId: Map<
-        string,
-        Array<{ requestId: string; type: "approval_required" | "question_required" }>
-      >;
-    }
-  >;
+  sessions: Map<string, SessionRecord>;
   clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
 };
+
+const sessionRef = (externalSessionId = "external-session-1"): AgentSessionRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+});
+
+const sessionRuntimeRef = (externalSessionId = "external-session-1"): AgentSessionRuntimeRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "spec",
+  systemPrompt: "system",
+});
 
 const createDeferred = <T>(): {
   promise: Promise<T>;
@@ -78,17 +92,6 @@ const makeRuntimeSummary = (
 });
 
 const defaultRepoRuntimeResolver = {
-  ensureRepoRuntime: async ({
-    repoPath,
-    runtimeKind,
-  }: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-  }) => ({
-    ...makeRuntimeSummary("local_http"),
-    repoPath,
-    kind: runtimeKind,
-  }),
   requireRepoRuntime: async ({
     repoPath,
     runtimeKind,
@@ -103,17 +106,6 @@ const defaultRepoRuntimeResolver = {
 };
 
 const makeRepoRuntimeResolver = (routeType: "local_http" | "stdio") => ({
-  ensureRepoRuntime: async ({
-    repoPath,
-    runtimeKind,
-  }: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-  }) => ({
-    ...makeRuntimeSummary(routeType),
-    repoPath,
-    kind: runtimeKind,
-  }),
   requireRepoRuntime: async ({
     repoPath,
     runtimeKind,
@@ -327,15 +319,13 @@ const makeMockClient = (
 };
 
 describe("opencode-sdk-adapter", () => {
-  test("startSession ensures the repo runtime before creating a new session", async () => {
+  test("startSession requires the live repo runtime before creating a new session", async () => {
     const mockClient = makeMockClient();
-    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
-        ensureRepoRuntime,
         requireRepoRuntime,
       },
     });
@@ -349,19 +339,16 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
   });
 
-  test("resumeSession ensures the repo runtime without listing live runtimes", async () => {
+  test("resumeSession requires the live repo runtime without listing live runtimes", async () => {
     const mockClient = makeMockClient();
-    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
-        ensureRepoRuntime,
         requireRepoRuntime,
       },
     });
@@ -376,8 +363,7 @@ describe("opencode-sdk-adapter", () => {
       externalSessionId: "external-session-1",
     });
 
-    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(mockClient.getCalls).toEqual([
       { directory: defaultWorkingDirectory, sessionID: "external-session-1" },
     ]);
@@ -463,23 +449,20 @@ describe("opencode-sdk-adapter", () => {
 
   test("live session scans require an existing repo runtime without starting one", async () => {
     const mockClient = makeMockClient();
-    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
-        ensureRepoRuntime,
         requireRepoRuntime,
       },
     });
 
-    await adapter.listSessionPresence({
+    await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
     });
 
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
   });
 
@@ -488,11 +471,6 @@ describe("opencode-sdk-adapter", () => {
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    const events: AgentEvent[] = [];
-    adapter.subscribeEvents("external-session-1", (event) => {
-      events.push(event);
     });
 
     const summary = await adapter.startSession({
@@ -504,14 +482,22 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
+    const adapterInternals = adapter as unknown as TestAdapterInternals;
+    const events: AgentEvent[] = [];
+    await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
+      events.push(event);
+    });
+
     expect(summary.externalSessionId).toBe("external-session-1");
-    expect(adapter.hasSession("external-session-1")).toBe(true);
+    expect(summary.runtimeKind).toBe("opencode");
+    expect(summary.workingDirectory).toBe("/repo");
+    expect(adapterInternals.sessions.has("external-session-1")).toBe(true);
     expect(mock.createCalls).toHaveLength(1);
 
-    await adapter.stopSession("external-session-1");
+    await adapter.stopSession(sessionRef("external-session-1"));
 
     expect(mock.abortCalls).toHaveLength(1);
-    expect(adapter.hasSession("external-session-1")).toBe(false);
+    expect(adapterInternals.sessions.has("external-session-1")).toBe(false);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
@@ -577,7 +563,9 @@ describe("opencode-sdk-adapter", () => {
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");
-    expect(adapter.hasSession("external-session-1")).toBe(false);
+    expect((adapter as unknown as TestAdapterInternals).sessions.has("external-session-1")).toBe(
+      false,
+    );
   });
 
   test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
@@ -635,7 +623,7 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Expected test session to be registered.");
     }
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("external-session-1", (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
     });
 
@@ -667,14 +655,14 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listLiveAgentSessions maps server sessions and statuses", async () => {
+  test("listSessionRuntimeSnapshots maps server sessions and statuses", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const sessions = await adapter.listLiveAgentSessions({
+    const sessions = await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
     });
@@ -683,25 +671,44 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/other" }]);
     expect(sessions).toEqual([
       {
-        externalSessionId: "external-session-1",
-        title: "BUILD task-1",
-        workingDirectory: "/repo",
-        startedAt: "2026-02-22T12:00:00.000Z",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "retrying",
-          nextEpochMs: 1234,
+        availability: "runtime",
+        classification: "waiting_for_permission",
+        ref: {
+          externalSessionId: "external-session-1",
+          repoPath: defaultRepoPath,
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
         },
+        title: "BUILD task-1",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        pendingApprovals: [expectedReadApproval],
+        pendingQuestions: [],
       },
       {
-        externalSessionId: "external-session-2",
-        title: "OTHER task",
-        workingDirectory: "/other",
-        startedAt: "2026-02-22T12:00:00.000Z",
-        status: {
-          type: "busy",
+        availability: "runtime",
+        classification: "waiting_for_question",
+        ref: {
+          externalSessionId: "external-session-2",
+          repoPath: defaultRepoPath,
+          runtimeKind: "opencode",
+          workingDirectory: "/other",
         },
+        title: "OTHER task",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        pendingApprovals: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Ship it?",
+                options: [{ label: "Yes", description: "Approve" }],
+                custom: false,
+              },
+            ],
+          },
+        ],
       },
     ]);
   });
@@ -759,7 +766,6 @@ describe("opencode-sdk-adapter", () => {
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("local_http"),
         requireRepoRuntime: async () => makeRuntimeSummary("local_http"),
       },
     });
@@ -852,14 +858,14 @@ describe("opencode-sdk-adapter", () => {
     ).rejects.toThrow("OpenCode runtime does not expose the file search API.");
   });
 
-  test("listSessionPresence merges status and pending input into a single live-session view", async () => {
+  test("listSessionRuntimeSnapshots merges status and pending input into a single live-session view", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const snapshots = await adapter.listSessionPresence({
+    const snapshots = await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
     });
@@ -870,7 +876,7 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.questionListCalls).toEqual([{ directory: "/repo" }, { directory: "/other" }]);
     expect(snapshots).toMatchObject([
       {
-        presence: "runtime",
+        availability: "runtime",
         classification: "waiting_for_permission",
         ref: {
           repoPath: defaultRepoPath,
@@ -878,21 +884,13 @@ describe("opencode-sdk-adapter", () => {
           externalSessionId: "external-session-1",
           workingDirectory: "/repo",
         },
-        runtimeId: "runtime-opencode-1",
         title: "BUILD task-1",
         startedAt: "2026-02-22T12:00:00.000Z",
-        agentSessionStatus: "idle",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "retrying",
-          nextEpochMs: 1234,
-        },
         pendingApprovals: [expectedReadApproval],
         pendingQuestions: [],
       },
       {
-        presence: "runtime",
+        availability: "runtime",
         classification: "waiting_for_question",
         ref: {
           repoPath: defaultRepoPath,
@@ -900,13 +898,8 @@ describe("opencode-sdk-adapter", () => {
           externalSessionId: "external-session-2",
           workingDirectory: "/other",
         },
-        runtimeId: "runtime-opencode-1",
         title: "OTHER task",
         startedAt: "2026-02-22T12:00:00.000Z",
-        agentSessionStatus: "idle",
-        status: {
-          type: "busy",
-        },
         pendingApprovals: [],
         pendingQuestions: [
           {
@@ -925,7 +918,105 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("readSessionPresence keeps a newly attached local session active through idle runtime status", async () => {
+  test("listSessionRuntimeSnapshots preserves OpenCode parent session evidence", async () => {
+    const mock = makeMockClient();
+    const parentChildClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return {
+            data: [
+              {
+                id: "parent-session",
+                projectID: "project-1",
+                directory: "/repo",
+                title: "Parent",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:00.000Z"),
+                },
+              },
+              {
+                id: "child-session",
+                projectID: "project-1",
+                directory: "/repo",
+                parentID: "parent-session",
+                title: "Child",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:01.000Z"),
+                },
+              },
+            ],
+            error: undefined,
+          };
+        },
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "parent-session": { type: "idle" },
+              "child-session": { type: "idle" },
+            },
+            error: undefined,
+          };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return {
+            data: [
+              {
+                id: "perm-1",
+                sessionID: "child-session",
+                permission: "read",
+                patterns: ["**/.env"],
+                metadata: { source: "history" },
+                always: [],
+              },
+            ],
+            error: undefined,
+          };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => parentChildClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const snapshots = await adapter.listSessionRuntimeSnapshots({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      directories: ["/repo"],
+    });
+
+    expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(snapshots).toMatchObject([
+      {
+        ref: {
+          externalSessionId: "parent-session",
+          workingDirectory: "/repo",
+        },
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+      {
+        parentExternalSessionId: "parent-session",
+        ref: {
+          externalSessionId: "child-session",
+          workingDirectory: "/repo",
+        },
+        pendingApprovals: [expectedReadApproval],
+        pendingQuestions: [],
+      },
+    ]);
+  });
+
+  test("readSessionRuntimeSnapshot trusts runtime idle after the runtime lists the session", async () => {
     const mock = makeMockClient();
     const idleStatusClient = {
       ...mock.client,
@@ -988,7 +1079,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const snapshot = await adapter.readSessionPresence({
+    const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
@@ -996,16 +1087,14 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(snapshot).toMatchObject({
-      presence: "runtime",
-      classification: "running",
-      agentSessionStatus: "running",
-      status: { type: "busy" },
+      availability: "runtime",
+      classification: "idle",
     });
     expect(mock.listCalls).toEqual([undefined]);
     expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
   });
 
-  test("sendUserMessage keeps presence active while resolving workflow tools", async () => {
+  test("sendUserMessage keeps the runtime snapshot active while resolving workflow tools", async () => {
     const mock = makeMockClient();
     const mcpStatusDeferred = createDeferred<{
       data: { openducktor: { status: string } };
@@ -1081,7 +1170,7 @@ describe("opencode-sdk-adapter", () => {
 
     expect(mcpStatusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
 
-    const snapshot = await adapter.readSessionPresence({
+    const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
@@ -1089,10 +1178,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(snapshot).toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       classification: "running",
-      agentSessionStatus: "running",
-      status: { type: "busy" },
     });
 
     mcpStatusDeferred.resolve({
@@ -1105,7 +1192,7 @@ describe("opencode-sdk-adapter", () => {
     expect(promptAsyncCalls).toHaveLength(1);
   });
 
-  test("readSessionPresence does not synthesize local presence for another working directory", async () => {
+  test("readSessionRuntimeSnapshot does not synthesize local runtime snapshot for another working directory", async () => {
     const mock = makeMockClient();
     const emptyListClient = {
       ...mock.client,
@@ -1131,7 +1218,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const snapshot = await adapter.readSessionPresence({
+    const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: "/other",
@@ -1139,8 +1226,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(snapshot).toMatchObject({
-      presence: "stale",
-      classification: "stale",
+      availability: "missing",
+      classification: "missing",
       ref: {
         externalSessionId: "external-session-1",
         workingDirectory: "/other",
@@ -1148,7 +1235,7 @@ describe("opencode-sdk-adapter", () => {
     });
   });
 
-  test("listSessionPresence includes attached local sessions before runtime list catches up", async () => {
+  test("listSessionRuntimeSnapshots includes local runtime sessions before runtime list catches up", async () => {
     const mock = makeMockClient();
     const emptyListClient = {
       ...mock.client,
@@ -1174,7 +1261,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const snapshots = await adapter.listSessionPresence({
+    const snapshots = await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       directories: [defaultWorkingDirectory],
@@ -1182,20 +1269,63 @@ describe("opencode-sdk-adapter", () => {
 
     expect(snapshots).toMatchObject([
       {
-        presence: "runtime",
+        availability: "runtime",
         classification: "running",
         ref: {
           externalSessionId: "external-session-1",
           workingDirectory: defaultWorkingDirectory,
         },
-        status: { type: "busy" },
         pendingApprovals: [],
         pendingQuestions: [],
       },
     ]);
   });
 
-  test("listSessionPresence rejects malformed pending approval payloads", async () => {
+  test("listSessionRuntimeSnapshots includes observed existing sessions before runtime list catches up", async () => {
+    const mock = makeMockClient();
+    const emptyListClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return { data: [], error: undefined };
+        },
+        messages: async () => ({ data: [], error: undefined }),
+        children: async () => ({ data: [], error: undefined }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => emptyListClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+    const unsubscribe = await adapter.subscribeEvents(sessionRef("external-session-1"), () => {});
+
+    try {
+      const snapshots = await adapter.listSessionRuntimeSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+        directories: [defaultWorkingDirectory],
+      });
+
+      expect(snapshots).toMatchObject([
+        {
+          availability: "runtime",
+          classification: "idle",
+          ref: {
+            externalSessionId: "external-session-1",
+            workingDirectory: defaultWorkingDirectory,
+          },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("listSessionRuntimeSnapshots rejects malformed pending approval payloads", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1219,14 +1349,14 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listSessionPresence({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
     ).rejects.toThrow("Malformed Opencode pending approval payload: missing permission.");
   });
 
-  test("listSessionPresence rejects malformed pending question payloads", async () => {
+  test("listSessionRuntimeSnapshots rejects malformed pending question payloads", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1250,7 +1380,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listSessionPresence({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
@@ -1259,7 +1389,7 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
-  test("listSessionPresence normalizes trailing separators in directory filters", async () => {
+  test("listSessionRuntimeSnapshots normalizes trailing separators in directory filters", async () => {
     const mock = makeMockClient();
     const trailingDirectoryClient = {
       ...mock.client,
@@ -1286,7 +1416,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const snapshots = await adapter.listSessionPresence({
+    const snapshots = await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       directories: ["/repo///"],
@@ -1297,7 +1427,7 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
     expect(snapshots).toMatchObject([
       {
-        presence: "runtime",
+        availability: "runtime",
         ref: {
           repoPath: defaultRepoPath,
           runtimeKind: "opencode",
@@ -1306,19 +1436,13 @@ describe("opencode-sdk-adapter", () => {
         },
         title: "BUILD task-1",
         startedAt: "2026-02-22T12:00:00.000Z",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "retrying",
-          nextEpochMs: 1234,
-        },
         pendingApprovals: [expectedReadApproval],
         pendingQuestions: [],
       },
     ]);
   });
 
-  test("listLiveAgentSessions fails fast on malformed runtime statuses", async () => {
+  test("listSessionRuntimeSnapshots fails fast on malformed runtime statuses", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1340,14 +1464,14 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listLiveAgentSessions({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
     ).rejects.toThrow("Unsupported Opencode live agent session status type");
   });
 
-  test("listLiveAgentSessions rejects non-object session status maps", async () => {
+  test("listSessionRuntimeSnapshots rejects non-object session status maps", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1365,14 +1489,14 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listLiveAgentSessions({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
     ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
 
-  test("listLiveAgentSessions normalizes directory keys for status lookups", async () => {
+  test("listSessionRuntimeSnapshots normalizes directory keys for status lookups", async () => {
     const mock = makeMockClient();
     const whitespaceClient = {
       ...mock.client,
@@ -1399,7 +1523,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const sessions = await adapter.listLiveAgentSessions({
+    const sessions = await adapter.listSessionRuntimeSnapshots({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
     });
@@ -1407,21 +1531,23 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(sessions).toEqual([
       {
-        externalSessionId: "external-session-1",
-        title: "BUILD task-1",
-        workingDirectory: "/repo",
-        startedAt: "2026-02-22T12:00:00.000Z",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "retrying",
-          nextEpochMs: 1234,
+        availability: "runtime",
+        classification: "waiting_for_permission",
+        ref: {
+          externalSessionId: "external-session-1",
+          repoPath: defaultRepoPath,
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
         },
+        title: "BUILD task-1",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        pendingApprovals: [expectedReadApproval],
+        pendingQuestions: [],
       },
     ]);
   });
 
-  test("listLiveAgentSessions rejects sessions with invalid directories", async () => {
+  test("listSessionRuntimeSnapshots rejects sessions with invalid directories", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1449,7 +1575,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listLiveAgentSessions({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
@@ -1458,7 +1584,7 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
-  test("listLiveAgentSessions rejects sessions with malformed titles", async () => {
+  test("listSessionRuntimeSnapshots rejects sessions with malformed titles", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -1485,7 +1611,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listLiveAgentSessions({
+      adapter.listSessionRuntimeSnapshots({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
@@ -1494,7 +1620,7 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
-  test("readSessionPresence includes pending permissions and questions", async () => {
+  test("readSessionRuntimeSnapshot includes pending permissions and questions", async () => {
     const mock = makeMockClient();
     const questionfulClient = {
       ...mock.client,
@@ -1534,7 +1660,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const snapshot = await adapter.readSessionPresence({
+    const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: `${defaultWorkingDirectory}/`,
@@ -1544,14 +1670,13 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
     expect(snapshot).toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       ref: {
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         externalSessionId: "external-session-1",
       },
-      runtimeId: "runtime-opencode-1",
       pendingApprovals: [expectedReadApproval],
       pendingQuestions: [
         {

@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -13,7 +13,7 @@ import type {
 type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
-  activeSession: Pick<AgentSessionState, "status"> | null;
+  selectedRole: AgentRole;
   sessionsForTaskLength: number;
   agentStudioReady: boolean;
   isStarting: boolean;
@@ -28,7 +28,7 @@ type UseAgentStudioHeaderModelArgs = {
 export const useAgentStudioHeaderModel = ({
   selectedTask,
   onOpenTaskDetails,
-  activeSession,
+  selectedRole,
   sessionsForTaskLength,
   agentStudioReady,
   isStarting,
@@ -39,17 +39,14 @@ export const useAgentStudioHeaderModel = ({
   onResolveGitConflictQuickAction,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
-  const activeSessionStatus = activeSession?.status ?? null;
-
   return useMemo(
     () =>
       buildAgentStudioHeaderModel({
         selectedTask,
         onOpenTaskDetails,
-        activeSession: activeSessionStatus ? { status: activeSessionStatus } : null,
         roleOptions: ROLE_OPTIONS,
         workflowStateByRole: workflow.workflowStateByRole,
-        selectedRole: workflow.selectedInteractionRole,
+        selectedRole,
         workflowSessionByRole: workflow.workflowSessionByRole,
         sessionSelectorAutofocusByValue: workflow.sessionSelectorAutofocusByValue,
         onWorkflowStepSelect,
@@ -67,7 +64,6 @@ export const useAgentStudioHeaderModel = ({
         isStarting,
       }),
     [
-      activeSessionStatus,
       agentStudioReady,
       isStarting,
       onOpenTaskDetails,
@@ -76,11 +72,11 @@ export const useAgentStudioHeaderModel = ({
       onResolveGitConflictQuickAction,
       onSessionSelectionChange,
       onWorkflowStepSelect,
+      selectedRole,
       selectedTask,
       sessionsForTaskLength,
       workflow.primaryQuickAction,
       workflow.quickActions,
-      workflow.selectedInteractionRole,
       workflow.sessionSelectorAutofocusByValue,
       workflow.sessionCreateOptions,
       workflow.sessionSelectorGroups,

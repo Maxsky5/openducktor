@@ -1,4 +1,8 @@
-import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
+import type {
+  AgentSessionHistoryMessage,
+  AgentUserMessageDisplayPart,
+  AgentUserMessageState,
+} from "@openducktor/core";
 import {
   ensureVisibleUserTextDisplayParts,
   normalizeUserMessageDisplayParts,
@@ -137,4 +141,68 @@ export const emitKnownUserMessage = (
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
+};
+
+export const emitAdmittedUserMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp: string;
+    message: string;
+    parts: AgentUserMessageDisplayPart[];
+    state: AgentUserMessageState;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  runtime.messageRoleById.set(input.messageId, "user");
+  persistUserMessageMetadata({
+    session,
+    messageId: input.messageId,
+    timestamp: input.timestamp,
+    ...(input.model ? { model: input.model } : {}),
+    visible: input.message,
+    displayParts: input.parts,
+  });
+
+  return emitUserMessage(runtime, input);
+};
+
+type UserHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "user" }>;
+
+const seedHistoryUserMessageMetadata = (
+  runtime: EventStreamRuntime,
+  message: UserHistoryMessage,
+): ReturnType<EventStreamRuntime["getSession"]> => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  runtime.messageRoleById.set(message.messageId, "user");
+  persistUserMessageMetadata({
+    session,
+    messageId: message.messageId,
+    timestamp: message.timestamp,
+    ...(message.model ? { model: message.model } : {}),
+    visible: message.text,
+    displayParts: message.displayParts,
+  });
+
+  return session;
+};
+
+export const seedHistoryUserMessage = (
+  runtime: EventStreamRuntime,
+  message: UserHistoryMessage,
+): boolean => {
+  const session = seedHistoryUserMessageMetadata(runtime, message);
+  session?.emittedUserMessageSignatures.set(
+    message.messageId,
+    buildUserMessageSignature({
+      timestamp: message.timestamp,
+      message: message.text,
+      parts: message.displayParts,
+      state: message.state,
+      ...(message.model ? { model: message.model } : {}),
+    }),
+  );
+  session?.emittedUserMessageStates.set(message.messageId, message.state);
+  return true;
 };

@@ -2,18 +2,19 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import { catalogModelOptionValue } from "@/components/features/agents";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export const useModelSelectionActions = ({
-  activeExternalSessionId,
+  loadedSessionIdentity,
   updateAgentSessionModel,
   applyDraftSelection,
   selectedModelSelection,
   selectionCatalog,
   selectedRuntimeKind,
 }: {
-  activeExternalSessionId: string | null;
+  loadedSessionIdentity: AgentSessionIdentity | null;
   updateAgentSessionModel: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
@@ -27,13 +28,13 @@ export const useModelSelectionActions = ({
 } => {
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
-      if (activeExternalSessionId) {
-        updateAgentSessionModel(activeExternalSessionId, selection);
+      if (loadedSessionIdentity) {
+        updateAgentSessionModel(loadedSessionIdentity, selection);
         return;
       }
       applyDraftSelection(selection);
     },
-    [activeExternalSessionId, applyDraftSelection, updateAgentSessionModel],
+    [applyDraftSelection, loadedSessionIdentity, updateAgentSessionModel],
   );
 
   const handleSelectAgentProfile = useCallback(

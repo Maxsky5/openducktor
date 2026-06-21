@@ -22,6 +22,21 @@ const SELECTED_MODEL: AgentModelSelection = {
   profileId: "build-agent",
 };
 
+const sourceSession = (externalSessionId: string, runtimeKind: RuntimeKind = "opencode") => ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory: "/repo/worktree",
+});
+
+const sourceOption = (externalSessionId: string, runtimeKind: RuntimeKind = "opencode") => ({
+  value: externalSessionId,
+  sourceSession: sourceSession(externalSessionId, runtimeKind),
+  label: "Reusable session",
+  description: "Reusable session",
+  runtimeKind,
+  selectedModel: null,
+});
+
 const FORKLESS_RUNTIME = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
   label: "Reuse Runtime",
@@ -42,8 +57,9 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fresh",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
@@ -58,15 +74,16 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "session-1",
+          sourceSessionOptionValue: "session-1",
           targetBranch: "refs/remotes/origin/feature/session-start",
         },
+        existingSessionOptions: [sourceOption("session-1")],
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
     ).toEqual({
       startMode: "reuse",
-      sourceExternalSessionId: "session-1",
+      sourceSession: sourceSession("session-1"),
       targetBranch: {
         remote: "origin",
         branch: "feature/session-start",
@@ -79,16 +96,17 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fork",
-          sourceExternalSessionId: "session-2",
+          sourceSessionOptionValue: "session-2",
           targetBranch: "refs/heads/local-review",
         },
+        existingSessionOptions: [sourceOption("session-2")],
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
     ).toEqual({
       startMode: "fork",
       selectedModel: SELECTED_MODEL,
-      sourceExternalSessionId: "session-2",
+      sourceSession: sourceSession("session-2"),
       targetBranch: {
         branch: "local-review",
       },
@@ -100,8 +118,9 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fresh",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
@@ -113,8 +132,9 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
@@ -128,9 +148,10 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fresh",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
@@ -142,9 +163,10 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
@@ -156,9 +178,10 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fork",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
@@ -170,9 +193,10 @@ describe("buildSessionStartModalDecision", () => {
       buildSessionStartModalDecision({
         input: {
           startMode: "fork",
-          sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
+        existingSessionOptions: [],
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
@@ -229,11 +253,9 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("uses the source option runtime kind before selected model runtime kind", () => {
     expect(
       requireSourceSessionRuntimeKind({
-        value: "session-1",
+        ...sourceOption("session-1"),
         label: "Reusable session",
         description: "Reusable session with runtime",
-        runtimeKind: "opencode",
-        selectedModel: null,
       }),
     ).toBe("opencode");
   });
@@ -241,10 +263,14 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("fails fast when a reusable session has no runtime kind", () => {
     expect(() =>
       requireSourceSessionRuntimeKind({
-        value: "session-2",
+        ...sourceOption("session-2", null as unknown as RuntimeKind),
+        sourceSession: {
+          externalSessionId: "session-2",
+          runtimeKind: null as unknown as RuntimeKind,
+          workingDirectory: "/repo/worktree",
+        },
         label: "Missing runtime session",
         description: "Reusable session without runtime",
-        selectedModel: null,
       }),
     ).toThrow("Reusable session is missing a runtime kind.");
   });

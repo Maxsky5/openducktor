@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -8,26 +9,60 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createSessionStartWorkflowRunner } from "@/features/session-start";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createChecksStateContextValue,
   createDeferred,
+  createRepoRuntimeHealthContextValue,
+  createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
+
+const createSessionRuntimeData = (
+  overrides: Partial<HookArgs["selectedSession"]["runtimeData"]> = {},
+): HookArgs["selectedSession"]["runtimeData"] => ({
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+  error: null,
+  ...overrides,
+});
+
+const createRuntimeCatalog = (
+  runtime: RuntimeDescriptor,
+): NonNullable<HookArgs["selectedSession"]["runtimeData"]["modelCatalog"]> => ({
+  runtime,
+  models: [],
+  defaultModelsByProvider: {},
+  profiles: [],
+});
 
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
@@ -81,6 +116,77 @@ const createAttachmentDraft = (input: {
 });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+const summarizeSessions = (sessions: ReturnType<typeof createSession>[]) =>
+  sessions.map(toAgentSessionSummary);
+
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
+const createRunSessionStartWorkflow = (
+  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
+) =>
+  createSessionStartWorkflowRunner({
+    queryClient: new QueryClient(),
+    workspaceId: "workspace-1",
+    startAgentSession: async () => sessionIdentity("session-new"),
+    sendAgentMessage: async () => {},
+    ...overrides,
+  });
+
+const localSessionIdentity = (externalSessionId: string) =>
+  toAgentSessionIdentity(createSession({ externalSessionId }));
+
+const createSelectedSessionState = (
+  overrides: Partial<HookArgs["selectedSession"]> = {},
+): HookArgs["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: createSessionRuntimeData(),
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
+});
+
+const selectedSessionFromSession = (session: ReturnType<typeof createSession>) =>
+  createSelectedSessionState({
+    identity: toAgentSessionIdentity(session),
+    activityState: toAgentSessionSummary(session).activityState,
+    selectedModel: session.selectedModel,
+    loadedSession: session,
+  });
+
+const selectedSessionFromIdentity = (identity: AgentSessionIdentity) =>
+  createSelectedSessionState({ identity });
+
+const selectedSessionArgs = (overrides = {}) => {
+  const loadedSession = createSession(overrides);
+  return {
+    selectedSession: selectedSessionFromSession(loadedSession),
+  };
+};
+
+const selectedSessionWithRuntimeData = (
+  sessionOverrides: Parameters<typeof selectedSessionArgs>[0],
+  runtimeDataOverrides: Partial<HookArgs["selectedSession"]["runtimeData"]>,
+) => {
+  const { selectedSession } = selectedSessionArgs(sessionOverrides);
+  return {
+    selectedSession: {
+      ...selectedSession,
+      runtimeData: createSessionRuntimeData(runtimeDataOverrides),
+    },
+  };
+};
 
 const QUEUED_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
@@ -95,7 +201,57 @@ const QUEUED_RUNTIME_DESCRIPTOR = {
   },
 } as const;
 
+const TEST_RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR];
+
+const createTestRuntimeDefinitionsContextValue = () =>
+  createRuntimeDefinitionsContextValue({
+    runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
+    availableRuntimeDefinitions: TEST_RUNTIME_DEFINITIONS,
+    refreshRuntimeDefinitions: async () => TEST_RUNTIME_DEFINITIONS,
+    loadRepoRuntimeCatalog: async () => ({
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["default"],
+          contextWindow: 200_000,
+          outputLimit: 8_192,
+        },
+      ],
+      defaultModelsByProvider: {
+        openai: "gpt-5",
+      },
+      profiles: [
+        {
+          name: "spec",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "planner",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "build",
+          mode: "primary",
+          hidden: false,
+        },
+        {
+          name: "qa",
+          mode: "primary",
+          hidden: false,
+        },
+      ],
+    }),
+  });
+
 const createHookHarness = (initialProps: HookArgs) => {
+  const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -113,76 +269,29 @@ const createHookHarness = (initialProps: HookArgs) => {
             errors: [],
           }),
           refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
-          refreshRepoRuntimeHealthForRepo: async () => ({}),
           clearActiveTaskStoreCheck: () => {},
-          clearActiveRepoRuntimeHealth: () => {},
           setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
           hasCachedTaskStoreCheck: () => false,
-          hasCachedRepoRuntimeHealth: () => false,
         },
       },
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RuntimeDefinitionsContext.Provider,
+          RepoRuntimeHealthContext.Provider,
           {
-            value: {
-              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-              availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              isLoadingRuntimeDefinitions: false,
-              runtimeDefinitionsError: null,
-              refreshRuntimeDefinitions: async () => [
-                OPENCODE_RUNTIME_DESCRIPTOR,
-                QUEUED_RUNTIME_DESCRIPTOR,
-              ],
-              loadRepoRuntimeCatalog: async () => ({
-                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                models: [
-                  {
-                    id: "openai/gpt-5",
-                    providerId: "openai",
-                    providerName: "OpenAI",
-                    modelId: "gpt-5",
-                    modelName: "GPT-5",
-                    variants: ["default"],
-                    contextWindow: 200_000,
-                    outputLimit: 8_192,
-                  },
-                ],
-                defaultModelsByProvider: {
-                  openai: "gpt-5",
-                },
-                profiles: [
-                  {
-                    name: "spec",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "planner",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "build",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                  {
-                    name: "qa",
-                    mode: "primary" as const,
-                    hidden: false,
-                  },
-                ],
-              }),
-              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-              loadRepoRuntimeFileSearch: async () => [],
-            },
+            value: createRepoRuntimeHealthContextValue(),
           },
-          children,
+          createElement(
+            ChecksStateContext.Provider,
+            { value: checksStateContextValue },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: createTestRuntimeDefinitionsContextValue() },
+              children,
+            ),
+          ),
         ),
       ),
     );
@@ -215,28 +324,26 @@ const confirmSessionStartModal = async (
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode: "fresh",
-      sourceExternalSessionId: null,
+      sourceSessionOptionValue: null,
     });
   });
 };
 
 const createBaseArgs = (): HookArgs => {
   return {
-    activeWorkspace: {
-      repoPath: "/repo",
-      workspaceId: "workspace-1",
-      workspaceName: "Active Workspace",
-    },
+    activeWorkspaceId: "workspace-1",
+    workspaceRepoPath: "/repo",
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",
-    activeSession: null,
-    selectedModelSelection: null,
+    selectedSession: createSelectedSessionState(),
+    runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
     selectedModelDescriptor: null,
     sessionsForTask: [],
     selectedTask: createTask(),
+    isSelectedSessionModelSendable: true,
     agentStudioReady: true,
-    isActiveTaskHydrated: true,
+    isActiveTaskReady: true,
     selectionForNewSession: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -246,12 +353,13 @@ const createBaseArgs = (): HookArgs => {
     },
     reusablePrompts: [],
     repoSettings: null,
-    startAgentSession: async () => "session-new",
-    settleStartedAgentSession: () => {},
+    runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
     humanRequestChangesTask: async () => {},
+    replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
-    updateQuery: () => {},
+    scheduleQueryUpdate: () => {},
+    selectAgentStudioSelection: () => {},
   };
 };
 
@@ -277,17 +385,18 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("prepares a message-first session target without starting or sending", async () => {
-    const updateQuery = mock(() => {});
-    const scheduleSelectionIntent = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
-    const startAgentSession = mock(async () => "session-new");
+    const scheduleQueryUpdate = mock(() => {});
+    const selectAgentStudioSelection = mock(() => {});
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      updateQuery,
-      scheduleSelectionIntent,
-      onContextSwitchIntent,
-      startAgentSession,
+      scheduleQueryUpdate,
+      selectAgentStudioSelection,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
     });
 
@@ -304,17 +413,42 @@ describe("useAgentStudioSessionActions", () => {
       });
     });
 
-    expect(updateQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ task: "task-1", session: undefined, agent: "build" }),
-    );
-    expect(scheduleSelectionIntent).toHaveBeenCalledWith({
+    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-1",
-      externalSessionId: null,
+      sessionIdentity: null,
       role: "build",
+      hasExplicitRoleSelection: true,
+      keepSessionless: true,
     });
-    expect(onContextSwitchIntent).toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("does not prepare a message-first target when parent start policy rejects it", async () => {
+    const selectAgentStudioSelection = mock(() => {});
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      sessionsForTask: [],
+      canPrepareMessageFirstSession: () => false,
+      selectAgentStudioSelection,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handlePrepareMessageFirstSession({
+        id: "build:build_implementation_start:message_first",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        label: "Prepare Builder session",
+        description: "Open a Builder composer without sending a kickoff.",
+        disabled: false,
+      });
+    });
+
+    expect(selectAgentStudioSelection).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -352,11 +486,20 @@ describe("useAgentStudioSessionActions", () => {
         existingSessionOptions: [
           {
             value: "builder-1",
+            sourceSession: {
+              externalSessionId: "builder-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder #1",
             description: "Existing Builder session",
           },
         ],
-        initialSourceExternalSessionId: "builder-1",
+        initialSourceSession: {
+          externalSessionId: "builder-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         initialStartMode: "reuse",
       });
     });
@@ -364,7 +507,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.waitFor((state) => state.sessionStartModal !== null);
     expect(harness.getLatest().sessionStartModal?.description).toContain("Generate Pull Request");
     expect(harness.getLatest().sessionStartModal?.selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionId).toBe("builder-1");
+    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionValue).toBe("builder-1");
 
     await harness.unmount();
   });
@@ -376,7 +519,7 @@ describe("useAgentStudioSessionActions", () => {
     });
     const startAgentSession = mock(async () => {
       calls.push("start-session");
-      return "builder-rework-session";
+      return sessionIdentity("builder-rework-session");
     });
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
@@ -401,7 +544,10 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "build",
       },
       humanRequestChangesTask,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
     });
 
@@ -442,7 +588,7 @@ describe("useAgentStudioSessionActions", () => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
-        sourceExternalSessionId: null,
+        sourceSessionOptionValue: null,
       });
     });
     await harness.run(async () => {
@@ -463,16 +609,19 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend starts session and sends trimmed message", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -498,26 +647,33 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
-      initialStatusRelease: "after_listener_attach",
+      holdForPostStartMessage: false,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "  hello world  " },
     ]);
-    expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
+    expect(
+      updateCalls.some(
+        (entry) => entry.session === agentSessionIdentityKey(sessionIdentity("session-new")),
+      ),
+    ).toBe(true);
 
     await harness.unmount();
   });
 
-  test("onSend reuses active session when one exists", async () => {
+  test("onSend reuses loaded session when one exists", async () => {
     const sendAgentMessage = mock(async () => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       sendAgentMessage,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     });
 
     await harness.mount();
@@ -526,8 +682,37 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend targets the selected session while the session state has not loaded it yet", async () => {
+    const selectedSessionIdentity = sessionIdentity("session-selected");
+    const sendAgentMessage = mock(async () => {});
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
+    const draft = createComposerDraft("  selected-session follow-up  ");
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedSession: selectedSessionFromIdentity(selectedSessionIdentity),
+      sendAgentMessage,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledWith(selectedSessionIdentity, [
+      { kind: "text", text: "  selected-session follow-up  " },
     ]);
 
     await harness.unmount();
@@ -546,7 +731,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -555,7 +740,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "slash_command", command: COMMAND },
     ]);
 
@@ -575,7 +760,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       reusablePrompts: [
         {
           id: "prompt-1",
@@ -592,7 +777,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "Review this file:\nsrc/foo.ts" },
     ]);
 
@@ -612,7 +797,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       reusablePrompts: [
         {
           id: "prompt-1",
@@ -629,7 +814,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "Review this carefully.\nsrc/foo.ts" },
     ]);
 
@@ -649,7 +834,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       reusablePrompts: [],
       sendAgentMessage,
     });
@@ -677,7 +862,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -686,7 +871,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "file_reference", file: FILE_REFERENCE },
     ]);
 
@@ -698,11 +883,13 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
-        externalSessionId: "session-existing",
-        status: "running",
-        modelCatalog: {
-          runtime: {
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -711,11 +898,9 @@ describe("useAgentStudioSessionActions", () => {
                 supportsQueuedUserMessages: true,
               },
             },
-          },
-          models: [],
-          defaultModelsByProvider: {},
+          }),
         },
-      }),
+      ),
       sendAgentMessage,
     });
 
@@ -726,8 +911,47 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend allows queued follow-ups while a starting loaded session is being prepared", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "starting",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: true,
+              },
+            },
+          }),
+        },
+      ),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createComposerDraft("hello while starting"))).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
+      { kind: "text", text: "hello while starting" },
     ]);
 
     await harness.unmount();
@@ -738,11 +962,13 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
-        externalSessionId: "session-existing",
-        status: "running",
-        modelCatalog: {
-          runtime: {
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -751,11 +977,9 @@ describe("useAgentStudioSessionActions", () => {
                 supportsQueuedUserMessages: false,
               },
             },
-          },
-          models: [],
-          defaultModelsByProvider: {},
+          }),
         },
-      }),
+      ),
       sendAgentMessage,
     });
 
@@ -777,11 +1001,10 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
+      ...selectedSessionArgs({
         externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
-        modelCatalog: null,
       }),
       sendAgentMessage,
     });
@@ -793,9 +1016,36 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
     ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend blocks busy follow-ups when runtime support cannot be resolved", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs({
+        externalSessionId: "session-existing",
+        status: "running",
+        runtimeKind: "opencode",
+      }),
+      runtimeDefinitions: [],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toContain(
+      "does not support queued messages while the session is working",
+    );
+    await harness.run(async (state) => {
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
+    });
+
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -805,11 +1055,13 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
-        externalSessionId: "session-existing",
-        status: "running",
-        modelCatalog: {
-          runtime: {
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -818,11 +1070,9 @@ describe("useAgentStudioSessionActions", () => {
                 supportsQueuedUserMessages: false,
               },
             },
-          },
-          models: [],
-          defaultModelsByProvider: {},
+          }),
         },
-      }),
+      ),
       sendAgentMessage,
     });
 
@@ -833,11 +1083,10 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: createSession({
+      ...selectedSessionArgs({
         externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
-        modelCatalog: null,
       }),
       sendAgentMessage,
     });
@@ -847,24 +1096,26 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
     ]);
 
     await harness.unmount();
   });
 
-  test("onSend allows busy follow-ups when the selected runtime supports queued messages", async () => {
+  test("onSend uses loaded session runtime support for busy follow-ups", async () => {
     const sendAgentMessage = mock(async () => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
-        externalSessionId: "session-existing",
-        status: "running",
-        runtimeKind: "opencode",
-        modelCatalog: {
-          runtime: {
+      ...selectedSessionWithRuntimeData(
+        {
+          externalSessionId: "session-existing",
+          status: "running",
+          runtimeKind: "opencode",
+        },
+        {
+          modelCatalog: createRuntimeCatalog({
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -873,42 +1124,33 @@ describe("useAgentStudioSessionActions", () => {
                 supportsQueuedUserMessages: false,
               },
             },
-          },
-          models: [],
-          defaultModelsByProvider: {},
+          }),
         },
-      }),
-      selectedModelSelection: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec",
-      },
+      ),
       sendAgentMessage,
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
+    expect(harness.getLatest().busySendBlockedReason).toContain(
+      "does not support queued messages while the session is working",
+    );
     await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
-      { kind: "text", text: "hello world" },
-    ]);
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
-  test("onSend does not send while the active session is waiting for answers", async () => {
+  test("onSend does not send while the loaded session is waiting for answers", async () => {
     const sendAgentMessage = mock(async () => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({
+      ...selectedSessionArgs({
         externalSessionId: "session-existing",
         pendingQuestions: [
           {
@@ -926,7 +1168,10 @@ describe("useAgentStudioSessionActions", () => {
         ],
       }),
       sendAgentMessage,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     });
 
     await harness.mount();
@@ -948,7 +1193,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -958,7 +1203,7 @@ describe("useAgentStudioSessionActions", () => {
       sendPromise = state.onSend(draft);
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1, 1_000);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
     ]);
     expect(harness.getLatest().isSending).toBe(true);
@@ -977,7 +1222,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -1001,7 +1246,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       selectedModelDescriptor: {
         id: "openai/gpt-5",
         providerId: "openai",
@@ -1036,7 +1281,7 @@ describe("useAgentStudioSessionActions", () => {
       ).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "please review" },
       {
         kind: "attachment",
@@ -1057,7 +1302,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-existing" }),
+      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
       selectedModelDescriptor: {
         id: "openai/gpt-5",
         providerId: "openai",
@@ -1114,8 +1359,8 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      selectedSession: selectedSessionFromSession(taskOneSession),
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1127,13 +1372,13 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor((state) => state.isSending);
-    expect(harness.getLatest().isSessionWorking).toBe(true);
+    expect(harness.getLatest().isSessionWorking).toBe(false);
 
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      selectedSession: selectedSessionFromSession(taskTwoSession),
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
 
@@ -1165,8 +1410,8 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      selectedSession: selectedSessionFromSession(taskOneSession),
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1181,16 +1426,16 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      selectedSession: selectedSessionFromSession(taskTwoSession),
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
     expect(harness.getLatest().isSending).toBe(false);
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      selectedSession: selectedSessionFromSession(taskOneSession),
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1223,8 +1468,8 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      selectedSession: selectedSessionFromSession(taskOneSession),
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1239,16 +1484,16 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       taskId: "task-2",
-      activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      selectedSession: selectedSessionFromSession(taskTwoSession),
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
     expect(harness.getLatest().isSending).toBe(false);
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      selectedSession: selectedSessionFromSession(taskOneSession),
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
     await harness.waitFor((state) => state.isSending);
@@ -1267,20 +1512,23 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("blocks fresh session creation while an active session send is in flight", async () => {
+  test("blocks fresh session creation while a loaded session send is in flight", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const startAgentSession = mock(async () => "session-new");
-    const activeSession = createSession({
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
+    const loadedSession = createSession({
       externalSessionId: "session-existing",
       status: "stopped",
     });
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession,
-      sessionsForTask: [activeSession],
+      selectedSession: selectedSessionFromSession(loadedSession),
+      sessionsForTask: summarizeSessions([loadedSession]),
       sendAgentMessage,
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
     });
 
     await harness.mount();
@@ -1289,6 +1537,8 @@ describe("useAgentStudioSessionActions", () => {
       sendPromise = state.onSend(createComposerDraft("hello world"));
     });
     await harness.waitFor((state) => state.isSending);
+    expect(harness.getLatest().isSessionWorking).toBe(false);
+    expect(harness.getLatest().canStopSession).toBe(false);
 
     await harness.run((state) => {
       state.handleCreateSession({
@@ -1313,18 +1563,21 @@ describe("useAgentStudioSessionActions", () => {
   test("keeps sending state while a newly created session becomes selected", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
       taskId: "task-1",
-      externalSessionId: "session-new",
+      ...sessionIdentity("session-new"),
       role: "spec",
       status: "stopped",
     });
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
     });
 
@@ -1340,9 +1593,12 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      activeSession: nextSession,
-      sessionsForTask: [nextSession],
-      startAgentSession,
+      selectedSession: selectedSessionFromSession(nextSession),
+      sessionsForTask: summarizeSessions([nextSession]),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
     });
 
@@ -1356,7 +1612,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend reuses active session when available", async () => {
+  test("onSend reuses loaded session when available", async () => {
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const draft = createComposerDraft("  hello world  ");
@@ -1368,10 +1624,10 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: existingSpecSession,
-      sessionsForTask: [existingSpecSession],
+      selectedSession: selectedSessionFromSession(existingSpecSession),
+      sessionsForTask: summarizeSessions([existingSpecSession]),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -1381,51 +1637,50 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
     ]);
 
     await harness.unmount();
   });
 
-  test("session selection and workflow selection update URL query", async () => {
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+  test("session selection and workflow selection publish selected session state", async () => {
+    const selectAgentStudioSelection = mock(() => {});
     const sessionTwo = createSession({ externalSessionId: "session-2", taskId: "task-2" });
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      sessionsForTask: [sessionTwo],
+      sessionsForTask: summarizeSessions([sessionTwo]),
       taskId: "task-2",
-      updateQuery: (updates) => {
-        updateCalls.push(updates);
-      },
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
+    const sessionTwoValue = agentSessionIdentityKey(sessionTwo);
     await harness.run((state) => {
-      state.handleSessionSelectionChange("session-2");
-      state.handleWorkflowStepSelect("spec", "session-2");
+      state.handleSessionSelectionChange(sessionTwoValue);
+      state.handleWorkflowStepSelect("spec", sessionTwoValue);
     });
 
-    expect(updateCalls).toContainEqual({
-      task: "task-2",
-      session: "session-2",
-      agent: "spec",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-2",
+      sessionIdentity: toAgentSessionIdentity(sessionTwo),
+      role: "spec",
+      hasExplicitRoleSelection: true,
+      keepSessionless: false,
     });
 
     await harness.unmount();
   });
 
   test("workflow selection without existing session switches role context", async () => {
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const selectAgentStudioSelection = mock(() => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
       sessionsForTask: [],
-      updateQuery: (updates) => {
-        updateCalls.push(updates);
-      },
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1433,10 +1688,12 @@ describe("useAgentStudioSessionActions", () => {
       state.handleWorkflowStepSelect("planner", null);
     });
 
-    expect(updateCalls).toContainEqual({
-      task: "task-1",
-      session: undefined,
-      agent: "planner",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionIdentity: null,
+      role: "planner",
+      hasExplicitRoleSelection: true,
+      keepSessionless: true,
     });
 
     await harness.unmount();
@@ -1444,10 +1701,23 @@ describe("useAgentStudioSessionActions", () => {
 
   test("submits question answers when session is active", async () => {
     const answerAgentQuestion = mock(async () => {});
+    const questionRequest = {
+      requestId: "req-1",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Continue?",
+          options: [{ label: "Yes", description: "Continue the session" }],
+        },
+      ],
+    } satisfies AgentQuestionRequest;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ externalSessionId: "session-9" }),
+      ...selectedSessionArgs({
+        externalSessionId: "session-9",
+        pendingQuestions: [questionRequest],
+      }),
       answerAgentQuestion,
     });
 
@@ -1456,13 +1726,51 @@ describe("useAgentStudioSessionActions", () => {
       await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
     });
 
-    expect(answerAgentQuestion).toHaveBeenCalledWith("session-9", "req-1", [["yes"]]);
+    expect(answerAgentQuestion).toHaveBeenCalledWith(
+      localSessionIdentity("session-9"),
+      questionRequest,
+      [["yes"]],
+    );
+
+    await harness.unmount();
+  });
+
+  test("replies to approval requests when session is active", async () => {
+    const replyAgentApproval = mock(async () => {});
+    const approvalRequest = {
+      requestId: "approval-1",
+      requestType: "permission_grant",
+      title: "Approve command",
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    } satisfies AgentApprovalRequest;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs({
+        externalSessionId: "session-approval",
+        pendingApprovals: [approvalRequest],
+      }),
+      replyAgentApproval,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onReplyApproval("approval-1", "approve_once");
+    });
+
+    expect(replyAgentApproval).toHaveBeenCalledWith(
+      localSessionIdentity("session-approval"),
+      approvalRequest,
+      "approve_once",
+      undefined,
+    );
 
     await harness.unmount();
   });
 
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
-    const deferredStart = createDeferred<string>();
+    const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
@@ -1470,11 +1778,14 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
+      ...selectedSessionArgs({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createTask(),
-      startAgentSession,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+        sendAgentMessage,
+      }),
       sendAgentMessage,
-      updateQuery: (updates) => {
+      scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
     });
@@ -1494,7 +1805,7 @@ describe("useAgentStudioSessionActions", () => {
 
       expect(updateCalls).toEqual([]);
     } finally {
-      deferredStart.resolve("session-spec-fresh");
+      deferredStart.resolve(sessionIdentity("session-spec-fresh"));
       await harness.unmount();
     }
   });
@@ -1505,13 +1816,12 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_rebase_conflict_resolution",
       selectedTask: createTask(),
-      activeSession: null,
       sessionsForTask: [],
     });
 
     await harness.mount();
 
-    expect(harness.getLatest().canKickoffNewSession).toBe(false);
+    expect(harness.getLatest().canUseKickoffPrompt).toBe(false);
 
     await harness.unmount();
   });
@@ -1522,34 +1832,23 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_after_human_request_changes",
       selectedTask: createTask({ status: "human_review" }),
-      activeSession: null,
       sessionsForTask: [],
     });
 
     await harness.mount();
 
-    expect(harness.getLatest().canKickoffNewSession).toBe(true);
+    expect(harness.getLatest().canUseKickoffPrompt).toBe(true);
 
     await harness.unmount();
   });
 
-  test("selection actions ignore invalid session ids without mutating query state", async () => {
-    const updateQuery = mock(() => {});
-    const scheduleSelectionIntent = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
+  test("selection actions ignore invalid session ids without mutating selection state", async () => {
+    const selectAgentStudioSelection = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeExternalSessionId: null,
-      activeSessionRole: "spec" as const,
-      activeSessionExists: false,
-      agentStudioReady: true,
-      isActiveTaskHydrated: true,
-      isSessionWorking: false,
-      sessionsForTask: [createSession({ externalSessionId: "session-1" })],
-      selectedTask: createTask(),
-      updateQuery,
-      scheduleSelectionIntent,
-      onContextSwitchIntent,
+      sessionsForTask: summarizeSessions([createSession({ externalSessionId: "session-1" })]),
+      canPrepareMessageFirstSession: () => true,
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
@@ -1557,63 +1856,76 @@ describe("useAgentStudioSessionActions", () => {
       state.handleSessionSelectionChange("missing-session");
     });
 
-    expect(updateQuery).not.toHaveBeenCalled();
-    expect(scheduleSelectionIntent).not.toHaveBeenCalled();
-    expect(onContextSwitchIntent).not.toHaveBeenCalled();
+    expect(selectAgentStudioSelection).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
-  test("selection actions do not signal context switch for same session and role", async () => {
-    const updateQuery = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
+  test("selection actions apply selected session identity", async () => {
+    const selectAgentStudioSelection = mock(() => {});
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeExternalSessionId: "session-1",
-      activeSessionRole: "spec" as const,
-      activeSessionExists: true,
-      agentStudioReady: true,
-      isActiveTaskHydrated: true,
-      isSessionWorking: false,
-      sessionsForTask: [session],
-      selectedTask: createTask(),
-      updateQuery,
-      scheduleSelectionIntent: undefined,
-      onContextSwitchIntent,
+      sessionsForTask: summarizeSessions([session]),
+      canPrepareMessageFirstSession: () => true,
+      selectAgentStudioSelection,
     });
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSessionSelectionChange("session-1");
+      state.handleSessionSelectionChange(agentSessionIdentityKey(session));
     });
 
-    expect(updateQuery).toHaveBeenCalledWith({
-      task: "task-1",
-      session: "session-1",
-      agent: "spec",
+    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionIdentity: toAgentSessionIdentity(session),
+      role: "spec",
+      hasExplicitRoleSelection: true,
+      keepSessionless: false,
     });
-    expect(onContextSwitchIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
-  test("question actions no-op when there is no active session", async () => {
-    const answerAgentQuestion = mock(async () => {});
-    const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
-      activeExternalSessionId: null,
-      agentStudioReady: true,
-      pendingQuestions: [],
-      answerAgentQuestion,
+  test("selection actions publish local selection immediately", async () => {
+    const selections: unknown[] = [];
+    const session = createSession({ externalSessionId: "session-1", role: "spec" });
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      sessionsForTask: summarizeSessions([session]),
+      canPrepareMessageFirstSession: () => true,
+      selectAgentStudioSelection: (selection) => {
+        selections.push(selection);
+      },
     });
 
     await harness.mount();
-    await harness.run(async (state) => {
-      await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
+    await harness.run((state) => {
+      state.handleSessionSelectionChange(agentSessionIdentityKey(session));
     });
+    expect(selections).toEqual([
+      {
+        taskId: "task-1",
+        sessionIdentity: toAgentSessionIdentity(session),
+        role: "spec",
+        hasExplicitRoleSelection: true,
+        keepSessionless: false,
+      },
+    ]);
 
-    expect(answerAgentQuestion).not.toHaveBeenCalled();
-    expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
+    selections.length = 0;
+    await harness.run((state) => {
+      state.handleWorkflowStepSelect("planner", null);
+    });
+    expect(selections).toEqual([
+      {
+        taskId: "task-1",
+        sessionIdentity: null,
+        role: "planner",
+        hasExplicitRoleSelection: true,
+        keepSessionless: true,
+      },
+    ]);
 
     await harness.unmount();
   });

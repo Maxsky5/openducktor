@@ -4,6 +4,7 @@ import { type ComponentProps, createElement as createReactElement } from "react"
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
@@ -19,13 +20,23 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
     throw new Error("Test runtime catalog loader was not configured.");
   },
   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+  loadRepoRuntimeSkills: async () => ({ skills: [] }),
   loadRepoRuntimeFileSearch: async () => [],
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+const DEFAULT_TEST_SESSION_IDENTITY: AgentSessionIdentity = {
+  externalSessionId: "session-parent",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+};
 
-type AgentChatMessageCardTestProps = ComponentProps<typeof AgentChatMessageCard> & {
+type AgentChatMessageCardTestProps = Omit<
+  ComponentProps<typeof AgentChatMessageCard>,
+  "sessionIdentity"
+> & {
   chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
+  sessionIdentity?: AgentSessionIdentity | null;
 };
 
 const createElement = (
@@ -39,7 +50,7 @@ const createElement = (
       AgentChatSettingsProvider,
       { value: chatSettings },
       createReactElement(AgentChatMessageCard, {
-        sessionRuntimeKind: "opencode",
+        sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
         ...props,
       }),
     ),
@@ -349,6 +360,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
+        sessionIdentity: null,
       }),
     );
 
@@ -378,7 +390,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -794,9 +805,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountByExternalSessionId: {
-          "session-child-waiting": 1,
-        },
+        subagentPendingApprovalCount: 1,
       }),
     );
 
@@ -823,9 +832,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingQuestionCountByExternalSessionId: {
-          "session-child-question": 1,
-        },
+        subagentPendingQuestionCount: 1,
       }),
     );
 
@@ -853,9 +860,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountByExternalSessionId: {
-          "session-child-completed": 1,
-        },
+        subagentPendingApprovalCount: 1,
       }),
     );
 
@@ -995,7 +1000,10 @@ describe("AgentChatMessageCard tool duration", () => {
             variant: "high",
           },
         },
-        sessionRuntimeKind: "codex",
+        sessionIdentity: {
+          ...DEFAULT_TEST_SESSION_IDENTITY,
+          runtimeKind: "codex",
+        },
         sessionAgentColors: {},
       }),
     );
@@ -1249,7 +1257,10 @@ describe("AgentChatMessageCard tool duration", () => {
             modelId: "gpt-5.3-codex",
           },
         },
-        sessionRuntimeKind: "codex",
+        sessionIdentity: {
+          ...DEFAULT_TEST_SESSION_IDENTITY,
+          runtimeKind: "codex",
+        },
         sessionAgentColors: {},
       }),
     );
@@ -1315,7 +1326,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1362,7 +1372,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1408,7 +1417,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1424,13 +1432,13 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("mx-1");
   });
 
-  test("renders hydrated skill source text against the raw message content", () => {
+  test("renders history-loaded skill source text against the raw message content", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
-          id: "hydrated-user-skill-ref",
+          id: "history-loaded-user-skill-ref",
           role: "user",
-          content: "Tell me the purpose of $create-pr please skill-hydration-smoke",
+          content: "Tell me the purpose of $create-pr please skill-history-load-smoke",
           timestamp: "2026-02-22T10:28:50.000Z",
           meta: {
             kind: "user",
@@ -1456,24 +1464,23 @@ describe("AgentChatMessageCard tool duration", () => {
               },
               {
                 kind: "text",
-                text: " please skill-hydration-smoke",
+                text: " please skill-history-load-smoke",
               },
             ],
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
     const leadingTextIndex = html.indexOf("Tell me the purpose of");
     const chipTextIndex = html.indexOf(">create-pr<");
-    const trailingTextIndex = html.indexOf(" please skill-hydration-smoke");
+    const trailingTextIndex = html.indexOf(" please skill-history-load-smoke");
 
     expect(leadingTextIndex).toBeGreaterThanOrEqual(0);
     expect(chipTextIndex).toBeGreaterThan(leadingTextIndex);
     expect(trailingTextIndex).toBeGreaterThan(chipTextIndex);
-    expect(html).not.toContain("create-prill-hydration-smoke");
+    expect(html).not.toContain("create-prill-history-load-smoke");
     expect(html).not.toContain(">$create-pr<");
   });
 
@@ -1502,7 +1509,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1536,7 +1542,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1574,7 +1579,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1618,7 +1622,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 

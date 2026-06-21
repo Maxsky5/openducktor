@@ -1,14 +1,24 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
-  AgentSessionPresenceSnapshot,
   AgentSessionRef,
-  LiveAgentSessionSnapshot,
+  AgentSessionRuntimeSnapshot,
+  AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
-import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
+import {
+  type AgentSessionCollection,
+  createAgentSessionCollection,
+  getAgentSession,
+  listAgentSessions,
+  replaceAgentSession,
+  replaceAgentSessionByIdentity,
+} from "@/state/agent-session-collection";
 import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionObservers, type SessionObservers } from "./support/session-observers";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",
@@ -17,6 +27,34 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 };
 
 export const createDeferred = createSharedDeferred;
+
+type SessionObserversFixture = {
+  externalSessionId?: string;
+  repoPath?: string;
+  runtimeKind?: AgentSessionRef["runtimeKind"];
+  workingDirectory?: string;
+};
+
+const toSessionObserverFixtureRef = ({
+  externalSessionId = "external-1",
+  repoPath = "/tmp/repo",
+  runtimeKind = "opencode",
+  workingDirectory = "/tmp/repo/worktree",
+}: SessionObserversFixture): AgentSessionRef => ({
+  externalSessionId,
+  repoPath,
+  runtimeKind,
+  workingDirectory,
+});
+
+export const createSessionObserversRefFixture = (): { current: SessionObservers } => ({
+  current: createSessionObservers(),
+});
+
+export const hasSessionObserverFixture = (
+  observers: SessionObservers,
+  observer: SessionObserversFixture,
+): boolean => observers.has(toSessionObserverFixtureRef(observer));
 
 export const withTimeout = async <T>(
   promise: Promise<T>,
@@ -33,32 +71,72 @@ export const withTimeout = async <T>(
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(ORCHESTRATOR_TASK_CARD_DEFAULTS, overrides);
 
-const createLiveAgentSessionSnapshotFixture = (
-  overrides: Partial<LiveAgentSessionSnapshot> = {},
-): LiveAgentSessionSnapshot => {
-  const externalSessionId = overrides.externalSessionId ?? "external-1";
+export type AgentSessionCollectionRef = { current: AgentSessionCollection };
 
+export const createAgentSessionCollectionRefFixture = (
+  sessions: AgentSessionState[],
+): AgentSessionCollectionRef => ({
+  current: createAgentSessionCollection(sessions),
+});
+
+export const findAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  externalSessionId = "session-1",
+): AgentSessionState | undefined =>
+  listAgentSessions(sessionsRef.current).find(
+    (session) => session.externalSessionId === externalSessionId,
+  );
+
+export const getAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  externalSessionId = "session-1",
+): AgentSessionState => {
+  const session = findAgentSessionFixture(sessionsRef, externalSessionId);
+  if (!session) {
+    throw new Error(`Expected session ${externalSessionId}`);
+  }
+  return session;
+};
+
+export const replaceAgentSessionFixture = (
+  collection: AgentSessionCollection,
+  session: AgentSessionState,
+): AgentSessionCollection => replaceAgentSession(collection, session);
+
+export const updateAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  identity: AgentSessionIdentity,
+  updater: (current: AgentSessionState) => AgentSessionState,
+): AgentSessionState | null => {
+  const current = getAgentSession(sessionsRef.current, identity);
+  if (!current) {
+    return null;
+  }
+  const nextSession = updater(current);
+  sessionsRef.current = replaceAgentSessionByIdentity(sessionsRef.current, identity, nextSession);
+  return nextSession;
+};
+
+const createRuntimeSnapshotSourceFixture = (
+  overrides: Partial<AgentSessionRuntimeSnapshotSource> = {},
+): AgentSessionRuntimeSnapshotSource => {
   return {
-    externalSessionId,
     title: overrides.title ?? "BUILD task-1",
-    workingDirectory: "/tmp/repo/worktree",
     startedAt: "2026-02-22T08:00:00.000Z",
-    status: { type: "idle" },
+    runtimeActivity: "idle",
     pendingApprovals: [],
     pendingQuestions: [],
     ...overrides,
   };
 };
 
-export const createAgentSessionPresenceSnapshotFixture = ({
+export const createAgentSessionRuntimeSnapshotFixture = ({
   ref: refOverrides = {},
-  runtimeId = "runtime-1",
   snapshot: snapshotOverrides = {},
 }: {
   ref?: Partial<AgentSessionRef>;
-  runtimeId?: string;
-  snapshot?: Partial<LiveAgentSessionSnapshot>;
-} = {}): AgentSessionPresenceSnapshot => {
+  snapshot?: Partial<AgentSessionRuntimeSnapshotSource>;
+} = {}): AgentSessionRuntimeSnapshot => {
   const ref: AgentSessionRef = {
     repoPath: "/tmp/repo",
     runtimeKind: "opencode",
@@ -67,13 +145,10 @@ export const createAgentSessionPresenceSnapshotFixture = ({
     ...refOverrides,
   };
 
-  return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+  return toAgentSessionRuntimeSnapshot({
     ref,
-    runtimeId,
-    snapshot: createLiveAgentSessionSnapshotFixture({
+    snapshot: createRuntimeSnapshotSourceFixture({
       ...snapshotOverrides,
-      externalSessionId: ref.externalSessionId,
-      workingDirectory: ref.workingDirectory,
     }),
   });
 };

@@ -1,5 +1,4 @@
 import type {
-  AgentSessionRecord,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
@@ -9,9 +8,7 @@ import type {
   RepoDevServerScript,
   RuntimeApprovalReplyOutcome,
   RuntimeCheck,
-  RuntimeInstanceSummary,
   RuntimeKind,
-  RuntimeRef,
   SettingsSnapshot,
   TaskCard,
   TaskCreateInput,
@@ -21,23 +18,23 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
+  AgentEvent,
   AgentModelSelection,
-  AgentRole,
   AgentSessionHistoryMessage,
-  AgentSessionPresenceSnapshot,
+  AgentSessionRef,
   AgentSessionTodoItem,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
   AgentUserMessagePart,
+  EventUnsubscribe,
+  LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
-  AgentSessionLoadOptions,
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
   AgentSessionState,
-  InitialSessionStatusReleasePolicy,
 } from "./agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
+import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -118,9 +115,14 @@ export type ChecksStateContextValue = {
   taskStoreCheck: TaskStoreCheck | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
+};
+
+export type RepoRuntimeHealthContextValue = {
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  isLoadingRepoRuntimeHealth: boolean;
+  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
 };
 
 export type TasksStateContextValue = {
@@ -165,117 +167,37 @@ export type SpecStateContextValue = {
   savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
-export type AgentStateContextValue = {
-  sessions: AgentSessionState[];
-  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-    historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
-    externalSessionId: string;
-    repoReadinessState: SessionRepoReadinessState;
-    historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<boolean>;
-  reconcileLiveTaskSessions: (input: {
-    taskId: string;
-    persistedRecords?: AgentSessionRecord[];
-    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
-  }) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
+export type AgentSessionReadModelStateContextValue = {
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  reloadSessionReadModel: () => void;
+};
+
+export type AgentOperationsContextValue = {
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
+    session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  attachRuntimeTranscriptSession: (input: {
-    repoPath: string;
-    externalSessionId: string;
-    runtimeRef: RuntimeRef;
-    workingDirectory: string;
-    pendingApprovals?: AgentSessionState["pendingApprovals"];
-    pendingQuestions?: AgentSessionState["pendingQuestions"];
-  }) => Promise<void>;
-  readSessionSlashCommands: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
-  readSessionFileSearch: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (externalSessionId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
-  startAgentSession: (
-    input:
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          startMode: "reuse";
-          sourceExternalSessionId: string;
-        }
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          selectedModel: AgentModelSelection;
-          startMode: "fresh";
-          targetWorkingDirectory?: string | null;
-          initialStatusRelease?: InitialSessionStatusReleasePolicy;
-        }
-      | {
-          taskId: string;
-          role: AgentRole;
-          runtimeKind?: RuntimeKind;
-          selectedModel: AgentModelSelection;
-          startMode: "fork";
-          sourceExternalSessionId: string;
-          initialStatusRelease?: InitialSessionStatusReleasePolicy;
-        },
-  ) => Promise<string>;
-  settleStartedAgentSession: (externalSessionId: string) => void;
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  subscribeSessionEvents: (
+    session: AgentSessionRef,
+    listener: (event: AgentEvent) => void,
+  ) => Promise<EventUnsubscribe>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
+  startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
+  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
+  stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
   replyAgentApproval: (
-    externalSessionId: string,
-    requestId: string,
+    session: AgentSessionIdentity,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
-    externalSessionId: string,
-    requestId: string,
+    session: AgentSessionIdentity,
+    request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;
 };
-
-export type AgentOperationsContextValue = Omit<AgentStateContextValue, "sessions">;

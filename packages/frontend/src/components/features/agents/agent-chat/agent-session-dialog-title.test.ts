@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
 
 describe("resolveAgentSessionDialogTitle", () => {
-  test("prefers a hydrated session title when one is available", () => {
+  test("prefers a history-loaded session title when one is available", () => {
     expect(resolveAgentSessionDialogTitle("Subagent activity", "Background research")).toBe(
       "Background research",
     );

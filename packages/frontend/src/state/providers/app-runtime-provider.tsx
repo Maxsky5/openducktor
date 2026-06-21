@@ -1,13 +1,14 @@
 import {
   DEFAULT_AGENT_RUNTIMES,
+  type RepoRuntimeRef,
   type RuntimeDescriptor,
-  type RuntimeKind,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
@@ -23,22 +24,11 @@ import { runtimeDefinitionsQueryOptions, runtimeQueryKeys } from "../queries/run
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 type AppRuntimeProviderProps = PropsWithChildren<{
-  loadRepoRuntimeCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  loadRepoRuntimeSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
   loadRepoRuntimeFileSearch: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
+    runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
 }>;
@@ -107,7 +97,7 @@ export function AppRuntimeProvider({
       },
       loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands,
-      ...(loadRepoRuntimeSkills ? { loadRepoRuntimeSkills } : {}),
+      loadRepoRuntimeSkills,
       loadRepoRuntimeFileSearch,
     }),
     [

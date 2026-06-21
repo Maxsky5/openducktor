@@ -1,8 +1,7 @@
-import type { RuntimeRef } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
@@ -11,12 +10,8 @@ type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
-  sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
-  sessionRuntimeRef?: RuntimeRef | null | undefined;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
+  sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount?: number;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
 
@@ -24,12 +19,8 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   isStreamingAssistantMessage,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
-  sessionRuntimeRef,
-  subagentPendingApprovals,
+  sessionIdentity,
   subagentPendingApprovalCount = 0,
-  subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {
@@ -44,12 +35,8 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             message={row.message}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
             sessionAgentColors={sessionAgentColors}
-            sessionWorkingDirectory={sessionWorkingDirectory}
-            sessionRuntimeKind={sessionRuntimeKind}
-            sessionRuntimeRef={sessionRuntimeRef}
-            subagentPendingApprovals={subagentPendingApprovals}
+            sessionIdentity={sessionIdentity}
             subagentPendingApprovalCount={subagentPendingApprovalCount}
-            subagentPendingQuestions={subagentPendingQuestions}
             subagentPendingQuestionCount={subagentPendingQuestionCount}
           />
         </div>

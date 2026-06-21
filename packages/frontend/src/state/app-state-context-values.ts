@@ -1,6 +1,5 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import type {
-  AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
@@ -30,6 +29,3 @@ export const buildDelegationStateValue = (
 ): DelegationStateContextValue => value;
 
 export const buildSpecStateValue = (value: SpecStateContextValue): SpecStateContextValue => value;
-
-export const buildAgentStateValue = (value: AgentStateContextValue): AgentStateContextValue =>
-  value;

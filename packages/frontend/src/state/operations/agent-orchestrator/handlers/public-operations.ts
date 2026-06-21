@@ -1,114 +1,50 @@
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type {
-  AgentSessionRecord,
-  RuntimeApprovalReplyOutcome,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-} from "@openducktor/contracts";
-import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
+  AgentEnginePort,
   AgentModelSelection,
-  AgentRole,
   AgentSessionHistoryMessage,
-  AgentSessionPresenceSnapshot,
+  AgentSessionRef,
   AgentSessionTodoItem,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
   AgentUserMessagePart,
+  LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
-  AgentSessionHistoryPreludeMode,
-  AgentSessionLoadOptions,
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { StartAgentSession } from "@/types/agent-session-start";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
-  startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  settleStartedAgentSession: (externalSessionId: string) => void;
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  startAgentSession: StartAgentSession;
+  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
+  stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
   replyAgentApproval: (
-    externalSessionId: string,
-    requestId: string,
+    session: AgentSessionIdentity,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
-    externalSessionId: string,
-    requestId: string,
+    session: AgentSessionIdentity,
+    request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;
 };
 
 type CreatePublicOperationsArgs = {
-  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
-    externalSessionId: string;
-    repoReadinessState: SessionRepoReadinessState;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<boolean>;
-  reconcileLiveTaskSessions: (input: {
-    taskId: string;
-    persistedRecords?: AgentSessionRecord[];
-    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
-  }) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
-  readSessionHistory: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionHistoryMessage[]>;
-  attachRuntimeTranscriptSession: AgentOperationsContextValue["attachRuntimeTranscriptSession"];
-  readSessionSlashCommands: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionSkills?: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ) => Promise<AgentSkillCatalog>;
-  readSessionFileSearch: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (externalSessionId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
+  agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory" | "subscribeEvents">;
   sessionActions: SessionActions;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
 };
-
-type OrchestratorPublicOperations = AgentOperationsContextValue;
 
 const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {
   try {
@@ -122,56 +58,22 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
-  ensureSessionReadyForView,
-  reconcileLiveTaskSessions,
-  loadAgentSessions,
-  readSessionModelCatalog,
-  readSessionTodos,
-  readSessionHistory,
-  attachRuntimeTranscriptSession,
-  readSessionSlashCommands,
-  readSessionFileSearch,
-  readSessionSkills,
-  removeAgentSession,
-  removeAgentSessions,
+  agentEngine,
   sessionActions,
-}: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
-  bootstrapTaskSessions: (taskId, persistedRecords) =>
-    withErrorToast("Failed to load agent sessions", () =>
-      bootstrapTaskSessions(taskId, persistedRecords),
-    ),
-  hydrateRequestedTaskSessionHistory: (input) =>
-    withErrorToast("Failed to hydrate session history", () =>
-      hydrateRequestedTaskSessionHistory(input),
-    ),
-  ensureSessionReadyForView: (input) =>
-    withErrorToast("Failed to prepare session", () => ensureSessionReadyForView(input)),
-  reconcileLiveTaskSessions: (input) =>
-    withErrorToast("Failed to reconcile live sessions", () => reconcileLiveTaskSessions(input)),
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
-    withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
-  readSessionModelCatalog,
-  readSessionTodos,
-  readSessionHistory,
-  attachRuntimeTranscriptSession,
-  readSessionSlashCommands,
-  readSessionFileSearch,
-  ...(readSessionSkills ? { readSessionSkills } : {}),
-  removeAgentSession,
-  removeAgentSessions: (input) => removeAgentSessions(input),
-  startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
-    sessionActions.startAgentSession(input),
-  settleStartedAgentSession: sessionActions.settleStartedAgentSession,
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
-    withErrorToast("Failed to send message", () =>
-      sessionActions.sendAgentMessage(externalSessionId, parts),
-    ),
-  stopAgentSession: (externalSessionId: string): Promise<void> =>
-    withErrorToast("Failed to stop agent session", () =>
-      sessionActions.stopAgentSession(externalSessionId),
-    ),
+  loadAgentSessionHistory,
+}: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
+  readSessionTodos: (session: AgentSessionRef): Promise<AgentSessionTodoItem[]> =>
+    agentEngine.loadSessionTodos(session),
+  readSessionHistory: (
+    session: LoadAgentSessionHistoryInput,
+  ): Promise<AgentSessionHistoryMessage[]> => agentEngine.loadSessionHistory(session),
+  subscribeSessionEvents: agentEngine.subscribeEvents,
+  loadAgentSessionHistory,
+  startAgentSession: sessionActions.startAgentSession,
+  sendAgentMessage: (session, parts: AgentUserMessagePart[]): Promise<void> =>
+    withErrorToast("Failed to send message", () => sessionActions.sendAgentMessage(session, parts)),
+  stopAgentSession: (session): Promise<void> =>
+    withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentApproval: sessionActions.replyAgentApproval,
   answerAgentQuestion: sessionActions.answerAgentQuestion,

@@ -1,16 +1,20 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
-import { type AgentRole, isRecord } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
 import {
+  isAgentSessionActivityActive,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
   type AgentSessionOptionSummary,
-  buildRoleSessionSequenceById,
+  buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
-import { errorMessage } from "@/lib/errors";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -19,17 +23,6 @@ import type {
   AgentWorkflowStepLiveSession,
   AgentWorkflowStepState,
 } from "@/types/agent-workflow";
-import { toTabsStorageKey } from "./agent-studio-navigation";
-
-type PersistedTaskTabsPayload = {
-  tabs: string[];
-  activeTaskId?: string | null;
-};
-
-type PersistedTaskTabsState = {
-  tabs: string[];
-  activeTaskId: string | null;
-};
 
 export type SessionCreateOption = {
   id: string;
@@ -42,7 +35,7 @@ export type SessionCreateOption = {
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
-  Pick<AgentSessionSummary, "taskId" | "pendingApprovals" | "pendingQuestions">;
+  Pick<AgentSessionSummary, "taskId">;
 
 type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
   role: AgentRole;
@@ -54,34 +47,7 @@ const isWorkflowSessionSummary = (
 
 const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 
-const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
-  tabs: [],
-  activeTaskId: null,
-};
-
-type RoleSessionSummary = {
-  latestSession: AgentSessionWorkflowSummary | null;
-  workflowSession: AgentSessionWorkflowSummary | null;
-  liveSession: AgentWorkflowStepLiveSession;
-};
-
 type TaskAttentionState = "none" | "blocked_needs_input";
-
-const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflowStepLiveSession => {
-  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
-    return "waiting_input";
-  }
-  if (session.status === "starting" || session.status === "running") {
-    return "running";
-  }
-  if (session.status === "error") {
-    return "error";
-  }
-  if (session.status === "stopped") {
-    return "stopped";
-  }
-  return "idle";
-};
 
 const deriveWorkflowAvailability = (
   workflow: AgentWorkflowState,
@@ -91,6 +57,12 @@ const deriveWorkflowAvailability = (
   }
   return workflow.available ? "available" : "blocked";
 };
+
+const isWorkflowLiveSessionWorking = (liveSession: AgentWorkflowStepLiveSession): boolean =>
+  liveSession !== "none" && isAgentSessionActivityWorking(liveSession);
+
+const isWorkflowLiveSessionActive = (liveSession: AgentWorkflowStepLiveSession): boolean =>
+  liveSession !== "none" && (isAgentSessionActivityActive(liveSession) || liveSession === "error");
 
 const deriveWorkflowTone = (params: {
   availability: AgentWorkflowStepAvailability;
@@ -105,7 +77,7 @@ const deriveWorkflowTone = (params: {
   if (liveSession === "waiting_input") {
     return "waiting_input";
   }
-  if (liveSession === "running") {
+  if (isWorkflowLiveSessionWorking(liveSession)) {
     return "in_progress";
   }
   if (liveSession === "error") {
@@ -118,19 +90,6 @@ const deriveWorkflowTone = (params: {
     return "in_progress";
   }
   return availability;
-};
-
-const normalizeTaskTabs = (entries: unknown): string[] => {
-  if (!Array.isArray(entries)) {
-    return [];
-  }
-  return Array.from(
-    new Set(
-      entries.filter(
-        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-      ),
-    ),
-  );
 };
 
 const createRoleRecord = <Value>(build: (role: AgentRole) => Value): Record<AgentRole, Value> => ({
@@ -175,7 +134,7 @@ const deriveWorkflowToneForRole = (params: {
   const allowBlockedTaskWarning =
     params.role === "build" &&
     params.taskAttentionState === "blocked_needs_input" &&
-    params.liveSession !== "running" &&
+    !isWorkflowLiveSessionWorking(params.liveSession) &&
     params.liveSession !== "error";
 
   if (allowBlockedTaskWarning) {
@@ -202,161 +161,6 @@ export const buildLatestSessionByTaskMap = (
   return next;
 };
 
-export const ensureActiveTaskTab = (openTaskTabs: string[], activeTaskId: string): string[] => {
-  if (!activeTaskId || openTaskTabs.includes(activeTaskId)) {
-    return openTaskTabs;
-  }
-  return [...openTaskTabs, activeTaskId];
-};
-
-export const reorderTaskTabs = (params: {
-  tabTaskIds: string[];
-  draggedTaskId: string;
-  targetTaskId: string;
-  position: "before" | "after";
-}): string[] => {
-  const { tabTaskIds, draggedTaskId, targetTaskId, position } = params;
-  const sourceIndex = tabTaskIds.indexOf(draggedTaskId);
-  const targetIndex = tabTaskIds.indexOf(targetTaskId);
-
-  if (sourceIndex < 0 || targetIndex < 0 || draggedTaskId === targetTaskId) {
-    return tabTaskIds;
-  }
-
-  const nextTabTaskIds = tabTaskIds.filter((taskId) => taskId !== draggedTaskId);
-  const nextTargetIndex = nextTabTaskIds.indexOf(targetTaskId);
-
-  if (nextTargetIndex < 0) {
-    return tabTaskIds;
-  }
-
-  const insertionIndex = position === "before" ? nextTargetIndex : nextTargetIndex + 1;
-  nextTabTaskIds.splice(insertionIndex, 0, draggedTaskId);
-  return nextTabTaskIds;
-};
-
-export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsState => {
-  if (!raw) {
-    return DEFAULT_PERSISTED_TABS_STATE;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-
-    if (Array.isArray(parsed)) {
-      return {
-        tabs: normalizeTaskTabs(parsed),
-        activeTaskId: null,
-      };
-    }
-
-    if (!isRecord(parsed)) {
-      return DEFAULT_PERSISTED_TABS_STATE;
-    }
-
-    const tabs = normalizeTaskTabs(parsed.tabs);
-    const activeTaskId =
-      typeof parsed.activeTaskId === "string" && parsed.activeTaskId.trim().length > 0
-        ? parsed.activeTaskId
-        : null;
-    return {
-      tabs,
-      activeTaskId,
-    };
-  } catch {
-    return DEFAULT_PERSISTED_TABS_STATE;
-  }
-};
-
-export const toPersistedTaskTabs = (state: PersistedTaskTabsState): string => {
-  const activeTaskId =
-    state.activeTaskId && state.tabs.includes(state.activeTaskId) ? state.activeTaskId : null;
-  return JSON.stringify({
-    tabs: normalizeTaskTabs(state.tabs),
-    activeTaskId,
-  } satisfies PersistedTaskTabsPayload);
-};
-
-export const addTaskToPersistedTaskTabs = (params: {
-  raw: string | null;
-  taskId: string;
-  tasks: TaskCard[];
-}): string | null => {
-  const taskId = params.taskId.trim();
-  if (!taskId) {
-    return null;
-  }
-
-  const task = params.tasks.find((entry) => entry.id === taskId) ?? null;
-  if (!task || task.status === "closed") {
-    return null;
-  }
-
-  const persisted = parsePersistedTaskTabs(params.raw);
-  if (persisted.tabs.includes(taskId)) {
-    return toPersistedTaskTabs(persisted);
-  }
-
-  return toPersistedTaskTabs({
-    tabs: [...persisted.tabs, taskId],
-    activeTaskId: persisted.activeTaskId,
-  });
-};
-
-export const addTaskToPersistedAgentStudioTabs = (params: {
-  workspaceId: string;
-  taskId: string;
-  tasks: TaskCard[];
-}): void => {
-  const storageKey = toTabsStorageKey(params.workspaceId);
-  let raw: string | null;
-  try {
-    raw = globalThis.localStorage.getItem(storageKey);
-  } catch (cause) {
-    throw new Error(
-      `Failed to read agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-
-  const next = addTaskToPersistedTaskTabs({
-    raw,
-    taskId: params.taskId,
-    tasks: params.tasks,
-  });
-  if (next === null || next === raw) {
-    return;
-  }
-
-  try {
-    globalThis.localStorage.setItem(storageKey, next);
-  } catch (cause) {
-    throw new Error(
-      `Failed to persist agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-};
-
-export const resolveFallbackTaskId = (params: {
-  tabTaskIds: string[];
-  persistedActiveTaskId: string | null;
-}): string | null => {
-  if (params.persistedActiveTaskId && params.tabTaskIds.includes(params.persistedActiveTaskId)) {
-    return params.persistedActiveTaskId;
-  }
-  return params.tabTaskIds[0] ?? null;
-};
-
-export const canPersistTaskTabs = (
-  persistenceWorkspaceId: string | null,
-  tabsStorageHydratedWorkspaceId: string | null,
-): boolean => {
-  return (
-    Boolean(persistenceWorkspaceId) && tabsStorageHydratedWorkspaceId === persistenceWorkspaceId
-  );
-};
-
 export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {
   const workflowsByRole = resolveRoleWorkflowMapForTask(task);
   return {
@@ -370,7 +174,7 @@ export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentR
 export const buildWorkflowStateByRole = (params: {
   task: TaskCard | null;
   roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
-  roleSessionByRole: Record<AgentRole, RoleSessionSummary>;
+  liveSessionByRole: Record<AgentRole, AgentWorkflowStepLiveSession>;
 }): Record<AgentRole, AgentWorkflowStepState> => {
   const stateByRole = createRoleRecord<AgentWorkflowStepState>(() => ({
     tone: "blocked",
@@ -391,11 +195,9 @@ export const buildWorkflowStateByRole = (params: {
 
   for (const role of ALL_AGENT_ROLES) {
     const workflow = params.roleWorkflowsByTask[role];
-    const sessionSummary = params.roleSessionByRole[role];
     const availability = deriveWorkflowAvailability(workflow);
-    const liveSession = sessionSummary.liveSession;
-    const isLiveSessionActive =
-      liveSession === "running" || liveSession === "waiting_input" || liveSession === "error";
+    const liveSession = params.liveSessionByRole[role];
+    const isLiveSessionActive = isWorkflowLiveSessionActive(liveSession);
     let completion: AgentWorkflowStepState["completion"] = "not_started";
 
     if (role === "build" && (qaRejected || qaApprovedInBuildCompleteStatus)) {
@@ -440,20 +242,14 @@ export const buildLatestSessionByRoleMap = (
   return createRoleRecord((role) => sessionsByRole[role][0] ?? null);
 };
 
-export const buildRoleSessionSummaryMap = (
+export const buildLiveSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
-): Record<AgentRole, RoleSessionSummary> => {
+): Record<AgentRole, AgentWorkflowStepLiveSession> => {
   const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
 
   return createRoleRecord((role) => {
     const latestSession = latestSessionByRole[role];
-    const workflowSession = latestSession;
-
-    return {
-      latestSession,
-      workflowSession,
-      liveSession: workflowSession ? toLiveSessionState(workflowSession) : "none",
-    };
+    return latestSession ? latestSession.activityState : "none";
   });
 };
 
@@ -469,17 +265,20 @@ export const buildSessionSelectorGroups = (params: {
     if (roleSessions.length === 0) {
       continue;
     }
-    const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
-    const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => ({
-      value: session.externalSessionId,
-      label: formatAgentSessionOptionLabel({
-        session,
-        sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
-        roleLabelByRole: params.roleLabelByRole,
-      }),
-      description: formatAgentSessionOptionDescription(session),
-      searchKeywords: [role, session.externalSessionId],
-    }));
+    const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
+    const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => {
+      const sessionIdentity = agentSessionIdentityKey(session);
+      return {
+        value: sessionIdentity,
+        label: formatAgentSessionOptionLabel({
+          session,
+          sessionNumber: roleSessionNumberByIdentity.get(sessionIdentity) ?? index + 1,
+          roleLabelByRole: params.roleLabelByRole,
+        }),
+        description: formatAgentSessionOptionDescription(session),
+        searchKeywords: [role, session.externalSessionId],
+      };
+    });
     groups.push({
       label: params.roleLabelByRole[role],
       options: roleOptions,
@@ -560,20 +359,18 @@ export const buildSessionCreateOptions = (params: {
   return options;
 };
 
-export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): TaskCard[] => {
-  return tasks.filter((task) => !tabTaskIds.includes(task.id));
-};
-
 const getTabStatusFromSession = (
   session: AgentSessionWorkflowSummary | null | undefined,
 ): AgentStudioTaskTab["status"] => {
   if (!session) {
     return "idle";
   }
-  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
+
+  const liveSessionState = session.activityState;
+  if (liveSessionState === "waiting_input") {
     return "waiting_input";
   }
-  if (session.status === "starting" || session.status === "running") {
+  if (isAgentSessionActivityWorking(liveSessionState)) {
     return "working";
   }
   return "idle";
@@ -614,36 +411,4 @@ export const buildTaskTabs = (params: {
       isActive: params.activeTaskId === tabTaskId,
     };
   });
-};
-
-export const closeTaskTab = (params: {
-  tabTaskIds: string[];
-  taskIdToClose: string;
-  activeTaskId: string;
-}): { nextTabTaskIds: string[]; nextActiveTaskId: string | null } => {
-  const closeIndex = params.tabTaskIds.indexOf(params.taskIdToClose);
-  if (closeIndex < 0) {
-    return {
-      nextTabTaskIds: params.tabTaskIds,
-      nextActiveTaskId: params.activeTaskId || null,
-    };
-  }
-
-  const nextTabTaskIds = params.tabTaskIds.filter((taskId) => taskId !== params.taskIdToClose);
-  if (params.taskIdToClose !== params.activeTaskId) {
-    return {
-      nextTabTaskIds,
-      nextActiveTaskId: params.activeTaskId || null,
-    };
-  }
-
-  const adjacentTab =
-    closeIndex >= nextTabTaskIds.length
-      ? (nextTabTaskIds[nextTabTaskIds.length - 1] ?? null)
-      : (nextTabTaskIds[closeIndex] ?? null);
-
-  return {
-    nextTabTaskIds,
-    nextActiveTaskId: adjacentTab,
-  };
 };

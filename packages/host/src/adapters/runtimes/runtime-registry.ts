@@ -1,10 +1,6 @@
-import {
-  type RuntimeInstanceSummary,
-  type RuntimeRoute,
-  runtimeInstanceSummarySchema,
-} from "@openducktor/contracts";
+import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
+import { runtimeWorkspaceKey } from "../../domain/runtime-workspace-key";
 import {
   HostOperationError,
   HostResourceError,
@@ -17,16 +13,12 @@ import type {
   RuntimeWorkspaceHandle,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
-import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
-import { stopCodexSession } from "../codex/codex-session-stop";
+import { probeCodexMcpStatus, probeOpenCodeMcpStatus } from "./runtime-registry-probes";
 import {
-  findWorkspaceRuntime,
-  probeCodexMcpStatus,
-  probeOpenCodeMcpStatus,
-  probeOpenCodeSessionStatus,
-  runtimeEnsureFlightKey,
-  stopOpenCodeSession,
-} from "./runtime-registry-probes";
+  createRuntimeRegistryStore,
+  type WorkspaceRuntimeLookupInput,
+} from "./runtime-registry-store";
+import { probeRuntimeSessionStatus, stopRuntimeSession } from "./runtime-session-operations";
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
@@ -37,94 +29,35 @@ type RuntimeEnsureFlight = {
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
 };
 
-const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
-  Effect.gen(function* () {
-    if (runtimeRoute.type === "stdio") {
-      return runtimeRoute.identity;
-    }
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "runtimeRoute",
-        message: "Codex app-server operations require a stdio runtime route.",
-        details: { runtimeRouteType: runtimeRoute.type },
-      }),
-    );
-  });
-
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
   codexAppServer,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
-  const entries = new Map<string, RuntimeInstanceSummary>();
-  const runtimeIdsByRepo = new Map<string, Set<string>>();
+  const store = createRuntimeRegistryStore(runtimes);
   const handles = new Map<string, RuntimeWorkspaceHandle>();
   const ensureFlights = new Map<string, RuntimeEnsureFlight>();
-  const repoIndexKey = (repoPath: string): string => normalizePathForComparison(repoPath);
-  const addRuntimeToIndexes = (runtime: RuntimeInstanceSummary) => {
-    const key = repoIndexKey(runtime.repoPath);
-    const ids = runtimeIdsByRepo.get(key) ?? new Set<string>();
-    ids.add(runtime.runtimeId);
-    runtimeIdsByRepo.set(key, ids);
-  };
-  const removeRuntimeFromIndexes = (runtime: RuntimeInstanceSummary) => {
-    const key = repoIndexKey(runtime.repoPath);
-    const ids = runtimeIdsByRepo.get(key);
-    if (!ids) {
-      return;
-    }
-    ids.delete(runtime.runtimeId);
-    if (ids.size === 0) {
-      runtimeIdsByRepo.delete(key);
-    }
-  };
-  const upsertRuntime = (runtime: RuntimeInstanceSummary) => {
-    const previous = entries.get(runtime.runtimeId);
-    if (previous) {
-      removeRuntimeFromIndexes(previous);
-    }
-    entries.set(runtime.runtimeId, runtime);
-    addRuntimeToIndexes(runtime);
-  };
-  const removeRuntime = (runtimeId: string): RuntimeInstanceSummary | null => {
-    const runtime = entries.get(runtimeId);
-    if (!runtime) {
-      return null;
-    }
-    removeRuntimeFromIndexes(runtime);
-    entries.delete(runtimeId);
-    return runtime;
-  };
-  const readRuntimesForRepo = ({
-    repoPath,
-    runtimeKind,
-  }: {
-    repoPath: string;
-    runtimeKind?: string;
-  }): RuntimeInstanceSummary[] => {
-    const ids = runtimeIdsByRepo.get(repoIndexKey(repoPath));
-    if (!ids) {
-      return [];
-    }
-    const result: RuntimeInstanceSummary[] = [];
-    for (const runtimeId of ids) {
-      const runtime = entries.get(runtimeId);
-      if (!runtime) {
-        throw new Error(`Runtime registry repo index referenced missing runtime: ${runtimeId}`);
-      }
-      if (runtimeKind && runtime.kind !== runtimeKind) {
-        continue;
-      }
-      result.push(runtime);
-    }
-    return result;
-  };
-  for (const runtime of runtimes) {
-    upsertRuntime(runtime);
-  }
+  const findRegisteredWorkspaceRuntime = (input: WorkspaceRuntimeLookupInput) =>
+    store.findWorkspaceRuntime(input);
+  const requireWorkspaceRuntime = (input: WorkspaceRuntimeLookupInput, operation: string) =>
+    findRegisteredWorkspaceRuntime(input).pipe(
+      Effect.flatMap((runtime) => {
+        if (runtime) {
+          return Effect.succeed(runtime);
+        }
+        return Effect.fail(
+          new HostResourceError({
+            resource: "runtime",
+            operation,
+            message: `No live ${input.runtimeKind} workspace runtime found for repo '${input.repoPath}'.`,
+            details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+          }),
+        );
+      }),
+    );
   const stopRegisteredRuntime = (runtimeId: string) =>
     Effect.gen(function* () {
-      const runtime = entries.get(runtimeId);
+      const runtime = store.get(runtimeId);
       if (!runtime) {
         return yield* Effect.fail(
           new HostResourceError({
@@ -140,7 +73,7 @@ export const createRuntimeRegistry = ({
         yield* handle.stop();
         handles.delete(runtimeId);
       }
-      removeRuntime(runtimeId);
+      store.remove(runtimeId);
       return runtime;
     });
   const waitForStartingRuntimes = () => {
@@ -175,7 +108,10 @@ export const createRuntimeRegistry = ({
   const registry: RuntimeRegistryPort = {
     ensureWorkspaceRuntime(input) {
       return Effect.gen(function* () {
-        const existingRuntime = findWorkspaceRuntime(entries.values(), input);
+        const existingRuntime = yield* findRegisteredWorkspaceRuntime({
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
+        });
         if (existingRuntime) {
           return yield* Effect.try({
             try: () => runtimeInstanceSummarySchema.parse(existingRuntime),
@@ -199,7 +135,10 @@ export const createRuntimeRegistry = ({
             }),
           );
         }
-        const flightKey = runtimeEnsureFlightKey(input.runtimeKind, input.repoPath);
+        const flightKey = runtimeWorkspaceKey({
+          runtimeKind: input.runtimeKind,
+          repoPath: input.repoPath,
+        });
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const reservation = yield* Effect.sync(() => {
@@ -225,7 +164,7 @@ export const createRuntimeRegistry = ({
                     details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
                   }),
               });
-              upsertRuntime(parsed);
+              store.upsert(parsed);
               handles.set(parsed.runtimeId, handle);
               return parsed;
             });
@@ -238,13 +177,16 @@ export const createRuntimeRegistry = ({
       });
     },
     listRuntimes() {
-      return Effect.succeed([...entries.values()]);
+      return Effect.succeed(store.list());
     },
     findRuntimeById(runtimeId) {
-      return Effect.succeed(entries.get(runtimeId) ?? null);
+      return Effect.succeed(store.get(runtimeId));
+    },
+    findWorkspaceRuntime(input) {
+      return findRegisteredWorkspaceRuntime(input);
     },
     listRuntimesByRepo(input) {
-      return Effect.sync(() => readRuntimesForRepo(input));
+      return Effect.sync(() => store.listByRepo(input));
     },
     stopRuntime(runtimeId) {
       return Effect.as(stopRegisteredRuntime(runtimeId), true);
@@ -254,7 +196,7 @@ export const createRuntimeRegistry = ({
         yield* waitForStartingRuntimes();
         const stopped: RuntimeInstanceSummary[] = [];
         const errors: string[] = [];
-        for (const runtime of [...entries.values()]) {
+        for (const runtime of store.list()) {
           const exit = yield* Effect.exit(stopRegisteredRuntime(runtime.runtimeId));
           if (exit._tag === "Success") {
             stopped.push(exit.value);
@@ -276,62 +218,16 @@ export const createRuntimeRegistry = ({
       });
     },
     stopSession(input) {
-      if (input.runtimeKind === "opencode") {
-        return stopOpenCodeSession(input);
-      }
-      if (input.runtimeKind === "codex") {
-        if (!codexAppServer) {
-          return Effect.fail(
-            new HostResourceError({
-              resource: "codexAppServer",
-              operation: "runtimeRegistry.stopCodexSession",
-              message: "Codex session stop requires the Codex app-server port.",
-            }),
-          );
-        }
-        return Effect.gen(function* () {
-          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
-          return yield* stopCodexSession({
-            codexAppServer,
-            runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          });
-        });
-      }
-      return Effect.fail(
-        new HostValidationError({
-          message: `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
-          field: "runtimeKind",
-          details: { runtimeKind: input.runtimeKind },
-        }),
-      );
+      return Effect.gen(function* () {
+        const runtime = yield* requireWorkspaceRuntime(input, "runtimeRegistry.stopSession");
+        return yield* stopRuntimeSession({ input, runtime, codexAppServer });
+      });
     },
     probeSessionStatus(input) {
-      if (input.runtimeKind === "opencode") {
-        return probeOpenCodeSessionStatus(input);
-      }
-      if (input.runtimeKind === "codex") {
-        if (!codexAppServer) {
-          return Effect.fail(
-            new HostResourceError({
-              resource: "codexAppServer",
-              operation: "runtimeRegistry.probeSessionStatus",
-              message: "Codex session status probing requires the Codex app-server port.",
-            }),
-          );
-        }
-        return Effect.gen(function* () {
-          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
-          return yield* probeCodexSessionStatus({
-            codexAppServer,
-            runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          });
-        });
-      }
-      return Effect.succeed({ supported: false, hasLiveSession: false });
+      return Effect.gen(function* () {
+        const runtime = yield* findRegisteredWorkspaceRuntime(input);
+        return yield* probeRuntimeSessionStatus({ input, runtime, codexAppServer });
+      });
     },
     probeMcpStatus(input) {
       if (input.runtimeKind === "opencode") {

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createAdapterWithTransport, createHarness } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
-describe("CodexAppServerAdapter history hydration", () => {
-  test("hydrates Codex history and diff from App Server reads", async () => {
+describe("CodexAppServerAdapter history loading", () => {
+  test("loads Codex history and diff from App Server reads", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     await adapter.startSession({
@@ -20,7 +20,7 @@ describe("CodexAppServerAdapter history hydration", () => {
       {
         method: "thread/tokenUsage/updated",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-1",
           tokenUsage: {
             total: { totalTokens: 42_000 },
@@ -35,10 +35,17 @@ describe("CodexAppServerAdapter history hydration", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
     });
 
     expect(history).toEqual([
+      {
+        messageId: "codex-system-prompt:thread/start-runtime-live",
+        role: "system",
+        timestamp: "2026-05-07T00:00:00.000Z",
+        text: "System prompt:\n\nUse the repo rules.",
+        parts: [],
+      },
       expect.objectContaining({
         messageId: "user-history-1",
         role: "user",
@@ -195,14 +202,14 @@ describe("CodexAppServerAdapter history hydration", () => {
       }),
     ]);
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/turns/list"),
     ).toBe(true);
     await expect(
       adapter.loadSessionDiff({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toEqual([
       {
@@ -215,7 +222,78 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates search command metadata and hides contextual user fragments from thread reads", async () => {
+  test("keeps the runtime-owned system prompt after observing a live session ref", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const unsubscribe = await adapter.subscribeEvents(
+      {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+      },
+      () => {},
+    );
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread/start-runtime-live",
+    });
+
+    expect(history[0]).toEqual({
+      messageId: "codex-system-prompt:thread/start-runtime-live",
+      role: "system",
+      timestamp: "2026-05-07T00:00:00.000Z",
+      text: "System prompt:\n\nUse the repo rules.",
+      parts: [],
+    });
+    unsubscribe();
+  });
+
+  test("projects supplied prompt context for cold persisted history reads", async () => {
+    const { adapter } = createHarness();
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-saved",
+      systemPromptContext: {
+        startedAt: "2026-05-07T00:00:00.000Z",
+        systemPrompt: "Use the hydrated task context.",
+      },
+    });
+
+    expect(history[0]).toEqual({
+      messageId: "codex-system-prompt:thread-saved",
+      role: "system",
+      timestamp: "2026-05-07T00:00:00.000Z",
+      text: "System prompt:\n\nUse the hydrated task context.",
+      parts: [],
+    });
+    expect(history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          messageId: "user-history-1",
+          role: "user",
+          text: "Hello Codex",
+        }),
+      ]),
+    );
+  });
+
+  test("loads search command metadata and hides contextual user fragments from thread reads", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -303,7 +381,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates persisted Codex skill marker text into user display parts", async () => {
+  test("loads persisted Codex skill marker text into user display parts", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -403,7 +481,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates loaded idle history from Codex token usage replay", async () => {
+  test("loads idle history without resuming the Codex thread", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     drainNotifications.mockImplementation(async () => [
@@ -429,13 +507,13 @@ describe("CodexAppServerAdapter history hydration", () => {
     });
 
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/resume"),
+    ).toBe(false);
+    expect(
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/read"),
     ).toBe(true);
     expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/read"),
-    ).toBe(true);
-    expect(
-      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/turns/list"),
     ).toBe(true);
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
@@ -470,7 +548,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     );
   });
 
-  test("resumes listed idle history so restored context usage is replayed", async () => {
+  test("loads paginated stored history without resuming the Codex thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -485,29 +563,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           } as Response;
         }
         if (request.method === "thread/resume") {
-          return {
-            thread: {
-              id: "thread-unloaded",
-              cwd: "/repo",
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  startedAt: 1,
-                  completedAt: 2,
-                  items: [
-                    {
-                      id: "msg-1",
-                      type: "agentMessage",
-                      phase: "final_answer",
-                      text: "Partial from resume",
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          throw new Error("Stored Codex history must be read without resuming the thread.");
         }
         if (request.method === "thread/read") {
           return {
@@ -570,16 +626,10 @@ describe("CodexAppServerAdapter history hydration", () => {
         text: "Hydrated from paginated history",
       }),
     );
-    expect(calls.map((call) => call.method)).toEqual([
-      "thread/loaded/list",
-      "thread/list",
-      "thread/resume",
-      "thread/read",
-      "thread/turns/list",
-    ]);
+    expect(calls.map((call) => call.method)).toEqual(["thread/read", "thread/turns/list"]);
   });
 
-  test("hydrates documented thread-read tool item shapes", async () => {
+  test("loads documented thread-read tool item shapes", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -716,7 +766,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     );
   });
 
-  test("hydrates command action read find and bash tools from thread reads", async () => {
+  test("loads command action read find and bash tools from thread reads", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -860,21 +910,15 @@ describe("CodexAppServerAdapter history hydration", () => {
     );
   });
 
-  test("returns empty history without loading an absent Codex thread", async () => {
+  test("returns empty history when Codex has no stored thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
-        if (request.method === "thread/loaded/list") {
-          return { data: [], nextCursor: null } as Response;
-        }
-        if (request.method !== "thread/list") {
+        if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        return {
-          data: [{ id: "other-thread", cwd: "/repo", createdAt: 1, status: { type: "idle" } }],
-          nextCursor: null,
-        } as Response;
+        throw new Error("thread not loaded: missing-thread");
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -889,8 +933,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ).resolves.toEqual([]);
 
     expect(calls).toEqual([
-      { method: "thread/loaded/list", params: { cursor: null, limit: 100 } },
-      { method: "thread/list", params: { cursor: null, limit: 100 } },
+      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: true } },
     ]);
   });
 
@@ -959,7 +1002,179 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates only the selected final Codex agent message as finished", async () => {
+  test("reuses todos discovered while loading Codex session history", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread-history-todos"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread-history-todos",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/resume") {
+          return {
+            thread: {
+              id: "thread-history-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              turns: [],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method !== "thread/read") {
+          throw new Error(`Unexpected method '${request.method}'.`);
+        }
+        return {
+          thread: {
+            id: "thread-history-todos",
+            cwd: "/repo",
+            turns: [
+              {
+                id: "turn-1",
+                status: "completed",
+                items: [
+                  {
+                    id: "todo-call-1",
+                    type: "dynamicToolCall",
+                    namespace: "functions",
+                    tool: "update_plan",
+                    arguments: {
+                      plan: [
+                        { step: "Load transcript once", status: "completed" },
+                        { step: "Reuse todos", status: "inProgress" },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        } as Response;
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-history-todos",
+    });
+
+    expect(
+      calls.filter(
+        (call) =>
+          call.method === "thread/read" &&
+          (call.params as { includeTurns?: boolean }).includeTurns === true,
+      ),
+    ).toHaveLength(1);
+    calls.length = 0;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-history-todos",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ content: "Load transcript once", status: "completed" }),
+      expect.objectContaining({ content: "Reuse todos", status: "in_progress" }),
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  test("reuses empty todos discovered while loading Codex session history", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread-empty-todos"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread-empty-todos",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/resume") {
+          return {
+            thread: {
+              id: "thread-empty-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              turns: [],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method !== "thread/read") {
+          throw new Error(`Unexpected method '${request.method}'.`);
+        }
+        return {
+          thread: {
+            id: "thread-empty-todos",
+            cwd: "/repo",
+            turns: [
+              {
+                id: "turn-1",
+                status: "completed",
+                items: [],
+              },
+            ],
+          },
+        } as Response;
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-empty-todos",
+    });
+    calls.length = 0;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-empty-todos",
+      }),
+    ).resolves.toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  test("loads only the selected final Codex agent message as finished", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {

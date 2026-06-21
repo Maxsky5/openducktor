@@ -2,26 +2,38 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AgentActivityCard } from "./agent-activity-card";
 
 const activeSession = {
-  runtimeKind: "opencode",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
   taskId: "task-1",
   taskTitle: "Add SSO",
   role: "build" as const,
-  status: "running" as const,
+  activityState: "starting" as const,
   startedAt: "2026-02-26T10:00:00.000Z",
 };
 
 const waitingSession = {
-  runtimeKind: "opencode",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktree",
   externalSessionId: "session-2",
   taskId: "task-2",
   taskTitle: "Validate QA flow",
   role: "qa" as const,
-  status: "idle" as const,
+  activityState: "waiting_input" as const,
   startedAt: "2026-02-26T09:00:00.000Z",
+};
+
+const expectedSessionHref = (session: typeof activeSession | typeof waitingSession): string => {
+  const params = new URLSearchParams({
+    task: session.taskId,
+    session: agentSessionIdentityKey(session),
+    agent: session.role,
+  });
+  return `/agents?${params.toString()}`.replaceAll("&", "&amp;");
 };
 
 describe("AgentActivityCard", () => {
@@ -45,8 +57,10 @@ describe("AgentActivityCard", () => {
     expect(html).toContain(">1<");
     expect(html).toContain("Add SSO");
     expect(html).toContain("Validate QA flow");
-    expect(html).toContain('href="/agents?task=task-1&amp;session=session-1&amp;agent=build"');
-    expect(html).toContain('href="/agents?task=task-2&amp;session=session-2&amp;agent=qa"');
+    expect(html).toContain("BUILD · starting");
+    expect(html).toContain("QA · waiting input");
+    expect(html).toContain(`href="${expectedSessionHref(activeSession)}"`);
+    expect(html).toContain(`href="${expectedSessionHref(waitingSession)}"`);
   });
 
   test("does not render redundant empty waiting text when there are no waiting sessions", () => {

@@ -39,7 +39,6 @@ export const findLatestCleanupTarget = (
     const candidates: Array<{
       workingDirectory: string;
       startedAt: string;
-      externalSessionId: string;
     }> = [];
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       repoPath,
@@ -49,33 +48,21 @@ export const findLatestCleanupTarget = (
       candidates.push({
         workingDirectory: taskWorktree.workingDirectory,
         startedAt: "\uffff",
-        externalSessionId: "task-worktree",
       });
     }
-    const tasks = yield* taskStore.listTasks({ repoPath });
-    const task = tasks.find((entry) => entry.id === taskId);
-    if (!task) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Task not found: ${taskId}`,
-          details: { repoPath, taskId },
-        }),
-      );
-    }
+    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
     candidates.push(
-      ...(task.agentSessions ?? [])
+      ...metadata.agentSessions
         .filter((session) => session.role.trim() === "build")
         .map((session) => ({
           workingDirectory: session.workingDirectory,
           startedAt: session.startedAt,
-          externalSessionId: session.externalSessionId,
         })),
     );
     candidates.sort((left, right) => {
       const startedAtComparison = right.startedAt.localeCompare(left.startedAt);
       return startedAtComparison === 0
-        ? right.externalSessionId.localeCompare(left.externalSessionId)
+        ? right.workingDirectory.localeCompare(left.workingDirectory)
         : startedAtComparison;
     });
     for (const candidate of candidates) {

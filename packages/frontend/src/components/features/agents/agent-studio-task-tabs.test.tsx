@@ -180,6 +180,23 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).not.toMatch(/aria-label="Open new task tab"[^>]*disabled/);
   });
 
+  test("shows loaded tasks immediately when opening the new-tab dialog", async () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, { model: buildModel() }),
+      ),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open new task tab" }));
+    });
+
+    expect(screen.queryByText("Loading tasks…")).toBeNull();
+    expect(screen.getByRole("button", { name: /Stabilize desktop startup/i })).toBeTruthy();
+  });
+
   test("keeps the new-tab button outside the horizontal scroll region", () => {
     render(
       createElement(

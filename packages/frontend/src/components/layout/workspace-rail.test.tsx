@@ -1,13 +1,10 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  type AppStateProviderModule,
-  createAppStateProviderModuleMock,
-} from "@/test-utils/app-state-provider-mock";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { WorkspaceRail } from "./workspace-rail";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
@@ -28,11 +25,23 @@ const workspaceRecord = (
 });
 
 let workspaceState: WorkspaceStateContextValue;
-let WorkspaceRail: typeof import("./workspace-rail").WorkspaceRail;
-const actualAppStateProviderModule = await import("../../state/app-state-provider");
+
+const renderRail = (onOpenRepositoryModal = () => {}): ReturnType<typeof render> =>
+  render(
+    <WorkspaceStateContext.Provider value={workspaceState}>
+      <WorkspaceRail onOpenRepositoryModal={onOpenRepositoryModal} />
+    </WorkspaceStateContext.Provider>,
+  );
+
+const renderRailMarkup = (): string =>
+  renderToStaticMarkup(
+    <WorkspaceStateContext.Provider value={workspaceState}>
+      <WorkspaceRail onOpenRepositoryModal={() => {}} />
+    </WorkspaceStateContext.Provider>,
+  );
 
 describe("WorkspaceRail", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     workspaceState = {
       isLoadingBranches: false,
       isSwitchingBranch: false,
@@ -60,23 +69,6 @@ describe("WorkspaceRail", () => {
     };
     selectWorkspaceMock.mockClear();
     reorderWorkspacesMock.mockClear();
-
-    mock.module("@/state/app-state-provider", () =>
-      createAppStateProviderModuleMock({
-        useWorkspaceState: (() => workspaceState) as AppStateProviderModule["useWorkspaceState"],
-      }),
-    );
-
-    ({ WorkspaceRail } = await import("./workspace-rail"));
-    await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
-    ]);
-  });
-
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
-    ]);
   });
 
   test("renders icon and initials variants with hidden-scrollbar overflow", () => {
@@ -91,7 +83,7 @@ describe("WorkspaceRail", () => {
       }),
     ];
 
-    const html = renderToStaticMarkup(<WorkspaceRail onOpenRepositoryModal={() => {}} />);
+    const html = renderRailMarkup();
 
     expect(html).toContain("hide-scrollbar");
     expect(html).toContain('aria-label="Alpha Repo"');
@@ -112,7 +104,7 @@ describe("WorkspaceRail", () => {
       }),
     ];
 
-    render(<WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />);
+    renderRail(openRepositoryModal);
 
     fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
     fireEvent.click(screen.getByRole("button", { name: "Alpha Repo" }));
@@ -135,7 +127,7 @@ describe("WorkspaceRail", () => {
       }),
     ];
 
-    render(<WorkspaceRail onOpenRepositoryModal={() => {}} />);
+    renderRail();
 
     expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);

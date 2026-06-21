@@ -2,8 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoRuntimeRef,
   type RuntimeDescriptor,
-  type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
@@ -39,10 +39,7 @@ const OPENCODE_CATALOG: AgentModelCatalog = {
 
 const createHookHarness = (
   initialProps: HookArgs,
-  loadRepoRuntimeCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>,
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
 ) => {
   const runtimeDefinitionsContext = {
     runtimeDefinitions: [OPENCODE_DESCRIPTOR],
@@ -53,6 +50,7 @@ const createHookHarness = (
     refreshRuntimeDefinitions: async () => [OPENCODE_DESCRIPTOR],
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -118,7 +116,10 @@ describe("useSettingsModalCatalogState", () => {
     await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
     expect(harness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);
     expect(harness.getLatest().isCatalogLoadingForRuntime("opencode")).toBe(false);
 
@@ -140,7 +141,10 @@ describe("useSettingsModalCatalogState", () => {
     await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
 
     await harness.unmount();
   });

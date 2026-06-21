@@ -6,11 +6,11 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
-  AgentStateContextValue,
+  AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
@@ -19,58 +19,43 @@ import type {
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
-import type { AgentActivitySessionSummary, AgentSessionSummary } from "./agent-sessions-store";
+import { createAgentRuntimeServices } from "./agent-runtime-services";
+import type { AgentSessionVisiblePendingInput } from "./agent-session-visible-pending-input";
+import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
 import {
-  AgentOperationsContext,
-  AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
   useAgentOperationsContext,
+  useAgentSessionReadModelStateContext,
   useAgentSessionsContext,
   useRequiredContext,
   useWorkspaceBranchStateContext,
   useWorkspacePresenceContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
-import { createHostRuntimeCatalogOperations } from "./operations/shared/runtime-catalog";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "./operations/shared/runtime-readiness-publication";
 import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
 import { AppRuntimeProvider } from "./providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "./providers/delegation-state-provider";
+import { RepoRuntimeHealthProvider } from "./providers/repo-runtime-health-provider";
 import { SpecStateProvider } from "./providers/spec-state-provider";
 import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
-  const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
-  const runtimeCatalogOperations = useMemo(() => {
-    return createHostRuntimeCatalogOperations(runtimeRegistry.getAdapter);
-  }, [runtimeRegistry]);
+  const { agentEngine, runtimeCatalogOperations, startRepoRuntime } = useMemo(
+    () => createAgentRuntimeServices(),
+    [],
+  );
   const checkRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>
       runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
     [runtimeCatalogOperations],
-  );
-  const startRepoRuntime = useCallback(
-    (repoPath: string, runtimeKind: RuntimeKind) =>
-      ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          runtimeRegistry.startRepoRuntime({
-            repoPath: nextRepoPath,
-            runtimeKind: nextRuntimeKind,
-          }),
-      }),
-    [runtimeRegistry],
   );
 
   return (
@@ -81,19 +66,21 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
       <SpecStateProvider>
-        <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
-          <TasksStateProvider>
-            <WorkspaceStateProvider>
-              <DelegationStateProvider>
-                <AgentStudioStateProvider agentEngine={agentEngine}>
-                  <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
-                    <AutopilotProvider>{children}</AutopilotProvider>
-                  </AppLifecycleStateProvider>
-                </AgentStudioStateProvider>
-              </DelegationStateProvider>
-            </WorkspaceStateProvider>
-          </TasksStateProvider>
-        </ChecksStateProvider>
+        <RepoRuntimeHealthProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
+          <ChecksStateProvider>
+            <TasksStateProvider>
+              <WorkspaceStateProvider>
+                <DelegationStateProvider>
+                  <AgentStudioStateProvider agentEngine={agentEngine}>
+                    <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
+                      <AutopilotProvider>{children}</AutopilotProvider>
+                    </AppLifecycleStateProvider>
+                  </AgentStudioStateProvider>
+                </DelegationStateProvider>
+              </WorkspaceStateProvider>
+            </TasksStateProvider>
+          </ChecksStateProvider>
+        </RepoRuntimeHealthProvider>
       </SpecStateProvider>
     </AppRuntimeProvider>
   );
@@ -125,56 +112,39 @@ export const useSpecState = (): SpecStateContextValue =>
 
 export const useAgentOperations = (): AgentOperationsContextValue => useAgentOperationsContext();
 
-export const useAgentSessions = (): AgentStateContextValue["sessions"] => {
+export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
+  useAgentSessionReadModelStateContext();
+
+export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
-    sessionStore.getSessionsSnapshot,
-    sessionStore.getSessionsSnapshot,
+    sessionStore.getActivitySnapshot,
+    sessionStore.getActivitySnapshot,
   );
 };
 
-export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
+export const useAgentSessionSummaries = (): AgentSessionSummary[] =>
+  useAgentActivitySnapshot().sessions;
+
+export const useAgentSession = (
+  identity: AgentSessionIdentity | null,
+): AgentSessionState | null => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
-    sessionStore.getSessionSummariesSnapshot,
-    sessionStore.getSessionSummariesSnapshot,
+    () => sessionStore.getSessionSnapshot(identity),
+    () => sessionStore.getSessionSnapshot(identity),
   );
 };
 
-export const useAgentActivitySessions = (): AgentActivitySessionSummary[] => {
+export const useAgentSessionVisiblePendingInput = (
+  identity: AgentSessionIdentity | null,
+): AgentSessionVisiblePendingInput => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
-    sessionStore.getActivitySessionsSnapshot,
-    sessionStore.getActivitySessionsSnapshot,
-  );
-};
-
-export const useAgentSession = (externalSessionId: string | null): AgentSessionState | null => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    () => sessionStore.getSessionSnapshot(externalSessionId),
-    () => sessionStore.getSessionSnapshot(externalSessionId),
-  );
-};
-
-export const useAgentState = (): AgentStateContextValue => {
-  const sessionStore = useRequiredContext(AgentSessionsContext, "useAgentState");
-  const operations = useRequiredContext(AgentOperationsContext, "useAgentState");
-  const sessions = useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getSessionsSnapshot,
-    sessionStore.getSessionsSnapshot,
-  );
-
-  return useMemo(
-    () => ({
-      sessions,
-      ...operations,
-    }),
-    [operations, sessions],
+    () => sessionStore.getVisiblePendingInputSnapshot(identity),
+    () => sessionStore.getVisiblePendingInputSnapshot(identity),
   );
 };

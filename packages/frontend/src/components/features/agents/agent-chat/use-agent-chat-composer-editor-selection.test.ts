@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
-import { act } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createFileReferenceSegment, createTextSegment } from "./agent-chat-composer-draft";
+import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import {
   type ActiveTextSelection,
   deriveTextSelectionTargetAfterInput,
@@ -175,50 +175,16 @@ describe("useAgentChatComposerEditorSelection helpers", () => {
 });
 
 describe("useAgentChatComposerEditorSelection", () => {
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-  const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-  let nextAnimationFrameId = 1;
-
-  const flushAnimationFrames = async (): Promise<void> => {
-    const drainFrames = async (): Promise<void> => {
-      if (animationFrameCallbacks.size === 0) {
-        return;
-      }
-
-      const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-      animationFrameCallbacks.clear();
-      for (const callback of queuedCallbacks) {
-        callback(16);
-      }
-      await Promise.resolve();
-      await drainFrames();
-    };
-
-    await act(async () => {
-      await drainFrames();
-    });
-  };
+  const animationFrameDriver = createAnimationFrameTestDriver();
 
   beforeEach(() => {
     document.body.replaceChildren();
-    animationFrameCallbacks.clear();
-    nextAnimationFrameId = 1;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    animationFrameDriver.install();
   });
 
   afterEach(() => {
     document.body.replaceChildren();
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
   });
 
   test("repairs root-collapsed selections from the remembered text target", async () => {
@@ -279,10 +245,10 @@ describe("useAgentChatComposerEditorSelection", () => {
     expect(didFocus).toBe(false);
 
     await harness.update({ tick: 1 });
-    expect(animationFrameCallbacks.size).toBe(1);
+    expect(animationFrameDriver.pendingFrameCount()).toBe(1);
 
     const textSegment = appendTextSegment(root, "segment-1", "hello");
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(globalThis.getSelection?.()?.anchorNode).toBe(textSegment.firstChild);
     expect(globalThis.getSelection?.()?.anchorOffset).toBe(2);

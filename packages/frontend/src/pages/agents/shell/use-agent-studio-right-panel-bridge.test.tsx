@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
+  createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
@@ -18,6 +20,46 @@ const createPanelState = (
   },
 ): HookArgs["panel"] => panel;
 
+const createSelectionView = (
+  overrides: Partial<HookArgs["selection"]["view"]> = {},
+): HookArgs["selection"]["view"] => {
+  const loadedSession = createAgentSessionFixture({
+    externalSessionId: "session-1",
+    taskId: "task-1",
+    role: "build",
+    status: "running",
+    workingDirectory: "/repo/worktrees/task-1",
+  });
+  return {
+    role: "build",
+    taskId: "task-1",
+    selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
+    sessionsForTask: [],
+    selectedSession: {
+      identity: toAgentSessionIdentity(loadedSession),
+      activityState: "running",
+      selectedModel: loadedSession.selectedModel,
+      loadedSession,
+      runtimeData: {
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+        error: null,
+      },
+      runtimeReadiness: {
+        state: "ready",
+        message: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
+    },
+    launchActionId: "build_implementation_start",
+    isTaskReady: true,
+    ...overrides,
+  };
+};
+
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
     workspaceId: "workspace-repo",
@@ -27,24 +69,13 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   branches: [],
   activeBranch: null,
   selection: {
-    viewRole: "build",
-    viewTaskId: "task-1",
-    viewSelectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
-    viewActiveSession: createAgentSessionFixture({
-      externalSessionId: "session-1",
-      taskId: "task-1",
-      role: "build",
-      status: "running",
-      workingDirectory: "/repo/worktrees/task-1",
-    }),
-    isViewSessionHistoryHydrating: false,
+    view: createSelectionView(),
   },
   panel: createPanelState(),
   documentsModel: {
     activeDocument: null,
   },
   repoSettings: null,
-  worktreeRecoverySignal: 3,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
   onDetectPullRequest: mock((_taskId: string) => {}),
@@ -67,19 +98,13 @@ describe("useAgentStudioRightPanelBridge", () => {
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(args.activeWorkspace);
-      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe("task-1");
-      expect(state.rightPanelBridge?.rightPanel.viewRole).toBe("build");
+      expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe("task-1");
+      expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(
-        args.selection.viewActiveSession,
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.loadedSession).toBe(
+        args.selection.view.selectedSession.loadedSession,
       );
-      expect(state.rightPanelBridge?.rightPanel.session).toEqual({
-        role: "build",
-        status: "running",
-        workingDirectory: "/repo/worktrees/task-1",
-        hasActiveSession: true,
-      });
     } finally {
       await harness.unmount();
     }

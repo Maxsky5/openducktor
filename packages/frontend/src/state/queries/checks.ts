@@ -6,8 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
-import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import { isRepoRuntimeHealthTransient } from "@/lib/repo-runtime-health";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -22,8 +20,7 @@ export type ChecksQueryDependencies = {
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
-const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
-const RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS = 1_000;
+const READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -31,51 +28,8 @@ const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
 };
 
-const buildRuntimeHealthErrorCheck = (
-  runtimeHealthError: string,
-  checkedAt: string,
-): RepoRuntimeHealthCheck => ({
-  status: "error",
-  checkedAt,
-  runtime: {
-    status: "error",
-    stage: "startup_failed",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: checkedAt,
-    elapsedMs: null,
-    attempts: null,
-    detail: runtimeHealthError,
-    failureKind: "error",
-    failureReason: null,
-  },
-  mcp: {
-    supported: true,
-    status: "error",
-    serverName: ODT_MCP_SERVER_NAME,
-    serverStatus: null,
-    toolIds: [],
-    detail: runtimeHealthError,
-    failureKind: "error",
-  },
-});
-
 const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   runtimeKinds.toSorted();
-
-const hasTransientRepoRuntimeHealth = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
-): boolean => {
-  if (!runtimeHealthByRuntime) {
-    return false;
-  }
-
-  return runtimeDefinitions.some((definition) =>
-    isRepoRuntimeHealthTransient(runtimeHealthByRuntime[definition.kind] ?? null),
-  );
-};
 
 export class DiagnosticsQueryTimeoutError extends Error {
   readonly failureKind = "timeout" as const;
@@ -134,6 +88,19 @@ export const checksQueryKeys = {
     ] as const,
 };
 
+export const repoRuntimeHealthStaleTime = (
+  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
+): number => {
+  const runtimeHealthEntries = Object.values(runtimeHealthByRuntime ?? {});
+  if (runtimeHealthEntries.length === 0) {
+    return 0;
+  }
+
+  return runtimeHealthEntries.every((runtimeHealth) => runtimeHealth?.status === "ready")
+    ? READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS
+    : 0;
+};
+
 export const runtimeCheckQueryOptions = (
   force = false,
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
@@ -169,27 +136,17 @@ export const repoRuntimeHealthQueryOptions = (
     ),
     queryFn: async (): Promise<RepoRuntimeHealthMap> => {
       const checks = await Promise.all(
-        runtimeDefinitions.map(async (definition) => {
-          let check: RepoRuntimeHealthCheck;
-
-          try {
-            check = await checkRepoRuntimeHealth(repoPath, definition.kind);
-          } catch (error) {
-            check = buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString());
-          }
-
-          return [definition.kind, check] as const;
-        }),
+        runtimeDefinitions.map(
+          async (definition) =>
+            [definition.kind, await checkRepoRuntimeHealth(repoPath, definition.kind)] as const,
+        ),
       );
 
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
-    staleTime: RUNTIME_HEALTH_STALE_TIME_MS,
-    refetchInterval: (query) => {
-      return hasTransientRepoRuntimeHealth(runtimeDefinitions, query.state.data)
-        ? RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS
-        : false;
-    },
+    staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
 export const loadRuntimeCheckFromQuery = (
@@ -203,16 +160,3 @@ export const loadTaskStoreCheckFromQuery = (
   taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
 ): Promise<TaskStoreCheck> =>
   queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck));
-
-export const loadRepoRuntimeHealthFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  runtimeDefinitions: RuntimeDescriptor[],
-  checkRepoRuntimeHealth: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<RepoRuntimeHealthCheck>,
-): Promise<RepoRuntimeHealthMap> =>
-  queryClient.fetchQuery(
-    repoRuntimeHealthQueryOptions(repoPath, runtimeDefinitions, checkRepoRuntimeHealth),
-  );

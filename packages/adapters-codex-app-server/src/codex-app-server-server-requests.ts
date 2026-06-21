@@ -1,8 +1,4 @@
-import type {
-  AgentEvent,
-  AgentPendingApprovalRequest,
-  AgentPendingQuestionRequest,
-} from "@openducktor/core";
+import type { AgentEvent } from "@openducktor/core";
 import {
   extractTurnId,
   isMutatingCodexRequest,
@@ -11,6 +7,7 @@ import {
   toApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
+import type { CodexPendingInputState } from "./codex-pending-input-state";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
@@ -18,25 +15,9 @@ import type {
   CodexSessionState,
 } from "./types";
 
-export type PendingApprovalEntry = {
-  runtimeId: string;
-  request: AgentPendingApprovalRequest;
-};
-
-export type PendingQuestionEntry = {
-  runtimeId: string;
-  threadId: string;
-  request: AgentPendingQuestionRequest;
-  questionIds: string[];
-  input: Record<string, unknown>;
-};
-
 export type CodexServerRequestHandlerContext = {
   respondServerRequest: CodexServerRequestResponder;
-  pendingApprovalsByRequestId: Map<string, PendingApprovalEntry>;
-  pendingApprovalIdsBySessionId: Map<string, Set<string>>;
-  pendingQuestionsByRequestId: Map<string, PendingQuestionEntry>;
-  pendingQuestionIdsBySessionId: Map<string, Set<string>>;
+  pendingInput: CodexPendingInputState;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -83,16 +64,13 @@ export const handleCodexServerRequest = async (
       requestId: parsed.request.requestId,
       questions: parsed.request.questions,
     };
-    context.pendingQuestionsByRequestId.set(parsed.request.requestId, {
+    context.pendingInput.addQuestion({
       runtimeId: session.runtimeId,
       threadId: session.threadId,
       request: parsed.request,
       questionIds: parsed.questionIds,
       input: questionInput,
     });
-    const requestIds = context.pendingQuestionIdsBySessionId.get(session.threadId) ?? new Set();
-    requestIds.add(parsed.request.requestId);
-    context.pendingQuestionIdsBySessionId.set(session.threadId, requestIds);
     context.emitSessionEvent(session.threadId, {
       ...parsed.request,
       type: "question_required",
@@ -158,13 +136,11 @@ export const handleCodexServerRequest = async (
       throw new Error("Codex approval request cannot be created without a session role.");
     }
     const approval = toApprovalRequest(rawRequest, role);
-    context.pendingApprovalsByRequestId.set(approval.requestId, {
+    context.pendingInput.addApproval({
       runtimeId: session.runtimeId,
+      threadId: session.threadId,
       request: approval,
     });
-    const requestIds = context.pendingApprovalIdsBySessionId.get(session.threadId) ?? new Set();
-    requestIds.add(approval.requestId);
-    context.pendingApprovalIdsBySessionId.set(session.threadId, requestIds);
     context.emitSessionEvent(session.threadId, {
       ...approval,
       type: "approval_required",

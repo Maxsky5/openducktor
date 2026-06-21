@@ -26,7 +26,6 @@ const createSearchAdapter = (
   transport: CodexJsonRpcTransport,
   runtime: RuntimeInstanceSummary = makeRuntimeSummary("runtime-search"),
 ) => {
-  const ensureRepoRuntime = mock(async () => makeRuntimeSummary("runtime-ensure"));
   const requireRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
     ...runtime,
     repoPath,
@@ -35,11 +34,10 @@ const createSearchAdapter = (
   }));
   const adapter = createAdapterWithTransport(transport, {
     repoRuntimeResolver: {
-      ensureRepoRuntime,
       requireRepoRuntime,
     },
   });
-  return { adapter, ensureRepoRuntime, requireRepoRuntime };
+  return { adapter, requireRepoRuntime };
 };
 
 describe("CodexAppServerAdapter file search", () => {
@@ -64,7 +62,7 @@ describe("CodexAppServerAdapter file search", () => {
         },
       ],
     });
-    const { adapter, ensureRepoRuntime, requireRepoRuntime } = createSearchAdapter(transport);
+    const { adapter, requireRepoRuntime } = createSearchAdapter(transport);
 
     await expect(
       adapter.searchFiles({
@@ -79,7 +77,6 @@ describe("CodexAppServerAdapter file search", () => {
     ]);
 
     expect(requireRepoRuntime).toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
     expect(calls).toEqual([
       {
         method: "fuzzyFileSearch",

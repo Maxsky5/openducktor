@@ -9,10 +9,10 @@ import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { basename, toProjectRelativePath } from "./path-utils";
-import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
+import { mapProviderListToCatalog } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { OpencodeRuntimeClientInput } from "./runtime-connection";
-import type { ClientFactory, McpServerStatus } from "./types";
+import type { ClientFactory } from "./types";
 
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
   build: "var(--icon-agent-build-base)",
@@ -23,10 +23,6 @@ const FILE_SEARCH_LIMIT = 20;
 
 type OpencodeFileSearchInput = OpencodeRuntimeClientInput & {
   query: string;
-};
-
-type OpencodeMcpConnectInput = OpencodeRuntimeClientInput & {
-  name: string;
 };
 
 type FindFilesClient = {
@@ -259,68 +255,4 @@ export const searchFiles = async (
   } catch (error) {
     throw toOpenCodeRequestError("search files", error);
   }
-};
-
-export const listAvailableToolIds = async (
-  createClient: ClientFactory,
-  input: OpencodeRuntimeClientInput,
-): Promise<string[]> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const response = await client.tool.ids({
-    directory: input.workingDirectory,
-  });
-  const payload = unwrapData(response, "list tool ids");
-  return toToolIdList(payload);
-};
-
-export const getMcpStatus = async (
-  createClient: ClientFactory,
-  input: OpencodeRuntimeClientInput,
-): Promise<Record<string, McpServerStatus>> => {
-  try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const response = await client.mcp.status({
-      directory: input.workingDirectory,
-    });
-    const payload = unwrapData(response, "get mcp status");
-    const statusPayload = asUnknownRecord(payload);
-    if (!statusPayload) {
-      throw new Error("Invalid MCP status payload: expected an object keyed by server name.");
-    }
-
-    const statusByServer: Record<string, McpServerStatus> = {};
-    for (const [name, rawStatus] of Object.entries(statusPayload)) {
-      const status = readStringProp(rawStatus, ["status"]);
-      if (!status || status.trim().length === 0) {
-        continue;
-      }
-      const error = readStringProp(rawStatus, ["error"]);
-      statusByServer[name] = error && error.trim().length > 0 ? { status, error } : { status };
-    }
-
-    return statusByServer;
-  } catch (error) {
-    throw toOpenCodeRequestError("get mcp status", error);
-  }
-};
-
-export const connectMcpServer = async (
-  createClient: ClientFactory,
-  input: OpencodeMcpConnectInput,
-): Promise<void> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const response = await client.mcp.connect({
-    directory: input.workingDirectory,
-    name: input.name,
-  });
-  unwrapData(response, `connect mcp server ${input.name}`);
 };

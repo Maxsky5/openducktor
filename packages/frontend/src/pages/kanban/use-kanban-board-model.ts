@@ -1,104 +1,41 @@
-import type { KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  KanbanEmptyColumnDisplay,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
+  type ActiveAgentSessionSummary,
   type ActiveTaskSessionContext,
+  isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
-  toKanbanSessionPresentationState,
   toKanbanTaskActivityState,
+  toKanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
-import { compareActiveSessionForPrimary } from "@/components/features/kanban/session-target-resolution";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+  compareActiveSessionForPrimary,
+  type SessionTargetOptions,
+} from "@/components/features/kanban/session-target-resolution";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
-const ACTIVE_SESSION_STATUS = new Set<AgentSessionSummary["status"]>(["starting", "running"]);
-
-const shouldDisplayKanbanTaskSession = (
-  session: AgentSessionSummary,
-): session is WorkflowAgentSessionSummary => {
-  if (!isWorkflowAgentSessionSummary(session)) {
-    return false;
-  }
-
-  if (isAgentSessionWaitingInput(session)) {
-    return true;
-  }
-
-  return ACTIVE_SESSION_STATUS.has(session.status);
-};
-
-const compareTaskSessionOrder = (
-  left: WorkflowAgentSessionSummary,
-  right: WorkflowAgentSessionSummary,
-): number => {
-  const leftPresentationState = toKanbanSessionPresentationState(left);
-  const rightPresentationState = toKanbanSessionPresentationState(right);
-
-  if (leftPresentationState !== rightPresentationState) {
-    return leftPresentationState === "waiting_input" ? -1 : 1;
-  }
-
-  if (left.status !== right.status) {
-    if (left.status === "running") {
-      return -1;
-    }
-
-    if (right.status === "running") {
-      return 1;
-    }
-
-    if (left.status === "starting") {
-      return -1;
-    }
-
-    if (right.status === "starting") {
-      return 1;
-    }
-  }
-
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt > right.startedAt ? -1 : 1;
-  }
-  if (left.externalSessionId === right.externalSessionId) {
-    return 0;
-  }
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
-};
-
 const comparePrimaryTaskSession = (
-  left: WorkflowAgentSessionSummary,
-  right: WorkflowAgentSessionSummary,
+  left: ActiveAgentSessionSummary,
+  right: ActiveAgentSessionSummary,
 ): number => {
-  return compareActiveSessionForPrimary(
-    {
-      externalSessionId: left.externalSessionId,
-      status: left.status,
-      presentationState: toKanbanSessionPresentationState(left),
-      startedAt: left.startedAt,
-    },
-    {
-      externalSessionId: right.externalSessionId,
-      status: right.status,
-      presentationState: toKanbanSessionPresentationState(right),
-      startedAt: right.startedAt,
-    },
-  );
+  return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
 
 export const buildActiveTaskSessionContextByTaskId = (
   sessions: AgentSessionSummary[],
 ): Map<string, ActiveTaskSessionContext> => {
-  const activeTaskSessionContextByTaskId = new Map<string, WorkflowAgentSessionSummary>();
+  const activeTaskSessionContextByTaskId = new Map<string, ActiveAgentSessionSummary>();
 
   for (const session of sessions) {
-    if (!shouldDisplayKanbanTaskSession(session)) {
+    if (!isKanbanActiveTaskSession(session)) {
       continue;
     }
 
@@ -113,7 +50,7 @@ export const buildActiveTaskSessionContextByTaskId = (
       taskId,
       {
         role: session.role,
-        presentationState: toKanbanSessionPresentationState(session),
+        activityState: session.activityState,
       },
     ]),
   );
@@ -172,9 +109,9 @@ export const sortTasksByActivityState = (
 export const buildTaskSessionsByTaskId = (
   sessions: AgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
-  const sessionsByTaskId = new Map<string, WorkflowAgentSessionSummary[]>();
+  const sessionsByTaskId = new Map<string, ActiveAgentSessionSummary[]>();
   for (const session of sessions) {
-    if (!shouldDisplayKanbanTaskSession(session)) {
+    if (!isKanbanActiveTaskSession(session)) {
       continue;
     }
 
@@ -187,20 +124,13 @@ export const buildTaskSessionsByTaskId = (
   }
 
   for (const taskSessions of sessionsByTaskId.values()) {
-    taskSessions.sort(compareTaskSessionOrder);
+    taskSessions.sort(comparePrimaryTaskSession);
   }
 
   return new Map(
     Array.from(sessionsByTaskId.entries()).map(([taskId, taskSessions]) => [
       taskId,
-      taskSessions.map((session) => ({
-        ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
-        externalSessionId: session.externalSessionId,
-        role: session.role,
-        status: session.status,
-        startedAt: session.startedAt,
-        presentationState: toKanbanSessionPresentationState(session),
-      })),
+      taskSessions.map(toKanbanTaskSession),
     ]),
   );
 };
@@ -210,14 +140,11 @@ type UseKanbanBoardModelArgs = {
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   tasks: TaskCard[];
+  historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -232,6 +159,7 @@ export function useKanbanBoardModel({
   isSwitchingWorkspace,
   emptyColumnDisplay,
   tasks,
+  historicalSessionsByTaskId,
   sessions,
   onOpenDetails,
   onDelegate,
@@ -273,6 +201,7 @@ export function useKanbanBoardModel({
     emptyColumnDisplay,
     columns: columnsWithSortedTasks,
     taskSessionsByTaskId,
+    historicalSessionsByTaskId,
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,

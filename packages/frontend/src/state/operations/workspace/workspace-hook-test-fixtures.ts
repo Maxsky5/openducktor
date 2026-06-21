@@ -1,5 +1,4 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { WorkspaceOperationsHostClient } from "./workspace-operations-types";
 
 export const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
@@ -20,12 +19,6 @@ export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
   workspaceReorder: async (workspaceOrder: string[]) =>
     workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
-  workspaceGetRepoConfig: async () => {
-    throw new Error("workspaceGetRepoConfig not configured");
-  },
-  runtimeEnsure: async () => {
-    throw new Error("runtimeEnsure not configured");
-  },
   gitGetCurrentBranch: async () => {
     throw new Error("gitGetCurrentBranch not configured");
   },
@@ -35,21 +28,6 @@ export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   gitSwitchBranch: async () => {
     throw new Error("gitSwitchBranch not configured");
   },
-});
-
-export const createWorkspaceRuntimeSummary = (repoPath: string) => ({
-  kind: "opencode" as const,
-  runtimeId: `runtime:${repoPath}`,
-  repoPath,
-  taskId: null,
-  role: "workspace" as const,
-  workingDirectory: repoPath,
-  runtimeRoute: {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:3030",
-  },
-  startedAt: "2026-02-22T08:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
 export const flush = async (): Promise<void> => {

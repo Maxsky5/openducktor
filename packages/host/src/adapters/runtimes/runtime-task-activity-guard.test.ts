@@ -1,8 +1,4 @@
-import {
-  type AgentSessionRecord,
-  RUNTIME_DESCRIPTORS_BY_KIND,
-  type RuntimeInstanceSummary,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -11,25 +7,13 @@ import { createRuntimeTaskActivityGuard as createEffectRuntimeTaskActivityGuard 
 const createRuntimeTaskActivityGuard = (
   ...args: Parameters<typeof createEffectRuntimeTaskActivityGuard>
 ) => createEffectRuntimeTaskActivityGuard(...args);
-const runtime = (overrides: Partial<RuntimeInstanceSummary> = {}): RuntimeInstanceSummary => ({
-  kind: "opencode",
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-  startedAt: "2026-05-10T10:00:00.000Z",
-  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-  ...overrides,
-});
 const registry = ({
-  runtimes = [runtime()],
   liveSessions = new Set<string>(),
+  probeCalls = [],
   supported = true,
 }: {
-  runtimes?: RuntimeInstanceSummary[];
   liveSessions?: Set<string>;
+  probeCalls?: unknown[];
   supported?: boolean;
 } = {}): RuntimeRegistryPort => ({
   ensureWorkspaceRuntime() {
@@ -46,19 +30,16 @@ const registry = ({
     });
   },
   listRuntimes() {
-    return Effect.succeed(runtimes);
+    return Effect.succeed([]);
   },
-  findRuntimeById(runtimeId) {
-    return Effect.succeed(runtimes.find((entry) => entry.runtimeId === runtimeId) ?? null);
+  findRuntimeById() {
+    return Effect.succeed(null);
   },
-  listRuntimesByRepo(input) {
-    return Effect.succeed(
-      runtimes.filter(
-        (entry) =>
-          entry.repoPath === input.repoPath &&
-          (!input.runtimeKind || entry.kind === input.runtimeKind),
-      ),
-    );
+  findWorkspaceRuntime() {
+    return Effect.succeed(null);
+  },
+  listRuntimesByRepo() {
+    return Effect.succeed([]);
   },
   stopRuntime() {
     return Effect.tryPromise({
@@ -92,6 +73,7 @@ const registry = ({
   probeSessionStatus(input) {
     return Effect.tryPromise({
       try: async () => {
+        probeCalls.push(input);
         return {
           supported,
           hasLiveSession: liveSessions.has(input.externalSessionId),
@@ -160,6 +142,31 @@ describe("createRuntimeTaskActivityGuard", () => {
       ),
     ).resolves.toBeUndefined();
   });
+  test("probes sessions by durable runtime context", async () => {
+    const probeCalls: unknown[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ probeCalls }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.ensureNoActiveTaskResetActivity({
+          repoPath: "/repo",
+          taskId: "task-1",
+          sessions: [session()],
+          operationLabel: "reset task",
+          sessionRoles: ["build"],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    expect(probeCalls).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        externalSessionId: "external-build-session",
+        workingDirectory: "/repo/worktree",
+      },
+    ]);
+  });
   test("blocks delete with QA-specific wording when only QA sessions are active", async () => {
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({ liveSessions: new Set(["external-qa-session"]) }),
@@ -168,38 +175,15 @@ describe("createRuntimeTaskActivityGuard", () => {
       Effect.runPromise(
         guard.ensureNoActiveTaskDeleteRuns({
           repoPath: "/repo",
-          taskIds: ["task-1"],
-          tasks: [
+          taskSessions: [
             {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              status: "ai_review",
-              priority: 2,
-              issueType: "task",
-              aiReviewEnabled: true,
-              availableActions: [],
-              labels: [],
-              subtaskIds: [],
-              documentSummary: {
-                spec: { has: false },
-                plan: { has: false },
-                qaReport: { has: false, verdict: "not_reviewed" },
-              },
-              agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
-              },
-              agentSessions: [
+              taskId: "task-1",
+              sessions: [
                 session({
                   externalSessionId: "external-qa-session",
                   role: "qa",
                 }),
               ],
-              updatedAt: "2026-05-10T10:00:00.000Z",
-              createdAt: "2026-05-10T09:00:00.000Z",
             },
           ],
         }),
@@ -225,29 +209,5 @@ describe("createRuntimeTaskActivityGuard", () => {
     ).rejects.toThrow(
       "Cannot reset implementation while active build session(s) exist for task task-1. Stop the active session(s) first.",
     );
-  });
-  test("fails when duplicate same-kind repo runtimes make the probe route ambiguous", async () => {
-    const guard = createRuntimeTaskActivityGuard({
-      runtimeRegistry: registry({
-        runtimes: [
-          runtime(),
-          runtime({
-            runtimeId: "runtime-2",
-            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4097" },
-          }),
-        ],
-      }),
-    });
-    await expect(
-      Effect.runPromise(
-        guard.ensureNoActiveTaskResetActivity({
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset implementation",
-          sessionRoles: ["build"],
-        }),
-      ),
-    ).rejects.toThrow("Failed checking live runtime state before reset implementation task-1");
   });
 });

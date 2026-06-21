@@ -24,13 +24,6 @@ import type {
   SessionRecord,
 } from "./types";
 
-export const hasSession = (
-  sessions: Map<string, SessionRecord>,
-  externalSessionId: string,
-): boolean => {
-  return sessions.has(externalSessionId);
-};
-
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
   externalSessionId: string,
@@ -46,10 +39,10 @@ const resolveSubagentSessionLink = (
   sessions: Map<string, SessionRecord>,
   childExternalSessionId: string,
 ): SubagentSessionLink | undefined => {
-  const childTransportKeys = new Set<string>();
+  const childRuntimeIds = new Set<string>();
   for (const session of sessions.values()) {
     if (session.externalSessionId === childExternalSessionId) {
-      childTransportKeys.add(session.eventTransportKey);
+      childRuntimeIds.add(session.runtimeId);
     }
   }
   const matches: SubagentSessionLink[] = [];
@@ -60,7 +53,7 @@ const resolveSubagentSessionLink = (
     if (!subagentCorrelationKey) {
       continue;
     }
-    if (childTransportKeys.size > 0 && !childTransportKeys.has(session.eventTransportKey)) {
+    if (childRuntimeIds.size > 0 && !childRuntimeIds.has(session.runtimeId)) {
       continue;
     }
 
@@ -184,14 +177,14 @@ const resolveParentlessChildEvent = async (input: {
 const ensureRuntimeEventTransport = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
+  runtimeId: string;
   runtimeEndpoint: string;
   sessions: Map<string, SessionRecord>;
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): RuntimeEventTransportRecord => {
-  const eventTransportKey = input.runtimeEndpoint;
-  const existingTransport = input.runtimeEventTransports.get(eventTransportKey);
+  const existingTransport = input.runtimeEventTransports.get(input.runtimeId);
   if (existingTransport) {
     return existingTransport;
   }
@@ -202,7 +195,7 @@ const ensureRuntimeEventTransport = (input: {
   assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
   const streamRecord: RuntimeEventTransportRecord = {
-    key: eventTransportKey,
+    runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     streamDone: Promise.resolve(),
@@ -271,16 +264,17 @@ const ensureRuntimeEventTransport = (input: {
       }
     })
     .finally(() => {
-      input.runtimeEventTransports.delete(eventTransportKey);
+      input.runtimeEventTransports.delete(input.runtimeId);
     });
-  input.runtimeEventTransports.set(eventTransportKey, streamRecord);
+  input.runtimeEventTransports.set(input.runtimeId, streamRecord);
   return streamRecord;
 };
 
-export const attachSessionToRuntimeEvents = (input: {
+export const subscribeSessionToRuntimeEvents = (input: {
   sessions: Map<string, SessionRecord>;
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
+  runtimeId: string;
   runtimeEndpoint: string;
   externalSessionId: string;
   sessionInput: SessionInput;
@@ -291,6 +285,7 @@ export const attachSessionToRuntimeEvents = (input: {
   const eventTransport = ensureRuntimeEventTransport({
     runtimeEventTransports: input.runtimeEventTransports,
     createClient: input.createClient,
+    runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     sessions: input.sessions,
     now: input.now,
@@ -303,24 +298,38 @@ export const attachSessionToRuntimeEvents = (input: {
   });
 };
 
-export const registerSession = (input: {
-  sessions: Map<string, SessionRecord>;
-  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
-  createClient: ClientFactory;
-  runtimeEndpoint: string;
-  externalSessionId: string;
-  sessionInput: SessionInput;
-  client: OpencodeClient;
-  startedAt: string;
-  startedMessage: string;
-  emitStartedEvent?: boolean;
-  subscribeToEvents?: boolean;
-  now: () => string;
-  emit: (externalSessionId: string, event: AgentEvent) => void;
-  logEvent?: OpencodeEventLogger;
-}): AgentSessionSummary => {
+type RegisterSessionStartEvent =
+  | {
+      emitStartedEvent?: true;
+      startedMessage: string;
+    }
+  | {
+      emitStartedEvent: false;
+      startedMessage?: never;
+    };
+
+export const registerSession = (
+  input: {
+    sessions: Map<string, SessionRecord>;
+    runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+    createClient: ClientFactory;
+    runtimeId: string;
+    runtimeEndpoint: string;
+    externalSessionId: string;
+    sessionInput: SessionInput;
+    client: OpencodeClient;
+    startedAt: string;
+    subscribeToEvents?: boolean;
+    now: () => string;
+    emit: (externalSessionId: string, event: AgentEvent) => void;
+    logEvent?: OpencodeEventLogger;
+  } & RegisterSessionStartEvent,
+): AgentSessionSummary => {
+  const startsActive = input.emitStartedEvent !== false;
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
+    runtimeKind: input.sessionInput.runtimeKind,
+    workingDirectory: input.sessionInput.workingDirectory,
     ...(input.sessionInput.role
       ? {
           title: formatWorkflowAgentSessionTitle(
@@ -331,18 +340,17 @@ export const registerSession = (input: {
       : {}),
     role: input.sessionInput.role,
     startedAt: input.startedAt,
-    status: "running",
+    status: startsActive ? "running" : "idle",
   };
-
-  const eventTransportKey = input.runtimeEndpoint;
 
   input.sessions.set(input.externalSessionId, {
     summary,
     input: input.sessionInput,
     client: input.client,
     externalSessionId: input.externalSessionId,
-    eventTransportKey,
-    hasIdleSinceActivity: false,
+    runtimeId: input.runtimeId,
+    streamTurnStatus: startsActive ? "active" : "idle",
+    isSendingUserMessage: false,
     activeAssistantMessageId: null,
     completedAssistantMessageIds: new Set<string>(),
     emittedAssistantMessageIds: new Set<string>(),
@@ -366,10 +374,11 @@ export const registerSession = (input: {
 
   if (input.subscribeToEvents !== false) {
     try {
-      attachSessionToRuntimeEvents({
+      subscribeSessionToRuntimeEvents({
         sessions: input.sessions,
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
+        runtimeId: input.runtimeId,
         runtimeEndpoint: input.runtimeEndpoint,
         externalSessionId: input.externalSessionId,
         sessionInput: input.sessionInput,
@@ -395,25 +404,13 @@ export const registerSession = (input: {
   return summary;
 };
 
-export const clearWorkflowToolCacheForDirectory = (
-  sessions: Map<string, SessionRecord>,
-  workingDirectory: string,
-): void => {
-  for (const session of sessions.values()) {
-    if (session.input.workingDirectory === workingDirectory) {
-      delete session.workflowToolSelectionCache;
-      delete session.workflowToolSelectionCachedAt;
-    }
-  }
-};
-
-const releaseSessionRuntimeAttachment = async (
+export const releaseSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
   sessions.delete(session.summary.externalSessionId);
-  const eventTransport = runtimeEventTransports.get(session.eventTransportKey);
+  const eventTransport = runtimeEventTransports.get(session.runtimeId);
   if (!eventTransport) {
     return;
   }
@@ -425,27 +422,15 @@ const releaseSessionRuntimeAttachment = async (
   await eventTransport.streamDone.catch(() => undefined);
 };
 
-export const detachSessionRuntime = async (
-  session: SessionRecord,
-  sessions: Map<string, SessionRecord>,
-  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
-): Promise<void> => {
-  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
-};
-
 export const stopSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
-  try {
-    await session.client.session.abort({
-      directory: session.input.workingDirectory,
-      sessionID: session.externalSessionId,
-    });
-  } catch (abortError) {
-    void abortError;
-  }
+  await session.client.session.abort({
+    directory: session.input.workingDirectory,
+    sessionID: session.externalSessionId,
+  });
 
-  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
+  await releaseSessionRuntime(session, sessions, runtimeEventTransports);
 };

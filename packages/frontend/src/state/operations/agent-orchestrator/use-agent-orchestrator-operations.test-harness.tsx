@@ -1,7 +1,23 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type TaskCard,
+} from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
+import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
+import {
+  ChecksStateContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
@@ -77,29 +93,91 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
       };
 
 type ActiveWorkspace = ReturnType<typeof createDefaultActiveWorkspace>;
+type OrchestratorHookState = ReturnType<typeof useAgentOrchestratorOperations>;
+
+const createChecksStateContextValue = () => ({
+  runtimeCheck: null,
+  taskStoreCheck: null,
+  runtimeCheckFailureKind: null,
+  taskStoreCheckFailureKind: null,
+  isLoadingChecks: false,
+  refreshChecks: async () => undefined,
+});
+
+const createRepoRuntimeHealthContextValue = (runtimeHealthByRuntime: RepoRuntimeHealthMap) => ({
+  runtimeHealthByRuntime,
+  isLoadingRepoRuntimeHealth: false,
+  refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
+});
+
+const createRuntimeDefinitionsContextValue = () => {
+  const runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+  return {
+    runtimeDefinitions,
+    availableRuntimeDefinitions: getAvailableRuntimeDefinitions({
+      runtimeDefinitions,
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    }),
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => runtimeDefinitions,
+    loadRepoRuntimeCatalog: async () => {
+      throw new Error("Test runtime catalog loader was not configured.");
+    },
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+};
+
+export const listHarnessSessions = (state: OrchestratorHookState): AgentSessionState[] =>
+  state.sessionStore.getActivitySnapshot().sessions.flatMap((summary) => {
+    const session = state.sessionStore.getSessionSnapshot(summary);
+    return session ? [session] : [];
+  });
 
 export const createHookHarness = (args: {
   activeRepo: string | null;
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
+  isLoadingTasks?: boolean;
+  runtimeHealthByRuntime?: RepoRuntimeHealthMap;
   refreshTaskData: (repoPath: string) => Promise<void>;
-  agentEngine?: OpencodeSdkAdapter;
+  agentEngine?: AgentEnginePort;
   dependencies?: OrchestratorDependencies;
 }) => {
-  let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
+  let latest: OrchestratorHookState | null = null;
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
+    isLoadingTasks: args.isLoadingTasks ?? false,
+    runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
+      opencode: createRepoRuntimeHealthFixture(),
+    },
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
-    isSessionRuntimeReady: () => true,
   };
 
   const Harness = () => {
     latest = useAgentOrchestratorOperations(currentArgs);
     return null;
   };
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(
+      RuntimeDefinitionsContext.Provider,
+      { value: createRuntimeDefinitionsContextValue() },
+      createElement(
+        RepoRuntimeHealthContext.Provider,
+        { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },
+        createElement(
+          ChecksStateContext.Provider,
+          { value: createChecksStateContextValue() },
+          children,
+        ),
+      ),
+    );
 
-  const sharedHarness = createSharedHookHarness(Harness, undefined);
+  const sharedHarness = createSharedHookHarness(Harness, undefined, { wrapper });
 
   const mount = async () => {
     await sharedHarness.mount();
@@ -118,8 +196,10 @@ export const createHookHarness = (args: {
       activeRepo: string | null;
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
+      isLoadingTasks: boolean;
+      runtimeHealthByRuntime: RepoRuntimeHealthMap;
       refreshTaskData: (repoPath: string) => Promise<void>;
-      agentEngine: OpencodeSdkAdapter;
+      agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;
     }>,
   ) => {
@@ -144,9 +224,7 @@ export const createHookHarness = (args: {
     });
   };
 
-  const waitFor = async (
-    predicate: (state: ReturnType<typeof useAgentOrchestratorOperations>) => boolean,
-  ) => {
+  const waitFor = async (predicate: (state: OrchestratorHookState) => boolean) => {
     await sharedHarness.waitFor(() => latest !== null && predicate(latest));
     return getLatest();
   };

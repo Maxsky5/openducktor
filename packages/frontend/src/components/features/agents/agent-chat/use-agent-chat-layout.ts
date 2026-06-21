@@ -105,7 +105,7 @@ export const resizeComposerTextareaElement = (
 
 type UseAgentChatLayoutInput = {
   input?: string;
-  activeExternalSessionId: string | null;
+  displayedSessionKey: string | null;
   syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
 };
 
@@ -120,7 +120,7 @@ type UseAgentChatLayoutResult = {
 
 export const useAgentChatLayout = ({
   input: _input,
-  activeExternalSessionId,
+  displayedSessionKey,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -225,8 +225,8 @@ export const useAgentChatLayout = ({
     didInitializeComposerForSessionRef.current = false;
     composerEditorHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
     composerTextareaHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
-    const hasActiveSession = activeExternalSessionId !== null;
-    if (hasActiveSession && resizeFrameIdRef.current !== null) {
+    const hasDisplayedSession = displayedSessionKey !== null;
+    if (hasDisplayedSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
       if (typeof cancelAnimationFrameFn === "function") {
         cancelAnimationFrameFn(resizeFrameIdRef.current);
@@ -236,7 +236,7 @@ export const useAgentChatLayout = ({
 
     flushComposerEditorResize();
     resizeComposerEditor();
-  }, [activeExternalSessionId, flushComposerEditorResize, resizeComposerEditor]);
+  }, [displayedSessionKey, flushComposerEditorResize, resizeComposerEditor]);
 
   useLayoutEffect(() => {
     if (didInitializeComposerForSessionRef.current) {

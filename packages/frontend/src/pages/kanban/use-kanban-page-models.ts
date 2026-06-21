@@ -1,10 +1,12 @@
 import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
+import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import {
   useAgentOperations,
@@ -12,6 +14,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state";
+import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -46,18 +49,11 @@ export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeWorkspace, branches, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { activeWorkspace, branches, isSwitchingWorkspace } = useWorkspaceState();
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspace });
-  const {
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
-    removeAgentSessions,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
-  } = useAgentOperations();
+  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
+  const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
     refreshTasks,
@@ -105,6 +101,39 @@ export function useKanbanPageModels({
 
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
+  const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
+  const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
+  const historicalSessionQueries = useQueries({
+    queries:
+      shouldLoadHistoricalSessions && workspaceRepoPath
+        ? kanbanTaskIds.map((taskId) => agentSessionListQueryOptions(workspaceRepoPath, taskId))
+        : [],
+  });
+  const historicalSessionsByTaskId = useMemo(
+    () =>
+      new Map(
+        kanbanTaskIds.map((taskId, index) => [taskId, historicalSessionQueries[index]?.data ?? []]),
+      ),
+    [historicalSessionQueries, kanbanTaskIds],
+  );
+  const historicalSessionsError = historicalSessionQueries.find((query) => query.isError)?.error;
+  const reportedHistoricalSessionsErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!historicalSessionsError) {
+      reportedHistoricalSessionsErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(historicalSessionsError);
+    if (reportedHistoricalSessionsErrorRef.current === description) {
+      return;
+    }
+
+    reportedHistoricalSessionsErrorRef.current = description;
+    toast.error("Failed to load task session history", {
+      description,
+    });
+  }, [historicalSessionsError]);
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
@@ -113,24 +142,24 @@ export function useKanbanPageModels({
     isKanbanPending: false,
   });
   const navigate = useNavigate();
+  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+    workspaceId: activeWorkspaceId,
+    startAgentSession,
+    sendAgentMessage,
+  });
 
   const sessionStartFlow = useKanbanSessionStartFlow({
-    activeWorkspace,
+    activeWorkspaceId,
     branches,
     repoSettings,
     openAgentStudioTabOnBackgroundSessionStart,
     tasks: kanbanTasks,
     sessions,
     navigate,
-    loadRepoSettings,
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
+    workspaceRepoPath,
     humanRequestChangesTask,
     setTaskTargetBranch,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
+    runSessionStartWorkflow,
   });
   const {
     humanReviewFeedbackModal,
@@ -164,23 +193,11 @@ export function useKanbanPageModels({
   const onResetTask = useCallback(
     async (taskId: string): Promise<void> => {
       await resetTask(taskId);
-      await removeAgentSessions({
-        taskId,
-        roles: ["spec", "planner", "build", "qa"],
-      });
-      try {
-        await loadAgentSessions(taskId);
-      } catch (error: unknown) {
-        toast.error("Failed to refresh sessions", {
-          description: errorMessage(error),
-        });
-        throw error;
-      }
     },
-    [loadAgentSessions, removeAgentSessions, resetTask],
+    [resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeWorkspace,
+    workspaceId: activeWorkspaceId,
     startConflictResolutionSession: async (request) =>
       startSessionIntent({
         taskId: request.taskId,
@@ -188,7 +205,7 @@ export function useKanbanPageModels({
         launchActionId: "build_rebase_conflict_resolution",
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        initialSourceExternalSessionId: request.initialSourceExternalSessionId,
+        initialSourceSession: request.initialSourceSession,
         existingSessionOptions: request.existingSessionOptions,
         postStartAction: "send_message",
         message: request.message,
@@ -204,11 +221,11 @@ export function useKanbanPageModels({
         taskId,
         task,
         builderSessions,
-        currentViewSessionId: null,
-        onOpenSession: (externalSessionId) => {
+        currentViewSession: null,
+        onOpenSession: (session) => {
           const search = new URLSearchParams({
             task: taskId,
-            session: externalSessionId,
+            session: agentSessionIdentityKey(session),
             agent: "build",
           });
           navigate(`/agents?${search.toString()}`);
@@ -220,8 +237,6 @@ export function useKanbanPageModels({
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks: kanbanTasks,
     sessions,
-    loadAgentSessions,
-    removeAgentSessions,
     resetTaskImplementation,
     closeTaskDetails: onCloseDetails,
   });
@@ -252,6 +267,7 @@ export function useKanbanPageModels({
     isSwitchingWorkspace,
     emptyColumnDisplay,
     tasks: kanbanTasks,
+    historicalSessionsByTaskId,
     sessions,
     onOpenDetails,
     onDelegate,
@@ -278,6 +294,7 @@ export function useKanbanPageModels({
       activeWorkspace,
       allTasks: kanbanTasks,
       taskSessionsByTaskId: content.taskSessionsByTaskId,
+      historicalSessionsByTaskId: content.historicalSessionsByTaskId,
       activeTaskSessionContextByTaskId: content.activeTaskSessionContextByTaskId,
       onOpenSession,
       onPlan,

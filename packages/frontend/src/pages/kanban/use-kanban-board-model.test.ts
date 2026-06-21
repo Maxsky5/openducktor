@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildActiveTaskSessionContextByTaskId,
@@ -37,29 +39,24 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  repoPath: overrides.repoPath ?? "/repo",
-  role: "build",
-  status: "running",
-  startedAt: "2026-03-17T10:00:00.000Z",
-  runtimeId: null,
-  workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel: null,
-  isLoadingModelCatalog: false,
-  ...overrides,
-});
+const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
+  const session: AgentSessionState = {
+    runtimeKind: "opencode",
+    externalSessionId: "external-1",
+    taskId: "task-1",
+    role: "build",
+    status: "running",
+    startedAt: "2026-03-17T10:00:00.000Z",
+    workingDirectory: "/repo",
+    messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...overrides,
+    historyLoadState: overrides.historyLoadState ?? "not_requested",
+  };
+  return toAgentSessionSummary(session);
+};
 
 describe("use-kanban-board-model helpers", () => {
   test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
@@ -116,20 +113,19 @@ describe("use-kanban-board-model helpers", () => {
     expect(taskSessionsByTaskId.get("task-1")).toEqual([
       expect.objectContaining({
         externalSessionId: "session-running-newer",
-        presentationState: "waiting_input",
+        activityState: "waiting_input",
       }),
       expect.objectContaining({
         externalSessionId: "session-idle",
-        status: "idle",
-        presentationState: "waiting_input",
+        activityState: "waiting_input",
       }),
       expect.objectContaining({
         externalSessionId: "session-running-older",
-        presentationState: "active",
+        activityState: "running",
       }),
       expect.objectContaining({
         externalSessionId: "session-starting",
-        presentationState: "active",
+        activityState: "starting",
       }),
     ]);
   });
@@ -331,7 +327,7 @@ describe("use-kanban-board-model helpers", () => {
 
     expect(activeTaskSessionContextByTaskId.get("task-1")).toEqual({
       role: "qa",
-      presentationState: "waiting_input",
+      activityState: "waiting_input",
     });
   });
 });

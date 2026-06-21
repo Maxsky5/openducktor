@@ -154,7 +154,7 @@ describe("useAgentStudioDiffData", () => {
   test("visibility refresh invalidates the inactive scope so switching scopes triggers a fresh full reload", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
@@ -280,7 +280,7 @@ describe("useAgentStudioDiffData", () => {
   test("visibility refresh requests a summary for the active scope", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {
@@ -402,7 +402,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      enablePolling: true,
+      enableScheduledRefresh: true,
     });
 
     try {

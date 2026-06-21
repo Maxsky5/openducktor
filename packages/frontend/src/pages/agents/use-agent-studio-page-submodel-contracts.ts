@@ -4,7 +4,6 @@ import type { WorkflowModelContext } from "./use-agent-studio-page-model-builder
 export type WorkflowHeaderContext = Pick<
   WorkflowModelContext,
   | "workflowStateByRole"
-  | "selectedInteractionRole"
   | "workflowSessionByRole"
   | "sessionSelectorAutofocusByValue"
   | "sessionSelectorValue"
@@ -14,7 +13,4 @@ export type WorkflowHeaderContext = Pick<
   | "primaryQuickAction"
 >;
 
-export type AgentStudioWorkflowStepSelect = (
-  role: AgentRole,
-  externalSessionId: string | null,
-) => void;
+export type AgentStudioWorkflowStepSelect = (role: AgentRole, sessionValue: string | null) => void;

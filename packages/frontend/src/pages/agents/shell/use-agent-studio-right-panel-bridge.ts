@@ -1,19 +1,11 @@
 import { useMemo } from "react";
-import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
 import type {
   AgentStudioGitConflictQuickActionContext,
   UseAgentsPageRightPanelModelArgs,
 } from "../use-agents-page-right-panel-model";
 
-type AgentStudioRightPanelBridgeSelection = Pick<
-  AgentStudioOrchestrationSelectionContext,
-  | "viewActiveSession"
-  | "viewRole"
-  | "viewTaskId"
-  | "viewSelectedTask"
-  | "isViewSessionHistoryHydrating"
->;
+type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelectionContext, "view">;
 
 type AgentStudioRightPanelPanelState = Pick<
   UseAgentsPageRightPanelModelArgs,
@@ -28,7 +20,6 @@ type UseAgentStudioRightPanelBridgeArgs = {
   panel: AgentStudioRightPanelPanelState;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoverySignal: number;
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -42,16 +33,11 @@ export type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
-  viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
-  viewTaskId: UseAgentsPageRightPanelModelArgs["viewTaskId"];
-  session: UseAgentsPageRightPanelModelArgs["session"];
-  viewSelectedTask: UseAgentsPageRightPanelModelArgs["viewSelectedTask"];
+  selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
   panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
-  isViewSessionHistoryHydrating: UseAgentsPageRightPanelModelArgs["isViewSessionHistoryHydrating"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoverySignal: UseAgentsPageRightPanelModelArgs["worktreeRecoverySignal"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -63,10 +49,12 @@ export type AgentStudioRightPanelRuntimeModel = {
 
 export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
-  "panelKind" | "isPanelOpen" | "viewRole"
+  "panelKind" | "isPanelOpen"
 > & {
-  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  isSessionHistoryHydrating: AgentStudioRightPanelRuntimeModel["isViewSessionHistoryHydrating"];
+  selectedView: {
+    role: AgentStudioOrchestrationSelectionContext["view"]["role"];
+    loadedSession: AgentStudioOrchestrationSelectionContext["view"]["selectedSession"]["loadedSession"];
+  };
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -85,27 +73,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
 > & {
   panelKind: NonNullable<AgentStudioRightPanelPanelState["panelKind"]>;
   isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
-  session: BuildToolsSessionDescriptor;
 };
-
-function useRightPanelSessionDescriptor(
-  activeSession: AgentStudioRightPanelBridgeSelection["viewActiveSession"],
-): BuildToolsSessionDescriptor {
-  const role = activeSession?.role ?? null;
-  const status = activeSession?.status ?? null;
-  const workingDirectory = activeSession?.workingDirectory ?? null;
-  const hasActiveSession = activeSession != null;
-
-  return useMemo(
-    () => ({
-      role,
-      status,
-      workingDirectory,
-      hasActiveSession,
-    }),
-    [hasActiveSession, role, status, workingDirectory],
-  );
-}
 
 function buildAgentStudioRightPanelBridgeModel({
   activeWorkspace,
@@ -114,10 +82,8 @@ function buildAgentStudioRightPanelBridgeModel({
   selection,
   panelKind,
   isPanelOpen,
-  session,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -128,24 +94,20 @@ function buildAgentStudioRightPanelBridgeModel({
     buildWorktreeRefresh: {
       panelKind,
       isPanelOpen,
-      viewRole: selection.viewRole,
-      activeSession: selection.viewActiveSession,
-      isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+      selectedView: {
+        role: selection.view.role,
+        loadedSession: selection.view.selectedSession.loadedSession,
+      },
     },
     rightPanel: {
       activeWorkspace,
       activeBranch,
       branches,
-      viewRole: selection.viewRole,
-      viewTaskId: selection.viewTaskId,
-      session,
-      viewSelectedTask: selection.viewSelectedTask,
+      selectedView: selection.view,
       panelKind,
       isPanelOpen,
-      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
       documentsModel,
       repoSettings,
-      worktreeRecoverySignal,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -163,7 +125,6 @@ export function useAgentStudioRightPanelBridge({
   panel,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -173,7 +134,6 @@ export function useAgentStudioRightPanelBridge({
   const panelKind = panel.panelKind;
   const isPanelOpen = panel.isPanelOpen;
   const isRightPanelVisible = Boolean(panelKind && isPanelOpen);
-  const session = useRightPanelSessionDescriptor(selection.viewActiveSession);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
     if (!isRightPanelVisible || !panelKind) {
@@ -187,10 +147,8 @@ export function useAgentStudioRightPanelBridge({
       selection,
       panelKind,
       isPanelOpen,
-      session,
       documentsModel,
       repoSettings,
-      worktreeRecoverySignal,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -211,9 +169,7 @@ export function useAgentStudioRightPanelBridge({
     panelKind,
     repoSettings,
     selection,
-    session,
     setTaskTargetBranch,
-    worktreeRecoverySignal,
   ]);
 
   return {

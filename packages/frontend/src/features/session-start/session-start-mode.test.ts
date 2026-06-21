@@ -18,6 +18,11 @@ describe("resolveLaunchStartMode", () => {
         existingSessionOptions: [
           {
             value: "session-1",
+            sourceSession: {
+              externalSessionId: "session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder #1",
             description: "Existing builder session",
           },

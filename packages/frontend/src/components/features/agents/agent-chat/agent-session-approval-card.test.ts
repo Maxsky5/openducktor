@@ -72,6 +72,25 @@ describe("resolveApprovalReplyOutcomes", () => {
     );
   });
 
+  test("labels subagent approval requests", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          source: {
+            kind: "subagent",
+            parentExternalSessionId: "parent-session",
+            childExternalSessionId: "child-session",
+          },
+        },
+        runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+        onReply: async () => {},
+      }),
+    );
+
+    expect(html).toContain("Subagent request");
+  });
+
   test("keeps reply controls disabled when runtime capabilities are unavailable", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
@@ -84,6 +103,6 @@ describe("resolveApprovalReplyOutcomes", () => {
     expect(html).not.toContain("Approve once");
     expect(html).not.toContain("Reject");
     expect(html).toContain("Runtime approval capabilities are unavailable for this request.");
-    expect(html).toContain("Refresh runtime checks or reattach the session, then try again.");
+    expect(html).toContain("Refresh runtime checks or open the session again, then try again.");
   });
 });

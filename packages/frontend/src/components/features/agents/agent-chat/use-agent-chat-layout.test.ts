@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { withAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
   COMPOSER_EDITOR_MIN_HEIGHT_PX,
@@ -323,16 +324,10 @@ describe("use-agent-chat-layout helpers", () => {
 
   test("returns stable refs for the layout hook", async () => {
     const harness = createSharedHookHarness(
-      ({
-        activeExternalSessionId,
-        input,
-      }: {
-        activeExternalSessionId: string | null;
-        input: string;
-      }) => {
-        return useAgentChatLayout({ activeExternalSessionId, input });
+      ({ displayedSessionKey, input }: { displayedSessionKey: string | null; input: string }) => {
+        return useAgentChatLayout({ displayedSessionKey, input });
       },
-      { activeExternalSessionId: "session-1", input: "" },
+      { displayedSessionKey: "session-1", input: "" },
     );
 
     await harness.mount();
@@ -344,7 +339,7 @@ describe("use-agent-chat-layout helpers", () => {
     expect(initialState.composerTextareaRef.current).toBeNull();
     expect(typeof initialState.resizeComposerTextarea).toBe("function");
 
-    await harness.update({ activeExternalSessionId: "session-2", input: "draft" });
+    await harness.update({ displayedSessionKey: "session-2", input: "draft" });
 
     const updatedState = harness.getLatest() as LayoutHookState;
     expect(updatedState.messagesContainerRef).toBe(initialState.messagesContainerRef);
@@ -353,22 +348,12 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizes only when controlled input value changes", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-    const queuedFrameCallbacks: FrameRequestCallback[] = [];
-
-    try {
-      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-        queuedFrameCallbacks.push(callback);
-        return queuedFrameCallbacks.length;
-      }) as typeof requestAnimationFrame;
-      globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
-
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const harness = createSharedHookHarness(
-        ({ activeExternalSessionId }: { activeExternalSessionId: string | null }) => {
-          return useAgentChatLayout({ activeExternalSessionId });
+        ({ displayedSessionKey }: { displayedSessionKey: string | null }) => {
+          return useAgentChatLayout({ displayedSessionKey });
         },
-        { activeExternalSessionId: "session-1" },
+        { displayedSessionKey: "session-1" },
       );
 
       await harness.mount();
@@ -386,31 +371,18 @@ describe("use-agent-chat-layout helpers", () => {
       } as unknown as HTMLTextAreaElement;
       state.composerTextareaRef.current = textarea;
 
-      const pendingInitFrames = queuedFrameCallbacks.splice(0);
-      for (const callback of pendingInitFrames) {
-        callback(0);
-      }
+      await animationFrameDriver.flushFrames();
 
-      queuedFrameCallbacks.length = 0;
       textarea.value = "line one\nline two";
       state.resizeComposerTextarea();
 
-      expect(queuedFrameCallbacks).toHaveLength(1);
-      const firstFrame = queuedFrameCallbacks.shift();
-      if (!firstFrame) {
-        throw new Error("Expected queued frame callback");
-      }
-      firstFrame(0);
+      expect(animationFrameDriver.pendingFrameCount()).toBe(1);
+      await animationFrameDriver.flushFrame();
       expect(styleState.height).toBe("120px");
 
-      queuedFrameCallbacks.length = 0;
       state.resizeComposerTextarea();
-      expect(queuedFrameCallbacks).toHaveLength(1);
-      const repeatedFrame = queuedFrameCallbacks.shift();
-      if (!repeatedFrame) {
-        throw new Error("Expected queued frame callback");
-      }
-      repeatedFrame(8);
+      expect(animationFrameDriver.pendingFrameCount()).toBe(1);
+      await animationFrameDriver.flushFrame();
       expect(styleState.height).toBe("120px");
 
       Object.assign(textarea, {
@@ -418,33 +390,17 @@ describe("use-agent-chat-layout helpers", () => {
         scrollHeight: 20,
       });
       state.resizeComposerTextarea();
-      expect(queuedFrameCallbacks).toHaveLength(1);
+      expect(animationFrameDriver.pendingFrameCount()).toBe(1);
 
-      const secondFrame = queuedFrameCallbacks.shift();
-      if (!secondFrame) {
-        throw new Error("Expected queued frame callback");
-      }
-      secondFrame(16);
+      await animationFrameDriver.flushFrame();
       expect(styleState.height).toBe("44px");
 
       await harness.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
   });
 
   test("requests a bottom resync only when composer height changes while the transcript is near bottom", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-
-    try {
-      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
-      }) as typeof requestAnimationFrame;
-      globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
-
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       let syncBottomAfterComposerLayoutCallCount = 0;
       const syncBottomAfterComposerLayoutRef = {
         current: () => {
@@ -452,13 +408,13 @@ describe("use-agent-chat-layout helpers", () => {
         },
       } as { current: (() => void) | null };
       const harness = createSharedHookHarness(
-        ({ activeExternalSessionId }: { activeExternalSessionId: string | null }) => {
+        ({ displayedSessionKey }: { displayedSessionKey: string | null }) => {
           return useAgentChatLayout({
-            activeExternalSessionId,
+            displayedSessionKey,
             syncBottomAfterComposerLayoutRef,
           });
         },
-        { activeExternalSessionId: "session-1" },
+        { displayedSessionKey: "session-1" },
       );
 
       await harness.mount();
@@ -483,6 +439,7 @@ describe("use-agent-chat-layout helpers", () => {
       state.composerTextareaRef.current = textarea;
 
       state.resizeComposerTextarea();
+      await animationFrameDriver.flushFrame();
 
       expect(styleState.height).toBe("120px");
       expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
@@ -498,39 +455,22 @@ describe("use-agent-chat-layout helpers", () => {
       });
 
       state.resizeComposerTextarea();
+      await animationFrameDriver.flushFrame();
 
       expect(styleState.height).toBe("120px");
       expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
       await harness.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
   });
 
   test("initializes textarea height when ref becomes available after first mount", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-
-    try {
-      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
-      }) as typeof requestAnimationFrame;
-      globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
-
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const harness = createSharedHookHarness(
-        ({
-          activeExternalSessionId,
-          input,
-        }: {
-          activeExternalSessionId: string | null;
-          input: string;
-        }) => {
-          return useAgentChatLayout({ activeExternalSessionId, input });
+        ({ displayedSessionKey, input }: { displayedSessionKey: string | null; input: string }) => {
+          return useAgentChatLayout({ displayedSessionKey, input });
         },
-        { activeExternalSessionId: "session-1", input: "" },
+        { displayedSessionKey: "session-1", input: "" },
       );
 
       await harness.mount();
@@ -549,13 +489,11 @@ describe("use-agent-chat-layout helpers", () => {
 
       state.composerTextareaRef.current = textarea;
       state.resizeComposerTextarea();
+      await animationFrameDriver.flushFrame();
 
       expect(styleState.height).toBe("44px");
 
       await harness.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
   });
 });

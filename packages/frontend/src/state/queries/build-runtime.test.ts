@@ -15,11 +15,21 @@ describe("build runtime queries", () => {
   });
 
   test("uses a repo and task scoped query key for task worktrees", () => {
-    expect(taskWorktreeQueryKeys.taskWorktree("/repo", "task-24")).toEqual([
+    expect(taskWorktreeQueryKeys.taskWorktree({ repoPath: "/repo", taskId: "task-24" })).toEqual([
       "task-worktree",
       "/repo",
       "task-24",
     ]);
+  });
+
+  test("can key task worktrees by the task version that owns them", () => {
+    expect(
+      taskWorktreeQueryKeys.taskWorktree({
+        repoPath: "/repo",
+        taskId: "task-24",
+        taskVersion: "2026-02-22T12:00:00.000Z",
+      }),
+    ).toEqual(["task-worktree", "/repo", "task-24", "2026-02-22T12:00:00.000Z"]);
   });
 
   test("taskWorktreeQueryOptions loads the canonical working directory", async () => {
@@ -30,8 +40,12 @@ describe("build runtime queries", () => {
     );
 
     const result = await queryClient.fetchQuery(
-      taskWorktreeQueryOptions("/repo", "task-24", {
-        taskWorktreeGet,
+      taskWorktreeQueryOptions({
+        repoPath: "/repo",
+        taskId: "task-24",
+        hostClient: {
+          taskWorktreeGet,
+        },
       }),
     );
 
@@ -39,6 +53,26 @@ describe("build runtime queries", () => {
       workingDirectory: "/repo/.worktrees/task-24",
     });
     expect(taskWorktreeGet).toHaveBeenCalledWith("/repo", "task-24");
+  });
+
+  test("taskWorktreeQueryOptions includes the task version in its query key", () => {
+    const taskWorktreeGet = mock(async (): Promise<TaskWorktreeSummary | null> => null);
+
+    const options = taskWorktreeQueryOptions({
+      repoPath: "/repo",
+      taskId: "task-24",
+      taskVersion: "2026-02-22T12:00:00.000Z",
+      hostClient: {
+        taskWorktreeGet,
+      },
+    });
+
+    expect([...options.queryKey]).toEqual([
+      "task-worktree",
+      "/repo",
+      "task-24",
+      "2026-02-22T12:00:00.000Z",
+    ]);
   });
 
   test("taskWorktreeQueryOptions times out unresolved worktree reads", async () => {
@@ -66,8 +100,12 @@ describe("build runtime queries", () => {
     try {
       await expect(
         queryClient.fetchQuery(
-          taskWorktreeQueryOptions("/repo", "task-24", {
-            taskWorktreeGet,
+          taskWorktreeQueryOptions({
+            repoPath: "/repo",
+            taskId: "task-24",
+            hostClient: {
+              taskWorktreeGet,
+            },
           }),
         ),
       ).rejects.toThrow(

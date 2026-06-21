@@ -2,7 +2,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback, useMemo, useReducer } from "react";
 import { isSameSelection } from "@/features/session-start";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { resolveDraftModelSelection } from "./model-selection-preferences";
+import { resolvePreferredModelSelection } from "./model-selection-preferences";
 
 const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
   spec: null,
@@ -43,10 +43,9 @@ type DraftModelSelectionAction =
       selection: AgentModelSelection | null;
     }
   | {
-      type: "draftSelectionRepaired";
+      type: "draftSelectionSynced";
       composerCatalog: AgentModelCatalog | null;
       context: DraftModelSelectionContext;
-      hasActiveSession: boolean;
       repoSettingsReady: boolean;
       role: AgentRole;
       roleDefaultSelection: AgentModelSelection | null;
@@ -105,16 +104,16 @@ const draftModelSelectionReducer = (
           [action.role]: true,
         },
       };
-    case "draftSelectionRepaired": {
-      if (action.hasActiveSession || !action.composerCatalog) {
+    case "draftSelectionSynced": {
+      if (!action.composerCatalog) {
         return currentState;
       }
 
       const existing = currentState.draftSelectionByRole[action.role];
-      const normalized = resolveDraftModelSelection({
+      const normalized = resolvePreferredModelSelection({
         catalog: action.composerCatalog,
-        existingSelection: currentState.draftSelectionTouchedByRole[action.role] ? existing : null,
-        roleDefaultSelection: action.roleDefaultSelection,
+        preferredSelection: currentState.draftSelectionTouchedByRole[action.role] ? existing : null,
+        fallbackSelection: action.roleDefaultSelection,
       });
       return isSameSelection(existing, normalized)
         ? currentState
@@ -141,8 +140,7 @@ export const useAgentStudioDraftModelSelectionState = ({
   draftSelection: AgentModelSelection | null;
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
-  repairDraftSelection: (input: {
-    hasActiveSession: boolean;
+  syncDraftSelection: (input: {
     composerCatalog: AgentModelCatalog | null;
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
@@ -176,21 +174,18 @@ export const useAgentStudioDraftModelSelectionState = ({
     [draftContext, repoSettingsReady, role],
   );
 
-  const repairDraftSelection = useCallback(
+  const syncDraftSelection = useCallback(
     ({
-      hasActiveSession,
       composerCatalog,
       roleDefaultSelection,
     }: {
-      hasActiveSession: boolean;
       composerCatalog: AgentModelCatalog | null;
       roleDefaultSelection: AgentModelSelection | null;
     }): void => {
       dispatchDraftState({
-        type: "draftSelectionRepaired",
+        type: "draftSelectionSynced",
         composerCatalog,
         context: draftContext,
-        hasActiveSession,
         repoSettingsReady,
         role,
         roleDefaultSelection,
@@ -204,6 +199,6 @@ export const useAgentStudioDraftModelSelectionState = ({
     isAwaitingRepoSettingsForWorkspaceRepoPath:
       currentDraftState.isAwaitingRepoSettingsForWorkspaceRepoPath,
     applyDraftSelection,
-    repairDraftSelection,
+    syncDraftSelection,
   };
 };

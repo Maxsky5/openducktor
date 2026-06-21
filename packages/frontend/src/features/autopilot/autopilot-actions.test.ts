@@ -12,14 +12,19 @@ import {
   detectAutopilotEvents,
   shouldAdvanceAutopilotBaseline,
 } from "@/features/autopilot/autopilot-events";
+import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
-const startSessionWorkflowMock = mock(async () => ({
-  externalSessionId: "session-new",
-  postStartActionError: null,
-}));
+const runSessionStartWorkflowMock = mock(
+  async (): Promise<SessionStartWorkflowResult> => ({
+    externalSessionId: "session-new",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktrees/session-new",
+    postStartActionError: null,
+  }),
+);
 
 const createBuilderSessionRecord = (
   overrides: Partial<AgentSessionRecord> = {},
@@ -98,51 +103,50 @@ const createQueryClient = (): QueryClient => {
   return queryClient;
 };
 
-const createExecuteArgs = (task: TaskCard) => ({
-  activeWorkspace: {
-    repoPath: "/repo",
-    workspaceId: "repo",
-    workspaceName: "Repo",
-  },
-  task,
-  queryClient: createQueryClient(),
-  loadRepoRuntimeCatalog: mock(
-    async (): Promise<AgentModelCatalog> => ({
-      models: [
-        {
-          id: "openai",
-          providerId: "openai",
-          providerName: "OpenAI",
-          modelId: "gpt-5",
-          modelName: "GPT-5",
-          variants: ["high"],
+const createExecuteArgs = (task: TaskCard) => {
+  const loadTaskSessionRecords = mock(async (): Promise<AgentSessionRecord[]> => []);
+
+  return {
+    activeWorkspace: {
+      repoPath: "/repo",
+      workspaceId: "repo",
+      workspaceName: "Repo",
+    },
+    task,
+    queryClient: createQueryClient(),
+    loadTaskSessionRecords,
+    loadRepoRuntimeCatalog: mock(
+      async (): Promise<AgentModelCatalog> => ({
+        models: [
+          {
+            id: "openai",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5",
+            modelName: "GPT-5",
+            variants: ["high"],
+          },
+        ],
+        defaultModelsByProvider: {
+          openai: "gpt-5",
         },
-      ],
-      defaultModelsByProvider: {
-        openai: "gpt-5",
-      },
-      profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
-    }),
-  ),
-  loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
-  loadRepoRuntimeFileSearch: mock(async () => []),
-  resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
-  startSessionWorkflow: startSessionWorkflowMock,
-  startAgentSession: mock(async () => {
-    throw new Error("startAgentSession should not be called in this test");
-  }),
-  settleStartedAgentSession: mock(() => undefined),
-  sendAgentMessage: mock(async () => {
-    throw new Error("sendAgentMessage should not be called in this test");
-  }),
-  onDetachedPostStartError: mock(() => undefined),
-});
+        profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
+      }),
+    ),
+    loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
+    loadRepoRuntimeFileSearch: mock(async () => []),
+    resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
+    runSessionStartWorkflow: runSessionStartWorkflowMock,
+  };
+};
 
 describe("autopilot feature helpers", () => {
   beforeEach(() => {
-    startSessionWorkflowMock.mockReset();
-    startSessionWorkflowMock.mockImplementation(async () => ({
+    runSessionStartWorkflowMock.mockReset();
+    runSessionStartWorkflowMock.mockImplementation(async () => ({
       externalSessionId: "session-new",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-new",
       postStartActionError: null,
     }));
   });
@@ -232,15 +236,39 @@ describe("autopilot feature helpers", () => {
       actionId: "startPlanner",
     });
 
-    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        intent: expect.objectContaining({
+        request: expect.objectContaining({
           taskId: "TASK-PLAN",
           role: "planner",
+        }),
+        decision: expect.objectContaining({
           startMode: "fresh",
         }),
       }),
     );
+  });
+
+  test("reports post-start action errors from the workflow result", async () => {
+    const postStartError = new Error("kickoff failed");
+    runSessionStartWorkflowMock.mockImplementationOnce(async () => ({
+      externalSessionId: "session-new",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-new",
+      postStartActionError: postStartError,
+    }));
+    const args = createExecuteArgs(createTask({ id: "TASK-PLAN", status: "spec_ready" }));
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startPlanner",
+    });
+
+    expect(outcome).toEqual({
+      kind: "started",
+      message: "Started Start Planner for TASK-PLAN.",
+      postStartActionError: postStartError,
+    });
   });
 
   test("skips pull request generation when no builder session exists", async () => {
@@ -253,18 +281,15 @@ describe("autopilot feature helpers", () => {
       kind: "skipped",
       message: 'No Builder session is available to fork for task "TASK-PR".',
     });
-    expect(startSessionWorkflowMock).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
   });
 
   test("skips builder follow-up when the build continuation target is missing", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "in_progress" }));
+    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
+
     const outcome = await executeAutopilotAction({
-      ...createExecuteArgs(
-        createTask({
-          id: "TASK-QA",
-          status: "in_progress",
-          agentSessions: [createBuilderSessionRecord()],
-        }),
-      ),
+      ...args,
       actionId: "startReviewQaFeedbacks",
     });
 
@@ -275,32 +300,25 @@ describe("autopilot feature helpers", () => {
   });
 
   test("surfaces unexpected pull request start failures", async () => {
-    startSessionWorkflowMock.mockImplementationOnce(async () => {
+    runSessionStartWorkflowMock.mockImplementationOnce(async () => {
       throw new Error("workflow failed");
     });
+    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
 
     await expect(
       executeAutopilotAction({
-        ...createExecuteArgs(
-          createTask({
-            id: "TASK-PR",
-            status: "human_review",
-            agentSessions: [createBuilderSessionRecord()],
-          }),
-        ),
+        ...args,
         actionId: "startGeneratePullRequest",
       }),
     ).rejects.toThrow("workflow failed");
   });
 
   test("falls back to a fresh builder continuation when the latest builder session targets an older worktree", async () => {
-    const args = createExecuteArgs(
-      createTask({
-        id: "TASK-QA",
-        status: "in_progress",
-        agentSessions: [createBuilderSessionRecord({ workingDirectory: "/tmp/repo/old-worktree" })],
-      }),
-    );
+    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "in_progress" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({ workingDirectory: "/tmp/repo/old-worktree" }),
+    ]);
     args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/new-worktree",
     });
@@ -310,37 +328,34 @@ describe("autopilot feature helpers", () => {
       actionId: "startReviewQaFeedbacks",
     });
 
-    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        intent: expect.objectContaining({
-          startMode: "fresh",
+        request: expect.objectContaining({
           targetWorkingDirectory: "/tmp/repo/new-worktree",
+        }),
+        decision: expect.objectContaining({
+          startMode: "fresh",
         }),
       }),
     );
   });
 
   test("reuses QA follow-up only when the latest QA session matches the current continuation target", async () => {
-    const args = createExecuteArgs(
-      createTask({
-        id: "TASK-QA",
-        status: "ai_review",
-        agentSessions: [
-          createBuilderSessionRecord({
-            externalSessionId: "qa-session-1",
-            role: "qa",
-            workingDirectory: "/tmp/repo/current-worktree",
-            selectedModel: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-              profileId: "qa",
-            },
-          }),
-        ],
+    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "ai_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({
+        externalSessionId: "qa-session-1",
+        role: "qa",
+        workingDirectory: "/tmp/repo/current-worktree",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "qa",
+        },
       }),
-    );
+    ]);
     args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/current-worktree",
     });
@@ -350,13 +365,16 @@ describe("autopilot feature helpers", () => {
       actionId: "startQa",
     });
 
-    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        intent: expect.objectContaining({
+        decision: expect.objectContaining({
           startMode: "reuse",
-          sourceExternalSessionId: "qa-session-1",
+          sourceSession: {
+            externalSessionId: "qa-session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/current-worktree",
+          },
         }),
-        selection: null,
       }),
     );
   });
@@ -368,20 +386,15 @@ describe("autopilot feature helpers", () => {
       modelId: "gpt-5",
       variant: "medium",
     };
-    const args = createExecuteArgs(
-      createTask({
-        id: "TASK-CODEX",
-        status: "in_progress",
-        agentSessions: [
-          createBuilderSessionRecord({
-            externalSessionId: "codex-builder-session-1",
-            runtimeKind: "codex",
-            workingDirectory: "/tmp/repo/current-worktree",
-            selectedModel: codexSelection,
-          }),
-        ],
+    const args = createExecuteArgs(createTask({ id: "TASK-CODEX", status: "in_progress" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({
+        externalSessionId: "codex-builder-session-1",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/current-worktree",
+        selectedModel: codexSelection,
       }),
-    );
+    ]);
     args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/current-worktree",
     });
@@ -391,13 +404,16 @@ describe("autopilot feature helpers", () => {
       actionId: "startReviewQaFeedbacks",
     });
 
-    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        intent: expect.objectContaining({
+        decision: expect.objectContaining({
           startMode: "reuse",
-          sourceExternalSessionId: "codex-builder-session-1",
+          sourceSession: {
+            externalSessionId: "codex-builder-session-1",
+            runtimeKind: "codex",
+            workingDirectory: "/tmp/repo/current-worktree",
+          },
         }),
-        selection: null,
       }),
     );
   });

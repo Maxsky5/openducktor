@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  createAgentSessionFixture,
+  createSelectedSessionTranscriptStateFixture,
+  createTaskCardFixture,
+} from "./agent-studio-test-utils";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import {
-  buildAgentStudioPageModelsArgs,
-  buildAgentStudioSelectedSessionContextFromOrchestration,
-} from "./use-agent-studio-orchestration-controller";
+import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
@@ -26,6 +29,7 @@ const session = createAgentSessionFixture({
   taskId: "task-1",
   role: "planner",
 });
+const sessionSummary = toAgentSessionSummary(session);
 const onSelectTab = () => {};
 const onCreateTab = () => {};
 const onCloseTab = () => {};
@@ -33,10 +37,9 @@ const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
-const baseReadiness = {
-  agentStudioReadinessState: "ready" as const,
-  agentStudioReady: true,
-  agentStudioBlockedReason: "",
+const baseRuntimeReadiness = {
+  state: "ready" as const,
+  message: null,
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
@@ -52,51 +55,52 @@ const baseSessionActions = {
   isSessionWorking: false,
   isWaitingInput: false,
   busySendBlockedReason: null,
-  canKickoffNewSession: false,
+  canUseKickoffPrompt: false,
   kickoffLabel: "Kickoff",
   canStopSession: false,
   startLaunchKickoff: async () => {},
   onSend: async () => true,
   onSubmitQuestionAnswers: async () => {},
   isSubmittingQuestionByRequestId: {},
-  stopAgentSession: async () => {},
-};
-const baseApprovals = {
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onReplyApproval: async () => {},
+  stopAgentSession: async () => {},
 };
 const baseDocuments = {
   specDoc: taskDocument,
   planDoc: taskDocument,
   qaDoc: taskDocument,
 };
+const baseActiveSessionRuntimeData = {
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+  error: null,
+};
 
 const baseArgs: BuildArgs = {
   view: {
-    viewTaskId: "task-1",
+    taskId: "task-1",
   },
   selectedSession: buildAgentStudioSelectedSessionContext({
     taskId: "task-1",
     role: "planner",
     selectedTask: task,
-    sessionsForTask: [session],
-    allSessionSummaries: [session],
-    activeSession: session,
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    sessionRuntimeDataError: null,
+    sessionsForTask: [sessionSummary],
+    allSessionSummaries: [sessionSummary],
+    selectedSession: {
+      identity: toAgentSessionIdentity(session),
+      activityState: sessionSummary.activityState,
+      selectedModel: session.selectedModel,
+      loadedSession: session,
+      runtimeData: baseActiveSessionRuntimeData,
+      runtimeReadiness: baseRuntimeReadiness,
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
+    },
     hasActiveGitConflict: false,
-    isTaskHydrating: false,
-    isSessionHistoryHydrated: true,
-    isSessionHistoryHydrating: false,
-    isSessionSelectionResolving: false,
-    isWaitingForRuntimeReadiness: false,
-    isSessionHistoryHydrationFailed: false,
-    activeSessionContextUsage: null,
     documents: baseDocuments,
-    readiness: baseReadiness,
     sessionActions: baseSessionActions,
-    approvals: baseApprovals,
     roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
   }),
   tabs: {
@@ -134,13 +138,18 @@ const baseArgs: BuildArgs = {
     handleSelectModel,
     handleSelectVariant,
     agentAccentColorsByProfileId: {},
+    selectedSessionContextUsage: null,
   },
   chatSettings: {
     showThinkingMessages: true,
     expandFileDiffsByDefault: false,
   },
   composer: {
-    draftStateKey: "draft-1",
+    draftScope: {
+      taskId: "task-1",
+      role: "planner",
+      session: toAgentSessionIdentity(session),
+    },
   },
 };
 
@@ -150,24 +159,28 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     expect(mapped.activeTabValue).toBe("task-1");
     expect(mapped.selectedSession.role).toBe("planner");
-    expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
-      OPENCODE_RUNTIME_DESCRIPTOR,
-    ]);
-    expect(mapped.selectedSession.runtime.isSessionHistoryHydrated).toBe(true);
-    expect(mapped.selectedSession.runtime.isSessionHistoryHydrationFailed).toBe(false);
-    expect(mapped.selectedSession.runtime.isWaitingForRuntimeReadiness).toBe(false);
+    expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
+      kind: "visible",
+    });
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
-    expect(mapped.selectedSession.runtime.runtimeReadiness.readinessState).toBe("ready");
+    expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
     expect(mapped.chatSettings.expandFileDiffsByDefault).toBe(false);
-    expect(mapped.composer.draftStateKey).toBe("draft-1");
+    expect(mapped.composer.draftScope).toEqual({
+      taskId: "task-1",
+      role: "planner",
+      session: toAgentSessionIdentity(session),
+    });
+    expect(agentChatDraftScopeKey(mapped.composer.draftScope)).toBe(
+      `task-1:planner:${agentSessionIdentityKey(toAgentSessionIdentity(session))}`,
+    );
   });
 
   test("derives activeTabValue from tab id, task id, then empty sentinel", () => {
@@ -193,7 +206,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
       },
       view: {
         ...baseArgs.view,
-        viewTaskId: "",
+        taskId: "",
       },
       tabs: {
         ...baseArgs.tabs,
@@ -205,73 +218,24 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(withTaskFallback.activeTabValue).toBe("task-1");
     expect(withEmptyFallback.activeTabValue).toBe("__agent_studio_empty__");
   });
-});
-
-describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
-  test("maps raw orchestration inputs into selected-session context", () => {
-    const context = buildAgentStudioSelectedSessionContextFromOrchestration({
-      taskId: "task-1",
-      role: "planner",
-      selectedTask: task,
-      sessionsForTask: [session],
-      allSessionSummaries: [session],
-      activeSession: session,
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      viewSessionRuntimeDataError: "runtime data failed",
-      hasActiveGitConflict: true,
-      isActiveTaskHydrated: false,
-      isActiveTaskHydrationFailed: false,
-      isSessionHistoryHydrated: false,
-      isSessionHistoryHydrating: true,
-      isSessionSelectionResolving: true,
-      isWaitingForRuntimeReadiness: true,
-      isSessionHistoryHydrationFailed: false,
-      activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
-      documents: baseDocuments,
-      readiness: {
-        ...baseReadiness,
-        agentStudioReadinessState: "checking",
-        agentStudioReady: false,
-      },
-      sessionActions: {
-        ...baseSessionActions,
-        canKickoffNewSession: true,
-      },
-      approvals: baseApprovals,
-      roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
-    });
-
-    expect(context.runtime.isTaskHydrating).toBe(true);
-    expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
-    expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.isSessionSelectionResolving).toBe(true);
-    expect(context.runtime.isSessionHistoryHydrating).toBe(true);
-    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(true);
-    expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
-    expect(context.workflow.selectedInteractionRole).toBe("planner");
-    expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
-    expect(context.rightPanel).toMatchObject({
-      role: "planner",
-      hasTaskContext: true,
-      hasDocumentPanel: true,
-      hasBuildToolsPanel: false,
-    });
-  });
-
   test("forwards selected-session runtime state without recomputing it", () => {
     const failed = buildAgentStudioPageModelsArgs({
       ...baseArgs,
       selectedSession: {
         ...baseArgs.selectedSession,
-        runtime: {
-          ...baseArgs.selectedSession.runtime,
-          isTaskHydrating: true,
-          isSessionHistoryHydrationFailed: true,
+        selectedSession: {
+          ...baseArgs.selectedSession.selectedSession,
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "failed",
+            message: "Selected session failed",
+          }),
         },
       },
     });
 
-    expect(failed.selectedSession.runtime.isTaskHydrating).toBe(true);
-    expect(failed.selectedSession.runtime.isSessionHistoryHydrationFailed).toBe(true);
+    expect(failed.selectedSession.selectedSession.transcriptState).toEqual({
+      kind: "failed",
+      message: "Selected session failed",
+    });
   });
 });

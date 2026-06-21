@@ -63,7 +63,6 @@ const TASK_METHODS = [
   "qaApproved",
   "qaRejected",
   "agentSessionsList",
-  "agentSessionsListBulk",
   "agentSessionUpsert",
 ] as const satisfies readonly MethodName<HostTaskClient>[];
 
@@ -76,7 +75,7 @@ const AGENT_METHODS = [
   "taskWorktreeGet",
   "runtimeStop",
   "runtimeEnsure",
-  "runtimeStartupStatus",
+  "runtimeRequire",
   "repoRuntimeHealth",
   "repoRuntimeHealthStatus",
   "codexAppServerRequest",

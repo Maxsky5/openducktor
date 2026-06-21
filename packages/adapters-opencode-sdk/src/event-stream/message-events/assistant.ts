@@ -5,6 +5,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
+import { isStreamTurnIdle } from "../../session-activity";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -19,7 +20,7 @@ import {
   updateMessageMetadata,
 } from "./helpers";
 import { normalizeLiveSubagentCorrelation } from "./subagent";
-import { reconcileUserMessageQueuedStates } from "./user";
+import { publishUserMessageReadStateChanges } from "./user";
 
 type EmitAssistantPartOptions = {
   linkedSubagentExternalSessionId?: string;
@@ -31,10 +32,12 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
   roleHint?: string,
 ): boolean => {
   const session = runtime.getSession(runtime.externalSessionId);
-  return Boolean(
-    session?.hasIdleSinceActivity &&
-      isAssistantMessage(runtime, messageId, roleHint) &&
-      session.completedAssistantMessageIds.has(messageId),
+  if (!session || !isStreamTurnIdle(session)) {
+    return false;
+  }
+  return (
+    isAssistantMessage(runtime, messageId, roleHint) &&
+    session.completedAssistantMessageIds.has(messageId)
   );
 };
 
@@ -182,7 +185,7 @@ export const updateAssistantMessageCompletionState = (
   }
 
   if (previousActiveAssistantMessageId !== session.activeAssistantMessageId) {
-    reconcileUserMessageQueuedStates(runtime);
+    publishUserMessageReadStateChanges(runtime);
   }
 };
 
@@ -231,7 +234,7 @@ export const maybeEmitCompletedAssistantMessage = (
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
     emitSessionIdle(runtime);
-    reconcileUserMessageQueuedStates(runtime);
+    publishUserMessageReadStateChanges(runtime);
     return true;
   }
 
@@ -251,6 +254,6 @@ export const maybeEmitCompletedAssistantMessage = (
   session.emittedAssistantMessageIds.add(input.messageId);
 
   emitSessionIdle(runtime);
-  reconcileUserMessageQueuedStates(runtime);
+  publishUserMessageReadStateChanges(runtime);
   return true;
 };

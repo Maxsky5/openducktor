@@ -71,7 +71,6 @@
       "forkTargets": [
         "session"
       ],
-      "supportsAttachLiveSessions": true,
       "supportsListLiveSessions": true,
       "supportsQueuedUserMessages": true,
       "supportsPendingInputSnapshots": true
@@ -83,13 +82,8 @@
       "stableItemIds": false,
       "stableItemOrder": true,
       "exposesCompletionState": false,
-      "hydratedEventTypes": [
-        "message",
-        "tool_call",
-        "tool_result"
-      ],
       "limitations": [
-        "OpenCode session history is hydrated at message-level fidelity."
+        "OpenCode session history is loaded at message-level fidelity."
       ]
     },
     "approvals": {

@@ -2,17 +2,25 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
+  type AgentChatThreadModelInput,
   buildApprovalRequest,
   buildMessage,
-  buildModelSelection,
   buildQuestionRequest,
   buildSession,
+  buildThreadTranscriptState,
   buildTodoItem,
+  completeThreadModel,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
+import {
+  createAnimationFrameTestDriver,
+  withAnimationFrameTestDriver,
+} from "./test-support/animation-frame-test-driver";
 
 (
   globalThis as typeof globalThis & {
@@ -22,14 +30,14 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
-  isSessionViewLoading: false,
-  isSessionHistoryLoading: false,
-  isWaitingForRuntimeReadiness: false,
-  readinessState: "ready" as const,
+  transcriptState: buildThreadTranscriptState(),
+  runtimeReadiness: {
+    state: "ready" as const,
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
   isInteractionEnabled: true,
-  blockedReason: "",
-  isLoadingChecks: false,
-  onRefreshChecks: () => {},
   emptyState: {
     title: "Send a message to start a new session automatically.",
   },
@@ -44,7 +52,7 @@ const buildBaseModel = () => ({
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
   onReplyApproval: async () => {},
-  sessionRuntimeDataError: null,
+  sessionAuxiliaryError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
@@ -54,11 +62,11 @@ const buildBaseModel = () => ({
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 
-const AgentChatThread = (props: Parameters<typeof AgentChatThreadComponent>[0]) =>
+const AgentChatThread = ({ model }: { model: AgentChatThreadModelInput }) =>
   createElement(
     AgentChatSettingsProvider,
     { value: DEFAULT_TEST_CHAT_SETTINGS },
-    createElement(AgentChatThreadComponent, props),
+    createElement(AgentChatThreadComponent, { model: completeThreadModel(model) }),
   );
 
 const flush = async (): Promise<void> => {
@@ -166,8 +174,6 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
     externalSessionId,
     messages,
     status: "idle",
-    pendingQuestions: [],
-    pendingApprovals: [],
   });
 };
 
@@ -175,13 +181,11 @@ describe("AgentChatThread", () => {
   const originalWindow = getGlobalWindow();
   const originalIntersectionObserver = globalThis.IntersectionObserver;
   const originalMatchMedia = globalThis.matchMedia;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   const originalResizeObserver = globalThis.ResizeObserver;
+  const animationFrameDriver = createAnimationFrameTestDriver();
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    let nextAnimationFrameTime = 16;
     globalThis.matchMedia = ((query: string) =>
       ({
         matches: false,
@@ -193,15 +197,7 @@ describe("AgentChatThread", () => {
         removeListener: () => {},
         dispatchEvent: () => false,
       }) as MediaQueryList) as typeof matchMedia;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameTime = nextAnimationFrameTime;
-      nextAnimationFrameTime += 16;
-      queueMicrotask(() => {
-        callback(frameTime);
-      });
-      return 1;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    animationFrameDriver.installAutoFlush();
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     globalThis.IntersectionObserver = class MockIntersectionObserver {
       disconnect(): void {}
@@ -220,8 +216,7 @@ describe("AgentChatThread", () => {
     setGlobalWindow(originalWindow);
     globalThis.IntersectionObserver = originalIntersectionObserver;
     globalThis.matchMedia = originalMatchMedia;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
@@ -251,8 +246,6 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             status: "running",
-            draftAssistantText: "",
-            pendingQuestions: [],
           }),
         },
       }),
@@ -261,7 +254,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Agent is thinking...");
   });
 
-  test("keeps the transcript area blank when active session has no renderable rows yet", () => {
+  test("keeps the transcript area blank when displayed session has no renderable rows yet", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -269,9 +262,6 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "stopped",
             messages: [],
-            draftAssistantText: "",
-            pendingQuestions: [],
-            pendingApprovals: [],
           }),
         },
       }),
@@ -292,9 +282,6 @@ describe("AgentChatThread", () => {
               buildMessage("thinking", "Reasoning trace 1", { id: "thinking-1" }),
               buildMessage("thinking", "Reasoning trace 2", { id: "thinking-2" }),
             ],
-            draftAssistantText: "",
-            pendingQuestions: [],
-            pendingApprovals: [],
           }),
         },
       }),
@@ -311,9 +298,9 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -349,9 +336,13 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          readinessState: "blocked",
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
+          runtimeReadiness: {
+            ...buildBaseModel().runtimeReadiness,
+            state: "blocked",
+            message: "OpenCode runtime is unavailable",
+          },
           isInteractionEnabled: false,
-          blockedReason: "OpenCode runtime is unavailable",
           session: null,
         },
       }),
@@ -359,6 +350,48 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("OpenCode runtime is unavailable");
     expect(html).toContain("Recheck");
+    expect(html).not.toContain("Send a message to start a new session automatically.");
+    expect(html).not.toContain("No conversation available.");
+  });
+
+  test("keeps renderable transcript visible when runtime readiness becomes blocked", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          runtimeReadiness: {
+            ...buildBaseModel().runtimeReadiness,
+            state: "blocked",
+            message: "OpenCode runtime is unavailable",
+          },
+          isInteractionEnabled: false,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Already loaded transcript", { id: "loaded-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Already loaded transcript");
+    expect(html).not.toContain("OpenCode runtime is unavailable");
+    expect(html).not.toContain("Recheck");
+  });
+
+  test("renders failed session loading state instead of a blank transcript", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcriptState: buildThreadTranscriptState({ kind: "failed" }),
+          isInteractionEnabled: false,
+          session: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("Failed to load session");
+    expect(html).toContain("The selected conversation could not be loaded.");
+    expect(html).not.toContain("Send a message to start a new session automatically.");
   });
 
   test("renders the runtime-starting overlay without unmounting transcript content", () => {
@@ -366,9 +399,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          readinessState: "checking",
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
+          runtimeReadiness: {
+            ...buildBaseModel().runtimeReadiness,
+            state: "checking",
+          },
           isInteractionEnabled: false,
-          isWaitingForRuntimeReadiness: true,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -386,8 +422,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          readinessState: "ready",
-          isWaitingForRuntimeReadiness: true,
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -395,10 +430,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Session runtime is reconnecting");
-    expect(html).toContain(
-      "Waiting for the selected session runtime to become available before loading this session.",
-    );
+    expect(html).toContain("Runtime is starting");
+    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
     expect(html).toContain("Cached transcript");
   });
 
@@ -407,9 +440,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          readinessState: "checking",
+          runtimeReadiness: {
+            ...buildBaseModel().runtimeReadiness,
+            state: "checking",
+          },
           isInteractionEnabled: false,
-          isWaitingForRuntimeReadiness: false,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -441,8 +476,8 @@ describe("AgentChatThread", () => {
                 id: "assistant-2",
               }),
             ],
-            pendingQuestions: [buildQuestionRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -460,8 +495,8 @@ describe("AgentChatThread", () => {
           session: buildSession({
             status: "idle",
             messages: [buildMessage("assistant", "Need your input", { id: "assistant-idle-1" })],
-            pendingQuestions: [buildQuestionRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -475,24 +510,23 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingApprovals: [
-              buildApprovalRequest({
-                requestId: "perm-1",
-                requestType: "permission_grant" as const,
-                title: `Approve permission: ${"bash"}`,
-                summary: `Approval request for ${"bash"}.`,
-                affectedPaths: ["**/*.sh", "/tmp/*"],
-                action: { name: "bash" },
-                mutation: "read_only" as const,
-                supportedReplyOutcomes: [
-                  "approve_once" as const,
-                  "approve_session" as const,
-                  "reject" as const,
-                ],
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingApprovalRequests: [
+            buildApprovalRequest({
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"bash"}`,
+              summary: `Approval request for ${"bash"}.`,
+              affectedPaths: ["**/*.sh", "/tmp/*"],
+              action: { name: "bash" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            }),
+          ],
         },
       }),
     );
@@ -520,9 +554,9 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             messages: longMessages,
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
           }),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -538,22 +572,21 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildApprovalRequest()],
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Analyze current styling",
-                status: "completed",
-              }),
-              buildTodoItem({
-                id: "todo-2",
-                content: "Read layout and pages",
-                status: "in_progress",
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          pendingApprovalRequests: [buildApprovalRequest()],
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Analyze current styling",
+              status: "completed",
+            }),
+            buildTodoItem({
+              id: "todo-2",
+              content: "Read layout and pages",
+              status: "in_progress",
+            }),
+          ],
         },
       }),
     );
@@ -587,21 +620,16 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             runtimeKind: "codex",
-            selectedModel: {
-              runtimeKind: "codex",
-              providerId: "openai",
-              modelId: "gpt-5.3-codex",
-              variant: "high",
-            },
             status: "idle",
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Keep Codex todo accented",
-                status: "in_progress",
-              }),
-            ],
           }),
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Keep Codex todo accented",
+              status: "in_progress",
+            }),
+          ],
+          sessionAccentColor: "var(--odt-runtime-accent-codex)",
         },
       }),
     );
@@ -615,19 +643,18 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
           session: buildSession({
             runtimeKind: "opencode",
-            selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
             status: "idle",
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Keep explicit todo accented",
-                status: "in_progress",
-              }),
-            ],
           }),
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Keep explicit todo accented",
+              status: "in_progress",
+            }),
+          ],
+          sessionAccentColor: "#123456",
         },
       }),
     );
@@ -636,38 +663,9 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("stages a large attachment transcript on session switch", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-    let nextAnimationFrameId = 1;
-
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
-    const flushAnimationFrames = async () => {
-      const pendingFrames = Array.from(animationFrameCallbacks.entries());
-      animationFrameCallbacks.clear();
-      await act(async () => {
-        for (const [, callback] of pendingFrames) {
-          callback(performance.now());
-        }
-      });
-    };
-    const waitForScheduledTranscriptWork = async () => {
-      await act(async () => {
-        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-      });
-    };
-
-    try {
-      const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
+  test("renders a large attachment transcript through the history window on session switch", async () => {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+      const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
         buildMessage(
           "user",
           `Attachment message ${index + 1}`,
@@ -722,40 +720,96 @@ describe("AgentChatThread", () => {
 
       expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
 
-      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
-      await flushAnimationFrames();
-      await waitForScheduledTranscriptWork();
+      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
+      await animationFrameDriver.flushFrame();
+      await animationFrameDriver.flushTimers();
 
       await waitFor(() => {
-        expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
+        expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
       });
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
       rendered.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
+  });
+
+  test("stages a cached large transcript immediately after switching back", async () => {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+      const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
+        buildMessage("user", `Turn ${turnIndex + 1} request`, {
+          id: `turn-${turnIndex + 1}-user`,
+        }),
+        ...Array.from({ length: 18 }, (_, replyIndex) =>
+          buildMessage("assistant", `Turn ${turnIndex + 1} reply ${replyIndex + 1}`, {
+            id: `turn-${turnIndex + 1}-assistant-${replyIndex + 1}`,
+          }),
+        ),
+      ]).flat();
+      const largeSession = buildSession({
+        externalSessionId: "session-cached-large",
+        status: "idle",
+        messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
+      });
+      const smallSession = buildSession({
+        externalSessionId: "session-small",
+        messages: [buildMessage("assistant", "Small transcript", { id: "small-assistant-1" })],
+      });
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: largeSession,
+          },
+        }),
+      );
+
+      await waitFor(async () => {
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      });
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: smallSession,
+          },
+        }),
+      );
+      await animationFrameDriver.flushTimers();
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              ...largeSession,
+              messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
+            }),
+          },
+        }),
+      );
+
+      expect(rendered.queryByText("Loading session")).toBeNull();
+      expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
+      expect(immediateRowCount).toBeGreaterThan(0);
+      expect(immediateRowCount).toBeLessThan(largeMessages.length);
+
+      await animationFrameDriver.flushFrame();
+      await waitFor(() => {
+        expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeGreaterThan(
+          immediateRowCount,
+        );
+      });
+
+      rendered.unmount();
+    });
   });
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-    let nextAnimationFrameId = 1;
-
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
-
-    try {
+    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const initialMessages = [
         buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
       ];
@@ -778,11 +832,11 @@ describe("AgentChatThread", () => {
             ...buildBaseModel(),
             session: {
               ...session,
-              status: "running",
-              messages: [
+              activityState: "running",
+              messages: createSessionMessagesState("session-streaming", [
                 ...initialMessages,
                 buildMessage("assistant", "Streaming update", { id: "assistant-2" }),
-              ],
+              ]),
             },
           },
         }),
@@ -790,13 +844,10 @@ describe("AgentChatThread", () => {
 
       expect(rendered.queryByText("Loading session")).toBeNull();
       expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
-      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
       rendered.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    });
   });
 
   test("keeps the latest user turn uncontained after a running session completes", async () => {
@@ -812,10 +863,9 @@ describe("AgentChatThread", () => {
     const runningSession = buildSession({
       externalSessionId,
       messages,
-      pendingQuestions: [],
-      pendingApprovals: [],
       status: "running",
     });
+    const sessionKey = agentSessionIdentityKey(runningSession);
     const model = {
       ...buildBaseModel(),
       isSessionWorking: true,
@@ -838,7 +888,7 @@ describe("AgentChatThread", () => {
       return turn.getAttribute("style") ?? "";
     };
 
-    const runningLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
     expect(runningLatestTurnStyle).not.toBeNull();
     expect(runningLatestTurnStyle).not.toContain("content-visibility");
 
@@ -850,8 +900,6 @@ describe("AgentChatThread", () => {
           session: buildSession({
             externalSessionId,
             messages,
-            pendingQuestions: [],
-            pendingApprovals: [],
             status: "idle",
           }),
         },
@@ -859,8 +907,8 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const completedOlderTurnStyle = getTurnStyle(`${externalSessionId}:user-3`);
-    const completedLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
     expect(completedOlderTurnStyle).not.toBeNull();
     expect(completedOlderTurnStyle).toContain("content-visibility");
     expect(completedLatestTurnStyle).not.toBeNull();
@@ -874,11 +922,8 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [],
-            todos: [],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
     );
@@ -895,11 +940,8 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [],
-            pendingApprovals: [buildApprovalRequest()],
-            todos: [],
-          }),
+          session: buildSession(),
+          pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
     );
@@ -911,18 +953,13 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("renders runtime data errors even when the session has no questions, approvals, or todos", async () => {
+  test("renders auxiliary errors even when the session has no questions, approvals, or todos", async () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [],
-            pendingApprovals: [],
-            todos: [],
-            selectedModel: null,
-          }),
-          sessionRuntimeDataError: "todos unavailable",
+          session: buildSession(),
+          sessionAuxiliaryError: "todos unavailable",
         },
       }),
     );
@@ -945,17 +982,15 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [],
-            todos: [
-              buildTodoItem({
-                id: "todo-1",
-                content: "Read layout and pages",
-                status: "in_progress",
-              }),
-            ],
-          }),
+          session: buildSession(),
+          pendingQuestionRequests: [buildQuestionRequest()],
+          todos: [
+            buildTodoItem({
+              id: "todo-1",
+              content: "Read layout and pages",
+              status: "in_progress",
+            }),
+          ],
         },
       }),
     );
@@ -996,8 +1031,6 @@ describe("AgentChatThread", () => {
           id: `message-${index + 1}`,
         }),
       ),
-      pendingQuestions: [],
-      pendingApprovals: [],
       status: "idle",
     });
 
@@ -1015,12 +1048,15 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("shows loading overlay while session context is switching", () => {
+  test("shows loading overlay while transcript is pending", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          isSessionViewLoading: true,
+          transcriptState: buildThreadTranscriptState({
+            kind: "session_loading",
+            reason: "preparing",
+          }),
           session: buildSession({
             externalSessionId: "session-loading",
             messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
@@ -1033,26 +1069,26 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Preparing the selected session view.");
   });
 
-  test("keeps transcript rows visible while the same session history is hydrating", () => {
+  test("keeps transcript rows visible while same-session history is loading", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          isSessionHistoryLoading: true,
+          transcriptState: buildThreadTranscriptState({ kind: "visible" }),
           session: buildSession({
-            externalSessionId: "session-hydrating",
+            externalSessionId: "session-history-loading",
             messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
           }),
         },
       }),
     );
 
-    expect(html).toContain("Loading session");
-    expect(html).toContain("Loading the selected conversation.");
+    expect(html).not.toContain("Loading session");
+    expect(html).not.toContain("Loading the selected conversation.");
     expect(html).toContain("Old cached message");
   });
 
-  test("preserves expanded tool details while same-session history hydration appends messages", async () => {
+  test("preserves expanded tool details while same-session history load appends messages", async () => {
     const messages = [
       buildMessage("tool", "Tool read_task completed", {
         id: "tool-1",
@@ -1069,12 +1105,12 @@ describe("AgentChatThread", () => {
       }),
     ];
     const session = buildSession({
-      externalSessionId: "session-tool-hydrating",
+      externalSessionId: "session-tool-history-loading",
       messages,
     });
     const model = {
       ...buildBaseModel(),
-      isSessionHistoryLoading: true,
+      transcriptState: buildThreadTranscriptState({ kind: "visible" }),
       session,
     };
 
@@ -1179,11 +1215,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
-      session: buildSession({
-        pendingQuestions: [],
-        pendingApprovals: [],
-        todos: [],
-      }),
+      session: buildSession(),
     };
 
     const rendered = render(
@@ -1200,10 +1232,8 @@ describe("AgentChatThread", () => {
           ...model,
           session: buildSession({
             externalSessionId: model.session?.externalSessionId,
-            pendingQuestions: [],
-            pendingApprovals: [],
-            todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
           }),
+          todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
         },
       }),
     );
@@ -1233,15 +1263,12 @@ describe("AgentChatThread", () => {
     const syncBottomAfterComposerLayoutRef = {
       current: null,
     } as { current: (() => void) | null };
-    const session = buildSession({
-      pendingQuestions: [],
-      pendingApprovals: [],
-      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
-    });
+    const session = buildSession();
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
       session,
+      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
       todoPanelCollapsed: true,
     };
 

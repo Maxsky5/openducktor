@@ -1,18 +1,11 @@
 import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
 import type {
-  AgentPendingApprovalRequest,
-  AgentPendingQuestionRequest,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
   AgentUserMessageDisplayPart,
-  ReplyApprovalInput,
-  ReplyQuestionInput,
 } from "@openducktor/core";
-import {
-  normalizeOpenCodeApprovalRequest,
-  toOpenCodePermissionReply,
-} from "./approval-translation";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { bindSubagentExternalSession, bindSubagentPartCorrelation } from "./event-stream/shared";
 import {
@@ -47,110 +40,6 @@ const readString = (record: Record<string, unknown>, keys: string[]): string | u
     }
   }
   return undefined;
-};
-
-const normalizeQuestionOptions = (
-  value: unknown,
-  requestId: string,
-  questionIndex: number,
-): AgentPendingQuestionRequest["questions"][number]["options"] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((entry, optionIndex) => {
-    const record = asRecord(entry);
-    if (!record) {
-      throw new Error(
-        `Malformed Opencode pending question payload '${requestId}': option ${optionIndex} for question ${questionIndex} must be an object.`,
-      );
-    }
-    const label = readString(record, ["label"]);
-    if (!label) {
-      throw new Error(
-        `Malformed Opencode pending question payload '${requestId}': option ${optionIndex} for question ${questionIndex} is missing label.`,
-      );
-    }
-    const description = readString(record, ["description"]) ?? label;
-    return { label, description };
-  });
-};
-
-const normalizePendingQuestion = (value: unknown): AgentPendingQuestionRequest => {
-  const record = asRecord(value);
-  if (!record) {
-    throw new Error("Malformed Opencode pending question payload: expected an object.");
-  }
-  const requestId = readString(record, ["id", "requestID", "requestId"]);
-  const sessionId = readString(record, ["sessionID", "sessionId", "session_id"]);
-  const rawQuestions = record.questions;
-  if (!requestId) {
-    throw new Error("Malformed Opencode pending question payload: missing request id.");
-  }
-  if (!sessionId) {
-    throw new Error("Malformed Opencode pending question payload: missing session id.");
-  }
-  if (!Array.isArray(rawQuestions)) {
-    throw new Error(
-      `Malformed Opencode pending question payload '${requestId}': missing questions array.`,
-    );
-  }
-
-  const questions = rawQuestions.map((entry, questionIndex) => {
-    const question = asRecord(entry);
-    if (!question) {
-      throw new Error(
-        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} must be an object.`,
-      );
-    }
-    const header = readString(question, ["header", "title", "label"]);
-    const prompt = readString(question, ["question", "title", "header"]);
-    if (!header) {
-      throw new Error(
-        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} is missing header.`,
-      );
-    }
-    if (!prompt) {
-      throw new Error(
-        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} is missing question text.`,
-      );
-    }
-    const options = normalizeQuestionOptions(question.options, requestId, questionIndex);
-    return {
-      header,
-      question: prompt,
-      options,
-      ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
-      ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
-    };
-  });
-
-  if (questions.length === 0) {
-    throw new Error(
-      `Malformed Opencode pending question payload '${requestId}': missing questions.`,
-    );
-  }
-
-  return {
-    requestId,
-    questions,
-  };
-};
-
-const readPendingSessionId = (value: unknown): string | undefined => {
-  const record = asRecord(value);
-  if (!record) {
-    return undefined;
-  }
-  return readString(record, ["sessionID", "sessionId", "session_id"]);
-};
-
-const requirePendingSessionId = (kind: "approval" | "question", value: unknown): string => {
-  const sessionId = readPendingSessionId(value);
-  if (!sessionId) {
-    throw new Error(`Malformed Opencode pending ${kind} payload: missing session id.`);
-  }
-  return sessionId;
 };
 
 const hasCompletedAssistantMessage = (value: unknown): boolean => {
@@ -217,7 +106,7 @@ const listChildSessionLinks = async (
     ?.children;
   if (typeof childrenApi !== "function") {
     throw new Error(
-      "OpenCode SDK does not expose session.children(); cannot hydrate subagent transcript links.",
+      "OpenCode SDK does not expose session.children(); cannot load subagent transcript links.",
     );
   }
 
@@ -568,9 +457,26 @@ export const loadSessionHistory = async (
   const pendingAssistantIndex =
     pendingAssistantReverseIndex >= 0 ? entries.length - 1 - pendingAssistantReverseIndex : -1;
 
-  return entries.map((item, index) => {
+  const history: AgentSessionHistoryMessage[] = [];
+  let lastRenderedSystemPrompt: string | null = null;
+
+  for (const [index, item] of entries.entries()) {
+    if (item.entry.info.role === "user") {
+      const systemPrompt = item.entry.info.system?.trim() ?? "";
+      if (systemPrompt.length > 0 && systemPrompt !== lastRenderedSystemPrompt) {
+        history.push({
+          messageId: `system-prompt:${item.entry.info.id}`,
+          role: "system",
+          timestamp: item.timestamp,
+          text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
+          parts: [],
+        });
+        lastRenderedSystemPrompt = systemPrompt;
+      }
+    }
+
     if (item.entry.info.role === "assistant") {
-      return {
+      history.push({
         messageId: item.entry.info.id,
         role: "assistant",
         timestamp: item.timestamp,
@@ -578,10 +484,11 @@ export const loadSessionHistory = async (
         ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
         ...(item.model ? { model: item.model } : {}),
         parts: item.parts,
-      };
+      });
+      continue;
     }
 
-    return {
+    history.push({
       messageId: item.entry.info.id,
       role: "user",
       timestamp: item.timestamp,
@@ -590,8 +497,10 @@ export const loadSessionHistory = async (
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
-    };
-  });
+    });
+  }
+
+  return history;
 };
 
 export const loadAndSeedSessionHistory = async (
@@ -655,89 +564,5 @@ export const loadSessionTodos = async (
     return normalizeTodoList(payload);
   } catch (error) {
     throw toOpenCodeRequestError("load session todos", error);
-  }
-};
-
-export const listOpencodeLiveSessionPendingInput = async (
-  createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
-): Promise<
-  Record<
-    string,
-    {
-      approvals: AgentPendingApprovalRequest[];
-      questions: AgentPendingQuestionRequest[];
-    }
-  >
-> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const [permissionResponse, questionResponse] = await Promise.all([
-    client.permission.list({
-      directory: input.workingDirectory,
-    }),
-    client.question.list({
-      directory: input.workingDirectory,
-    }),
-  ]);
-  const permissions = unwrapData(permissionResponse, "list pending permissions");
-  const questions = unwrapData(questionResponse, "list pending questions");
-
-  const bySession: Record<
-    string,
-    {
-      approvals: AgentPendingApprovalRequest[];
-      questions: AgentPendingQuestionRequest[];
-    }
-  > = {};
-
-  for (const entry of permissions) {
-    const sessionId = requirePendingSessionId("approval", entry);
-    const normalized = normalizeOpenCodeApprovalRequest(entry);
-    bySession[sessionId] ??= { approvals: [], questions: [] };
-    bySession[sessionId].approvals.push(normalized);
-  }
-
-  for (const entry of questions) {
-    const sessionId = requirePendingSessionId("question", entry);
-    const normalized = normalizePendingQuestion(entry);
-    bySession[sessionId] ??= { approvals: [], questions: [] };
-    bySession[sessionId].questions.push(normalized);
-  }
-
-  return bySession;
-};
-
-export const replyApproval = async (
-  session: SessionRecord,
-  input: ReplyApprovalInput,
-): Promise<void> => {
-  const response = await session.client.permission.reply({
-    directory: session.input.workingDirectory,
-    requestID: input.requestId,
-    reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : {}),
-  });
-  if (response.error) {
-    throw toOpenCodeRequestError("reply to permission request", response.error, response.response);
-  }
-};
-
-export const replyQuestion = async (
-  session: SessionRecord,
-  input: ReplyQuestionInput,
-): Promise<void> => {
-  const response = await session.client.question.reply({
-    directory: session.input.workingDirectory,
-    requestID: input.requestId,
-    answers: input.answers,
-  });
-  if (response.error) {
-    throw toOpenCodeRequestError("reply to question request", response.error, response.response);
   }
 };

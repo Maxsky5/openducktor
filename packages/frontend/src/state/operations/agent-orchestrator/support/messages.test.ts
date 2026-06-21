@@ -1,11 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  createSessionMessagesFixture,
+  type SessionMessagesFixtureInput,
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
+  areSessionMessagesSameRevision,
+  createSessionMessagesState,
   everySessionMessage,
+  findFirstChangedSessionMessageIndex,
   findLastToolSessionMessage,
   findLastUserSessionMessage,
+  getSessionMessageAt,
   getSessionMessageCount,
   isFinalAssistantChatMessage,
   updateLastSessionMessage,
@@ -13,9 +22,9 @@ import {
   upsertSessionMessage,
 } from "./messages";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesFixtureInput) => ({
   externalSessionId: "session-1",
-  messages,
+  messages: createSessionMessagesFixture("session-1", messages),
 });
 
 describe("agent-orchestrator/support/messages", () => {
@@ -136,6 +145,60 @@ describe("agent-orchestrator/support/messages", () => {
     expect(everySessionMessage(createSession([]), () => false)).toBe(true);
   });
 
+  test("rejects messages owned by another session", () => {
+    const messages = createSessionMessagesState("session-2");
+
+    expect(() => getSessionMessageCount({ externalSessionId: "session-1", messages })).toThrow(
+      "belong to 'session-2'",
+    );
+  });
+
+  test("compares message states through the canonical revision contract", () => {
+    const messages = [
+      {
+        id: "m1",
+        role: "user" as const,
+        content: "Question",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+    ];
+    const first = createSessionMessagesState("session-1", messages, 3);
+    const equivalent = createSessionMessagesState("session-1", messages, 3);
+    const nextVersion = createSessionMessagesState("session-1", messages, 4);
+    const nextCount = createSessionMessagesState(
+      "session-1",
+      [
+        ...messages,
+        {
+          id: "m2",
+          role: "assistant" as const,
+          content: "Answer",
+          timestamp: "2026-02-22T08:00:01.000Z",
+        },
+      ],
+      3,
+    );
+
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: equivalent },
+      ),
+    ).toBe(true);
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: nextVersion },
+      ),
+    ).toBe(false);
+    expect(
+      areSessionMessagesSameRevision(
+        { externalSessionId: "session-1", messages: first },
+        { externalSessionId: "session-1", messages: nextCount },
+      ),
+    ).toBe(false);
+  });
+
   test("detects final assistant chat messages", () => {
     expect(
       isFinalAssistantChatMessage({
@@ -164,5 +227,85 @@ describe("agent-orchestrator/support/messages", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  test("finds the final changed message index for tail-only message updates", () => {
+    const previousSession = createSession(
+      Array.from({ length: 400 }, (_, index) => ({
+        id: `message-${index}`,
+        role: "assistant" as const,
+        content: `Message ${index}`,
+        timestamp: `2026-02-22T08:${String(index % 60).padStart(2, "0")}:00.000Z`,
+        meta: {
+          kind: "assistant" as const,
+          agentRole: "build" as const,
+          isFinal: true,
+        },
+      })),
+    );
+    const previousMessages = previousSession.messages;
+    const nextMessages = sessionMessagesToArray(previousSession);
+    const lastMessage = getSessionMessageAt(previousSession, 399);
+    if (!lastMessage) {
+      throw new Error("Expected last message fixture");
+    }
+
+    nextMessages[399] = {
+      ...lastMessage,
+      content: "Updated final message",
+    };
+
+    expect(
+      findFirstChangedSessionMessageIndex(previousMessages, {
+        ...previousSession,
+        messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
+      }),
+    ).toBe(399);
+  });
+
+  test("finds the append point when new messages are added", () => {
+    const previousSession = createSession([
+      {
+        id: "message-0",
+        role: "assistant",
+        content: "Message 0",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "Message 1",
+        timestamp: "2026-02-22T08:01:00.000Z",
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        content: "Message 2",
+        timestamp: "2026-02-22T08:02:00.000Z",
+      },
+      {
+        id: "message-3",
+        role: "assistant",
+        content: "Message 3",
+        timestamp: "2026-02-22T08:03:00.000Z",
+      },
+    ]);
+    const previousMessages = previousSession.messages;
+    const nextMessages = [
+      ...sessionMessagesToArray(previousSession),
+      {
+        id: "message-4",
+        role: "assistant" as const,
+        content: "Message 4",
+        timestamp: "2026-02-22T08:04:00.000Z",
+      },
+    ];
+
+    expect(
+      findFirstChangedSessionMessageIndex(previousMessages, {
+        ...previousSession,
+        messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
+      }),
+    ).toBe(4);
   });
 });

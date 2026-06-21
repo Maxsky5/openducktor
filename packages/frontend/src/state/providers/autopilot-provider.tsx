@@ -3,31 +3,39 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
-import { getAutopilotRule } from "@/features/autopilot/autopilot-catalog";
+import {
+  AUTOPILOT_ACTION_DEFINITIONS,
+  getAutopilotRule,
+} from "@/features/autopilot/autopilot-catalog";
 import {
   detectAutopilotEvents,
   shouldAdvanceAutopilotBaseline,
   toTaskMap,
 } from "@/features/autopilot/autopilot-events";
-import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
+import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state";
 import {
   useAgentOperationsContext,
   useRuntimeDefinitionsContext,
-  useTaskDataContext,
+  useTaskSnapshotContext,
 } from "../app-state-contexts";
 import { loadTaskWorktree } from "../operations/agent-orchestrator/runtime/runtime";
+import { loadAgentSessionListFromQuery } from "../queries/agent-sessions";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { tasks } = useTaskDataContext();
+  const { tasks } = useTaskSnapshotContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
-  const { startAgentSession, settleStartedAgentSession, sendAgentMessage } =
-    useAgentOperationsContext();
+  const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
+  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+    workspaceId: activeWorkspace?.workspaceId ?? null,
+    startAgentSession,
+    sendAgentMessage,
+  });
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const previousRepoRef = useRef<string | null>(null);
   const previousTasksByIdRef = useRef<Map<string, TaskCard> | null>(null);
@@ -72,29 +80,31 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         const rule = getAutopilotRule(autopilotSettings, observedEvent.eventId);
         await Promise.all(
           rule.actionIds.map(async (actionId) => {
+            const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
             try {
               const outcome = await executeAutopilotAction({
                 activeWorkspace,
                 task: observedEvent.task,
                 actionId,
                 queryClient,
+                loadTaskSessionRecords: (repoPath, taskId) =>
+                  loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {
+                    forceFresh: true,
+                  }),
                 loadRepoRuntimeCatalog,
                 resolveTaskWorktree: loadTaskWorktree,
-                startSessionWorkflow,
-                startAgentSession,
-                settleStartedAgentSession,
-                sendAgentMessage,
-                onDetachedPostStartError: ({ actionLabel, taskId: detachedTaskId, error }) => {
-                  toast.error(
-                    `Autopilot started ${actionLabel} for ${detachedTaskId}, but kickoff failed.`,
-                    {
-                      description: error.message,
-                    },
-                  );
-                },
+                runSessionStartWorkflow,
               });
 
               if (outcome.kind === "started") {
+                if (outcome.postStartActionError) {
+                  toast.error(
+                    `Autopilot started ${action.label} for ${observedEvent.task.id}, but kickoff failed.`,
+                    {
+                      description: outcome.postStartActionError.message,
+                    },
+                  );
+                }
                 toast.success(`Autopilot: ${outcome.message}`);
               } else {
                 toast.info(`Autopilot skipped ${observedEvent.task.id}.`, {
@@ -115,9 +125,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     activeWorkspace,
     loadRepoRuntimeCatalog,
     queryClient,
-    sendAgentMessage,
-    settleStartedAgentSession,
-    startAgentSession,
+    runSessionStartWorkflow,
     settingsSnapshotQuery.data?.autopilot,
     tasks,
   ]);

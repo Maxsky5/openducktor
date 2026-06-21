@@ -1,9 +1,14 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeCatalogQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
 
 type UseSettingsModalCatalogStateArgs = {
   enabled: boolean;
@@ -21,6 +26,14 @@ type SettingsModalCatalogState = {
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
 };
 
+const skippedSettingsCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+  skippedQueryOptions<AgentModelCatalog>({
+    queryKey: runtimeRef
+      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+      : runtimeCatalogQueryKeys.all,
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
 export const useSettingsModalCatalogState = ({
   enabled,
   selectedRepoPath,
@@ -30,14 +43,17 @@ export const useSettingsModalCatalogState = ({
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
 
   const catalogQueries = useQueries({
-    queries: uniqueRuntimeKinds.map((runtimeKind) => ({
-      ...repoRuntimeCatalogQueryOptions(
-        selectedRepoPath ?? "",
-        runtimeKind,
-        loadRepoRuntimeCatalog,
-      ),
-      enabled: enabled && Boolean(selectedRepoPath),
-    })),
+    queries: uniqueRuntimeKinds.map((runtimeKind) => {
+      const runtimeRef: RepoRuntimeRef | null = selectedRepoPath
+        ? {
+            repoPath: selectedRepoPath,
+            runtimeKind,
+          }
+        : null;
+      return enabled && runtimeRef
+        ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
+        : skippedSettingsCatalogQueryOptions(runtimeRef);
+    }),
   });
 
   const catalogsByRuntime = useMemo<Record<string, AgentModelCatalog | null>>(() => {

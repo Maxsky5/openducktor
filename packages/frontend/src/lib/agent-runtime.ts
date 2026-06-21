@@ -1,13 +1,12 @@
 import {
   type AgentRuntimes,
   type AgentSessionStartMode,
+  formatRuntimeDescriptorSchemaIssue,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
-  type RuntimeCapabilityClass,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
-  runtimeCapabilityClasses,
   runtimeDescriptorSchema,
   runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
@@ -237,83 +236,6 @@ const roleScopeRequirementsDescription = (): string => {
   return agentRoles
     .map((role) => `${role} requires ${runtimeRequiredScopesByRole[role].join(", ")}`)
     .join("; ");
-};
-
-const runtimeCapabilityClassEntries = Object.entries(runtimeCapabilityClasses).sort(
-  ([left], [right]) => right.length - left.length,
-) as Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>;
-
-const getRuntimeCapabilityClassForPath = (
-  capabilityPath: string,
-): RuntimeCapabilityClass | null => {
-  return (
-    runtimeCapabilityClassEntries.find(
-      ([capabilityKey]) =>
-        capabilityPath === capabilityKey || capabilityPath.startsWith(`${capabilityKey}.`),
-    )?.[1] ?? null
-  );
-};
-
-const launchScopedConstraintPaths = new Set([
-  "sessionLifecycle.forkTargets",
-  "history.loadable",
-  "history.stableItemIds",
-  "history.stableItemOrder",
-  "history.exposesCompletionState",
-]);
-
-const classifyRuntimeDescriptorSchemaIssue = ({
-  path,
-  message,
-}: {
-  path: PropertyKey[];
-  message: string;
-}): RuntimeCapabilityClass => {
-  const descriptorPath = path.map(String).join(".");
-  const capabilityPath = path.slice(1).map(String).join(".");
-  if (
-    descriptorPath.startsWith("workflowToolAliasesByCanonical") ||
-    descriptorPath.startsWith("readOnlyRoleBlockedTools")
-  ) {
-    return "workflow";
-  }
-  if (
-    capabilityPath.startsWith("sessionLifecycle.supportedStartModes") &&
-    message.toLowerCase().includes("fork")
-  ) {
-    return "launch_scoped";
-  }
-  if (capabilityPath.startsWith("promptInput.supportedParts")) {
-    if (message.includes("slash commands") || message.includes("file search")) {
-      return "optional_enhancement";
-    }
-  }
-  if (launchScopedConstraintPaths.has(capabilityPath)) {
-    return "launch_scoped";
-  }
-
-  const mappedCapabilityClass = getRuntimeCapabilityClassForPath(capabilityPath);
-  if (mappedCapabilityClass !== null) {
-    return mappedCapabilityClass;
-  }
-
-  if (capabilityPath.startsWith("approvals.")) {
-    return "workflow";
-  }
-  if (capabilityPath.startsWith("structuredInput.")) {
-    return "workflow";
-  }
-
-  return "baseline";
-};
-
-const formatRuntimeDescriptorSchemaIssue = (issue: {
-  path: PropertyKey[];
-  message: string;
-}): string => {
-  const issueClass = classifyRuntimeDescriptorSchemaIssue(issue);
-  const issuePath = issue.path.map(String).join(".") || "descriptor";
-  return `[${issueClass}] runtime descriptor schema violation at ${issuePath}: ${issue.message}`;
 };
 
 export const getRuntimeDescriptorCapabilityConfigErrors = (

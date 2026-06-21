@@ -1,16 +1,17 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { createSessionPromptContext, loadSessionPromptInputs } from "../support/session-prompt";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { throwIfRepoStale } from "../support/core";
+import { loadSessionPromptContext } from "../support/session-prompt";
 import type {
-  ResolvedRuntimeAndModel,
+  FreshStartRuntimeContext,
   RuntimeDependencies,
   StartSessionContext,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
 
-export const resolvePromptContext = async ({
+export const loadStartSystemPrompt = async ({
   ctx,
   taskCard,
   deps,
@@ -18,51 +19,19 @@ export const resolvePromptContext = async ({
   ctx: StartSessionContext;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "model">;
-}): Promise<Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">> => {
-  const { promptOverrides } = await loadSessionPromptInputs({
+}): Promise<string> => {
+  const { systemPrompt } = await loadSessionPromptContext({
     workspaceId: ctx.workspaceId,
+    role: ctx.role,
+    task: taskCard,
     loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const { systemPrompt } = createSessionPromptContext({
-    role: ctx.role,
-    task: taskCard,
-    promptOverrides,
-  });
-
-  return {
-    systemPrompt,
-    promptOverrides,
-  };
+  return systemPrompt;
 };
 
-const ensureRuntimeAfterPromptContext = async ({
-  ctx,
-  targetWorkingDirectory,
-  requestedRuntimeKind,
-  promptContext,
-  deps,
-}: {
-  ctx: StartSessionContext;
-  targetWorkingDirectory?: string | null;
-  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
-  promptContext: Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">;
-  deps: Pick<StartSessionExecutionDependencies, "runtime">;
-}): Promise<Omit<ResolvedRuntimeAndModel, "taskCard">> => {
-  const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
-    workspaceId: ctx.workspaceId,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
-  });
-
-  return {
-    runtime: runtimeInfo,
-    ...promptContext,
-  };
-};
-
-export const resolveRuntimeAndModel = async ({
+export const resolveFreshStartRuntimeContext = async ({
   ctx,
   targetWorkingDirectory,
   requestedRuntimeKind,
@@ -71,27 +40,25 @@ export const resolveRuntimeAndModel = async ({
 }: {
   ctx: StartSessionContext;
   targetWorkingDirectory?: string | null;
-  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
+  requestedRuntimeKind: RuntimeKind;
   taskCard: TaskCard;
-  deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
-}): Promise<ResolvedRuntimeAndModel> => {
-  const promptContext = await resolvePromptContext({
+  deps: Pick<StartSessionExecutionDependencies, "runtime" | "model">;
+}): Promise<FreshStartRuntimeContext> => {
+  const systemPrompt = await loadStartSystemPrompt({
     ctx,
     taskCard,
     deps,
   });
-  const runtimeContext = await ensureRuntimeAfterPromptContext({
-    ctx,
+  const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    requestedRuntimeKind,
-    promptContext,
-    deps,
+    runtimeKind: requestedRuntimeKind,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   return {
-    taskCard,
-    ...runtimeContext,
+    runtime,
+    systemPrompt,
   };
 };
 

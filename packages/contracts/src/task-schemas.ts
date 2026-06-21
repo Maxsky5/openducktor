@@ -5,7 +5,6 @@ import {
   gitTargetBranchSchema,
   pullRequestSchema,
 } from "./git-schemas";
-import { agentSessionRecordSchema } from "./session-schemas";
 
 export const taskStatusSchema = z.enum([
   "open",
@@ -171,7 +170,6 @@ export const taskCardSchema = z.object({
   labels: z.array(z.string()).default([]),
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   subtaskIds: z.array(z.string()).default([]),
-  agentSessions: z.array(agentSessionRecordSchema).optional(),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),

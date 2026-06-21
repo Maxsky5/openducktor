@@ -1,15 +1,15 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
-  loadRepoConfigFromQuery,
   loadWorkspaceListFromQuery,
-  workspaceQueryKeys,
+  markWorkspaceCachesChanged,
+  workspaceListQueryOptions,
+  writeWorkspaceListToQuery,
 } from "../../queries/workspace";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "../shared/runtime-readiness-publication";
 import {
   normalizeRepoPath,
   shouldResetBranchStateForRepoChange,
@@ -100,15 +100,27 @@ export function useWorkspaceSelectionOperations({
   hostClient,
 }: UseWorkspaceSelectionOperationsArgs): UseWorkspaceSelectionOperationsResult {
   const queryClient = useQueryClient();
-  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
   const workspaceReorderVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
+  const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
+  const workspaces = workspaceListQuery.data ?? [];
   const workspacesRef = useRef(workspaces);
 
   activeWorkspaceRef.current = activeWorkspace;
   workspacesRef.current = workspaces;
+
+  const writeWorkspaceRecords = useCallback(
+    (
+      recordsOrUpdater:
+        | WorkspaceRecord[]
+        | ((current: WorkspaceRecord[] | undefined) => WorkspaceRecord[]),
+    ): void => {
+      writeWorkspaceListToQuery(queryClient, recordsOrUpdater);
+    },
+    [queryClient],
+  );
 
   const clearStateForWorkspaceTransition = useCallback(
     (nextWorkspace: ActiveWorkspace | WorkspaceRecord | null): void => {
@@ -124,30 +136,32 @@ export function useWorkspaceSelectionOperations({
     [clearActiveTaskStoreCheck, clearBranchData, clearTaskData],
   );
 
-  const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
-    setWorkspaces((current) => {
-      let hasMatch = false;
-      const next = current.map((workspace) => {
-        const isActive = workspace.workspaceId === workspaceId;
-        hasMatch ||= isActive;
+  const markWorkspaceActiveLocally = useCallback(
+    (workspaceId: string): void => {
+      writeWorkspaceRecords((current = []) => {
+        let hasMatch = false;
+        const next = current.map((workspace) => {
+          const isActive = workspace.workspaceId === workspaceId;
+          hasMatch ||= isActive;
 
-        if (workspace.isActive === isActive) {
-          return workspace;
-        }
+          if (workspace.isActive === isActive) {
+            return workspace;
+          }
 
-        return {
-          ...workspace,
-          isActive,
-        };
+          return {
+            ...workspace,
+            isActive,
+          };
+        });
+
+        return hasMatch ? next : current;
       });
+    },
+    [writeWorkspaceRecords],
+  );
 
-      return hasMatch ? next : current;
-    });
-  }, []);
-
-  const applyWorkspaceRecords = useCallback(
+  const applyActiveWorkspaceFromRecords = useCallback(
     (records: WorkspaceRecord[]): void => {
-      setWorkspaces(records);
       const selectedWorkspace = resolveActiveWorkspaceFromRecords({
         records,
         activeWorkspace: activeWorkspaceRef.current,
@@ -160,9 +174,17 @@ export function useWorkspaceSelectionOperations({
     [clearStateForWorkspaceTransition, setActiveWorkspace],
   );
 
+  const applyWorkspaceRecords = useCallback(
+    (records: WorkspaceRecord[]): void => {
+      writeWorkspaceRecords(records);
+      applyActiveWorkspaceFromRecords(records);
+    },
+    [applyActiveWorkspaceFromRecords, writeWorkspaceRecords],
+  );
+
   const applyWorkspaceRecord = useCallback(
     (record: WorkspaceRecord): void => {
-      setWorkspaces((current) => {
+      writeWorkspaceRecords((current = []) => {
         const next = current.map((entry) => {
           if (entry.workspaceId === record.workspaceId) {
             return record;
@@ -192,8 +214,26 @@ export function useWorkspaceSelectionOperations({
         setActiveWorkspace(record);
       }
     },
-    [clearStateForWorkspaceTransition, setActiveWorkspace],
+    [clearStateForWorkspaceTransition, setActiveWorkspace, writeWorkspaceRecords],
   );
+
+  useLayoutEffect(() => {
+    if (!workspaceListQuery.data) {
+      return;
+    }
+
+    applyActiveWorkspaceFromRecords(workspaceListQuery.data);
+  }, [applyActiveWorkspaceFromRecords, workspaceListQuery.data]);
+
+  useEffect(() => {
+    if (!workspaceListQuery.error) {
+      return;
+    }
+
+    toast.error("Workspace load failed", {
+      description: errorMessage(workspaceListQuery.error),
+    });
+  }, [workspaceListQuery.error]);
 
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
@@ -202,22 +242,19 @@ export function useWorkspaceSelectionOperations({
       const optimisticRecords = orderWorkspaceRecords(previousRecords, workspaceIds);
 
       if (optimisticRecords) {
-        setWorkspaces(optimisticRecords);
-        queryClient.setQueryData(workspaceQueryKeys.list(), optimisticRecords);
+        writeWorkspaceRecords(optimisticRecords);
       }
 
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
 
         if (workspaceReorderVersionRef.current === reorderVersion) {
-          queryClient.setQueryData(workspaceQueryKeys.list(), records);
           applyWorkspaceRecords(records);
         }
       } catch (error) {
         if (workspaceReorderVersionRef.current === reorderVersion) {
           if (optimisticRecords) {
-            setWorkspaces(previousRecords);
-            queryClient.setQueryData(workspaceQueryKeys.list(), previousRecords);
+            writeWorkspaceRecords(previousRecords);
             const selectedWorkspace = resolveActiveWorkspaceFromRecords({
               records: previousRecords,
               activeWorkspace: activeWorkspaceRef.current,
@@ -232,7 +269,7 @@ export function useWorkspaceSelectionOperations({
         }
       }
     },
-    [applyWorkspaceRecords, hostClient, queryClient, setActiveWorkspace],
+    [applyWorkspaceRecords, hostClient, setActiveWorkspace, writeWorkspaceRecords],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -241,13 +278,7 @@ export function useWorkspaceSelectionOperations({
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
   const refreshWorkspaceCachesAfterMutation = useCallback(async (): Promise<void> => {
-    await queryClient.invalidateQueries({
-      queryKey: workspaceQueryKeys.list(),
-    });
-    queryClient.removeQueries({
-      queryKey: workspaceQueryKeys.settingsSnapshot(),
-      exact: true,
-    });
+    await markWorkspaceCachesChanged(queryClient);
   }, [queryClient]);
 
   const addWorkspace = useCallback(
@@ -285,35 +316,6 @@ export function useWorkspaceSelectionOperations({
           clearStateForWorkspaceTransition(selectedWorkspace);
           setActiveWorkspace(selectedWorkspace);
 
-          void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
-            .then((repoConfig) => {
-              if (workspaceSwitchVersionRef.current !== switchVersion) {
-                return;
-              }
-              if (!repoConfig?.defaultRuntimeKind?.trim()) {
-                throw new Error(
-                  "Repository default runtime is not configured. Select a repository default runtime before switching repositories.",
-                );
-              }
-
-              return ensureRuntimeAndInvalidateReadinessQueries({
-                repoPath: selectedWorkspace.repoPath,
-                runtimeKind: repoConfig.defaultRuntimeKind,
-                ensureRuntime: (repoPath, runtimeKind) =>
-                  hostClient.runtimeEnsure(repoPath, runtimeKind),
-                queryClient,
-              });
-            })
-            .catch((error) => {
-              if (workspaceSwitchVersionRef.current !== switchVersion) {
-                return;
-              }
-
-              toast.error("Runtime unavailable", {
-                description: errorMessage(error),
-              });
-            });
-
           try {
             await refreshWorkspaces();
           } catch (error) {
@@ -343,7 +345,6 @@ export function useWorkspaceSelectionOperations({
       clearStateForWorkspaceTransition,
       hostClient,
       markWorkspaceActiveLocally,
-      queryClient,
       refreshWorkspaceCachesAfterMutation,
       refreshWorkspaces,
       setActiveWorkspace,

@@ -4,7 +4,6 @@ import type {
   TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
   describeRepoRuntimeStatus,
@@ -14,6 +13,8 @@ import {
   getRepoRuntimeMcpActivity,
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
+  isRepoRuntimeHealthBlockingReadiness,
+  isRepoRuntimeHealthPendingReadiness,
 } from "@/lib/repo-runtime-health";
 import {
   getRepoStoreCategoryLabel,
@@ -23,16 +24,11 @@ import {
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
 import {
-  buildTimeoutToastDescription,
-  hasDiagnosticsRetryingState,
-  hasRuntimeCheckFailure,
+  getCliToolsCheckFailureDetail,
+  hasCliToolCheckFailure,
   hasTaskStoreCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 
 export type DiagnosticKeyValueRowModel = {
@@ -79,54 +75,6 @@ type BuildDiagnosticsPanelModelInput = {
 
 type RuntimeHealthState = RepoRuntimeHealthMap[string] | undefined;
 
-const formatCliRuntimeValue = (cliHealth: RuntimeCheck["runtimes"][number] | null): string => {
-  if (cliHealth?.enabled === false) {
-    const detectedValue = cliHealth.ok ? (cliHealth.version ?? "detected") : "missing";
-    return `${detectedValue} (runtime disabled)`;
-  }
-
-  if (cliHealth?.ok) {
-    return cliHealth.version ?? "detected";
-  }
-
-  return "missing";
-};
-
-const buildDisabledRuntimeHealth = (definition: RuntimeDescriptor): RepoRuntimeHealthCheck => {
-  const checkedAt = new Date().toISOString();
-  const detail = `${definition.label} runtime is disabled in Agent Runtime settings.`;
-  const supportsMcpStatus = definition.capabilities.optionalSurfaces.supportsMcpStatus;
-
-  return {
-    status: "disabled",
-    checkedAt,
-    runtime: {
-      status: "disabled",
-      stage: "idle",
-      observation: null,
-      instance: null,
-      startedAt: null,
-      updatedAt: checkedAt,
-      elapsedMs: null,
-      attempts: null,
-      detail,
-      failureKind: null,
-      failureReason: null,
-    },
-    mcp: supportsMcpStatus
-      ? {
-          supported: true,
-          status: "unsupported",
-          serverName: ODT_MCP_SERVER_NAME,
-          serverStatus: null,
-          toolIds: [],
-          detail: "Runtime is disabled, so MCP is not checked.",
-          failureKind: null,
-        }
-      : null,
-  };
-};
-
 const getFailureBadge = (
   ok: boolean | null,
   failureKind: RepoRuntimeFailureKind,
@@ -156,13 +104,11 @@ const buildFailureMessages = ({
   availabilityVerb?: "is" | "are";
 }): string[] => {
   if (failureKind === "timeout") {
-    return [
-      buildTimeoutToastDescription(
-        label,
-        detail,
-        availabilityVerb ? { availabilityVerb } : undefined,
-      ),
-    ];
+    const verb = availabilityVerb ?? "is";
+    const message = detail
+      ? `${label} ${verb} not yet available. Latest detail: ${detail}`
+      : `${label} ${verb} not yet available.`;
+    return [message];
   }
 
   return detail ? [detail] : [];
@@ -173,7 +119,7 @@ const getRepoStoreFailureBadge = (
   failureKind: RepoRuntimeFailureKind,
 ): DiagnosticsSectionModel["badge"] => {
   if (failureKind === "timeout") {
-    return { label: "Retrying", variant: "warning" };
+    return { label: "Timed out", variant: "warning" };
   }
   const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
   if (repoStoreHealth === null) {
@@ -254,29 +200,12 @@ const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValue
   const rows: DiagnosticKeyValueRowModel[] = [];
   const instance = runtimeHealth.runtime.instance;
   if (instance) {
-    rows.push(
-      {
-        label: "Runtime ID",
-        value: instance.runtimeId,
-        mono: true,
-        valueClassName: "text-muted-foreground",
-      },
-      {
-        label: "Route",
-        value:
-          instance.runtimeRoute.type === "local_http"
-            ? instance.runtimeRoute.endpoint
-            : instance.runtimeRoute.identity,
-        mono: true,
-        valueClassName: "text-muted-foreground",
-      },
-      {
-        label: "Working directory",
-        value: instance.workingDirectory,
-        breakAll: true,
-        valueClassName: "text-muted-foreground",
-      },
-    );
+    rows.push({
+      label: "Working directory",
+      value: instance.workingDirectory,
+      breakAll: true,
+      valueClassName: "text-muted-foreground",
+    });
   }
 
   if (runtimeHealth.runtime.status !== "ready") {
@@ -424,26 +353,19 @@ export const buildDiagnosticsPanelModel = (
   const repoName = workspaceRepoPath?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
-  const runtimeEntries = runtimeDefinitions.map((definition) => {
-    const cliHealth =
-      runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null;
-    return {
-      definition,
-      cliHealth,
-      runtimeHealth:
-        runtimeHealthByRuntime[definition.kind] ??
-        (cliHealth?.enabled === false ? buildDisabledRuntimeHealth(definition) : undefined),
-    };
-  });
+  const runtimeEntries = runtimeDefinitions.map((definition) => ({
+    definition,
+    runtimeHealth: runtimeHealthByRuntime[definition.kind],
+  }));
   const isRuntimeHealthPending = runtimeEntries.some(
     ({ runtimeHealth }) => runtimeHealth === undefined,
   );
-  const hasCheckingRuntimeHealth = runtimeEntries.some(
-    ({ runtimeHealth }) => runtimeHealth?.status === "checking",
+  const hasRuntimeHealthChecking = runtimeEntries.some(({ runtimeHealth }) =>
+    isRepoRuntimeHealthPendingReadiness(runtimeHealth),
   );
-  const hasNotStartedRuntimeHealth = runtimeEntries.some(
-    ({ runtimeHealth }) => runtimeHealth?.status === "not_started",
-  );
+  const cliToolsIssueDetail = getCliToolsCheckFailureDetail(runtimeCheck, null);
+  const cliToolsFailureKind =
+    runtimeCheckFailureKind ?? (hasCliToolCheckFailure(runtimeCheck) ? "error" : null);
 
   const criticalReasons: string[] = [];
   if (workspaceRepoPath) {
@@ -451,22 +373,18 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
-    if (hasRuntimeCheckFailure(runtimeCheck) && runtimeCheckFailureKind !== "timeout") {
-      criticalReasons.push("Runtime CLI checks failing");
+    if (cliToolsIssueDetail) {
+      criticalReasons.push(cliToolsIssueDetail);
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
-      if (runtimeHealth?.status === "error") {
+      if (isRepoRuntimeHealthBlockingReadiness(runtimeHealth)) {
         criticalReasons.push(
-          describeRepoRuntimeStatus(definition.label, runtimeHealth) ??
+          describeRepoRuntimeStatus(definition.label, runtimeHealth ?? null) ??
             `${definition.label} runtime health has an issue.`,
         );
       }
     }
-    if (
-      repoStoreHealth &&
-      hasTaskStoreCheckFailure(taskStoreCheck) &&
-      taskStoreCheckFailureKind !== "timeout"
-    ) {
+    if (repoStoreHealth && hasTaskStoreCheckFailure(taskStoreCheck)) {
       criticalReasons.push(getRepoStoreDetail(repoStoreHealth));
     }
   }
@@ -483,13 +401,7 @@ export const buildDiagnosticsPanelModel = (
       runtimeCheck === null ||
       taskStoreCheck === null ||
       isRuntimeHealthPending ||
-      hasCheckingRuntimeHealth ||
-      hasDiagnosticsRetryingState({
-        runtimeDefinitions,
-        runtimeCheckFailureKind,
-        taskStoreCheckFailureKind,
-        runtimeHealthByRuntime,
-      }));
+      hasRuntimeHealthChecking);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",
@@ -519,24 +431,14 @@ export const buildDiagnosticsPanelModel = (
     ...(activeWorkspace ? {} : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
-  const cliRuntimeRows =
-    runtimeDefinitions.length > 0
-      ? runtimeEntries.map(({ definition, cliHealth }) => ({
-          label: runtimeLabelFor({ runtimeDefinitions, runtimeKind: definition.kind }),
-          value: formatCliRuntimeValue(cliHealth),
-        }))
-      : (runtimeCheck?.runtimes ?? []).map((runtimeEntry) => ({
-          label: runtimeEntry.kind,
-          value: runtimeEntry.ok ? (runtimeEntry.version ?? "detected") : "missing",
-        }));
-  const cliToolsHealthy = runtimeCheck === null ? null : !hasRuntimeCheckFailure(runtimeCheck);
+  const cliToolsHealthy = runtimeCheck === null ? null : !hasCliToolCheckFailure(runtimeCheck);
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",
     title: "CLI Tools",
-    badge: getFailureBadge(cliToolsHealthy, runtimeCheckFailureKind, {
+    badge: getFailureBadge(cliToolsHealthy, cliToolsFailureKind, {
       healthy: "Available",
-      timeout: "Retrying",
+      timeout: "Timed out",
       error: "Issue",
       checking: "Checking",
     }),
@@ -544,19 +446,18 @@ export const buildDiagnosticsPanelModel = (
       ? [
           { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
           { label: "GitHub CLI", value: runtimeCheck.ghVersion ?? "missing" },
-          ...cliRuntimeRows,
         ]
       : [],
     errors:
       runtimeDefinitionsError != null
-        ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
+        ? [runtimeDefinitionsError, ...(cliToolsIssueDetail ? [cliToolsIssueDetail] : [])]
         : buildFailureMessages({
             label: "CLI tools",
-            detail: runtimeCheck?.errors[0] ?? null,
-            failureKind: runtimeCheckFailureKind,
+            detail: cliToolsIssueDetail,
+            failureKind: cliToolsFailureKind,
             availabilityVerb: "are",
           }),
-    ...(runtimeCheck ? {} : { emptyMessage: "Runtime checks are loading..." }),
+    ...(runtimeCheck ? {} : { emptyMessage: "CLI checks are loading..." }),
   };
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
@@ -609,7 +510,6 @@ export const buildDiagnosticsPanelModel = (
       hasActiveWorkspace: Boolean(workspaceRepoPath),
       isChecking: isSummaryChecking,
       hasCriticalIssues: criticalReasons.length > 0,
-      hasPendingRuntimeStartup: hasNotStartedRuntimeHealth,
       hasSetupIssues: setupReasons.length > 0,
     }),
     criticalReasons,

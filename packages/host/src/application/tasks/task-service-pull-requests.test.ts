@@ -2008,6 +2008,9 @@ describe("createTaskService pull requests", () => {
   });
   test("syncs a merged linked pull request and closes the task", async () => {
     const calls: unknown[] = [];
+    const buildSession = createAgentSessionRecord({
+      workingDirectory: "/worktrees/repo/task-1",
+    });
     const linkedPullRequest = {
       providerId: "github" as const,
       number: 42,
@@ -2039,11 +2042,26 @@ describe("createTaskService pull requests", () => {
               task({
                 status: "human_review",
                 pullRequest: linkedPullRequest,
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
               }),
             ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [buildSession],
+            };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2111,19 +2129,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected metadata");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -3025,21 +3030,15 @@ describe("createTaskService pull requests", () => {
   test("links a merged pull request, closes the task, and cleans builder state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });
+    const buildSession = createAgentSessionRecord({
+      workingDirectory: "/worktrees/repo/task-1",
+    });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "list", input });
-            return [
-              task({
-                status: "human_review",
-                agentSessions: [
-                  createAgentSessionRecord({
-                    workingDirectory: "/worktrees/repo/task-1",
-                  }),
-                ],
-              }),
-            ];
+            return [task({ status: "human_review" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -3056,7 +3055,7 @@ describe("createTaskService pull requests", () => {
             return {
               spec: { markdown: "# Spec" },
               plan: { markdown: "# Plan" },
-              agentSessions: [],
+              agentSessions: [buildSession],
             };
           },
           catch: (cause) =>
@@ -3190,7 +3189,7 @@ describe("createTaskService pull requests", () => {
         input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
       },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "removeWorktree",

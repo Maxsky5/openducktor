@@ -3,6 +3,7 @@ import type { AgentSkillCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerSkills } from "./use-chat-composer-skills";
 
 (
@@ -14,23 +15,29 @@ const wrapper = ({ children }: PropsWithChildren) =>
 
 const EMPTY_CATALOG: AgentSkillCatalog = { skills: [] };
 
+const sessionRuntime: ChatComposerPromptInputRuntime = {
+  state: "available",
+  scope: "session",
+  runtimeRef: {
+    repoPath: "/repo",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/worktree",
+  },
+};
+
 describe("useChatComposerSkills", () => {
-  test("surfaces active-session runtime context errors without querying skills", async () => {
+  test("surfaces session-scoped runtime context errors without querying skills", async () => {
     const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
-    const readSessionSkills = mock(async () => EMPTY_CATALOG);
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasActiveSession: true,
-        activeSessionStatus: "idle",
-        activeSessionRuntimeQueryInput: null,
-        activeSessionRuntimeQueryError:
-          "Active session runtime context is missing working directory.",
+        promptInputRuntime: {
+          state: "unavailable",
+          runtimeKind: "codex",
+          error: "Selected session runtime context is missing working directory.",
+        },
         supportsSkillReferences: true,
-        workspaceRepoPath: "/repo",
-        selectedRuntimeKind: "codex",
         loadSkillsForRepo,
-        readSessionSkills,
       },
       { wrapper },
     );
@@ -38,18 +45,17 @@ describe("useChatComposerSkills", () => {
     try {
       await harness.mount();
 
-      expect(readSessionSkills).not.toHaveBeenCalled();
       expect(loadSkillsForRepo).not.toHaveBeenCalled();
       expect(harness.getLatest().skills).toEqual([]);
       expect(harness.getLatest().skillsError).toBe(
-        "Active session runtime context is missing working directory.",
+        "Selected session runtime context is missing working directory.",
       );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("reads active-session skills using the active working directory", async () => {
+  test("reads session-scoped skills using the session working directory", async () => {
     const catalog: AgentSkillCatalog = {
       skills: [
         {
@@ -59,24 +65,13 @@ describe("useChatComposerSkills", () => {
         },
       ],
     };
-    const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
-    const readSessionSkills = mock(async () => catalog);
+    const loadSkillsForRepo = mock(async () => catalog);
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasActiveSession: true,
-        activeSessionStatus: "idle",
-        activeSessionRuntimeQueryInput: {
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-        },
-        activeSessionRuntimeQueryError: null,
+        promptInputRuntime: sessionRuntime,
         supportsSkillReferences: true,
-        workspaceRepoPath: "/repo",
-        selectedRuntimeKind: "codex",
         loadSkillsForRepo,
-        readSessionSkills,
       },
       { wrapper },
     );
@@ -85,8 +80,11 @@ describe("useChatComposerSkills", () => {
       await harness.mount();
       await harness.waitFor((state) => state.skills.length === 1);
 
-      expect(loadSkillsForRepo).not.toHaveBeenCalled();
-      expect(readSessionSkills).toHaveBeenCalledWith("/repo", "codex", "/repo/worktree");
+      expect(loadSkillsForRepo).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+      });
       expect(harness.getLatest().skills).toEqual(catalog.skills);
     } finally {
       await harness.unmount();

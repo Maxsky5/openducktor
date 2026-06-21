@@ -1,183 +1,123 @@
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
+import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
-  useChecksOperationsContext,
-  useRuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
-import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
+  useAgentOperations,
+  useAgentSession,
+  useAgentSessionVisiblePendingInput,
+} from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
-import { useAgentChatSessionRuntimeData } from "../use-agent-chat-session-runtime-data";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
-import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
-import { errorMessageFromUnknown } from "./runtime-transcript-error";
-import { useLiveTranscriptAttachment } from "./use-live-transcript-attachment";
+import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
-import { useRuntimeTranscriptSessionHydration } from "./use-runtime-transcript-session-hydration";
-import { useRuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
+import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
+
+const EMPTY_TODOS = Object.freeze([]) as readonly AgentSessionTodoItem[];
+
+const mergePendingRequests = <Entry extends { requestId: string }>(
+  primary: readonly Entry[],
+  additional: readonly Entry[],
+): readonly Entry[] => {
+  if (primary.length === 0) {
+    return additional;
+  }
+  if (additional.length === 0) {
+    return primary;
+  }
+
+  const requestIds = new Set(primary.map((entry) => entry.requestId));
+  const merged = [...primary];
+  for (const entry of additional) {
+    if (requestIds.has(entry.requestId)) {
+      continue;
+    }
+    requestIds.add(entry.requestId);
+    merged.push(entry);
+  }
+  return merged;
+};
 
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
-  activeWorkspace: ActiveWorkspace | null;
-  externalSessionId: string | null;
-  source: RuntimeSessionTranscriptSource | null;
+  workspaceRepoPath: string | null;
+  target: AgentSessionIdentity | null;
 };
 
 export function useSessionTranscriptSurfaceModel({
   isOpen,
-  activeWorkspace,
-  externalSessionId: requestedExternalSessionId,
-  source,
+  workspaceRepoPath,
+  target,
 }: UseSessionTranscriptSurfaceModelArgs) {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
-  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
-    useChecksOperationsContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
-  const {
-    readSessionHistory,
-    readSessionModelCatalog,
-    readSessionTodos,
-    attachRuntimeTranscriptSession,
-    replyAgentApproval,
-    answerAgentQuestion,
-  } = useAgentOperations();
-  const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
-  const liveSession = useAgentSession(isOpen ? externalSessionId : null);
+  const hasWorkspace = workspaceRepoPath !== null;
+  const { replyAgentApproval, answerAgentQuestion } = useAgentOperations();
+  const liveSession = useAgentSession(isOpen ? target : null);
+  const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
-    activeWorkspace,
-  });
-
-  useRepoRuntimeHealthWarmup({
-    workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingChecks,
-    hasCachedRepoRuntimeHealth,
-    refreshRepoRuntimeHealthForRepo,
+    hasWorkspace,
   });
 
   const runtimeReadiness = useRepoRuntimeReadiness({
-    activeWorkspace,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
+    hasWorkspace,
+    runtimeTarget: repoRuntimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
   });
 
-  const sourceResolution = useRuntimeTranscriptSourceResolution({
+  const sessionHistory = useRuntimeTranscriptSessionHistory({
     isOpen,
-    workspaceRepoPath,
-    source,
-  });
-  const sessionHydration = useRuntimeTranscriptSessionHydration({
-    isOpen,
-    activeWorkspace,
-    externalSessionId,
-    source,
-    sourceResolution,
+    repoPath: workspaceRepoPath,
+    target,
+    repoReadinessState: runtimeReadiness.state,
     liveSession,
-    readSessionHistory,
   });
+  const pendingApprovalRequests = useMemo(
+    () =>
+      mergePendingRequests(
+        visiblePendingInput.pendingApprovals,
+        sessionHistory.interactionSession?.pendingApprovals ?? [],
+      ),
+    [sessionHistory.interactionSession, visiblePendingInput.pendingApprovals],
+  );
+  const pendingQuestionRequests = useMemo(
+    () =>
+      mergePendingRequests(
+        visiblePendingInput.pendingQuestions,
+        sessionHistory.interactionSession?.pendingQuestions ?? [],
+      ),
+    [sessionHistory.interactionSession, visiblePendingInput.pendingQuestions],
+  );
   const transcriptInteractions = useRuntimeTranscriptInteractions({
-    session: sessionHydration.session,
-    source,
-    externalSessionId,
-    sourceResolution,
-    isRuntimeReady: runtimeReadiness.isReady,
+    target,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
+    isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval,
     answerAgentQuestion,
   });
-  const liveAttachment = useLiveTranscriptAttachment({
-    isOpen,
-    activeWorkspace,
-    externalSessionId,
-    source,
-    sourceResolution,
-    visiblePendingApprovals: transcriptInteractions.visiblePendingApprovals,
-    visiblePendingQuestions: transcriptInteractions.visiblePendingQuestions,
-    attachRuntimeTranscriptSession,
-  });
-  const canUseLiveTranscriptSession =
-    source?.isLive !== true ||
-    (!liveAttachment.isAttachingLiveTranscript && !liveAttachment.liveTranscriptAttachError);
 
-  const runtimeData = useAgentChatSessionRuntimeData({
-    session: transcriptInteractions.session,
-    runtimeDefinitions,
-    repoReadinessState: runtimeReadiness.readinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
+  const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({
+    transcriptState: sessionHistory.transcriptState,
+    chatSettingsError,
   });
-  const isSessionWorking =
-    runtimeData.session?.status === "running" || runtimeData.session?.status === "starting";
-  const hasTranscriptSession = runtimeData.session !== null;
-  const isLiveAttachBlocking = liveAttachment.isAttachingLiveTranscript && !hasTranscriptSession;
-  const isTranscriptLoading = sessionHydration.isHistoryLoading || isLiveAttachBlocking;
-  const isResolvingTranscript =
-    Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
-    runtimeData.session === null &&
-    (sourceResolution.isPending || isTranscriptLoading);
-  const chatSettingsLoadError =
-    chatSettingsError && activeWorkspace
-      ? `Failed to load chat settings: ${errorMessageFromUnknown(
-          chatSettingsError,
-          "Settings read failed.",
-        )}`
-      : null;
-  const loadError =
-    sourceResolution.error ??
-    chatSettingsLoadError ??
-    liveAttachment.liveTranscriptAttachError ??
-    sessionHydration.historyError;
-  const emptyState = useMemo(() => {
-    if (loadError) {
-      return {
-        title: `Failed to load conversation: ${loadError}`,
-      };
-    }
-    if (isResolvingTranscript) {
-      return null;
-    }
-    if (externalSessionId && activeWorkspace) {
-      return {
-        title: "Conversation unavailable.",
-      };
-    }
-    return {
-      title: "Select a repository and session to view the conversation.",
-    };
-  }, [activeWorkspace, isResolvingTranscript, loadError, externalSessionId]);
+  const sessionKey = target ? agentSessionIdentityKey(target) : null;
 
   const model = useAgentChatSurfaceModel({
-    mode: "non_interactive",
-    session: runtimeData.session,
-    isTaskHydrating: isResolvingTranscript,
-    isSessionSelectionResolving: false,
+    sessionKey,
+    session: sessionHistory.session,
+    transcriptState: sessionHistory.transcriptState,
     chatSettings,
-    isSessionWorking,
-    isSessionHistoryLoading: isTranscriptLoading,
-    isWaitingForRuntimeReadiness: false,
-    runtimeDefinitions,
-    sessionRuntimeDataError: runtimeData.runtimeDataError ?? loadError,
+    sessionAuxiliaryError: transcriptSurfaceState.loadError,
     runtimeReadiness,
-    emptyState,
-    pendingQuestions: {
-      ...transcriptInteractions.pendingQuestions,
-      canSubmit: transcriptInteractions.pendingQuestions.canSubmit && canUseLiveTranscriptSession,
-    },
-    approvals: {
-      ...transcriptInteractions.approvals,
-      canReply: transcriptInteractions.approvals.canReply && canUseLiveTranscriptSession,
-    },
+    emptyState: transcriptSurfaceState.emptyState,
+    pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,
+    pendingQuestionRequests: transcriptInteractions.pendingQuestionRequests,
+    todos: EMPTY_TODOS,
+    pendingQuestions: transcriptInteractions.pendingQuestions,
+    approvals: transcriptInteractions.approvals,
   });
 
   return {
     model,
-    session: runtimeData.session,
-    runtimeDataError: runtimeData.runtimeDataError ?? loadError,
   };
 }

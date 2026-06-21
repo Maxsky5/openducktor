@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 
 type AgentSessionTodoPanelProps = {
-  todos: AgentSessionTodoItem[];
+  todos: readonly AgentSessionTodoItem[];
   collapsed: boolean;
   isSessionWorking: boolean;
   accentColor?: string | undefined;

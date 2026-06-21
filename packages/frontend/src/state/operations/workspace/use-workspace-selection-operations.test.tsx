@@ -5,27 +5,9 @@ import { useWorkspaceSelectionOperations } from "./use-workspace-selection-opera
 import {
   createDeferred,
   createWorkspaceHostClient,
-  createWorkspaceRuntimeSummary,
   workspace,
 } from "./workspace-hook-test-fixtures";
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
-
-type EmptyObject = Record<string, never>;
-
-type RepoConfigFixture = {
-  workspaceId: string;
-  workspaceName: string;
-  repoPath: string;
-  defaultRuntimeKind: "opencode";
-  branchPrefix: string;
-  defaultTargetBranch: { remote: string; branch: string };
-  git: { providers: Record<string, never> };
-  hooks: { preStart: []; postComplete: [] };
-  devServers: [];
-  worktreeCopyPaths: [];
-  promptOverrides: EmptyObject;
-  agentDefaults: EmptyObject;
-};
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -108,6 +90,11 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
 
       return latest;
     },
+    waitFor: async (
+      predicate: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => boolean,
+    ) => {
+      await sharedHarness.waitFor(() => Boolean(latest && predicate(latest)));
+    },
     unmount: async () => {
       await sharedHarness.unmount();
     },
@@ -169,26 +156,6 @@ describe("use-workspace-selection-operations", () => {
 
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-a", true));
     workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
-    workspaceHost.workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-a",
-      workspaceName: "repo-a",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    workspaceHost.runtimeEnsure = mock(async () => createWorkspaceRuntimeSummary("/repo-a"));
 
     const harness = createSelectionHarness({
       activeRepo: "/repo-old",
@@ -233,6 +200,7 @@ describe("use-workspace-selection-operations", () => {
       await harness.run((value) => {
         value.applyWorkspaceRecord(workspace("/repo-c", true));
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       expect(harness.getLatest().workspaces).toEqual([
         workspace("/repo-old", false),
@@ -271,9 +239,11 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
       await harness.run(async (value) => {
         await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
       });
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-c");
 
       expect(workspaceReorder).toHaveBeenCalledWith(["repo-c", "repo-a", "repo-b"]);
       expect(harness.getLatest().workspaces).toEqual([
@@ -317,6 +287,7 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       const firstCall = harness.run(async (value) => {
         await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
@@ -338,6 +309,7 @@ describe("use-workspace-selection-operations", () => {
         workspace("/repo-b"),
       ]);
       await firstCall;
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-b");
 
       expect(workspaceReorder).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().workspaces).toEqual([
@@ -371,11 +343,13 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       let pendingReorder: Promise<void> | null = null;
       await harness.run((value) => {
         pendingReorder = value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
       });
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-c");
 
       expect(harness.getLatest().workspaces).toEqual([
         workspace("/repo-c"),
@@ -429,29 +403,6 @@ describe("use-workspace-selection-operations", () => {
       workspace("/repo-a"),
       workspace("/repo-b", true),
     ]);
-    workspaceHost.workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-b",
-      workspaceName: "repo-b",
-      repoPath: "/repo-b",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    workspaceHost.runtimeEnsure = mock(async (repoPath: string) =>
-      createWorkspaceRuntimeSummary(repoPath),
-    );
-
     const harness = createSelectionHarness({
       activeWorkspace: latestActiveWorkspace,
       setActiveWorkspace: (workspace) => {
@@ -486,108 +437,6 @@ describe("use-workspace-selection-operations", () => {
       ]);
     } finally {
       reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
-      await harness.unmount();
-    }
-  });
-
-  test("skips stale runtime ensure calls after a newer workspace switch starts", async () => {
-    const repoAConfigDeferred = createDeferred<RepoConfigFixture>();
-    const runtimeEnsure = mock(async (repoPath: string) => createWorkspaceRuntimeSummary(repoPath));
-    const workspaceList = mock(async () => [workspace("/repo-a", true)]);
-    workspaceList.mockImplementationOnce(async () => [workspace("/repo-a", true)]);
-    workspaceList.mockImplementationOnce(async () => [workspace("/repo-b", true)]);
-    workspaceHost.workspaceSelect = mock(async (workspaceId: string) =>
-      workspace(`/${workspaceId}`, true),
-    );
-    workspaceHost.workspaceList = workspaceList;
-    workspaceHost.workspaceGetRepoConfig = mock(async (workspaceId: string) => {
-      if (workspaceId === "repo-a") {
-        return repoAConfigDeferred.promise;
-      }
-
-      return {
-        workspaceId: "repo-b",
-        workspaceName: "repo-b",
-        repoPath: "/repo-b",
-        defaultRuntimeKind: "opencode" as const,
-        branchPrefix: "odt",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      };
-    });
-    workspaceHost.runtimeEnsure = runtimeEnsure;
-
-    const harness = createSelectionHarness({
-      activeRepo: "/repo-old",
-      setActiveRepo: () => {},
-      clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
-      clearBranchData: () => {},
-    });
-
-    try {
-      await harness.mount();
-      await harness.run(async (value) => {
-        await value.selectWorkspace("repo-a");
-      });
-      await harness.run(async (value) => {
-        await value.selectWorkspace("repo-b");
-      });
-
-      repoAConfigDeferred.resolve({
-        workspaceId: "repo-a",
-        workspaceName: "repo-a",
-        repoPath: "/repo-a",
-        defaultRuntimeKind: "opencode",
-        branchPrefix: "odt",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(runtimeEnsure).toHaveBeenCalledTimes(1);
-      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-b", "opencode");
-    } finally {
-      repoAConfigDeferred.resolve({
-        workspaceId: "repo-a",
-        workspaceName: "repo-a",
-        repoPath: "/repo-a",
-        defaultRuntimeKind: "opencode",
-        branchPrefix: "odt",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      });
       await harness.unmount();
     }
   });

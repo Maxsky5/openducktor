@@ -1,0 +1,253 @@
+import { describe, expect, mock, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
+import { host } from "../operations/shared/host";
+import { runtimeCatalogQueryKeys } from "../queries/runtime-catalog";
+import { createCodexAppServerRuntimeAdapter } from "./codex-app-server-runtime-adapter";
+
+const createCodexRuntime = (runtimeId: string) => ({
+  kind: "codex" as const,
+  runtimeId,
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace" as const,
+  workingDirectory: "/repo",
+  runtimeRoute: { type: "stdio" as const, identity: runtimeId },
+  startedAt: "2026-02-22T09:00:00.000Z",
+  descriptor: CODEX_RUNTIME_DESCRIPTOR,
+});
+
+const codexModelListResponse = {
+  data: [
+    {
+      id: "gpt-5",
+      model: "gpt-5",
+      displayName: "GPT-5",
+      inputModalities: ["text", "image"],
+      supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced reasoning" }],
+      isDefault: true,
+    },
+  ],
+  nextCursor: null,
+};
+
+const configureCodexTestShellBridge = (
+  overrides: Partial<Pick<ShellBridge, "subscribeCodexAppServerEvents">> = {},
+): void => {
+  configureShellBridge({
+    client: {} as HostClient,
+    subscribeRunEvents: async () => () => {},
+    subscribeDevServerEvents: async () => () => {},
+    subscribeTaskEvents: async () => () => {},
+    subscribeCodexAppServerEvents: async () => () => {},
+    capabilities: {
+      canOpenExternalUrls: true,
+      canPreviewLocalAttachments: true,
+    },
+    openExternalUrl: async () => {},
+    resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+    ...overrides,
+  } satisfies ShellBridge);
+};
+
+const waitForSessionIdleEvent = async (
+  events: Array<{ type?: string }>,
+  deadline = Date.now() + 1_000,
+): Promise<void> => {
+  if (events.some((event) => event.type === "session_idle") || Date.now() >= deadline) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForSessionIdleEvent(events, deadline);
+};
+
+const waitForCodexEventListener = async (
+  bridge: { listener?: (payload: unknown) => void },
+  deadline = Date.now() + 1_000,
+): Promise<(payload: unknown) => void> => {
+  if (bridge.listener) {
+    return bridge.listener;
+  }
+  if (Date.now() >= deadline) {
+    throw new Error("Codex app-server event listener was not registered.");
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  return waitForCodexEventListener(bridge, deadline);
+};
+
+describe("createCodexAppServerRuntimeAdapter", () => {
+  test("resolves host-managed runtime ids through the host bridge", async () => {
+    const originalRuntimeEnsure = host.runtimeEnsure;
+    const originalRuntimeRequire = host.runtimeRequire;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const runtimeEnsureCalls: unknown[][] = [];
+    const runtimeRequireCalls: unknown[][] = [];
+    const codexRequestCalls: unknown[][] = [];
+
+    host.runtimeEnsure = mock(async (...args: unknown[]) => {
+      runtimeEnsureCalls.push(args);
+      return createCodexRuntime("runtime-codex-ensure");
+    }) as typeof host.runtimeEnsure;
+    host.runtimeRequire = mock(async (...args: unknown[]) => {
+      runtimeRequireCalls.push(args);
+      return createCodexRuntime("runtime-codex-live");
+    }) as typeof host.runtimeRequire;
+    host.codexAppServerRequest = mock(async (...args: unknown[]) => {
+      codexRequestCalls.push(args);
+      const [, method] = args as [string, string, unknown?];
+      if (method === "model/list") {
+        return codexModelListResponse;
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
+      }
+      if (method === "thread/name/set") {
+        return {};
+      }
+      throw new Error(`Unexpected Codex app-server request method: ${method}`);
+    }) as typeof host.codexAppServerRequest;
+    configureCodexTestShellBridge();
+
+    try {
+      const adapter = createCodexAppServerRuntimeAdapter();
+
+      await expect(
+        adapter.startSession({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+          taskId: "task-1",
+          role: "build",
+          systemPrompt: "Use the repo rules.",
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ).resolves.toMatchObject({ externalSessionId: "thread-codex" });
+
+      await expect(
+        adapter.listAvailableModels({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+        }),
+      ).resolves.toMatchObject({ runtime: { kind: "codex" } });
+
+      expect(runtimeEnsureCalls).toEqual([]);
+      expect(runtimeRequireCalls).toEqual([
+        ["/repo", "codex"],
+        ["/repo", "codex"],
+      ]);
+      expect(codexRequestCalls.map(([runtimeId, method]) => [runtimeId, method])).toEqual([
+        ["runtime-codex-live", "model/list"],
+        ["runtime-codex-live", "thread/start"],
+        ["runtime-codex-live", "thread/name/set"],
+      ]);
+      expect(codexRequestCalls[2]?.[2]).toEqual({
+        threadId: "thread-codex",
+        name: "BUILD task-1",
+      });
+    } finally {
+      host.runtimeEnsure = originalRuntimeEnsure;
+      host.runtimeRequire = originalRuntimeRequire;
+      host.codexAppServerRequest = originalCodexAppServerRequest;
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+
+  test("receives live app-server events from the shell bridge", async () => {
+    await clearAppQueryClient();
+    const originalRuntimeRequire = host.runtimeRequire;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const codexEventBridge: { listener?: (payload: unknown) => void } = {};
+
+    host.runtimeRequire = mock(async () =>
+      createCodexRuntime("runtime-codex-live"),
+    ) as typeof host.runtimeRequire;
+    host.codexAppServerRequest = mock(async (_runtimeId, method) => {
+      if (method === "model/list") {
+        return codexModelListResponse;
+      }
+      if (method === "thread/resume") {
+        return {
+          thread: {
+            id: "thread-live",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            status: { type: "active", activeFlags: [] },
+          },
+          startedAt: "2026-02-22T09:00:00.000Z",
+        };
+      }
+      throw new Error(`Unexpected Codex request '${method}'.`);
+    }) as typeof host.codexAppServerRequest;
+    configureCodexTestShellBridge({
+      subscribeCodexAppServerEvents: async (listener) => {
+        codexEventBridge.listener = listener;
+        return () => {
+          delete codexEventBridge.listener;
+        };
+      },
+    });
+
+    try {
+      const adapter = createCodexAppServerRuntimeAdapter();
+      const events: Array<{ type?: string }> = [];
+      const unsubscribe = await adapter.subscribeEvents(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+          externalSessionId: "thread-live",
+        },
+        (event) => events.push(event),
+      );
+
+      const emitCodexEvent = await waitForCodexEventListener(codexEventBridge);
+      const runtimeRef = {
+        repoPath: "/repo",
+        runtimeKind: "codex" as const,
+        workingDirectory: "/repo",
+      };
+      const runtimeSkillKey = runtimeCatalogQueryKeys.repoSkills(runtimeRef);
+      appQueryClient.setQueryData(runtimeSkillKey, { skills: [] });
+
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
+        kind: "notification",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-live",
+            turn: { id: "turn-live", status: "completed" },
+          },
+        },
+      });
+
+      await waitForSessionIdleEvent(events);
+      expect(events.some((event) => event.type === "session_idle")).toBe(true);
+
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
+        kind: "notification",
+        message: {
+          method: "skills/changed",
+          params: { cwd: "/repo" },
+        },
+      });
+
+      expect(appQueryClient.getQueryState(runtimeSkillKey)?.isInvalidated).toBe(true);
+      unsubscribe();
+    } finally {
+      host.runtimeRequire = originalRuntimeRequire;
+      host.codexAppServerRequest = originalCodexAppServerRequest;
+      await clearAppQueryClient();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+});

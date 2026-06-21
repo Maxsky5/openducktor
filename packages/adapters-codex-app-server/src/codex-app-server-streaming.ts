@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentUserMessage,
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
@@ -25,11 +26,9 @@ import {
   type CodexTokenUsageTotals,
   codexItemId,
   codexItemTypeMatches,
-  codexUserInputsFromItem,
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
   timestampFromCodexParams,
-  toCodexUserInputList,
   toStreamPart,
 } from "./codex-app-server-transcript";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
@@ -43,6 +42,7 @@ import {
   codexUserInputsToDisplayParts,
   toDisplayParts,
 } from "./codex-user-input-display";
+import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 export type CompletedAgentMessage = {
@@ -61,14 +61,13 @@ export type CodexStreamingContext = {
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
-  eventBacklogBySessionId: Map<string, AgentEvent[]>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   bufferNotification(notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  listenersForSession(externalSessionId: string): Set<(event: AgentEvent) => void> | undefined;
 };
 
 const modelForTurn = (
@@ -78,37 +77,12 @@ const modelForTurn = (
 ): AgentModelSelection | undefined =>
   turnId ? context.modelByTurnKey.get(codexTurnKey(session.threadId, turnId)) : undefined;
 
-const bufferSessionEvent = (
+const emitCodexSessionEvent = (
   context: CodexStreamingContext,
   externalSessionId: string,
   event: AgentEvent,
 ): void => {
-  // Pending input is stateful and exposed through presence snapshots; buffering it here would
-  // duplicate events for late listeners after the request has already been resolved.
-  if (event.type === "approval_required" || event.type === "question_required") {
-    return;
-  }
-  const backlog = context.eventBacklogBySessionId.get(externalSessionId) ?? [];
-  backlog.push(event);
-  if (backlog.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-    backlog.splice(0, backlog.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-  }
-  context.eventBacklogBySessionId.set(externalSessionId, backlog);
-};
-
-export const emitCodexSessionEvent = (
-  context: CodexStreamingContext,
-  externalSessionId: string,
-  event: AgentEvent,
-): void => {
-  const listeners = context.listenersForSession(externalSessionId);
-  if (!listeners) {
-    bufferSessionEvent(context, externalSessionId, event);
-    return;
-  }
-  for (const listener of listeners) {
-    listener(event);
-  }
+  context.emitSessionEvent(externalSessionId, event);
 };
 
 const withTurnModel = (
@@ -171,6 +145,19 @@ const consumeSyntheticUserMessage = (
 const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
+let lastAcceptedUserMessageTimestamp = 0;
+let acceptedUserMessageCounter = 0;
+
+const createCodexAcceptedUserMessageId = (timestamp = Date.now()): string => {
+  if (timestamp !== lastAcceptedUserMessageTimestamp) {
+    lastAcceptedUserMessageTimestamp = timestamp;
+    acceptedUserMessageCounter = 0;
+  }
+
+  acceptedUserMessageCounter += 1;
+  return `codex-user-${timestamp}-${acceptedUserMessageCounter}`;
+};
+
 const emitFinalAgentMessage = (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -199,32 +186,42 @@ const emitFinalAgentMessage = (
   }
 };
 
+export const createCodexAcceptedUserMessage = ({
+  session,
+  parts,
+  model,
+}: {
+  session: CodexSessionState;
+  parts: AgentUserMessagePart[];
+  model: AgentModelSelection | undefined;
+}): AcceptedAgentUserMessage => ({
+  type: "user_message",
+  externalSessionId: session.threadId,
+  timestamp: new Date().toISOString(),
+  messageId: createCodexAcceptedUserMessageId(),
+  message: serializeAgentUserMessagePartsToText(parts),
+  parts: toDisplayParts(parts),
+  state: "read",
+  ...(model ? { model } : {}),
+});
+
 export const emitCodexUserMessage = (
   context: CodexStreamingContext,
-  session: CodexSessionState,
-  parts: AgentUserMessagePart[],
-  model: AgentModelSelection | undefined,
-): void => {
-  const message = serializeAgentUserMessagePartsToText(parts);
+  event: AcceptedAgentUserMessage,
+  sourceParts: AgentUserMessagePart[],
+): AcceptedAgentUserMessage => {
   if (context.subscribeEvents) {
-    const codexEchoText = codexUserInputListToText(toCodexUserInputList(parts));
-    const pendingTexts = context.syntheticUserMessageTextsByThreadId.get(session.threadId) ?? [];
+    const codexEchoText = codexUserInputListToText(toCodexUserInputList(sourceParts));
+    const pendingTexts =
+      context.syntheticUserMessageTextsByThreadId.get(event.externalSessionId) ?? [];
     pendingTexts.push(codexEchoText);
     if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
       pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
     }
-    context.syntheticUserMessageTextsByThreadId.set(session.threadId, pendingTexts);
+    context.syntheticUserMessageTextsByThreadId.set(event.externalSessionId, pendingTexts);
   }
-  emitCodexSessionEvent(context, session.threadId, {
-    type: "user_message",
-    externalSessionId: session.threadId,
-    timestamp: new Date().toISOString(),
-    messageId: `codex-user-${Date.now()}`,
-    message,
-    parts: toDisplayParts(parts),
-    state: "read",
-    ...(model ? { model } : {}),
-  });
+  emitCodexSessionEvent(context, event.externalSessionId, event);
+  return event;
 };
 
 const emitStartedItem = (
@@ -389,8 +386,6 @@ export const handleCodexPendingNotifications = async (
     if (notification.method === "turn/started") {
       context.setSessionLiveStatus(session, {
         classification: "running",
-        status: { type: "busy" },
-        agentSessionStatus: "running",
       });
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
@@ -491,8 +486,6 @@ export const handleCodexPendingNotifications = async (
       if (!activeTurn || shouldSettleActiveTurn) {
         context.setSessionLiveStatus(session, {
           classification: "idle",
-          status: { type: "idle" },
-          agentSessionStatus: "idle",
         });
       }
       emitCanonicalEvents(

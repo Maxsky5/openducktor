@@ -8,6 +8,7 @@ import {
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
   CODEX_RUNTIME_DESCRIPTOR,
+  formatRuntimeDescriptorSchemaIssue,
   gitBranchSchema,
   gitCommitAllRequestSchema,
   gitCommitAllResultSchema,
@@ -110,6 +111,27 @@ const invalidRuntimeDescriptorCases =
   runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
 
 describe("runtime schemas", () => {
+  test("formats runtime descriptor schema issues with capability ownership", () => {
+    expect(
+      formatRuntimeDescriptorSchemaIssue({
+        path: ["capabilities", "history", "stableItemIds"],
+        message:
+          "Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+      }),
+    ).toBe(
+      "[launch_scoped] runtime descriptor schema violation at capabilities.history.stableItemIds: Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+    );
+
+    expect(
+      formatRuntimeDescriptorSchemaIssue({
+        path: ["capabilities", "supportsAttachLiveSessions"],
+        message: 'Unrecognized key: "supportsAttachLiveSessions"',
+      }),
+    ).toBe(
+      '[baseline] runtime descriptor schema violation at capabilities.supportsAttachLiveSessions: Unrecognized key: "supportsAttachLiveSessions"',
+    );
+  });
+
   test("OpenCode descriptor fixture stays aligned with the TypeScript built-in", () => {
     const parsed = runtimeDescriptorSchema.parse(opencodeRuntimeDescriptorFixture);
 
@@ -124,7 +146,6 @@ describe("runtime schemas", () => {
 
   test("Codex descriptor declares live session refresh support", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle).toMatchObject({
-      supportsAttachLiveSessions: true,
       supportsListLiveSessions: true,
     });
   });
@@ -281,7 +302,7 @@ describe("runtime schemas", () => {
     expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
   });
 
-  test("build session bootstrap parses runtime id and working directory without route data", () => {
+  test("build session bootstrap exposes runtime kind and working directory only", () => {
     const parsed = buildSessionBootstrapSchema.parse({
       runtimeKind: "opencode",
       runtimeId: " runtime-1 ",
@@ -290,7 +311,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.runtimeKind).toBe("opencode");
-    expect(parsed.runtimeId).toBe("runtime-1");
+    expect("runtimeId" in parsed).toBe(false);
     expect("runtimeRoute" in parsed).toBe(false);
     expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });
@@ -1256,7 +1277,6 @@ describe("runtime schemas", () => {
           supportedStartModes: ["fresh", "reuse", "fork"],
           supportsSessionFork: true,
           forkTargets: ["session", "message", "item"],
-          supportsAttachLiveSessions: true,
           supportsListLiveSessions: true,
           supportsQueuedUserMessages: true,
           supportsPendingInputSnapshots: true,
@@ -1268,14 +1288,6 @@ describe("runtime schemas", () => {
           stableItemIds: true,
           stableItemOrder: true,
           exposesCompletionState: true,
-          hydratedEventTypes: [
-            "message",
-            "tool_call",
-            "tool_result",
-            "approval_request",
-            "question_request",
-            "status_change",
-          ],
           limitations: [],
         },
         approvals: {
@@ -1566,7 +1578,7 @@ describe("runtime schemas", () => {
     expect(parsed.selectedModel).toBeNull();
   });
 
-  test("agent session record ignores old local session id when external id is present", () => {
+  test("agent session record strips legacy non-durable fields", () => {
     const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-2",
       externalSessionId: "obp-session-2",
@@ -1574,6 +1586,7 @@ describe("runtime schemas", () => {
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
+      systemPrompt: "Plan the work.",
       selectedModel: null,
     });
 
@@ -1594,6 +1607,19 @@ describe("runtime schemas", () => {
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("agent session record rejects blank working directory", () => {
+    const result = agentSessionRecordSchema.safeParse({
+      externalSessionId: "obp-session-2",
+      role: "planner",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: " ",
       selectedModel: null,
     });
 

@@ -5,6 +5,7 @@ import {
   flushAsync,
   makeMockClient,
   OpencodeSdkAdapter,
+  sessionRuntimeRef,
   startDefaultSession,
 } from "./test-support";
 
@@ -63,11 +64,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const partEvents = events.filter((entry) => entry.type === "assistant_part");
@@ -129,11 +130,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const idleEvents = events.filter((entry) => entry.type === "session_idle");
@@ -187,11 +188,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
@@ -269,11 +270,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
@@ -335,11 +336,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
@@ -401,11 +402,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     expect(events.some((entry) => entry.type === "assistant_message")).toBe(false);
@@ -443,11 +444,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const userEvents = events.filter((entry) => entry.type === "user_message");
@@ -509,11 +510,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const userEvents = events.filter((entry) => entry.type === "user_message");
@@ -574,11 +575,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     expect(events).toContainEqual({
@@ -641,11 +642,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -716,11 +717,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "planner");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "planner");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -790,11 +791,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -847,11 +848,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
@@ -905,11 +906,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
-
-    await startDefaultSession(adapter, "spec");
     await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");

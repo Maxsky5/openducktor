@@ -7,8 +7,8 @@ import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
-  activeExternalSessionId: string | null;
-  isSessionViewLoading: boolean;
+  displayedSessionKey: string | null;
+  shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
@@ -28,7 +28,7 @@ type UseAgentChatWindowResult = {
 };
 
 type StagedPrependScrollSnapshot = {
-  externalSessionId: string | null;
+  sessionKey: string | null;
   beforeScrollHeight: number;
   beforeScrollTop: number;
 };
@@ -36,8 +36,8 @@ type StagedPrependScrollSnapshot = {
 export function useAgentChatWindow({
   rows,
   turns,
-  activeExternalSessionId,
-  isSessionViewLoading,
+  displayedSessionKey,
+  shouldResetForTranscriptLoad,
   isSessionWorking = false,
   messagesContainerRef,
   messagesContentRef,
@@ -46,8 +46,8 @@ export function useAgentChatWindow({
   const composerLayoutSyncFrameRef = useRef<number | null>(null);
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const composerLayoutSyncTokenRef = useRef(0);
-  const prevSessionIdRef = useRef<string | null>(null);
-  const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
+  const prevSessionKeyRef = useRef<string | null>(null);
+  const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
   const stagedPrependScrollSnapshotRef = useRef<StagedPrependScrollSnapshot | null>(null);
   const {
     isNearBottom,
@@ -57,7 +57,7 @@ export function useAgentChatWindow({
     forceScrollToBottom,
     refreshScrollState,
   } = useAgentChatScrollController({
-    activeExternalSessionId,
+    displayedSessionKey,
     messagesContainerRef,
     messagesContentRef,
     isSessionWorking,
@@ -72,8 +72,8 @@ export function useAgentChatWindow({
     revealAllHistory,
   } = useAgentChatHistoryWindow({
     rows,
-    isSessionViewLoading,
-    activeExternalSessionId,
+    shouldResetForTranscriptLoad,
+    displayedSessionKey,
     messagesContainerRef,
     userScrolledRef,
     ...(turns ? { turns } : {}),
@@ -83,8 +83,7 @@ export function useAgentChatWindow({
   const isFollowingTranscript = useCallback(() => {
     return !userScrolledRef.current;
   }, [userScrolledRef]);
-
-  const preserveScrollBeforeStagedPrepend = useCallback(() => {
+  const preserveScrollBeforeStagedPrepend = useCallback((): void => {
     if (!userScrolledRef.current || stagedPrependScrollSnapshotRef.current !== null) {
       return;
     }
@@ -95,11 +94,11 @@ export function useAgentChatWindow({
     }
 
     stagedPrependScrollSnapshotRef.current = {
-      externalSessionId: activeExternalSessionId,
+      sessionKey: displayedSessionKey,
       beforeScrollHeight: container.scrollHeight,
       beforeScrollTop: container.scrollTop,
     };
-  }, [activeExternalSessionId, messagesContainerRef, userScrolledRef]);
+  }, [displayedSessionKey, messagesContainerRef, userScrolledRef]);
 
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (turnStart === latestTurnStart) {
@@ -112,24 +111,25 @@ export function useAgentChatWindow({
   }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
 
   useLayoutEffect(() => {
-    if (prevSessionIdRef.current === activeExternalSessionId) {
+    if (prevSessionKeyRef.current === displayedSessionKey) {
       return;
     }
 
-    prevSessionIdRef.current = activeExternalSessionId;
+    prevSessionKeyRef.current = displayedSessionKey;
     stagedPrependScrollSnapshotRef.current = null;
     resetLatestTurnsAndPinBottom();
-  }, [activeExternalSessionId, resetLatestTurnsAndPinBottom]);
+  }, [displayedSessionKey, resetLatestTurnsAndPinBottom]);
 
   useLayoutEffect(() => {
-    const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
-    prevIsSessionViewLoadingRef.current = isSessionViewLoading;
-    if (!finishedLoading) {
+    const finishedTranscriptLoad =
+      prevShouldResetForTranscriptLoadRef.current && !shouldResetForTranscriptLoad;
+    prevShouldResetForTranscriptLoadRef.current = shouldResetForTranscriptLoad;
+    if (!finishedTranscriptLoad) {
       return;
     }
 
     resetLatestTurnsAndPinBottom();
-  }, [isSessionViewLoading, resetLatestTurnsAndPinBottom]);
+  }, [resetLatestTurnsAndPinBottom, shouldResetForTranscriptLoad]);
 
   useEffect(() => {
     if (!syncBottomAfterComposerLayoutRef) {
@@ -204,16 +204,14 @@ export function useAgentChatWindow({
     forceScrollToBottom();
   }, [forceScrollToBottom, visibleWindowKey]);
 
-  // Intentionally checks staged prepends after every commit: staging happens in sibling hooks after
-  // this hook computes its window, so the window key can remain unchanged while the DOM grows above
-  // the viewport. The expensive scroll-state refresh stays gated in the next effect.
   useLayoutEffect(() => {
     const pendingStagedPrepend = stagedPrependScrollSnapshotRef.current;
     const container = messagesContainerRef.current;
     let restoredStagedPrepend = false;
+
     if (
       pendingStagedPrepend &&
-      pendingStagedPrepend.externalSessionId === activeExternalSessionId &&
+      pendingStagedPrepend.sessionKey === displayedSessionKey &&
       container
     ) {
       stagedPrependScrollSnapshotRef.current = null;

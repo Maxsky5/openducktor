@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -99,20 +99,10 @@ type UseAgentStudioDocumentsHook =
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
-type LegacyHookArgs = Omit<HookArgs, "activeWorkspace"> & {
-  activeWorkspace?: ActiveWorkspace | null;
-  workspaceRepoPath?: string | null;
-};
 type AgentMessage = AgentChatMessage;
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
 const createHookHarness = (
-  initialProps: LegacyHookArgs,
+  initialProps: HookArgs,
   options?: {
     runtimeDefinitionsContext?: ReturnType<typeof createRuntimeDefinitionsContextValue>;
     runtimeDefinitionsContextRef?: {
@@ -121,25 +111,28 @@ const createHookHarness = (
   },
 ) =>
   createSharedHookHarness(
-    (props: LegacyHookArgs) =>
-      useAgentStudioDocuments({
-        ...props,
-        activeWorkspace:
-          "workspaceRepoPath" in props
-            ? props.workspaceRepoPath
-              ? createActiveWorkspace(props.workspaceRepoPath)
-              : null
-            : (props.activeWorkspace ?? null),
-      }),
+    (props: HookArgs) => useAgentStudioDocuments(props),
     initialProps,
     options,
   );
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: createActiveWorkspace("/repo"),
+  workspaceRepoPath: "/repo",
   taskId: "task-1",
-  activeSession: null,
+  selectedSessionIdentity: null,
+  loadedSession: null,
   selectedTask: createTaskCardFixture({ id: "task-1", updatedAt: "2026-02-22T08:00:00.000Z" }),
+});
+
+const createArgsForSelectedSession = (
+  loadedSession: AgentSessionState,
+  overrides: Partial<HookArgs> = {},
+): HookArgs => ({
+  ...createBaseArgs(),
+  selectedTask: null,
+  ...overrides,
+  selectedSessionIdentity: toAgentSessionIdentity(loadedSession),
+  loadedSession,
 });
 
 const createCompletedToolMessage = ({
@@ -309,7 +302,7 @@ describe("useAgentStudioDocuments", () => {
       }),
     });
 
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-1",
       messages: [
@@ -322,11 +315,7 @@ describe("useAgentStudioDocuments", () => {
       ],
     });
 
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    });
+    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
 
     try {
       await harness.mount();
@@ -351,7 +340,7 @@ describe("useAgentStudioDocuments", () => {
       }),
     });
 
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-runtime-alias",
       messages: [
@@ -364,11 +353,7 @@ describe("useAgentStudioDocuments", () => {
       ],
     });
 
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    });
+    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
 
     try {
       await harness.mount();
@@ -386,7 +371,7 @@ describe("useAgentStudioDocuments", () => {
   });
 
   test("ignores incorrect-case runtime aliases for document refresh", async () => {
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-bad-case",
       messages: [
@@ -399,11 +384,7 @@ describe("useAgentStudioDocuments", () => {
       ],
     });
 
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    });
+    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
 
     try {
       await harness.mount();
@@ -423,7 +404,7 @@ describe("useAgentStudioDocuments", () => {
       }),
     });
 
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-hydrated-aliases",
       messages: [
@@ -435,11 +416,7 @@ describe("useAgentStudioDocuments", () => {
         }),
       ],
     });
-    const hookArgs = {
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    };
+    const hookArgs = createArgsForSelectedSession(loadedSession);
     const runtimeDefinitionsContextRef = {
       current: createRuntimeDefinitionsContextValue({
         runtimeDefinitions: [],
@@ -479,17 +456,13 @@ describe("useAgentStudioDocuments", () => {
       planDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
     });
 
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-2",
       messages: [createCompletedToolMessage({ tool: "odt_set_plan", input: {}, output: "done" })],
     });
 
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    });
+    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
 
     try {
       await harness.mount();
@@ -510,7 +483,7 @@ describe("useAgentStudioDocuments", () => {
       }),
     });
 
-    const activeSession = createAgentSessionFixture({
+    const loadedSession = createAgentSessionFixture({
       externalSessionId: "session-3",
       messages: [
         createCompletedToolMessage({
@@ -522,11 +495,7 @@ describe("useAgentStudioDocuments", () => {
       ],
     });
 
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession,
-    });
+    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
 
     try {
       await harness.mount();
@@ -550,15 +519,49 @@ describe("useAgentStudioDocuments", () => {
       input: { markdown: "# Saved plan" },
       output: "done",
     });
-    const baseArgs = {
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession: createAgentSessionFixture({
+    const firstSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "session-dedupe",
+      messages: [toolMessage],
+    });
+    const baseArgs = createArgsForSelectedSession(firstSession);
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
+
+      const nextSession = createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-dedupe",
         messages: [toolMessage],
-      }),
-    };
+      });
+      await harness.update({
+        ...baseArgs,
+        loadedSession: nextSession,
+      });
+
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps processed document events scoped to selected identity while session state reloads", async () => {
+    const toolMessage = createCompletedToolMessage({
+      id: "message-hydration-gap",
+      tool: "odt_set_plan",
+      toolType: "workflow",
+      input: { markdown: "# Saved plan" },
+      output: "done",
+    });
+    const loadedSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "session-hydration-gap",
+      messages: [toolMessage],
+    });
+    const baseArgs = createArgsForSelectedSession(loadedSession);
     const harness = createHookHarness(baseArgs);
 
     try {
@@ -568,12 +571,9 @@ describe("useAgentStudioDocuments", () => {
 
       await harness.update({
         ...baseArgs,
-        activeSession: createAgentSessionFixture({
-          runtimeKind: "opencode",
-          externalSessionId: "session-dedupe",
-          messages: [toolMessage],
-        }),
+        loadedSession: null,
       });
+      await harness.update(baseArgs);
 
       expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
     } finally {
@@ -589,16 +589,14 @@ describe("useAgentStudioDocuments", () => {
       input: { markdown: "# Hydrated plan" },
       output: "completed 2026-02-22T09:15:00.000Z",
     });
-    const baseArgs = {
-      ...createBaseArgs(),
-      selectedTask: null,
+    const loadedSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "session-repo-hydration",
+      messages: [toolMessage],
+    });
+    const baseArgs = createArgsForSelectedSession(loadedSession, {
       workspaceRepoPath: null,
-      activeSession: createAgentSessionFixture({
-        runtimeKind: "opencode",
-        externalSessionId: "session-repo-hydration",
-        messages: [toolMessage],
-      }),
-    };
+    });
     const harness = createHookHarness(baseArgs);
 
     try {
@@ -639,30 +637,65 @@ describe("useAgentStudioDocuments", () => {
       output: "completed 2026-02-22T08:45:00.000Z",
     });
 
-    const baseArgs = createBaseArgs();
-    const harness = createHookHarness({
-      ...baseArgs,
-      selectedTask: null,
-      activeSession: createAgentSessionFixture({
-        runtimeKind: "opencode",
-        externalSessionId: "session-A",
-        messages: [toolMessage],
-      }),
+    const firstSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "session-A",
+      messages: [toolMessage],
     });
+    const harness = createHookHarness(createArgsForSelectedSession(firstSession));
 
     try {
       await harness.mount();
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
 
-      await harness.update({
-        ...baseArgs,
-        selectedTask: null,
-        activeSession: createAgentSessionFixture({
-          runtimeKind: "opencode",
-          externalSessionId: "session-B",
-          messages: [toolMessage],
-        }),
+      const secondSession = createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "session-B",
+        messages: [toolMessage],
       });
+      await harness.update(createArgsForSelectedSession(secondSession));
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("resets processed tool-event context when same-id session identity changes", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const toolMessage = createCompletedToolMessage({
+      id: "shared-message-id",
+      tool: "odt_set_spec",
+      toolType: "workflow",
+      input: { markdown: "# Session update" },
+      output: "completed 2026-02-22T08:45:00.000Z",
+    });
+
+    const firstSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "shared-external-session",
+      workingDirectory: "/repo/worktree-a",
+      messages: [toolMessage],
+    });
+    const harness = createHookHarness(createArgsForSelectedSession(firstSession));
+
+    try {
+      await harness.mount();
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+
+      const secondSession = createAgentSessionFixture({
+        runtimeKind: "codex",
+        externalSessionId: "shared-external-session",
+        workingDirectory: "/repo/worktree-b",
+        messages: [toolMessage],
+      });
+      await harness.update(createArgsForSelectedSession(secondSession));
 
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(2);
     } finally {
@@ -696,28 +729,26 @@ describe("useAgentStudioDocuments", () => {
       input: { markdown: "# Saved plan" },
       output: "done",
     });
-    const baseArgs = {
-      ...createBaseArgs(),
-      selectedTask: null,
-      activeSession: createAgentSessionFixture({
-        runtimeKind: "opencode",
-        externalSessionId: "session-transition",
-        messages: [pendingToolMessage],
-      }),
-    };
+    const loadedSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "session-transition",
+      messages: [pendingToolMessage],
+    });
+    const baseArgs = createArgsForSelectedSession(loadedSession);
     const harness = createHookHarness(baseArgs);
 
     try {
       await harness.mount();
       expect(reloadDocumentMock).not.toHaveBeenCalled();
 
+      const completedSession = createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "session-transition",
+        messages: [completedToolMessage],
+      });
       await harness.update({
         ...baseArgs,
-        activeSession: createAgentSessionFixture({
-          runtimeKind: "opencode",
-          externalSessionId: "session-transition",
-          messages: [completedToolMessage],
-        }),
+        loadedSession: completedSession,
       });
 
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);

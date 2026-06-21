@@ -39,7 +39,6 @@ import type {
 } from "../workspaces/workspace-settings-service";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import type {
-  AgentSessionsListBulkInput,
   AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
@@ -97,9 +96,6 @@ export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
-  agentSessionsListBulk(
-    input: AgentSessionsListBulkInput,
-  ): Effect.Effect<Record<string, AgentSessionRecord[]>, TaskServiceError>;
   agentSessionUpsert(input: AgentSessionUpsertInput): Effect.Effect<boolean, TaskServiceError>;
   getApprovalContext(
     input: TaskIdInput,
@@ -214,7 +210,6 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
   };
   return {
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),
-    agentSessionsListBulk: (input) => mapTaskServiceErrors(service.agentSessionsListBulk(input)),
     agentSessionUpsert: (input) => mapTaskServiceErrors(service.agentSessionUpsert(input)),
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
     buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),

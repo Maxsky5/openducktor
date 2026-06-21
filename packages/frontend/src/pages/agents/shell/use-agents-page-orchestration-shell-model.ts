@@ -1,36 +1,30 @@
 import { type RefObject, useCallback, useMemo } from "react";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import type {
-  useAgentOperations,
-  useTasksState,
-  useWorkspaceState,
-} from "@/state/app-state-provider";
+import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import type { RunSessionStartWorkflow } from "@/features/session-start";
+import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 
 type UseAgentsPageOrchestrationShellModelArgs = {
-  activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
-  branches: ReturnType<typeof useWorkspaceState>["branches"];
+  activeWorkspaceId: string | null;
+  branches: Parameters<typeof useAgentStudioOrchestrationController>[0]["branches"];
   runtimeDefinitions: Parameters<
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
+  repoSettings: RepoSettingsInput | null;
+  workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
   hasActiveGitConflict: boolean;
   gitConflictQuickActionContext: AgentStudioGitConflictQuickActionContext | null;
   gitConflictQuickActionContextRef: RefObject<AgentStudioGitConflictQuickActionContext | null>;
   openTaskDetails: () => void;
+  runSessionStartWorkflow: RunSessionStartWorkflow;
   agentOperations: Pick<
     ReturnType<typeof useAgentOperations>,
-    | "bootstrapTaskSessions"
-    | "hydrateRequestedTaskSessionHistory"
-    | "readSessionFileSearch"
-    | "readSessionSlashCommands"
-    | "readSessionSkills"
-    | "startAgentSession"
-    | "settleStartedAgentSession"
     | "sendAgentMessage"
     | "stopAgentSession"
     | "updateAgentSessionModel"
@@ -53,43 +47,33 @@ export type AgentsPageOrchestrationShellModel = {
 };
 
 export function useAgentsPageOrchestrationShellModel({
-  activeWorkspace,
+  activeWorkspaceId,
   branches,
   runtimeDefinitions,
+  repoSettings,
+  workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
   hasActiveGitConflict,
   gitConflictQuickActionContext,
   gitConflictQuickActionContextRef,
   openTaskDetails,
+  runSessionStartWorkflow,
   agentOperations,
   humanRequestChangesTask,
   setTaskTargetBranch,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
-  const {
-    selection,
-    readiness,
-    contextSwitchVersion,
-    isSessionSelectionResolving,
-    scheduleQueryUpdate,
-    signalContextSwitchIntent,
-    scheduleSelectionIntent,
-  } = routeSession;
+  const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
 
-  const draftStateKey = useMemo(
-    () =>
-      [
-        selection.viewTaskId,
-        selection.viewRole,
-        selection.viewActiveSession?.externalSessionId ?? "new",
-        contextSwitchVersion,
-      ].join(":"),
-    [
-      contextSwitchVersion,
-      selection.viewActiveSession?.externalSessionId,
-      selection.viewRole,
-      selection.viewTaskId,
-    ],
+  const composer = useMemo(
+    (): { draftScope: AgentChatDraftScope } => ({
+      draftScope: {
+        taskId: selection.view.taskId,
+        role: selection.view.role,
+        session: selection.view.selectedSession.identity,
+      },
+    }),
+    [selection.view.role, selection.view.selectedSession.identity, selection.view.taskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -98,80 +82,37 @@ export function useAgentsPageOrchestrationShellModel({
     () => ({
       ...selection,
       isLoadingTasks: isForegroundLoadingTasks,
-      contextSwitchVersion,
-      isSessionSelectionResolving,
     }),
-    [contextSwitchVersion, isForegroundLoadingTasks, isSessionSelectionResolving, selection],
+    [isForegroundLoadingTasks, selection],
   );
-
   const orchestration = useAgentStudioOrchestrationController({
-    activeWorkspace,
+    activeWorkspaceId,
     branches,
     runtimeDefinitions,
+    repoSettings,
+    workspaceRepoPath,
     selection: orchestrationSelection,
-    readiness,
     hasActiveGitConflict,
-    draftStateKey,
+    composer,
     actions: {
-      updateQuery: scheduleQueryUpdate,
-      onContextSwitchIntent: signalContextSwitchIntent,
+      scheduleQueryUpdate,
       openTaskDetails,
-      startAgentSession: agentOperations.startAgentSession,
-      settleStartedAgentSession: agentOperations.settleStartedAgentSession,
+      runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
       stopAgentSession: agentOperations.stopAgentSession,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
-      readSessionFileSearch: agentOperations.readSessionFileSearch,
-      readSessionSlashCommands: agentOperations.readSessionSlashCommands,
-      readSessionSkills: agentOperations.readSessionSkills,
-      bootstrapTaskSessions: agentOperations.bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory: agentOperations.hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,
       setTaskTargetBranch,
       replyAgentApproval: agentOperations.replyAgentApproval,
       answerAgentQuestion: agentOperations.answerAgentQuestion,
-      scheduleSelectionIntent,
+      selectAgentStudioSelection,
     },
   });
 
-  const activeSessionSummary = useMemo(
-    () =>
-      selection.activeSessionSummary ??
-      (selection.activeSession ? toAgentSessionSummary(selection.activeSession) : null),
-    [selection.activeSession, selection.activeSessionSummary],
-  );
-  const viewActiveSessionSummary = useMemo(
-    () =>
-      selection.viewActiveSessionSummary ??
-      (selection.viewActiveSession ? toAgentSessionSummary(selection.viewActiveSession) : null),
-    [selection.viewActiveSession, selection.viewActiveSessionSummary],
-  );
-  const rebaseConflictSelection = useMemo(
-    () => ({
-      viewTaskId: selection.viewTaskId,
-      viewSelectedTask: selection.viewSelectedTask,
-      viewActiveSession: viewActiveSessionSummary,
-      activeSession: activeSessionSummary,
-      selectedSessionById: selection.selectedSessionById,
-      viewSessionsForTask: selection.viewSessionsForTask,
-      sessionsForTask: selection.sessionsForTask,
-    }),
-    [
-      activeSessionSummary,
-      selection.selectedSessionById,
-      selection.sessionsForTask,
-      selection.viewSelectedTask,
-      selection.viewSessionsForTask,
-      selection.viewTaskId,
-      viewActiveSessionSummary,
-    ],
-  );
-
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
-    activeWorkspace,
-    selection: rebaseConflictSelection,
+    workspaceId: activeWorkspaceId,
+    selection,
     scheduleQueryUpdate,
-    onContextSwitchIntent: signalContextSwitchIntent,
     startSessionRequest: orchestration.startSessionRequest,
   });
 

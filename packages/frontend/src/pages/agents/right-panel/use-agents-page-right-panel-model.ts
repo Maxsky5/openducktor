@@ -1,7 +1,7 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { hostClient } from "@/lib/host-client";
@@ -10,10 +10,7 @@ import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
-import type {
-  AgentStudioOrchestrationSelectionContext,
-  useAgentStudioOrchestrationController,
-} from "../use-agent-studio-orchestration-controller";
+import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
 export type AgentStudioGitConflictQuickActionContext = {
@@ -26,16 +23,11 @@ export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
-  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
-  session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  selectedView: BuildToolsSelectedView;
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
-  isViewSessionHistoryHydrating: boolean;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  worktreeRecoverySignal: number;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -58,7 +50,7 @@ type BuildAgentsPageDiffModelArgs = {
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: ReturnType<typeof useAgentStudioGitActions>;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  selectedTask: BuildToolsSelectedView["selectedTask"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -81,7 +73,7 @@ export function buildAgentsPageDiffModel({
   branches,
   buildToolsSnapshot,
   gitActions,
-  viewSelectedTask,
+  selectedTask,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -91,11 +83,11 @@ export function buildAgentsPageDiffModel({
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
   const pullRequestDetectionTask =
-    viewSelectedTask && !viewSelectedTask.pullRequest && canDetectTaskPullRequest(viewSelectedTask)
-      ? viewSelectedTask
+    selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask)
+      ? selectedTask
       : null;
   let targetBranchUpdateModel = {};
-  if (gitPanelContextMode === "worktree" && viewSelectedTask && setTaskTargetBranch) {
+  if (gitPanelContextMode === "worktree" && selectedTask && setTaskTargetBranch) {
     const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
     const targetBranchOptions = toBranchSelectorOptions(branches, {
       valueFormat: "full_ref",
@@ -114,7 +106,7 @@ export function buildAgentsPageDiffModel({
       targetBranchOptions,
       targetBranchSelectionValue: targetBranchState.selectionValue,
       onUpdateTargetBranch: async (selection: string) => {
-        await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
+        await setTaskTargetBranch(selectedTask.id, targetBranchFromSelection(selection));
       },
     };
   }
@@ -136,9 +128,9 @@ export function buildAgentsPageDiffModel({
           targetBranch: targetBranchState.displayTargetBranch,
         }
       : {}),
-    pullRequest: viewSelectedTask?.pullRequest ?? null,
+    pullRequest: selectedTask?.pullRequest ?? null,
     ...targetBranchUpdateModel,
-    ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
+    ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
       ? { isDetectingPullRequest: true }
       : {}),
     ...(pullRequestDetectionTask
@@ -161,16 +153,11 @@ export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
   activeBranch,
-  viewRole,
-  viewTaskId,
-  session,
-  viewSelectedTask,
+  selectedView,
   panelKind,
   isPanelOpen,
-  isViewSessionHistoryHydrating,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -178,26 +165,16 @@ export function useAgentsPageRightPanelModel({
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const sessionRole = session.role;
-  const sessionStatus = session.status;
-
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
-    viewRole,
-    viewTaskId,
-    session,
-    viewSelectedTask,
+    selectedView,
     panelKind,
     isPanelOpen,
-    isViewSessionHistoryHydrating,
     repoSettings,
-    worktreeRecoverySignal,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
 
-  const isActiveBuilderWorking =
-    sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
   const detectedConflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
@@ -216,7 +193,7 @@ export function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
-    isBuilderSessionWorking: isActiveBuilderWorking,
+    isBuilderSessionWorking: buildToolsSnapshot.context.isSelectedBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(
@@ -256,7 +233,7 @@ export function useAgentsPageRightPanelModel({
         branches,
         buildToolsSnapshot,
         gitActions,
-        viewSelectedTask,
+        selectedTask: selectedView.selectedTask,
         detectingPullRequestTaskId,
         onDetectPullRequest,
         ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
@@ -268,7 +245,7 @@ export function useAgentsPageRightPanelModel({
       onDetectPullRequest,
       detectingPullRequestTaskId,
       setTaskTargetBranch,
-      viewSelectedTask,
+      selectedView.selectedTask,
     ],
   );
 

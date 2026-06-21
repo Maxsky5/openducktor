@@ -32,7 +32,7 @@ const createStatus = (overrides: Partial<GitWorktreeStatus> = {}): GitWorktreeSt
 });
 
 describe("diff-normalization", () => {
-  test("normalizes dirty worktree snapshots without querying or polling state", () => {
+  test("normalizes dirty worktree snapshots without querying or scheduled refresh state", () => {
     const snapshot = toScopeSnapshot(createStatus());
 
     expect(snapshot).toMatchObject({

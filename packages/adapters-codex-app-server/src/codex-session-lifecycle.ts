@@ -1,13 +1,16 @@
 import type {
   AgentModelSelection,
   AgentRole,
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionSummary,
-  AttachAgentSessionInput,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import { agentSessionStatusFromActivity } from "@openducktor/core";
 import {
+  codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
   toSessionSummary,
@@ -23,12 +26,13 @@ type SessionInput =
   | StartAgentSessionInput
   | ResumeAgentSessionInput
   | ForkAgentSessionInput
-  | AttachAgentSessionInput;
+  | AgentSessionRuntimeRef
+  | AgentSessionRef;
 
 type SessionStateInput = SessionInput & {
-  role: AgentRole | null;
-  systemPrompt: string;
-  taskId: string;
+  role?: AgentRole | null;
+  systemPrompt?: string;
+  taskId?: string;
 };
 
 const buildSessionState = (
@@ -40,15 +44,29 @@ const buildSessionState = (
 ): CodexSessionState => ({
   summary,
   ...(model ? { model } : {}),
-  systemPrompt: input.systemPrompt,
-  role: input.role,
+  systemPrompt: input.systemPrompt ?? "",
+  role: input.role ?? null,
   runtimeId,
   repoPath: input.repoPath,
   threadId: summary.externalSessionId,
   workingDirectory: input.workingDirectory,
-  taskId: input.taskId,
+  taskId: input.taskId ?? "",
   ...(liveStatus ? { liveStatus } : {}),
 });
+
+export const applyRuntimeContextToSession = (
+  session: CodexSessionState,
+  input: AgentSessionRuntimeRef,
+): void => {
+  session.role = input.role;
+  session.taskId = input.taskId;
+  if (input.systemPrompt !== undefined) {
+    session.systemPrompt = input.systemPrompt;
+  }
+  if (input.model !== undefined) {
+    session.model = input.model;
+  }
+};
 
 export const sessionStateFromThreadStart = (
   input: StartAgentSessionInput,
@@ -60,12 +78,13 @@ export const sessionStateFromThreadStart = (
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/start");
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     role: input.role,
     status: "running",
   });
-  return buildSessionState(input, summary, runtimeId, model);
+  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
 export const sessionStateFromThreadResume = (
@@ -85,94 +104,45 @@ export const sessionStateFromThreadFork = (
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/fork");
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     role: input.role,
     status: "running",
   });
-  return buildSessionState(input, summary, runtimeId, model);
+  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
-export const sessionStateFromThreadAttach = (
-  input: AttachAgentSessionInput,
+export const sessionStateFromExistingThread = (
+  input: AgentSessionRef | AgentSessionRuntimeRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
-): CodexSessionState => sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
-
-type SessionScopedMap = {
-  delete(key: string): boolean;
-  keys(): IterableIterator<string>;
+): CodexSessionState => {
+  const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+  delete session.liveStatus;
+  return session;
 };
 
-type RequestIdsBySession = {
-  get(key: string): Set<string> | undefined;
-  delete(key: string): boolean;
-};
+export const preserveRuntimeContextForExistingThread = (
+  existingThreadSession: CodexSessionState,
+  current: CodexSessionState | undefined,
+): CodexSessionState => {
+  if (!current) {
+    return existingThreadSession;
+  }
 
-export type InternalCodexLocalSessionStateStore = {
-  sessions: { delete(key: string): boolean };
-  listenersBySessionId: { delete(key: string): boolean };
-  bufferedNotificationsByThreadId: { delete(key: string): boolean };
-  bufferedServerRequestsByThreadId: { delete(key: string): boolean };
-  handledStreamRequestKeysByThreadId: { delete(key: string): boolean };
-  syntheticUserMessageTextsByThreadId: { delete(key: string): boolean };
-  eventBacklogBySessionId: { delete(key: string): boolean };
-  latestTodosBySessionId: { delete(key: string): boolean };
-  activeTurnsBySessionId: { delete(key: string): boolean };
-  pendingApprovalIdsBySessionId: RequestIdsBySession;
-  pendingApprovalsByRequestId: { delete(key: string): boolean };
-  activeTurnsByApprovalRequestId: { delete(key: string): boolean };
-  pendingQuestionIdsBySessionId: RequestIdsBySession;
-  pendingQuestionsByRequestId: { delete(key: string): boolean };
-  activeTurnsByQuestionRequestId: { delete(key: string): boolean };
-  completedAgentMessagesByTurnKey: SessionScopedMap;
-  tokenUsageByTurnKey: SessionScopedMap;
-  modelByTurnKey: SessionScopedMap;
-};
-
-export const clearLocalSessionState = (
-  store: InternalCodexLocalSessionStateStore,
-  externalSessionId: string,
-): void => {
-  store.sessions.delete(externalSessionId);
-  store.listenersBySessionId.delete(externalSessionId);
-  store.bufferedNotificationsByThreadId.delete(externalSessionId);
-  store.bufferedServerRequestsByThreadId.delete(externalSessionId);
-  store.handledStreamRequestKeysByThreadId.delete(externalSessionId);
-  store.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
-  store.eventBacklogBySessionId.delete(externalSessionId);
-  store.latestTodosBySessionId.delete(externalSessionId);
-  store.activeTurnsBySessionId.delete(externalSessionId);
-  const approvalRequestIds = store.pendingApprovalIdsBySessionId.get(externalSessionId) ?? [];
-  for (const requestId of approvalRequestIds) {
-    store.pendingApprovalsByRequestId.delete(requestId);
-    store.activeTurnsByApprovalRequestId.delete(requestId);
-  }
-  store.pendingApprovalIdsBySessionId.delete(externalSessionId);
-  const questionRequestIds = store.pendingQuestionIdsBySessionId.get(externalSessionId) ?? [];
-  for (const requestId of questionRequestIds) {
-    store.pendingQuestionsByRequestId.delete(requestId);
-    store.activeTurnsByQuestionRequestId.delete(requestId);
-  }
-  store.pendingQuestionIdsBySessionId.delete(externalSessionId);
-  const turnKeyPrefix = `${externalSessionId}:`;
-  const turnScopedMaps = [
-    store.completedAgentMessagesByTurnKey,
-    store.tokenUsageByTurnKey,
-    store.modelByTurnKey,
-  ];
-  for (const turnScopedMap of turnScopedMaps) {
-    for (const turnKey of turnScopedMap.keys()) {
-      if (turnKey.startsWith(turnKeyPrefix)) {
-        turnScopedMap.delete(turnKey);
-      }
-    }
-  }
+  return {
+    ...existingThreadSession,
+    ...(existingThreadSession.model || !current.model ? {} : { model: current.model }),
+    role: existingThreadSession.role ?? current.role,
+    taskId: existingThreadSession.taskId || current.taskId,
+    systemPrompt: existingThreadSession.systemPrompt || current.systemPrompt,
+  };
 };
 
 const sessionStateFromThreadResumeResponse = (
-  input: ResumeAgentSessionInput | AttachAgentSessionInput,
+  input: ResumeAgentSessionInput | AgentSessionRuntimeRef | AgentSessionRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
@@ -185,10 +155,11 @@ const sessionStateFromThreadResumeResponse = (
   );
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? threadSnapshot.startedAt,
     title: threadSnapshot.title,
-    role: input.role,
-    status: threadSnapshot.status.agentSessionStatus,
+    role: "role" in input ? input.role : null,
+    status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
   });
   return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
 };

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   buildActiveDocumentForRole,
   buildWorkflowModelContext,
-  toChatContextUsage,
 } from "./use-agent-studio-page-model-builders";
 
 const createDoc = (markdown: string): TaskDocumentState => ({
@@ -17,13 +17,18 @@ const createDoc = (markdown: string): TaskDocumentState => ({
   loaded: true,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture({
+const createSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+): AgentSessionSummary =>
+  createAgentSessionSummaryFixture({
     status: "idle",
     ...overrides,
   });
 
 const roleLabelByRole = { ...AGENT_ROLE_LABELS } as const;
+
+const selectedIdentityFromSession = (session: AgentSessionSummary | null = null) =>
+  session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
   test("buildActiveDocumentForRole maps documents by role", () => {
@@ -65,25 +70,6 @@ describe("use-agent-studio-page-model-builders", () => {
     ).toBeNull();
   });
 
-  test("toChatContextUsage preserves optional output limit", () => {
-    expect(toChatContextUsage(null)).toBeNull();
-    expect(toChatContextUsage({ totalTokens: 120, contextWindow: 4096 })).toEqual({
-      totalTokens: 120,
-      contextWindow: 4096,
-    });
-    expect(
-      toChatContextUsage({
-        totalTokens: 120,
-        contextWindow: 4096,
-        outputLimit: 1024,
-      }),
-    ).toEqual({
-      totalTokens: 120,
-      contextWindow: 4096,
-      outputLimit: 1024,
-    });
-  });
-
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",
@@ -102,18 +88,18 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: unavailablePlannerTask,
       sessionsForTask: [plannerSession],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "planner",
       isSessionWorking: false,
       hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
-    expect(context.selectedInteractionRole).toBe("planner");
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
-    expect(context.sessionSelectorValue).toBe("planner-session");
-    expect(context.sessionSelectorAutofocusByValue[plannerSession.externalSessionId]).toBe(false);
+    const plannerSessionValue = agentSessionIdentityKey(plannerSession);
+    expect(context.sessionSelectorValue).toBe(plannerSessionValue);
+    expect(context.sessionSelectorAutofocusByValue[plannerSessionValue]).toBe(false);
     expect(context.createSessionDisabled).toBe(false);
   });
 
@@ -141,7 +127,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: task,
       sessionsForTask: [specSession, qaWaitingSession],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "spec",
       isSessionWorking: false,
       hasActiveGitConflict: false,
@@ -149,8 +135,8 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     expect(context.sessionSelectorAutofocusByValue).toEqual({
-      [specSession.externalSessionId]: true,
-      [qaWaitingSession.externalSessionId]: false,
+      [agentSessionIdentityKey(specSession)]: true,
+      [agentSessionIdentityKey(qaWaitingSession)]: false,
     });
   });
 
@@ -179,7 +165,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskWithFeedback,
       sessionsForTask: [activeSession],
-      activeSession,
+      selectedSessionIdentity: selectedIdentityFromSession(activeSession),
       role: "spec",
       isSessionWorking: true,
       hasActiveGitConflict: false,
@@ -218,7 +204,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskInAiReview,
       sessionsForTask: [],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
       hasActiveGitConflict: false,
@@ -249,7 +235,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const context = buildWorkflowModelContext({
       selectedTask: taskWithApprovedQa,
       sessionsForTask: [],
-      activeSession: null,
+      selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
       hasActiveGitConflict: false,

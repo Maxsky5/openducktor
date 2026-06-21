@@ -1,4 +1,4 @@
-import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 
@@ -7,7 +7,7 @@ export type CodexRuntimeResolutionInput = RepoRuntimeRef & {
 };
 
 export const resolveCodexRuntimeClientInput = (
-  runtime: RuntimeInstanceSummary,
+  runtime: RepoRuntimeRouteResolution,
   input: CodexRuntimeResolutionInput,
   action: string,
 ): { runtimeId: string; workingDirectory?: string } => {

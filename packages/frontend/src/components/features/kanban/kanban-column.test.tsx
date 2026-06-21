@@ -22,10 +22,10 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/waiting",
             externalSessionId: "session-waiting",
             role: "build",
-            status: "running",
-            presentationState: "waiting_input",
+            activityState: "waiting_input",
           },
         ],
       ],
@@ -34,10 +34,10 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/active",
             externalSessionId: "session-active",
             role: "build",
-            status: "running",
-            presentationState: "active",
+            activityState: "running",
           },
         ],
       ],
@@ -59,6 +59,7 @@ describe("KanbanColumn", () => {
             tasks: [waitingTask, activeTask, idleTask],
           },
           taskSessionsByTaskId,
+          historicalSessionsByTaskId: new Map(),
           taskActivityStateByTaskId,
           activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,

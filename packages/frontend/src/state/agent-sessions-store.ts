@@ -1,149 +1,67 @@
-import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/session-purpose";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  areAgentSessionCollectionsEquivalent,
+  emptyAgentSessionCollection,
+  getAgentSession,
+  hasAgentSessionStateChanges,
+  removeAgentSession,
+  replaceAgentSession,
+  replaceAgentSessionByIdentity,
+} from "@/state/agent-session-collection";
+import {
+  type AgentActivitySessionsSnapshot,
+  createAgentActivitySnapshot,
+  createEmptyAgentActivitySnapshot,
+} from "@/state/agent-session-snapshots";
+import {
+  type AgentSessionVisiblePendingInput,
+  getAgentSessionVisiblePendingInput,
+} from "@/state/agent-session-visible-pending-input";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type AgentSessionsById = Record<string, AgentSessionState>;
-export type AgentSessionSummary = Pick<
-  AgentSessionState,
-  | "externalSessionId"
-  | "title"
-  | "repoPath"
-  | "taskId"
-  | "role"
-  | "status"
-  | "startedAt"
-  | "workingDirectory"
-  | "pendingApprovals"
-  | "pendingQuestions"
-> & {
-  selectedModel: AgentSessionState["selectedModel"];
-  runtimeKind?: AgentSessionState["runtimeKind"];
-};
-
-export type WorkflowAgentSessionSummary = AgentSessionSummary &
-  Pick<WorkflowAgentSessionState, "role">;
-
-export const isWorkflowAgentSessionSummary = (
-  session: AgentSessionSummary | null | undefined,
-): session is WorkflowAgentSessionSummary => {
-  if (!session) {
-    return false;
-  }
-
-  return session.role !== null;
-};
-
-export type AgentActivitySessionSummary = Pick<
-  WorkflowAgentSessionState,
-  "externalSessionId" | "taskId" | "role" | "status" | "startedAt"
-> & {
-  repoPath: string;
-  hasPendingApprovals: boolean;
-  hasPendingQuestions: boolean;
-};
+export {
+  type AgentActivitySessionsSnapshot,
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
+type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) => {
+  collection: AgentSessionCollection;
+  result: Result;
+};
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
-  getSessionsSnapshot: () => AgentSessionState[];
-  getSessionSummariesSnapshot: () => AgentSessionSummary[];
-  getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
-  getSessionsByIdSnapshot: () => AgentSessionsById;
-  getSessionSnapshot: (externalSessionId: string | null) => AgentSessionState | null;
-  setSessionsById: (nextSessionsById: AgentSessionsById) => void;
+  getActivitySnapshot: () => AgentActivitySessionsSnapshot;
+  getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
+  getVisiblePendingInputSnapshot: (
+    identity: AgentSessionIdentity | null,
+  ) => AgentSessionVisiblePendingInput;
+  commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
+  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  replaceSession: (session: AgentSessionState) => void;
+  removeSession: (identity: AgentSessionIdentity) => void;
+  updateSession: (
+    identity: AgentSessionIdentity,
+    updater: (current: AgentSessionState) => AgentSessionState,
+  ) => AgentSessionState | null;
+  resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
-const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
-  left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
-
-export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
-  externalSessionId: session.externalSessionId,
-  ...(session.title ? { title: session.title } : {}),
-  repoPath: session.repoPath,
-  taskId: session.taskId,
-  role: session.role,
-  status: session.status,
-  startedAt: session.startedAt,
-  workingDirectory: session.workingDirectory,
-  selectedModel: session.selectedModel,
-  runtimeKind: session.runtimeKind,
-  pendingApprovals: session.pendingApprovals,
-  pendingQuestions: session.pendingQuestions,
-});
-
-export const toAgentActivitySessionSummary = (
-  session: AgentSessionState,
-): AgentActivitySessionSummary => {
-  if (!shouldIncludeAgentSessionInActivity(session)) {
-    throw new Error(`Session '${session.externalSessionId}' is not a workflow session`);
-  }
-
-  return {
-    externalSessionId: session.externalSessionId,
-    taskId: session.taskId,
-    repoPath: session.repoPath,
-    role: session.role,
-    status: session.status,
-    startedAt: session.startedAt,
-    hasPendingApprovals: session.pendingApprovals.length > 0,
-    hasPendingQuestions: session.pendingQuestions.length > 0,
-  };
-};
-
-const areSummariesEquivalent = (
-  left: AgentSessionSummary | undefined,
-  right: AgentSessionSummary,
-): boolean => {
-  return (
-    left?.externalSessionId === right.externalSessionId &&
-    left?.title === right.title &&
-    left.taskId === right.taskId &&
-    left.role === right.role &&
-    left.status === right.status &&
-    left.startedAt === right.startedAt &&
-    left.workingDirectory === right.workingDirectory &&
-    left.selectedModel === right.selectedModel &&
-    left.runtimeKind === right.runtimeKind &&
-    left.pendingApprovals === right.pendingApprovals &&
-    left.pendingQuestions === right.pendingQuestions
-  );
-};
-
-const areActivitySummariesEquivalent = (
-  left: AgentActivitySessionSummary | undefined,
-  right: AgentActivitySessionSummary,
-): boolean => {
-  return (
-    left?.externalSessionId === right.externalSessionId &&
-    left.taskId === right.taskId &&
-    left.repoPath === right.repoPath &&
-    left.role === right.role &&
-    left.status === right.status &&
-    left.startedAt === right.startedAt &&
-    left.hasPendingApprovals === right.hasPendingApprovals &&
-    left.hasPendingQuestions === right.hasPendingQuestions
-  );
-};
-
-const areArraysReferenceEqual = <T>(left: T[], right: T[]): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
-  return true;
-};
-
-export const createAgentSessionsStore = (): AgentSessionsStore => {
-  let sessionsById: AgentSessionsById = {};
-  let sessions: AgentSessionState[] = [];
-  let sessionSummaries: AgentSessionSummary[] = [];
-  let activitySessionSummaries: AgentActivitySessionSummary[] = [];
-  let hasPendingNotification = false;
-  let framePending = false;
+export const createAgentSessionsStore = (
+  initialWorkspaceRepoPath: string | null = null,
+): AgentSessionsStore => {
+  let workspaceRepoPath = initialWorkspaceRepoPath;
+  let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
+  let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
+  let visiblePendingInputSnapshot: {
+    collection: AgentSessionCollection;
+    identityKey: string | null;
+    snapshot: AgentSessionVisiblePendingInput;
+  } | null = null;
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
@@ -152,29 +70,29 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
     }
   };
 
-  const flushNotifications = (): void => {
-    framePending = false;
-    if (!hasPendingNotification) {
-      return;
+  const commitSessionCollection = <Result>(
+    commit: AgentSessionCollectionCommit<Result>,
+  ): Result => {
+    const { collection: nextCollection, result } = commit(sessionCollection);
+    if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
+      return result;
     }
 
-    hasPendingNotification = false;
+    sessionCollection = nextCollection;
+    activitySnapshot = createAgentActivitySnapshot({
+      collection: nextCollection,
+      previous: activitySnapshot,
+      workspaceRepoPath,
+    });
     notifyListeners();
+    return result;
   };
 
-  const scheduleNotification = (): void => {
-    if (process.env.NODE_ENV === "test" || typeof requestAnimationFrame !== "function") {
-      notifyListeners();
-      return;
-    }
-
-    hasPendingNotification = true;
-    if (framePending) {
-      return;
-    }
-
-    framePending = true;
-    requestAnimationFrame(flushNotifications);
+  const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
+    commitSessionCollection((current) => ({
+      collection: updater(current),
+      result: undefined,
+    }));
   };
 
   return {
@@ -184,57 +102,50 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
         listeners.delete(listener);
       };
     },
-    getSessionsSnapshot: () => sessions,
-    getSessionSummariesSnapshot: () => sessionSummaries,
-    getActivitySessionsSnapshot: () => activitySessionSummaries,
-    getSessionsByIdSnapshot: () => sessionsById,
-    getSessionSnapshot: (externalSessionId) =>
-      externalSessionId ? (sessionsById[externalSessionId] ?? null) : null,
-    setSessionsById: (nextSessionsById) => {
-      if (nextSessionsById === sessionsById) {
-        return;
+    getActivitySnapshot: () => activitySnapshot,
+    getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
+    getVisiblePendingInputSnapshot: (identity) => {
+      const identityKey = identity ? agentSessionIdentityKey(identity) : null;
+      if (
+        visiblePendingInputSnapshot?.collection === sessionCollection &&
+        visiblePendingInputSnapshot.identityKey === identityKey
+      ) {
+        return visiblePendingInputSnapshot.snapshot;
       }
 
-      const previousSummaryById = new Map(
-        sessionSummaries.map((summary) => [summary.externalSessionId, summary]),
-      );
-      const previousActivitySummaryById = new Map(
-        activitySessionSummaries.map((summary) => [summary.externalSessionId, summary]),
-      );
-      const nextSessions = Object.values(nextSessionsById).sort(sortByStartedAtDesc);
-      const nextSessionSummaries = nextSessions.flatMap((session) => {
-        if (!shouldIncludeAgentSessionInActivity(session)) {
-          return [];
-        }
-        const nextSummary = toAgentSessionSummary(session);
-        const previousSummary = previousSummaryById.get(session.externalSessionId);
-        return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? [previousSummary]
-          : [nextSummary];
-      });
-      const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
-        if (!shouldIncludeAgentSessionInActivity(session)) {
-          return [];
-        }
-        const nextSummary = toAgentActivitySessionSummary(session);
-        const previousSummary = previousActivitySummaryById.get(session.externalSessionId);
-        return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? [previousSummary]
-          : [nextSummary];
-      });
+      const snapshot = getAgentSessionVisiblePendingInput(sessionCollection, identity);
+      visiblePendingInputSnapshot = { collection: sessionCollection, identityKey, snapshot };
+      return snapshot;
+    },
+    commitSessionCollection,
+    setSessionCollection,
+    replaceSession: (session) => {
+      setSessionCollection((current) => replaceAgentSession(current, session));
+    },
+    removeSession: (identity) => {
+      setSessionCollection((current) => removeAgentSession(current, identity));
+    },
+    updateSession: (identity, updater) => {
+      const current = getAgentSession(sessionCollection, identity);
+      if (!current) {
+        return null;
+      }
 
-      sessionsById = nextSessionsById;
-      sessions = nextSessions;
-      sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
-        ? sessionSummaries
-        : nextSessionSummaries;
-      activitySessionSummaries = areArraysReferenceEqual(
-        activitySessionSummaries,
-        nextActivitySessionSummaries,
-      )
-        ? activitySessionSummaries
-        : nextActivitySessionSummaries;
-      scheduleNotification();
+      const nextSession = updater(current);
+      if (nextSession === current || !hasAgentSessionStateChanges(current, nextSession)) {
+        return null;
+      }
+
+      setSessionCollection((current) =>
+        replaceAgentSessionByIdentity(current, identity, nextSession),
+      );
+      return nextSession;
+    },
+    resetWorkspace: (nextWorkspaceRepoPath) => {
+      workspaceRepoPath = nextWorkspaceRepoPath;
+      sessionCollection = emptyAgentSessionCollection();
+      activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
+      notifyListeners();
     },
   };
 };

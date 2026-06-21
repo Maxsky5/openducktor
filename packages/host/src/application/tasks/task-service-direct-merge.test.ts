@@ -588,24 +588,18 @@ describe("createTaskService direct merge", () => {
   test("completes a published direct merge after sync and cleans builder state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });
+    const buildSession = createAgentSessionRecord({
+      externalSessionId: "session-1",
+      role: "build",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+    });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "list", input });
-            return [
-              task({
-                status: "human_review",
-                agentSessions: [
-                  createAgentSessionRecord({
-                    externalSessionId: "session-1",
-                    role: "build",
-                    startedAt: "2026-05-10T10:00:00.000Z",
-                    workingDirectory: "/worktrees/repo/task-1",
-                  }),
-                ],
-              }),
-            ];
+            return [task({ status: "human_review" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -628,7 +622,7 @@ describe("createTaskService direct merge", () => {
                 targetBranch: { remote: "origin", branch: "main" },
                 mergedAt: "2026-05-10T11:00:00.000Z",
               },
-              agentSessions: [],
+              agentSessions: [buildSession],
             };
           },
           catch: (cause) =>
@@ -740,7 +734,7 @@ describe("createTaskService direct merge", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
       },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "removeWorktree",

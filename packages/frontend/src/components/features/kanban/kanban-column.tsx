@@ -16,25 +16,25 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type TaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["taskSessions"]>;
+type HistoricalSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["historicalSessions"]>;
 const EMPTY_TASK_SESSIONS: TaskSessions = [];
+const EMPTY_HISTORICAL_SESSIONS: HistoricalSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  historicalSessionsByTaskId: Map<string, HistoricalSessions>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
@@ -75,9 +75,10 @@ type TaskCardHandlers = Pick<
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   taskSessions,
+  historicalSessions,
   hasActiveSession,
   activeSessionRole,
-  activeSessionPresentationState,
+  activeSessionActivityState,
   taskActivityState,
   measurementVersion,
   onMeasuredHeight,
@@ -94,9 +95,10 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
 }: {
   task: KanbanColumnData["tasks"][number];
   taskSessions: TaskSessions | undefined;
+  historicalSessions: HistoricalSessions | undefined;
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
-  activeSessionPresentationState: KanbanTaskSession["presentationState"] | undefined;
+  activeSessionActivityState: KanbanTaskSession["activityState"] | undefined;
   taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
@@ -116,19 +118,21 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   ].join("|");
   const taskSessionsMeasurementKey =
     taskSessions
-      ?.map(
-        (session) =>
-          `${session.externalSessionId}:${session.role}:${session.status}:${session.presentationState}`,
-      )
+      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.activityState}`)
+      .join("|") ?? "";
+  const historicalSessionsMeasurementKey =
+    historicalSessions
+      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.startedAt}`)
       .join("|") ?? "";
   const measurementTrigger = [
     measurementVersion,
     taskActivityState,
     taskMeasurementKey,
     taskSessionsMeasurementKey,
+    historicalSessionsMeasurementKey,
     hasActiveSession ? "active" : "idle",
     activeSessionRole ?? "",
-    activeSessionPresentationState ?? "",
+    activeSessionActivityState ?? "",
   ].join("::");
 
   useEffect(() => {
@@ -167,6 +171,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       <KanbanTaskCard
         task={task}
         taskSessions={taskSessions}
+        historicalSessions={historicalSessions}
         hasActiveSession={hasActiveSession}
         {...(activeSessionRole ? { activeSessionRole } : {})}
         taskActivityState={taskActivityState}
@@ -240,6 +245,7 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 export function KanbanColumn({
   column,
   taskSessionsByTaskId,
+  historicalSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
@@ -289,9 +295,12 @@ export function KanbanColumn({
                     key={task.id}
                     task={task}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                    historicalSessions={
+                      historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
+                    }
                     hasActiveSession={Boolean(activeSessionContext)}
                     activeSessionRole={activeSessionContext?.role}
-                    activeSessionPresentationState={activeSessionContext?.presentationState}
+                    activeSessionActivityState={activeSessionContext?.activityState}
                     taskActivityState={getRequiredTaskActivityState(
                       taskActivityStateByTaskId,
                       task.id,
@@ -327,6 +336,9 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                  historicalSessions={
+                    historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
+                  }
                   hasActiveSession={Boolean(activeSessionContext)}
                   {...(activeSessionContext?.role
                     ? { activeSessionRole: activeSessionContext.role }

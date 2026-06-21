@@ -140,7 +140,6 @@ const composeToolPartSessionUpdate = ({
   input,
   output,
   error,
-  todoUpdateFromTool,
   timestamp,
   workflowToolAliasesByCanonical,
 }: {
@@ -152,7 +151,6 @@ const composeToolPartSessionUpdate = ({
   input: Record<string, unknown> | undefined;
   output: string | undefined;
   error: string | undefined;
-  todoUpdateFromTool: ReturnType<typeof resolveTodoUpdateFromTool>;
   timestamp: string;
   workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1];
 }): ToolPartSessionUpdate => {
@@ -189,9 +187,6 @@ const composeToolPartSessionUpdate = ({
     nextState: {
       ...prepared,
       status: "running",
-      ...(todoUpdateFromTool
-        ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
-        : {}),
       messages: upsertSessionMessage(prepared, {
         id: messageId,
         role: "tool",
@@ -221,46 +216,43 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const activeSession = context.store.sessionsRef.current[context.store.externalSessionId] ?? null;
+  const activeSession = context.store.readSession(context.session.identity);
   const taskId = activeSession?.taskId;
-  const runtimeDescriptor =
-    activeSession?.runtimeKind && context.refresh.resolveRuntimeDefinition
-      ? context.refresh.resolveRuntimeDefinition(activeSession.runtimeKind)
-      : null;
-  const workflowToolAliasesByCanonical = runtimeDescriptor?.workflowToolAliasesByCanonical;
+  const workflowToolAliasesByCanonical = context.refresh.workflowToolAliasesByCanonical;
 
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const { nextState, refreshDecision } = composeToolPartSessionUpdate({
-        current,
-        prepareCurrent,
-        part,
-        status: resolvedStatus,
-        observedEventTimestampMs,
-        input,
-        output,
-        error,
-        todoUpdateFromTool,
-        timestamp: event.timestamp,
-        workflowToolAliasesByCanonical,
-      });
+  if (todoUpdateFromTool && activeSession) {
+    context.todos.updateSessionTodos((todos) =>
+      mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
+    );
+  }
 
-      shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
+  context.store.updateSession(context.session.identity, (current) => {
+    const { nextState, refreshDecision } = composeToolPartSessionUpdate({
+      current,
+      prepareCurrent,
+      part,
+      status: resolvedStatus,
+      observedEventTimestampMs,
+      input,
+      output,
+      error,
+      timestamp: event.timestamp,
+      workflowToolAliasesByCanonical,
+    });
 
-      return nextState;
-    },
-    { persist: false },
-  );
+    shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
+
+    return nextState;
+  });
 
   if (shouldRefreshTaskData) {
     runOrchestratorSideEffect(
       "session-events-refresh-task-data",
-      context.refresh.refreshTaskData(context.refresh.repoPath, taskId),
+      context.refresh.refreshTaskData(context.session.repoPath, taskId),
       {
         tags: {
-          repoPath: context.refresh.repoPath,
-          externalSessionId: context.store.externalSessionId,
+          repoPath: context.session.repoPath,
+          externalSessionId: context.session.identity.externalSessionId,
           tool: part.tool,
         },
       },

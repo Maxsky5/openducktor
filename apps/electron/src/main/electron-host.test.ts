@@ -681,27 +681,6 @@ describe("createElectronHostCommandRouter", () => {
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toEqual([]);
     await expect(
-      router.invoke("runtime_startup_status", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      runtimeKind: "opencode",
-      repoPath: "/repo",
-      stage: "idle",
-      runtime: null,
-    });
-    await expect(
-      router.invoke("repo_runtime_health_status", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      status: "not_started",
-      runtime: { status: "not_started", stage: "idle" },
-      mcp: { status: "waiting_for_runtime" },
-    });
-    await expect(
       router.invoke("repo_runtime_health", {
         runtimeKind: "opencode",
         repoPath: "/repo",
@@ -722,6 +701,9 @@ describe("createElectronHostCommandRouter", () => {
     await expect(
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toMatchObject([{ runtimeId: "runtime-1" }]);
+    await expect(
+      router.invoke("runtime_require", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
     expect(runtimeStarts).toEqual([
       {
         runtimeKind: "opencode",
@@ -1192,12 +1174,6 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).resolves.toEqual([]);
-    await expect(
-      router.invoke("agent_sessions_list_bulk", {
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-      }),
-    ).resolves.toEqual({ "task-1": [] });
 
     const stoppedSessions: unknown[] = [];
     const opencodeDescriptor = createRuntimeDefinitionsService()
@@ -1278,7 +1254,7 @@ describe("createElectronHostCommandRouter", () => {
     expect(stoppedSessions).toEqual([
       {
         runtimeKind: "opencode",
-        runtimeRoute: sessionRuntime.runtimeRoute,
+        repoPath: "/repo",
         externalSessionId: "external-session-1",
         workingDirectory: "/repo/worktree",
       },
@@ -2208,7 +2184,6 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
     });
   });

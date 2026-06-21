@@ -1,59 +1,62 @@
 import type {
   AgentSessionRecord,
   AutopilotActionId,
-  RuntimeKind,
+  RepoRuntimeRef,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
+import type {
+  ResolvedSessionStartDecision,
+  RunSessionStartWorkflow,
+} from "@/features/session-start";
 import {
   coerceVisibleSelectionToCatalog,
   pickDefaultVisibleSelectionForCatalog,
   roleDefaultSelectionFor,
 } from "@/features/session-start/session-start-selection";
-import type { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { getSessionLaunchAction } from "../session-start/session-start-launch-options";
 import { AUTOPILOT_ACTION_DEFINITIONS, type AutopilotActionDefinition } from "./autopilot-catalog";
 
-type AutopilotActionOutcome = {
-  kind: "started" | "skipped";
-  message: string;
-};
+type AutopilotActionOutcome =
+  | {
+      kind: "started";
+      message: string;
+      postStartActionError: Error | null;
+    }
+  | {
+      kind: "skipped";
+      message: string;
+    };
 
 type ExecuteAutopilotActionArgs = {
   activeWorkspace: ActiveWorkspace;
   task: TaskCard;
   actionId: AutopilotActionId;
   queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
+  loadTaskSessionRecords: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   resolveTaskWorktree: (
     repoPath: string,
     taskId: string,
   ) => Promise<{
     workingDirectory: string;
   } | null>;
-  startSessionWorkflow: StartSessionWorkflowFn;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  onDetachedPostStartError: (params: { actionLabel: string; taskId: string; error: Error }) => void;
+  runSessionStartWorkflow: RunSessionStartWorkflow;
 };
-
-type StartSessionWorkflowFn = typeof startSessionWorkflow;
 
 type ResolvedAutopilotStart = {
   kind: "start";
   startMode: "fresh" | "reuse" | "fork";
-  sourceExternalSessionId?: string | null;
+  sourceSession?: AgentSessionIdentity | null;
   targetWorkingDirectory?: string | null;
   preferredSelection?: AgentModelSelection | null;
 };
@@ -68,10 +71,10 @@ type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 const findLatestSessionRecordByRole = (
-  task: TaskCard,
+  sessions: AgentSessionRecord[],
   role: AgentRole,
 ): AgentSessionRecord | null => {
-  const matchingSessions = (task.agentSessions ?? [])
+  const matchingSessions = sessions
     .filter((session) => session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
@@ -105,10 +108,7 @@ const resolveAutopilotSelection = async ({
   role: AgentRole;
   preferredSelection?: AgentModelSelection | null;
   queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
 }): Promise<AgentModelSelection> => {
   if (preferredSelection) {
     return preferredSelection;
@@ -118,7 +118,10 @@ const resolveAutopilotSelection = async ({
   const repoSettings = toRepoSettingsInput(repoConfig);
   const savedDefaultSelection = roleDefaultSelectionFor(repoSettings, role);
   const runtimeKind = savedDefaultSelection?.runtimeKind ?? repoSettings.defaultRuntimeKind;
-  const catalog = await loadRepoRuntimeCatalog(activeWorkspace.repoPath, runtimeKind);
+  const catalog = await loadRepoRuntimeCatalog({
+    repoPath: activeWorkspace.repoPath,
+    runtimeKind,
+  });
 
   if (savedDefaultSelection) {
     const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
@@ -157,11 +160,16 @@ const resolveAutopilotStart = async ({
   activeWorkspace,
   action,
   task,
+  loadTaskSessionRecords,
   resolveTaskWorktree,
-}: Pick<ExecuteAutopilotActionArgs, "activeWorkspace" | "task" | "resolveTaskWorktree"> & {
+}: Pick<
+  ExecuteAutopilotActionArgs,
+  "activeWorkspace" | "task" | "loadTaskSessionRecords" | "resolveTaskWorktree"
+> & {
   action: AutopilotActionDefinition;
 }): Promise<AutopilotStartResolution> => {
-  const latestRoleSession = findLatestSessionRecordByRole(task, action.role);
+  const taskSessions = await loadTaskSessionRecords(activeWorkspace.repoPath, task.id);
+  const latestRoleSession = findLatestSessionRecordByRole(taskSessions, action.role);
 
   if (action.startPolicy.kind === "latestRoleSession") {
     if (!latestRoleSession) {
@@ -174,7 +182,7 @@ const resolveAutopilotStart = async ({
     return {
       kind: "start",
       startMode: action.startPolicy.startMode,
-      sourceExternalSessionId: latestRoleSession.externalSessionId,
+      sourceSession: toAgentSessionIdentity(latestRoleSession),
       preferredSelection: toAgentModelSelection(latestRoleSession.selectedModel),
     };
   }
@@ -200,7 +208,7 @@ const resolveAutopilotStart = async ({
     return {
       kind: "start",
       startMode: "reuse",
-      sourceExternalSessionId: latestRoleSession.externalSessionId,
+      sourceSession: toAgentSessionIdentity(latestRoleSession),
       targetWorkingDirectory: continuationTarget.workingDirectory,
     };
   }
@@ -212,18 +220,56 @@ const resolveAutopilotStart = async ({
   };
 };
 
+const requireAutopilotSourceSession = (
+  resolution: ResolvedAutopilotStart,
+): AgentSessionIdentity => {
+  if (resolution.sourceSession) {
+    return resolution.sourceSession;
+  }
+  throw new Error(`${resolution.startMode} autopilot start requires a source session.`);
+};
+
+const toSessionStartDecision = ({
+  resolution,
+  selectedModel,
+}: {
+  resolution: ResolvedAutopilotStart;
+  selectedModel: AgentModelSelection | null;
+}): ResolvedSessionStartDecision => {
+  if (resolution.startMode === "reuse") {
+    return {
+      startMode: "reuse",
+      sourceSession: requireAutopilotSourceSession(resolution),
+    };
+  }
+
+  if (!selectedModel) {
+    throw new Error(`${resolution.startMode} autopilot start requires a selected model.`);
+  }
+
+  if (resolution.startMode === "fork") {
+    return {
+      startMode: "fork",
+      sourceSession: requireAutopilotSourceSession(resolution),
+      selectedModel,
+    };
+  }
+
+  return {
+    startMode: "fresh",
+    selectedModel,
+  };
+};
+
 export const executeAutopilotAction = async ({
   activeWorkspace,
   task,
   actionId,
   queryClient,
+  loadTaskSessionRecords,
   loadRepoRuntimeCatalog,
   resolveTaskWorktree,
-  startSessionWorkflow,
-  startAgentSession,
-  settleStartedAgentSession,
-  sendAgentMessage,
-  onDetachedPostStartError,
+  runSessionStartWorkflow,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
 
@@ -232,57 +278,46 @@ export const executeAutopilotAction = async ({
       activeWorkspace,
       action,
       task,
+      loadTaskSessionRecords,
       resolveTaskWorktree,
     });
     if (startResolution.kind === "skipped") {
       return startResolution;
     }
+    const selectedModel =
+      startResolution.startMode === "reuse"
+        ? null
+        : await resolveAutopilotSelection({
+            activeWorkspace,
+            role: action.role,
+            ...(startResolution.preferredSelection !== undefined
+              ? { preferredSelection: startResolution.preferredSelection }
+              : {}),
+            queryClient,
+            loadRepoRuntimeCatalog,
+          });
 
-    await startSessionWorkflow({
-      activeWorkspace,
-      queryClient,
-      intent: {
+    const workflow = await runSessionStartWorkflow({
+      request: {
         taskId: task.id,
         role: action.role,
         launchActionId: action.launchActionId,
-        startMode: startResolution.startMode,
-        ...(startResolution.sourceExternalSessionId
-          ? { sourceExternalSessionId: startResolution.sourceExternalSessionId }
-          : {}),
+        postStartAction: "kickoff",
         ...(startResolution.targetWorkingDirectory !== undefined
           ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
           : {}),
-        postStartAction: "kickoff",
       },
-      selection:
-        startResolution.startMode === "reuse"
-          ? null
-          : await resolveAutopilotSelection({
-              activeWorkspace,
-              role: action.role,
-              ...(startResolution.preferredSelection !== undefined
-                ? { preferredSelection: startResolution.preferredSelection }
-                : {}),
-              queryClient,
-              loadRepoRuntimeCatalog,
-            }),
+      decision: toSessionStartDecision({
+        resolution: startResolution,
+        selectedModel,
+      }),
       task,
-      startAgentSession,
-      settleStartedAgentSession,
-      sendAgentMessage,
-      postStartExecution: "detached",
-      onDetachedPostStartError: (error) => {
-        onDetachedPostStartError({
-          actionLabel: action.label,
-          taskId: task.id,
-          error,
-        });
-      },
     });
 
     return {
       kind: "started",
       message: `Started ${action.label} for ${task.id}.`,
+      postStartActionError: workflow.postStartActionError,
     };
   } catch (error) {
     if (isSkippableAutopilotError(action, error)) {

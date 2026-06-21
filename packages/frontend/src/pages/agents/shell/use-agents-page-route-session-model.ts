@@ -1,99 +1,46 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useCallback, useState } from "react";
+import { startTransition, useCallback, useEffect } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
-import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
-import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
-import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
+import type { RepoSettingsInput } from "@/types/state-slices";
+import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
+import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import { useAgentStudioReadiness } from "../use-agents-page-readiness";
-import { useAgentStudioSelectionIntentState } from "./use-agent-studio-selection-intent-state";
-import { useAgentStudioWorktreeRecoverySignal } from "./use-agent-studio-worktree-recovery-signal";
+import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
+import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 
 type UseAgentsPageRouteSessionModelArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   workspaceRepoPath: string | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: boolean;
-  runtimeDefinitionsError: string | null;
-  runtimeHealthByRuntime: Parameters<typeof useAgentStudioReadiness>[0]["runtimeHealthByRuntime"];
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-  refreshRepoRuntimeHealthForRepo: (repoPath: string, force?: boolean) => Promise<unknown>;
-  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
-    externalSessionId: string;
-    repoReadinessState: Parameters<
-      typeof useAgentStudioSelectionController
-    >[0]["agentStudioReadinessState"];
-  }) => Promise<boolean>;
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
 };
 
 export type AgentsPageRouteSessionModel = {
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: () => void;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
-  signalContextSwitchIntent: () => void;
-  contextSwitchVersion: number;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
-  readiness: ReturnType<typeof useAgentStudioReadiness>;
-  isSessionSelectionResolving: boolean;
-  worktreeRecoverySignal: number;
-  scheduleSelectionIntent: (intent: {
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  }) => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export function useAgentsPageRouteSessionModel({
-  activeWorkspace,
+  activeWorkspaceId,
   workspaceRepoPath,
-  runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  runtimeDefinitionsError,
-  runtimeHealthByRuntime,
-  isLoadingChecks,
-  refreshChecks,
-  refreshRepoRuntimeHealthForRepo,
-  hasCachedRepoRuntimeHealth,
   tasks,
   isForegroundLoadingTasks,
   sessions,
-  hydrateRequestedTaskSessionHistory,
-  ensureSessionReadyForView,
-  readSessionModelCatalog,
-  readSessionTodos,
+  repoSettings,
+  isLoadingRepoSettings,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
-  const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
 
   const {
     taskIdParam,
-    sessionParam,
+    sessionKeyParam,
     hasExplicitRoleParam,
     roleFromQuery,
     isRepoNavigationBoundaryPending,
@@ -101,7 +48,7 @@ export function useAgentsPageRouteSessionModel({
     retryNavigationPersistence,
     updateQuery,
   } = useAgentStudioQuerySync({
-    activeWorkspace,
+    activeWorkspaceId,
     navigationType,
     searchParams,
     setSearchParams,
@@ -109,93 +56,53 @@ export function useAgentsPageRouteSessionModel({
 
   const scheduleQueryUpdate = useCallback(
     (updates: AgentStudioQueryUpdate): void => {
-      updateQuery(updates);
+      // Local selection state owns click responsiveness; URL persistence must not block it.
+      startTransition(() => {
+        updateQuery(updates);
+      });
     },
     [updateQuery],
   );
 
-  const signalContextSwitchIntent = useCallback((): void => {
-    setContextSwitchVersion((current) => current + 1);
-  }, []);
-
-  const { selectionIntentForController, isSessionSelectionResolving, scheduleSelectionIntent } =
-    useAgentStudioSelectionIntentState({
-      isRepoNavigationBoundaryPending,
-      taskIdParam,
-      sessionParam,
-      roleFromQuery,
-    });
-
-  const readiness = useAgentStudioReadiness({
-    activeWorkspace,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
+  const { selection: selectionState, selectAgentStudioSelection } = useAgentStudioSelectionState({
+    isRepoNavigationBoundaryPending,
+    taskIdParam,
+    sessionKeyParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scheduleQueryUpdate,
   });
 
   const selection = useAgentStudioSelectionController({
-    activeWorkspace,
+    activeWorkspaceId,
+    workspaceRepoPath,
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
     sessions,
     taskIdParam,
-    sessionParam,
+    sessionKeyParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    selectionIntent: selectionIntentForController,
-    updateQuery: scheduleQueryUpdate,
-    agentStudioReadinessState: readiness.agentStudioReadinessState,
-    hydrateRequestedTaskSessionHistory,
-    ensureSessionReadyForView,
-    runtimeDefinitions,
-    readSessionModelCatalog,
-    readSessionTodos,
-    clearComposerInput: signalContextSwitchIntent,
-    onContextSwitchIntent: signalContextSwitchIntent,
+    selectionState,
+    repoSettings,
+    isLoadingRepoSettings,
+    selectAgentStudioSelection,
   });
 
-  const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
-    workspaceRepoPath,
-    selection,
-    isForegroundLoadingTasks,
-  });
+  useEffect(() => {
+    if (!selection.queryUpdate) {
+      return;
+    }
 
-  useRepoRuntimeHealthWarmup({
-    workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingChecks,
-    hasCachedRepoRuntimeHealth,
-    refreshRepoRuntimeHealthForRepo,
-  });
-
-  useAgentStudioQuerySessionSync({
-    isRepoNavigationBoundaryPending,
-    isLoadingTasks: isForegroundLoadingTasks,
-    tasks,
-    taskIdParam,
-    sessionParam,
-    selectedSessionById: selection.selectedSessionById,
-    taskId: selection.taskId,
-    activeSession: selection.activeSession,
-    roleFromQuery,
-    isActiveTaskHydrated: selection.isActiveTaskHydrated,
-    scheduleQueryUpdate,
-  });
+    scheduleQueryUpdate(selection.queryUpdate);
+  }, [scheduleQueryUpdate, selection.queryUpdate]);
 
   return {
     navigationPersistenceError,
     retryNavigationPersistence,
     scheduleQueryUpdate,
-    signalContextSwitchIntent,
-    contextSwitchVersion,
     selection,
-    readiness,
-    isSessionSelectionResolving,
-    worktreeRecoverySignal,
-    scheduleSelectionIntent,
+    selectAgentStudioSelection,
   };
 }

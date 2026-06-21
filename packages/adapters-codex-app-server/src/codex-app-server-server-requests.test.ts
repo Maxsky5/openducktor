@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { handleCodexServerRequest } from "./codex-app-server-server-requests";
+import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSessionState } from "./types";
 
 describe("handleCodexServerRequest", () => {
@@ -15,7 +16,7 @@ describe("handleCodexServerRequest", () => {
       },
       systemPrompt: "Use the repo rules.",
       role: null,
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       repoPath: "/repo",
       threadId: "thread-unknown-role",
       workingDirectory: "/repo",
@@ -26,10 +27,7 @@ describe("handleCodexServerRequest", () => {
       handleCodexServerRequest(
         {
           respondServerRequest,
-          pendingApprovalsByRequestId: new Map(),
-          pendingApprovalIdsBySessionId: new Map(),
-          pendingQuestionsByRequestId: new Map(),
-          pendingQuestionIdsBySessionId: new Map(),
+          pendingInput: new CodexPendingInputState(),
           activeTurnsBySessionId: new Map(),
           bindActiveTurnId: () => false,
           flushQueuedUserMessagesLater: () => {},
@@ -51,7 +49,7 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(false);
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       29,
       expect.objectContaining({
         approved: false,
@@ -80,7 +78,7 @@ describe("handleCodexServerRequest", () => {
       },
       systemPrompt: "Use the repo rules.",
       role: null,
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       repoPath: "/repo",
       threadId: "thread-unknown-role",
       workingDirectory: "/repo",
@@ -90,10 +88,7 @@ describe("handleCodexServerRequest", () => {
     await handleCodexServerRequest(
       {
         respondServerRequest,
-        pendingApprovalsByRequestId: new Map(),
-        pendingApprovalIdsBySessionId: new Map(),
-        pendingQuestionsByRequestId: new Map(),
-        pendingQuestionIdsBySessionId: new Map(),
+        pendingInput: new CodexPendingInputState(),
         activeTurnsBySessionId: new Map(),
         bindActiveTurnId: () => false,
         flushQueuedUserMessagesLater: () => {},

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  useAgentState,
   useChecksState,
   useDelegationState,
   useSpecState,
@@ -46,10 +45,6 @@ describe("AppStateProvider hooks", () => {
       {
         hook: useSpecState,
         expected: "useSpecState must be used inside AppStateProvider",
-      },
-      {
-        hook: useAgentState,
-        expected: "useAgentState must be used inside AppStateProvider",
       },
     ];
 

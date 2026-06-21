@@ -1,45 +1,37 @@
-import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
+import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type {
+  StartAgentSessionInput,
   StartOrReuseResult,
   StartSessionContext,
-  StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { registerStartedSession } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
 import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
-import {
-  resolveFreshStartTargetWorkingDirectory,
-  resolveRuntimeAndModel,
-} from "./start-session-runtime";
+import { resolveFreshStartRuntimeContext } from "./start-session-runtime";
 
 type FreshStrategyInput = {
   ctx: StartSessionContext;
-  input: Extract<StartSessionCreationInput, { startMode: "fresh" }>;
+  input: Pick<Extract<StartAgentSessionInput, { startMode: "fresh" }>, "selectedModel">;
+  targetWorkingDirectory: string | null | undefined;
   deps: StartSessionExecutionDependencies;
 };
 
 export const executeFreshStart = async ({
   ctx,
   input,
+  targetWorkingDirectory,
   deps,
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-  const selectedModelRuntimeKind = requireSelectedModelRuntimeKindForStart(ctx.role, selectedModel);
+  const selectedModelRuntimeKind = readFreshSessionRuntimeKind(ctx.role, selectedModel);
   const selectedModelWithRuntime = {
     ...selectedModel,
     runtimeKind: selectedModelRuntimeKind,
   };
-  const targetWorkingDirectory =
-    input.targetWorkingDirectory !== undefined
-      ? input.targetWorkingDirectory
-      : await resolveFreshStartTargetWorkingDirectory({
-          ctx,
-          resolveTaskWorktree: deps.runtime.resolveTaskWorktree,
-        });
 
-  const resolved = await resolveRuntimeAndModel({
+  const resolved = await resolveFreshStartRuntimeContext({
     ctx,
     requestedRuntimeKind: selectedModelRuntimeKind,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
@@ -75,9 +67,8 @@ export const executeFreshStart = async ({
     startedCtx,
     runtimeInfo: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
-    promptOverrides: resolved.promptOverrides,
     selectedModel: selectedModelWithRuntime,
     deps,
-    taskCard: resolved.taskCard,
+    taskCard,
   });
 };

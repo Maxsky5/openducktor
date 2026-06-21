@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeRef } from "@openducktor/contracts";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -20,7 +20,7 @@ import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -34,6 +34,7 @@ import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-ca
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
+import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
@@ -542,23 +543,17 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  sessionRuntimeRef?: RuntimeRef | null;
-  sessionWorkingDirectory?: string | null | undefined;
+  parentSession: ParentSessionRuntimeIdentity | null;
   timeLabel: string;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
 
 const SubagentMessage = ({
   meta,
-  sessionRuntimeRef,
-  sessionWorkingDirectory,
+  parentSession,
   timeLabel,
-  subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
-  subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
@@ -620,13 +615,7 @@ const SubagentMessage = ({
                 <p className="whitespace-pre-wrap text-sm font-medium text-destructive">{error}</p>
               ) : null}
             </div>
-            <SubagentTranscriptButton
-              sessionRuntimeRef={sessionRuntimeRef ?? null}
-              sessionWorkingDirectory={sessionWorkingDirectory}
-              pendingApprovals={subagentPendingApprovals}
-              pendingQuestions={subagentPendingQuestions}
-              meta={meta}
-            />
+            <SubagentTranscriptButton parentSession={parentSession} meta={meta} />
           </div>
         </div>
       </div>
@@ -656,31 +645,27 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionRuntimeRef?: RuntimeRef | null;
+  parentSession: ParentSessionRuntimeIdentity | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
 
 export const MessageBody = ({
   message,
-  sessionRuntimeRef,
+  parentSession,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
-  subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
@@ -717,12 +702,9 @@ export const MessageBody = ({
     return (
       <SubagentMessage
         meta={meta}
-        sessionRuntimeRef={sessionRuntimeRef ?? null}
-        sessionWorkingDirectory={sessionWorkingDirectory}
+        parentSession={parentSession}
         timeLabel={timeLabel}
-        subagentPendingApprovals={subagentPendingApprovals}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
-        subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
     );

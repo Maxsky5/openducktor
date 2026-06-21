@@ -1,34 +1,13 @@
+import type { FileContent, FileDiff, RuntimeKind } from "@openducktor/contracts";
 import type {
-  AgentSessionRecord,
-  FileContent,
-  FileDiff,
-  RepoPromptOverrides,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-} from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
-  AgentSessionPresenceSnapshot,
-  AgentSessionTodoItem,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
 } from "@openducktor/core";
-
-/**
- * Defines when a newly-created local session may leave its initial `starting` state.
- *
- * - `after_listener_attach`: mark the session idle as soon as the runtime listener is attached.
- * - `after_first_send_attempt`: keep the session visibly starting until the kickoff/send path
- *   either marks it running or settles it back to idle/error.
- */
-export type InitialSessionStatusReleasePolicy =
-  | "after_listener_attach"
-  | "after_first_send_attempt";
 
 export type AgentChatMessageMeta =
   | {
@@ -134,13 +113,25 @@ export type AgentChatMessage = {
 
 export type SessionMessagesState = {
   readonly externalSessionId: string;
-  readonly count: number;
+  readonly items: readonly AgentChatMessage[];
   readonly version: number;
 };
 
-export type AgentSessionMessages = AgentChatMessage[] | SessionMessagesState;
+export type AgentSessionMessages = SessionMessagesState;
 
-export type AgentApprovalRequest = AgentPendingApprovalRequest;
+export type AgentPendingInputSource = {
+  kind: "subagent";
+  parentExternalSessionId: string;
+  childExternalSessionId: string;
+  subagentCorrelationKey?: string;
+};
+
+type AgentPendingInputRouting = {
+  source?: AgentPendingInputSource;
+  responseSession?: AgentSessionIdentity;
+};
+
+export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInputRouting;
 
 export type AgentQuestionRequest = {
   requestId: string;
@@ -151,7 +142,7 @@ export type AgentQuestionRequest = {
     multiple?: boolean;
     custom?: boolean;
   }>;
-};
+} & AgentPendingInputRouting;
 
 export type AgentSessionContextUsage = {
   totalTokens: number;
@@ -163,53 +154,23 @@ export type AgentSessionContextUsage = {
   profileId?: string;
 };
 
-export type AgentSessionHistoryHydrationState =
-  | "not_requested"
-  | "hydrating"
-  | "hydrated"
-  | "failed";
-
-export type AgentSessionHistoryPreludeMode = "task_context" | "none";
-
-export type AgentSessionRuntimeRecoveryState =
-  | "idle"
-  | "waiting_for_runtime"
-  | "recovering_runtime"
-  | "failed";
-
-export type AgentSessionPurpose = "primary" | "transcript";
+export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
 
 export type AgentSessionState = {
   externalSessionId: string;
-  purpose?: AgentSessionPurpose;
   title?: string;
   taskId: string;
-  repoPath: string;
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
-  runtimeId: string | null;
   workingDirectory: string;
-  historyHydrationState?: AgentSessionHistoryHydrationState;
-  runtimeRecoveryState?: AgentSessionRuntimeRecoveryState;
+  historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
-  draftAssistantText: string;
-  draftAssistantMessageId: string | null;
-  draftReasoningText: string;
-  draftReasoningMessageId: string | null;
   contextUsage?: AgentSessionContextUsage | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
-  /** Live-only parent-session overlay keyed by child runtime session id. */
-  subagentPendingApprovalsByExternalSessionId?: Record<string, AgentApprovalRequest[]> | undefined;
-  /** Live-only parent-session overlay keyed by child runtime session id. */
-  subagentPendingQuestionsByExternalSessionId?: Record<string, AgentQuestionRequest[]> | undefined;
-  todos: AgentSessionTodoItem[];
-  modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
-  isLoadingModelCatalog: boolean;
-  promptOverrides?: RepoPromptOverrides;
   pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };
@@ -218,25 +179,7 @@ export type WorkflowAgentSessionState = AgentSessionState & {
   role: AgentRole;
 };
 
-export type TranscriptAgentSessionState = AgentSessionState & {
-  purpose: "transcript";
-};
-
-export type AgentSessionLoadMode =
-  | "bootstrap"
-  | "requested_history"
-  | "reconcile_live"
-  | "recover_runtime_attachment";
-export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "live_if_empty";
-
-export type AgentSessionLoadOptions = {
-  mode?: AgentSessionLoadMode;
-  targetExternalSessionId?: string | null;
-  recoveryDedupKey?: string | null;
-  historyPolicy?: AgentSessionHistoryHydrationPolicy;
-  historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  allowLiveSessionResume?: boolean;
-  persistedRecords?: AgentSessionRecord[];
-  preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
-};
+export type AgentSessionIdentity = Pick<
+  AgentSessionState,
+  "externalSessionId" | "runtimeKind" | "workingDirectory"
+>;

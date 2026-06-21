@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
   makeRepoHealth,
   makeRuntimeDefinitions,
-  makeRuntimeSummary,
+  makeRuntimeDiagnosticInstance,
   makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
@@ -81,7 +82,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
-  test("reports an enabled runtime as not started instead of healthy", () => {
+  test("keeps diagnostics checking while an enabled runtime awaits automatic startup", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -126,8 +127,58 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(false);
-    expect(model.summaryState.label).toBe("Runtime not started");
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+  });
+
+  test("keeps diagnostics checking when stale health summary wraps pending startup fields", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            observation: null,
+            instance: null,
+            detail: "Runtime has not been started yet.",
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: null,
+            failureKind: null,
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+    expect(model.criticalReasons).toEqual([]);
   });
 
   test("reports disabled runtimes without leaving diagnostics stuck checking", () => {
@@ -156,7 +207,8 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({ runtime: { instance: makeRuntimeSummary() } }),
+        opencode: makeRepoHealth({ runtime: { instance: makeRuntimeDiagnosticInstance() } }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -166,10 +218,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(false);
     expect(cliToolsSection?.badge.label).toBe("Available");
-    expect(cliToolsSection?.rows).toContainEqual({
-      label: "Codex",
-      value: "missing (runtime disabled)",
-    });
+    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
     expect(codexRuntimeSection?.badge.label).toBe("Disabled");
     expect(codexRuntimeSection?.rows).toContainEqual(
       expect.objectContaining({
@@ -207,7 +256,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -256,7 +305,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -305,7 +354,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
@@ -358,7 +407,7 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"] },
         }),
       },
@@ -450,9 +499,9 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["Runtime CLI checks failing", "runtime failed", "task store failed"]),
+      expect.arrayContaining(["gh not found in PATH", "runtime failed", "task store failed"]),
     );
-    expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
+    expect(model.sections[1]?.errors).toEqual(["gh not found in PATH"]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
     expect(taskStoreSection?.errors).toEqual(["task store failed"]);
@@ -482,7 +531,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: {
             supported: true,
             status: "error",
@@ -605,7 +654,7 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "ready",
             stage: "runtime_ready",
             observation: "started_by_diagnostics",
-            instance: makeRuntimeSummary(),
+            instance: makeRuntimeDiagnosticInstance(),
             startedAt: "2026-02-20T12:00:59.000Z",
             updatedAt: "2026-02-20T12:01:00.000Z",
             elapsedMs: 886,
@@ -679,7 +728,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: {
             supported: true,
             status: "checking",
@@ -696,6 +745,100 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(true);
     expect(model.summaryState.label).toBe("Checking...");
+  });
+
+  test("keeps the summary checking when MCP is reconnecting even if the health summary is stale", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "ready",
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
+          mcp: {
+            supported: true,
+            status: "reconnecting",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "The operation was aborted due to timeout",
+            failureKind: "timeout",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+    expect(model.criticalReasons).toEqual([]);
+    expect(mcpSection?.badge).toEqual({ label: "Reconnecting", variant: "warning" });
+  });
+
+  test("reports MCP failures as critical even if the health summary is stale", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "ready",
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "MCP unavailable",
+            failureKind: "error",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.criticalReasons).toContain("MCP unavailable");
+    expect(mcpSection?.errors).toEqual(["MCP unavailable"]);
   });
 
   test("shows timeout-specific cli tools and task-store states instead of leaving them checking", () => {
@@ -732,23 +875,23 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(true);
-    expect(model.summaryState.label).toBe("Checking...");
-    expect(model.criticalReasons).toEqual([]);
-    expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.criticalReasons).toEqual(expect.arrayContaining(["Timed out after 15000ms"]));
+    expect(model.sections[1]?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
-    expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.sections[4]?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(model.sections[4]?.errors[0]).toContain("Task store is not yet available");
   });
 
-  test("keeps hard failures ahead of retrying summary state", () => {
+  test("keeps hard failures ahead of timeout summary state", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -776,8 +919,8 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "error",
             stage: "startup_failed",
             observation: null,
-            instance: makeRuntimeSummary(),
-            startedAt: makeRuntimeSummary().startedAt,
+            instance: makeRuntimeDiagnosticInstance(),
+            startedAt: makeRuntimeDiagnosticInstance().startedAt,
             updatedAt: "2026-02-22T08:00:00.000Z",
             elapsedMs: 20_000,
             attempts: 4,
@@ -799,7 +942,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(true);
+    expect(model.isSummaryChecking).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
   });
@@ -827,14 +970,14 @@ describe("buildDiagnosticsPanelModel", () => {
       taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeSummary() },
+          runtime: { instance: makeRuntimeDiagnosticInstance() },
           mcp: { toolIds: [] },
         }),
       },
       isLoadingChecks: false,
     });
 
-    expect(model.criticalReasons).toContain("Runtime CLI checks failing");
+    expect(model.criticalReasons).toContain("gh auth missing");
     expect(model.sections[1]?.badge).toEqual({ label: "Issue", variant: "danger" });
     expect(model.sections[1]?.errors).toEqual(["gh auth missing"]);
   });

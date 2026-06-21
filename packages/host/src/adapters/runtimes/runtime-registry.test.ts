@@ -35,6 +35,16 @@ const createRuntime = (
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
   ...overrides,
 });
+const createCodexRuntime = (
+  overrides: Partial<RuntimeInstanceSummary> = {},
+): RuntimeInstanceSummary =>
+  createRuntime({
+    kind: "codex",
+    runtimeId: "runtime-1",
+    runtimeRoute: { type: "stdio", identity: "runtime-1" },
+    descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+    ...overrides,
+  });
 describe("createRuntimeRegistry", () => {
   test("returns an existing workspace runtime during ensure", async () => {
     const runtime = createRuntime();
@@ -49,6 +59,64 @@ describe("createRuntimeRegistry", () => {
         }),
       ),
     ).resolves.toEqual(runtime);
+  });
+  test("returns an existing workspace runtime when the repo path formatting differs", async () => {
+    const runtime = createRuntime({ repoPath: "/repo", workingDirectory: "/repo" });
+    const registry = createRuntimeRegistry({ runtimes: [runtime] });
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/repo/",
+          workingDirectory: "/repo/",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(runtime);
+  });
+  test("does not reuse a task runtime during workspace runtime ensure", async () => {
+    const taskRuntime = createRuntime({
+      runtimeId: "task-runtime",
+      taskId: "task-1",
+      workingDirectory: "/repo/task-1",
+    });
+    const workspaceRuntime = createRuntime({ runtimeId: "workspace-runtime" });
+    const starts: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      runtimes: [taskRuntime],
+      workspaceStarter: {
+        startWorkspaceRuntime(input) {
+          starts.push(input);
+          return Effect.succeed({
+            runtime: workspaceRuntime,
+            stop: () => Effect.succeed(undefined),
+          });
+        },
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(workspaceRuntime);
+    await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([
+      taskRuntime,
+      workspaceRuntime,
+    ]);
+    expect(starts).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      },
+    ]);
   });
   test("finds runtimes by id from initial registrations", async () => {
     const runtime = createRuntime();
@@ -129,7 +197,7 @@ describe("createRuntimeRegistry", () => {
       },
     ]);
   });
-  test("removes replaced runtime ids from their previous repo index", async () => {
+  test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({
       runtimeId: "runtime-1",
       repoPath: "/old-repo",
@@ -199,6 +267,54 @@ describe("createRuntimeRegistry", () => {
     };
     const first = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
     const second = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    resolveStart(createRuntime());
+    await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([createRuntime()]);
+    expect(starts).toBe(1);
+  });
+  test("deduplicates parallel workspace runtime ensure calls with equivalent repo paths", async () => {
+    let starts = 0;
+    let resolveStart: (runtime: RuntimeInstanceSummary) => void = () => {};
+    const started = new Promise<RuntimeInstanceSummary>((resolve) => {
+      resolveStart = resolve;
+    });
+    const registry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          return Effect.tryPromise({
+            try: async () => {
+              starts += 1;
+              return {
+                runtime: await started,
+                stop: () => Effect.succeed(undefined),
+              };
+            },
+            catch: (cause) =>
+              toHostOperationError(cause, "test.workspaceStarter.startWorkspaceRuntime"),
+          });
+        },
+      },
+    });
+    const first = Effect.runPromise(
+      registry.ensureWorkspaceRuntime({
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      }),
+    );
+    const second = Effect.runPromise(
+      registry.ensureWorkspaceRuntime({
+        runtimeKind: "opencode",
+        repoPath: "/repo/",
+        workingDirectory: "/repo/",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      }),
+    );
     resolveStart(createRuntime());
     await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
     await expect(
@@ -337,14 +453,20 @@ describe("createRuntimeRegistry", () => {
       return new Response("not found", { status: 404 });
     }) as unknown as typeof fetch;
     try {
-      const registry = createRuntimeRegistry();
-      const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
       const endpoint = "http://127.0.0.1:4096";
+      const registry = createRuntimeRegistry({
+        runtimes: [
+          createRuntime({
+            runtimeRoute: { type: "local_http", endpoint },
+          }),
+        ],
+      });
+      const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
       await expect(
         Effect.runPromise(
           registry.stopSession({
             runtimeKind: "opencode",
-            runtimeRoute: { type: "local_http", endpoint },
+            repoPath: "/repo",
             externalSessionId: "session-1",
             workingDirectory: "/repo/worktree",
           }),
@@ -354,7 +476,7 @@ describe("createRuntimeRegistry", () => {
         Effect.runPromise(
           probeSessionStatus({
             runtimeKind: "opencode",
-            runtimeRoute: { type: "local_http", endpoint },
+            repoPath: "/repo",
             externalSessionId: "session-1",
             workingDirectory: "/repo/worktree",
           }),
@@ -375,6 +497,59 @@ describe("createRuntimeRegistry", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+  test("treats session status probes without a live workspace runtime as inactive", async () => {
+    const calls: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          calls.push(input);
+          return codexResult({});
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.probeSessionStatus({
+          runtimeKind: "codex",
+          repoPath: "/repo",
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    expect(calls).toEqual([]);
+  });
+  test("requires a live workspace runtime to stop a session", async () => {
+    const registry = createRuntimeRegistry();
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("No live opencode workspace runtime found for repo '/repo'.");
+  });
+  test("rejects ambiguous same-kind workspace runtimes before session operations", async () => {
+    const registry = createRuntimeRegistry({
+      runtimes: [
+        createRuntime({ runtimeId: "runtime-1" }),
+        createRuntime({ runtimeId: "runtime-2" }),
+      ],
+    });
+    await expect(
+      Effect.runPromise(
+        registry.probeSessionStatus({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Multiple live opencode workspace runtimes found for repo '/repo'.");
   });
   test("probes OpenCode MCP status and tool ids through the local runtime endpoint", async () => {
     const requests: Array<{
@@ -437,6 +612,36 @@ describe("createRuntimeRegistry", () => {
       globalThis.fetch = originalFetch;
     }
   });
+  test("reports OpenCode MCP fetch timeouts as reconnecting probe results", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    }) as unknown as typeof fetch;
+    try {
+      const registry = createRuntimeRegistry();
+      const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
+
+      await expect(
+        Effect.runPromise(
+          probeMcpStatus({
+            runtimeKind: "opencode",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            workingDirectory: "/repo/worktree",
+            serverName: "openducktor",
+          }),
+        ),
+      ).resolves.toEqual({
+        supported: true,
+        connected: false,
+        serverStatus: null,
+        toolIds: [],
+        detail: "The operation was aborted due to timeout",
+        failureKind: "timeout",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
   test("reports Codex MCP status for host-managed stdio runtimes", async () => {
     const registry = createRuntimeRegistry();
     const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
@@ -461,6 +666,7 @@ describe("createRuntimeRegistry", () => {
   test("probes Codex session status through the host-managed app-server transport", async () => {
     const calls: unknown[] = [];
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           calls.push(input);
@@ -489,7 +695,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -499,7 +705,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-2",
           workingDirectory: "/repo/worktree",
         }),
@@ -509,7 +715,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-3",
           workingDirectory: "/repo/worktree",
         }),
@@ -519,7 +725,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-4",
           workingDirectory: "/repo/worktree",
         }),
@@ -529,7 +735,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-5",
           workingDirectory: "/repo/worktree",
         }),
@@ -565,6 +771,7 @@ describe("createRuntimeRegistry", () => {
   });
   test("treats missing Codex session probe threads as inactive", async () => {
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           return Effect.fail(
@@ -582,7 +789,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "missing-session",
           workingDirectory: "/repo/worktree",
         }),
@@ -591,6 +798,7 @@ describe("createRuntimeRegistry", () => {
   });
   test("fails malformed Codex session probe thread payloads with a typed error", async () => {
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request() {
           return codexResult({});
@@ -602,7 +810,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -612,6 +820,7 @@ describe("createRuntimeRegistry", () => {
   test("interrupts an active Codex session through the app-server port", async () => {
     const calls: unknown[] = [];
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           calls.push(input);
@@ -650,7 +859,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         registry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -682,6 +891,7 @@ describe("createRuntimeRegistry", () => {
   test("treats exact idle Codex sessions as already stopped", async () => {
     const calls: unknown[] = [];
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           calls.push(input);
@@ -699,7 +909,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         registry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -715,6 +925,7 @@ describe("createRuntimeRegistry", () => {
   });
   test("fails active Codex stop when no active turn can be found", async () => {
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
@@ -749,7 +960,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         registry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -758,6 +969,7 @@ describe("createRuntimeRegistry", () => {
   });
   test("fails malformed Codex turn-list payloads with a typed error", async () => {
     const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
@@ -777,7 +989,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         registry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
@@ -785,18 +997,23 @@ describe("createRuntimeRegistry", () => {
     ).rejects.toThrow("Codex thread/turns/list response data must be an array");
   });
   test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
-    const registry = createRuntimeRegistry();
+    const registry = createRuntimeRegistry({ runtimes: [createCodexRuntime()] });
     await expect(
       Effect.runPromise(
         registry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),
       ),
     ).rejects.toThrow("Codex session stop requires the Codex app-server port.");
     const codexRegistry = createRuntimeRegistry({
+      runtimes: [
+        createCodexRuntime({
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+        }),
+      ],
       codexAppServer: {
         request() {
           return codexResult({});
@@ -807,7 +1024,7 @@ describe("createRuntimeRegistry", () => {
       Effect.runPromise(
         codexRegistry.stopSession({
           runtimeKind: "codex",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+          repoPath: "/repo",
           externalSessionId: "session-1",
           workingDirectory: "/repo/worktree",
         }),

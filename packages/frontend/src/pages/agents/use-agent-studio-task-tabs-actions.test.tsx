@@ -8,11 +8,10 @@ enableReactActEnvironment();
 
 type HookArgs = Omit<
   Parameters<typeof useTaskTabActions>[0],
-  "tabTaskIds" | "setOpenTaskTabs" | "setPersistedActiveTaskId" | "setIntentActiveTaskId"
+  "tabTaskIds" | "setOpenTaskTabs" | "setPersistedActiveTaskId"
 > & {
   initialOpenTaskTabs: string[];
   initialPersistedActiveTaskId?: string | null;
-  initialIntentActiveTaskId?: string | null;
 };
 
 const useTaskTabActionsHarness = (props: HookArgs) => {
@@ -20,28 +19,21 @@ const useTaskTabActionsHarness = (props: HookArgs) => {
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState(
     props.initialPersistedActiveTaskId ?? null,
   );
-  const [intentActiveTaskId, setIntentActiveTaskId] = useState(
-    props.initialIntentActiveTaskId ?? null,
-  );
 
   const actions = useTaskTabActions({
     tabTaskIds: openTaskTabs,
     activeTaskTabId: props.activeTaskTabId,
-    clearComposerInput: props.clearComposerInput,
-    onContextSwitchIntent: props.onContextSwitchIntent,
     clearTaskSelection: props.clearTaskSelection,
-    navigateToTaskIntent: props.navigateToTaskIntent,
+    selectTask: props.selectTask,
     handleSelectTab: props.handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   });
 
   return {
     ...actions,
     openTaskTabs,
     persistedActiveTaskId,
-    intentActiveTaskId,
   };
 };
 
@@ -54,10 +46,8 @@ describe("useTaskTabActions", () => {
     const harness = createHookHarness({
       initialOpenTaskTabs: ["task-1"],
       activeTaskTabId: "task-1",
-      clearComposerInput: () => {},
-      onContextSwitchIntent: undefined,
       clearTaskSelection: () => {},
-      navigateToTaskIntent: () => {},
+      selectTask: () => {},
       handleSelectTab,
     });
 
@@ -72,18 +62,14 @@ describe("useTaskTabActions", () => {
   });
 
   test("closing an inactive tab avoids active-tab side effects", async () => {
-    const clearComposerInput = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const clearTaskSelection = mock(() => {});
-    const navigateToTaskIntent = mock(() => {});
+    const selectTask = mock(() => {});
     const harness = createHookHarness({
       initialOpenTaskTabs: ["task-1", "task-2"],
       initialPersistedActiveTaskId: "task-1",
       activeTaskTabId: "task-1",
-      clearComposerInput,
-      onContextSwitchIntent,
       clearTaskSelection,
-      navigateToTaskIntent,
+      selectTask,
       handleSelectTab: () => {},
     });
 
@@ -98,21 +84,16 @@ describe("useTaskTabActions", () => {
       handleReorderTab: harness.getLatest().handleReorderTab,
       openTaskTabs: ["task-1"],
       persistedActiveTaskId: "task-1",
-      intentActiveTaskId: null,
     });
-    expect(clearComposerInput).toHaveBeenCalledTimes(0);
-    expect(onContextSwitchIntent).toHaveBeenCalledTimes(0);
     expect(clearTaskSelection).toHaveBeenCalledTimes(0);
-    expect(navigateToTaskIntent).toHaveBeenCalledTimes(0);
+    expect(selectTask).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
   });
 
   test("closing the active tab focuses and navigates to the adjacent replacement tab", async () => {
-    const clearComposerInput = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const clearTaskSelection = mock(() => {});
-    const navigateToTaskIntent = mock(() => {});
+    const selectTask = mock(() => {});
     const nextTrigger = globalThis.document.createElement("button");
     nextTrigger.id = "agent-studio-tab-task-3";
     globalThis.document.body.appendChild(nextTrigger);
@@ -121,10 +102,8 @@ describe("useTaskTabActions", () => {
       initialOpenTaskTabs: ["task-1", "task-2", "task-3"],
       initialPersistedActiveTaskId: "task-2",
       activeTaskTabId: "task-2",
-      clearComposerInput,
-      onContextSwitchIntent,
       clearTaskSelection,
-      navigateToTaskIntent,
+      selectTask,
       handleSelectTab: () => {},
     });
 
@@ -140,12 +119,9 @@ describe("useTaskTabActions", () => {
       const latest = harness.getLatest();
       expect(latest.openTaskTabs).toEqual(["task-1", "task-3"]);
       expect(latest.persistedActiveTaskId).toBe("task-3");
-      expect(latest.intentActiveTaskId).toBe("task-3");
       expect(typeof latest.handleReorderTab).toBe("function");
-      expect(clearComposerInput).toHaveBeenCalledTimes(1);
-      expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
       expect(clearTaskSelection).toHaveBeenCalledTimes(0);
-      expect(navigateToTaskIntent).toHaveBeenCalledWith("task-3");
+      expect(selectTask).toHaveBeenCalledWith("task-3");
       expect(globalThis.document.activeElement).toBe(nextTrigger);
     } finally {
       try {
@@ -157,18 +133,14 @@ describe("useTaskTabActions", () => {
   });
 
   test("closing the last active tab clears the current selection", async () => {
-    const clearComposerInput = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const clearTaskSelection = mock(() => {});
-    const navigateToTaskIntent = mock(() => {});
+    const selectTask = mock(() => {});
     const harness = createHookHarness({
       initialOpenTaskTabs: ["task-1"],
       initialPersistedActiveTaskId: "task-1",
       activeTaskTabId: "task-1",
-      clearComposerInput,
-      onContextSwitchIntent,
       clearTaskSelection,
-      navigateToTaskIntent,
+      selectTask,
       handleSelectTab: () => {},
     });
 
@@ -180,30 +152,22 @@ describe("useTaskTabActions", () => {
     const latest = harness.getLatest();
     expect(latest.openTaskTabs).toEqual([]);
     expect(latest.persistedActiveTaskId).toBeNull();
-    expect(latest.intentActiveTaskId).toBeNull();
     expect(typeof latest.handleReorderTab).toBe("function");
-    expect(clearComposerInput).toHaveBeenCalledTimes(1);
-    expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
     expect(clearTaskSelection).toHaveBeenCalledTimes(1);
-    expect(navigateToTaskIntent).toHaveBeenCalledTimes(0);
+    expect(selectTask).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
   });
 
   test("reordering tabs updates order without changing active-tab side effects", async () => {
-    const clearComposerInput = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const clearTaskSelection = mock(() => {});
-    const navigateToTaskIntent = mock(() => {});
+    const selectTask = mock(() => {});
     const harness = createHookHarness({
       initialOpenTaskTabs: ["task-1", "task-2", "task-3"],
       initialPersistedActiveTaskId: "task-2",
-      initialIntentActiveTaskId: "task-2",
       activeTaskTabId: "task-2",
-      clearComposerInput,
-      onContextSwitchIntent,
       clearTaskSelection,
-      navigateToTaskIntent,
+      selectTask,
       handleSelectTab: () => {},
     });
 
@@ -218,12 +182,9 @@ describe("useTaskTabActions", () => {
       handleReorderTab: harness.getLatest().handleReorderTab,
       openTaskTabs: ["task-3", "task-1", "task-2"],
       persistedActiveTaskId: "task-2",
-      intentActiveTaskId: "task-2",
     });
-    expect(clearComposerInput).toHaveBeenCalledTimes(0);
-    expect(onContextSwitchIntent).toHaveBeenCalledTimes(0);
     expect(clearTaskSelection).toHaveBeenCalledTimes(0);
-    expect(navigateToTaskIntent).toHaveBeenCalledTimes(0);
+    expect(selectTask).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
   });

@@ -1,42 +1,33 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type {
-  KanbanSessionPresentationState,
-  KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
+import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
+import { compareActiveAgentSessionActivityState } from "@/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
 
 export type SessionTargetOptions = {
-  externalSessionId?: string | null;
+  session: AgentSessionIdentity;
 };
 
 type PrimarySessionOrderingCandidate = {
   externalSessionId: string;
-  status: KanbanTaskSession["status"];
-  presentationState: KanbanSessionPresentationState;
+  runtimeKind: AgentSessionIdentity["runtimeKind"];
+  workingDirectory: AgentSessionIdentity["workingDirectory"];
+  activityState: ActiveAgentSessionActivityState;
   startedAt?: string;
-};
-
-const rankActiveSessionForPrimary = (session: PrimarySessionOrderingCandidate): number => {
-  if (session.presentationState === "waiting_input") {
-    return 0;
-  }
-  if (session.status === "running") {
-    return 1;
-  }
-  if (session.status === "starting") {
-    return 2;
-  }
-  return 3;
 };
 
 export const compareActiveSessionForPrimary = (
   left: PrimarySessionOrderingCandidate,
   right: PrimarySessionOrderingCandidate,
 ): number => {
-  const leftRank = rankActiveSessionForPrimary(left);
-  const rightRank = rankActiveSessionForPrimary(right);
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
+  const activityPriority = compareActiveAgentSessionActivityState(
+    left.activityState,
+    right.activityState,
+  );
+  if (activityPriority !== 0) {
+    return activityPriority;
   }
 
   if (left.startedAt !== right.startedAt) {
@@ -49,11 +40,13 @@ export const compareActiveSessionForPrimary = (
     return left.startedAt > right.startedAt ? -1 : 1;
   }
 
-  if (left.externalSessionId === right.externalSessionId) {
+  const leftIdentityKey = agentSessionIdentityKey(left);
+  const rightIdentityKey = agentSessionIdentityKey(right);
+  if (leftIdentityKey === rightIdentityKey) {
     return 0;
   }
 
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
+  return leftIdentityKey > rightIdentityKey ? -1 : 1;
 };
 
 export const resolvePreferredActiveSession = (
@@ -70,17 +63,19 @@ export const resolvePreferredActiveSession = (
 };
 
 const resolveLatestHistoricalSessionByRole = (
-  task: TaskCard,
+  historicalSessions: readonly AgentSessionRecord[],
   role: AgentRole,
-): NonNullable<TaskCard["agentSessions"]>[number] | null => {
-  const matchingTaskAgentSessions = (task.agentSessions ?? [])
+): AgentSessionRecord | null => {
+  const matchingTaskAgentSessions = historicalSessions
     .filter((session) => session.role === role)
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   return matchingTaskAgentSessions[0] ?? null;
 };
 
-export const resolveHistoricalSessionRoles = (task: TaskCard): AgentRole[] => {
-  const sortedTaskAgentSessions = (task.agentSessions ?? []).toSorted((left, right) =>
+export const resolveHistoricalSessionRoles = (
+  historicalSessions: readonly AgentSessionRecord[],
+): AgentRole[] => {
+  const sortedTaskAgentSessions = historicalSessions.toSorted((left, right) =>
     right.startedAt.localeCompare(left.startedAt),
   );
   const roles: AgentRole[] = [];
@@ -98,20 +93,19 @@ export const resolveHistoricalSessionRoles = (task: TaskCard): AgentRole[] => {
 };
 
 export const resolveSessionTargetOptions = (
-  task: TaskCard,
+  historicalSessions: readonly AgentSessionRecord[],
   taskSessions: readonly KanbanTaskSession[],
   role: AgentRole,
 ): SessionTargetOptions | undefined => {
   const activeSession = resolvePreferredActiveSession(taskSessions, role);
-  const historicalSession = resolveLatestHistoricalSessionByRole(task, role);
-  const externalSessionId =
-    activeSession?.externalSessionId ?? historicalSession?.externalSessionId;
+  const historicalSession = resolveLatestHistoricalSessionByRole(historicalSessions, role);
+  const session = activeSession ?? historicalSession;
 
-  if (!externalSessionId) {
+  if (!session) {
     return undefined;
   }
 
   return {
-    externalSessionId,
+    session,
   };
 };

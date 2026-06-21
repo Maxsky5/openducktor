@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createSessionMessagesState,
+  getSessionMessageCount,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import {
   createAgentSessionFixture,
   createChatSettingsFixture,
@@ -40,23 +43,17 @@ describe("shared test fixtures", () => {
         "reject" as const,
       ],
     });
-    first.messages = [
+    first.messages = createSessionMessagesState(first.externalSessionId, [
       {
         id: "message-1",
         role: "assistant",
         content: "hello",
         timestamp: "2026-03-23T10:00:00.000Z",
       },
-    ];
+    ]);
 
     expect(second.pendingApprovals).toEqual([]);
     expect(getSessionMessageCount(second)).toBe(0);
-  });
-
-  test("createAgentSessionFixture keeps repo identity explicit", () => {
-    const session = createAgentSessionFixture({}, { repoPath: "/repo-b" });
-
-    expect(session.repoPath).toBe("/repo-b");
   });
 
   test("createAgentSessionFixture uses the canonical external id by default", () => {

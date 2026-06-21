@@ -13,17 +13,17 @@ describe("KanbanTaskCard active sessions", () => {
       id: "TASK-1",
       title: "Implement payment flow",
       availableActions: ["build_start", "open_builder", "open_qa"],
-      agentSessions: [
-        {
-          externalSessionId: "external-spec-old",
-          role: "spec",
-          startedAt: "2026-01-10T10:00:00.000Z",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktrees/spec",
-          selectedModel: null,
-        },
-      ],
     });
+    const historicalSessions = [
+      {
+        externalSessionId: "external-spec-old",
+        role: "spec" as const,
+        startedAt: "2026-01-10T10:00:00.000Z",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktrees/spec",
+        selectedModel: null,
+      },
+    ];
 
     const html = renderToStaticMarkup(
       createElement(
@@ -31,23 +31,24 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          historicalSessions,
           taskActivityState: "active",
           hasActiveSession: true,
           activeSessionRole: "build",
           taskSessions: [
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-build",
               role: "build",
-              status: "running",
-              presentationState: "active",
+              activityState: "running",
             },
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/qa",
               externalSessionId: "session-qa",
               role: "qa",
-              status: "starting",
-              presentationState: "active",
+              activityState: "starting",
             },
           ],
           onOpenDetails: noop,
@@ -78,25 +79,25 @@ describe("KanbanTaskCard active sessions", () => {
       id: "TASK-2",
       title: "Write specs",
       availableActions: ["build_start"],
-      agentSessions: [
-        {
-          externalSessionId: "external-planner",
-          role: "planner",
-          startedAt: "2026-01-11T10:00:00.000Z",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktrees/planner",
-          selectedModel: null,
-        },
-        {
-          externalSessionId: "external-spec",
-          role: "spec",
-          startedAt: "2026-01-10T10:00:00.000Z",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktrees/spec",
-          selectedModel: null,
-        },
-      ],
     });
+    const historicalSessions = [
+      {
+        externalSessionId: "external-planner",
+        role: "planner" as const,
+        startedAt: "2026-01-11T10:00:00.000Z",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktrees/planner",
+        selectedModel: null,
+      },
+      {
+        externalSessionId: "external-spec",
+        role: "spec" as const,
+        startedAt: "2026-01-10T10:00:00.000Z",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktrees/spec",
+        selectedModel: null,
+      },
+    ];
 
     const html = renderToStaticMarkup(
       createElement(
@@ -104,6 +105,7 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          historicalSessions,
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
@@ -135,17 +137,17 @@ describe("KanbanTaskCard active sessions", () => {
           taskSessions: [
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-build",
               role: "build",
-              status: "running",
-              presentationState: "waiting_input",
+              activityState: "waiting_input",
             },
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/qa",
               externalSessionId: "session-qa",
               role: "qa",
-              status: "running",
-              presentationState: "active",
+              activityState: "running",
             },
           ],
           onOpenDetails: noop,

@@ -1,21 +1,11 @@
 import type { RefCallback } from "react";
 import { useCallback, useRef } from "react";
 
-type UseAgentChatRowMotionInput = {
-  activeExternalSessionId: string | null;
-  rowKeys: string[];
-  windowStart: number;
-};
-
 type UseAgentChatRowMotionResult = {
   registerRowElement: (rowKey: string) => RefCallback<HTMLDivElement>;
 };
 
-export function useAgentChatRowMotion({
-  activeExternalSessionId: _activeExternalSessionId,
-  rowKeys: _rowKeys,
-  windowStart: _windowStart,
-}: UseAgentChatRowMotionInput): UseAgentChatRowMotionResult {
+export function useAgentChatRowMotion(): UseAgentChatRowMotionResult {
   const refCallbackByKeyRef = useRef<Map<string, RefCallback<HTMLDivElement>> | null>(null);
   if (refCallbackByKeyRef.current === null) {
     refCallbackByKeyRef.current = new Map<string, RefCallback<HTMLDivElement>>();

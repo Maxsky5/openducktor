@@ -2,6 +2,7 @@ import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts
 import type { PropsWithChildren, ReactElement } from "react";
 import {
   useChecksOperationsContext,
+  useRepoRuntimeHealthContext,
   useRequiredContext,
   useRuntimeAvailabilityContext,
   useTaskControlContext,
@@ -22,20 +23,18 @@ export function AppLifecycleStateProvider({
     WorkspaceStateContext,
     "AppLifecycleStateProvider",
   );
-  const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
+  const { refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
-  const { refreshRuntimeCheck, refreshTaskStoreCheckForRepo, refreshRepoRuntimeHealthForRepo } =
-    useChecksOperationsContext();
+  const { refreshRepoRuntimeHealth } = useRepoRuntimeHealthContext();
+  const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { refreshTaskData } = useTaskControlContext();
 
   useAppLifecycle({
     activeWorkspace,
     runtimeDefinitions: availableRuntimeDefinitions,
-    refreshWorkspaces,
     refreshBranches,
-    refreshRuntimeCheck,
+    refreshRepoRuntimeHealth,
     refreshTaskStoreCheckForRepo,
-    refreshRepoRuntimeHealthForRepo,
     refreshTaskData,
     startRepoRuntime,
     clearBranchData,

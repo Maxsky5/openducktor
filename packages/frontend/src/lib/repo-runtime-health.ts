@@ -1,9 +1,18 @@
+import type { RepoRuntimeHealthState, RuntimeDescriptor } from "@openducktor/contracts";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthObservation } from "@/types/diagnostics";
 
 type RuntimeHealthBadge = {
   label: string;
   variant: "success" | "warning" | "danger" | "secondary";
 };
+
+export type RepoRuntimeHealthReadiness =
+  | "unknown"
+  | "ready"
+  | "startup_pending"
+  | "checking"
+  | "blocked";
 
 export const formatRepoRuntimeElapsed = (elapsedMs: number | null): string | null => {
   if (elapsedMs === null) {
@@ -36,52 +45,162 @@ export const formatRepoRuntimeObservation = (
   }
 };
 
-export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
-  return runtimeHealth?.status === "ready";
+export const buildDisabledRuntimeHealth = (
+  definition: RuntimeDescriptor,
+): RepoRuntimeHealthCheck => {
+  const checkedAt = new Date().toISOString();
+  const detail = `${definition.label} runtime is disabled in Agent Runtime settings.`;
+  const supportsMcpStatus = definition.capabilities.optionalSurfaces.supportsMcpStatus;
+
+  return {
+    status: "disabled",
+    checkedAt,
+    runtime: {
+      status: "disabled",
+      stage: "idle",
+      observation: null,
+      instance: null,
+      startedAt: null,
+      updatedAt: checkedAt,
+      elapsedMs: null,
+      attempts: null,
+      detail,
+      failureKind: null,
+      failureReason: null,
+    },
+    mcp: supportsMcpStatus
+      ? {
+          supported: true,
+          status: "unsupported",
+          serverName: ODT_MCP_SERVER_NAME,
+          serverStatus: null,
+          toolIds: [],
+          detail: "Runtime is disabled, so MCP is not checked.",
+          failureKind: null,
+        }
+      : null,
+  };
 };
 
-export const isRepoRuntimeHealthTransient = (
+export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
+  return (
+    runtimeHealth?.status === "ready" && deriveRepoRuntimeHealthState(runtimeHealth) === "ready"
+  );
+};
+
+export const deriveRepoRuntimeHealthState = ({
+  runtime,
+  mcp,
+}: Pick<RepoRuntimeHealthCheck, "runtime" | "mcp">): RepoRuntimeHealthState => {
+  if (runtime.status !== "ready") {
+    return runtime.status;
+  }
+
+  switch (mcp?.status) {
+    case "connected":
+    case "unsupported":
+    case undefined:
+      return "ready";
+    case "checking":
+    case "reconnecting":
+    case "waiting_for_runtime":
+      return "checking";
+    case "error":
+      return "error";
+  }
+};
+
+export const isRepoRuntimeStarting = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
+  if (!runtimeHealth) {
+    return false;
+  }
+
+  return (
+    runtimeHealth.runtime.status === "checking" &&
+    (runtimeHealth.runtime.stage === "startup_requested" ||
+      runtimeHealth.runtime.stage === "waiting_for_runtime")
+  );
+};
+
+export const isRepoRuntimeStartupPending = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): boolean => {
   if (!runtimeHealth) {
     return false;
   }
 
-  if (runtimeHealth.runtime.status === "checking") {
+  if (runtimeHealth.status === "not_started") {
     return true;
   }
 
-  if (runtimeHealth.runtime.status !== "ready") {
+  return runtimeHealth.runtime.status === "not_started" || isRepoRuntimeStarting(runtimeHealth);
+};
+
+export const classifyRepoRuntimeHealth = (
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined,
+): RepoRuntimeHealthReadiness => {
+  if (!runtimeHealth) {
+    return "unknown";
+  }
+
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return "startup_pending";
+  }
+
+  const derivedHealthState = deriveRepoRuntimeHealthState(runtimeHealth);
+  if (runtimeHealth.status === "checking" || derivedHealthState === "checking") {
+    return "checking";
+  }
+
+  if (isRepoRuntimeReady(runtimeHealth)) {
+    return "ready";
+  }
+
+  return "blocked";
+};
+
+export const isRepoRuntimeHealthPendingReadiness = (
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined,
+): boolean => {
+  const readiness = classifyRepoRuntimeHealth(runtimeHealth);
+  return readiness === "startup_pending" || readiness === "checking";
+};
+
+export const isRepoRuntimeHealthBlockingReadiness = (
+  runtimeHealth: RepoRuntimeHealthCheck | null | undefined,
+): boolean => {
+  if (!runtimeHealth) {
+    return false;
+  }
+  if (runtimeHealth.status === "disabled" || runtimeHealth.runtime.status === "disabled") {
     return false;
   }
 
-  switch (runtimeHealth.mcp?.status) {
-    case "checking":
-    case "reconnecting":
-    case "waiting_for_runtime":
-      return true;
-    default:
-      return false;
-  }
+  return classifyRepoRuntimeHealth(runtimeHealth) === "blocked";
 };
 
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
-  const runtimeStatus = runtimeHealth?.runtime.status;
-  switch (runtimeStatus) {
-    case "disabled":
-      return { label: "Disabled", variant: "secondary" };
+  if (!runtimeHealth) {
+    return { label: "Checking", variant: "secondary" };
+  }
+
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return { label: "Starting", variant: "warning" };
+  }
+
+  switch (runtimeHealth.runtime.status) {
     case "ready":
       return { label: "Running", variant: "success" };
     case "checking":
       return { label: "Starting", variant: "warning" };
+    case "disabled":
+      return { label: "Disabled", variant: "secondary" };
+    case "not_started":
+      return { label: "Starting", variant: "warning" };
     case "error":
       return { label: "Unavailable", variant: "danger" };
-    case "not_started":
-      return { label: "Not started", variant: "secondary" };
-    default:
-      return { label: "Checking", variant: "secondary" };
   }
 };
 
@@ -149,8 +268,8 @@ export const describeRepoRuntimeStatus = (
     runtimeHealth.runtime.attempts === null ? "" : ` (${runtimeHealth.runtime.attempts} attempts)`;
   const elapsedSuffix = runtimeElapsed ? ` after ${runtimeElapsed}` : "";
 
-  if (runtimeHealth.runtime.status === "not_started") {
-    return runtimeHealth.runtime.detail ?? `${runtimeLabel} runtime has not been started yet.`;
+  if (isRepoRuntimeStartupPending(runtimeHealth)) {
+    return `${runtimeLabel} runtime is starting${elapsedSuffix}${runtimeAttempts}.`;
   }
 
   if (runtimeHealth.runtime.status === "disabled") {

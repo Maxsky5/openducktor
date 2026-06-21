@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -21,8 +22,8 @@ const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
     ...overrides,
   });
 
-const createSession = (overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {}) =>
-  createAgentSessionFixture({
+const createSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
+  createAgentSessionSummaryFixture({
     externalSessionId: "ext-session-build-1",
     taskId: "task-1",
     role: "build",
@@ -33,6 +34,13 @@ const createSession = (overrides: Partial<ReturnType<typeof createAgentSessionFi
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioHumanReviewFeedbackFlow, initialProps);
+
+const sessionWorkflowResult = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+  postStartActionError: null,
+});
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   taskId: "task-1",
@@ -160,7 +168,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: string;
       role: "build";
       existingSessionOptions: Array<{ value: string }>;
-      initialSourceExternalSessionId?: string | null;
+      initialSourceSession?: { externalSessionId: string } | null;
       initialStartMode?: "fresh" | "reuse" | "fork";
       postStartAction: "kickoff";
       message?: string;
@@ -171,21 +179,20 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     }> = [];
     const startSessionRequest = mock(async (request) => {
       startSessionRequests.push(request);
-      return "session-build-new";
+      return sessionWorkflowResult("session-build-new");
+    });
+    const newestSession = createSession({
+      externalSessionId: "session-build-existing",
+      startedAt: "2026-02-22T13:00:00.000Z",
+    });
+    const olderSession = createSession({
+      externalSessionId: "session-build-older",
+      startedAt: "2026-02-22T11:00:00.000Z",
     });
     const harness = createHookHarness(
       createBaseArgs({
         startSessionRequest,
-        sessionsForTask: [
-          createSession({
-            externalSessionId: "session-build-existing",
-            startedAt: "2026-02-22T13:00:00.000Z",
-          }),
-          createSession({
-            externalSessionId: "session-build-older",
-            startedAt: "2026-02-22T11:00:00.000Z",
-          }),
-        ],
+        sessionsForTask: [newestSession, olderSession],
       }),
     );
 
@@ -198,7 +205,11 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: "task-1",
       role: "build",
       launchActionId: "build_after_human_request_changes",
-      initialSourceExternalSessionId: "session-build-existing",
+      initialSourceSession: {
+        externalSessionId: "session-build-existing",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      },
       postStartAction: "kickoff",
       message: "Ship the requested fixes.",
       beforeStartAction: {
@@ -207,8 +218,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       },
     });
     expect(startSessionRequests[0]?.existingSessionOptions.map((option) => option.value)).toEqual([
-      "session-build-existing",
-      "session-build-older",
+      agentSessionIdentityKey(newestSession),
+      agentSessionIdentityKey(olderSession),
     ]);
     expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
 

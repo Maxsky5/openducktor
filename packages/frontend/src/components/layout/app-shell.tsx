@@ -28,7 +28,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const hasActiveWorkspace = activeWorkspace !== null;
   const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
-  const agentActivity = useShellAgentActivity(activeWorkspace);
+  const agentActivity = useShellAgentActivity(activeWorkspace?.repoPath ?? null);
 
   useEffect(() => {
     if (hasActiveWorkspace) {

@@ -12,15 +12,25 @@ import { appQueryClient } from "@/lib/query-client";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
-  runtimeKind?: RuntimeKind;
-  kind?: string;
-  runtimeId: string | null;
+  runtimeKind: RuntimeKind;
   workingDirectory: string;
 };
+
+export type EnsureRuntimeOptions = {
+  workspaceId?: string | null;
+  targetWorkingDirectory?: string | null;
+  runtimeKind?: RuntimeKind | null;
+};
+
+export type EnsureRuntime = (
+  repoPath: string,
+  taskId: string,
+  role: AgentRole,
+  options?: EnsureRuntimeOptions,
+) => Promise<RuntimeInfo>;
 
 export type TaskDocuments = {
   specMarkdown: string;
@@ -34,9 +44,18 @@ type EnsureRuntimeDependencies = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  hostClient?: Pick<typeof host, "buildStart" | "runtimeEnsure" | "taskWorktreeGet">;
-  queryClient?: Pick<QueryClient, "invalidateQueries">;
+  hostClient?: RuntimeStartupHost;
   repoConfigLoader?: RepoConfigLoader;
+};
+
+type RuntimeStartupHost = {
+  buildStart(
+    repoPath: string,
+    taskId: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<BuildSessionBootstrap>;
+  runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<{ workingDirectory: string }>;
+  taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null>;
 };
 
 type RuntimeWorkspaceQueryHost = Pick<
@@ -146,19 +165,9 @@ export const requireConfiguredRuntimeKind = (
 export const createEnsureRuntime = ({
   refreshTaskData,
   hostClient = host,
-  queryClient = appQueryClient,
   repoConfigLoader = defaultRepoConfigLoader,
-}: EnsureRuntimeDependencies) => {
-  return async (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    options?: {
-      workspaceId?: string | null;
-      targetWorkingDirectory?: string | null;
-      runtimeKind?: RuntimeKind | null;
-    },
-  ): Promise<RuntimeInfo> => {
+}: EnsureRuntimeDependencies): EnsureRuntime => {
+  return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const workspaceId = options?.workspaceId?.trim() ?? "";
     const explicitRuntimeKind = options?.runtimeKind;
@@ -174,28 +183,15 @@ export const createEnsureRuntime = ({
       }
       runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role, repoConfigLoader);
     }
-    const toRuntimeInfo = (input: {
-      runtimeId: string | null;
-      workingDirectory: string;
-    }): RuntimeInfo => ({
+    const toRuntimeInfo = (workingDirectory: string): RuntimeInfo => ({
       runtimeKind,
-      runtimeId: input.runtimeId,
-      workingDirectory: input.workingDirectory,
+      workingDirectory,
     });
 
     if (role === "build") {
       if (targetWorkingDirectory) {
-        const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
-          repoPath,
-          runtimeKind,
-          queryClient,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-        });
-        return toRuntimeInfo({
-          runtimeId: runtime.runtimeId,
-          workingDirectory: targetWorkingDirectory,
-        });
+        await hostClient.runtimeEnsure(repoPath, runtimeKind);
+        return toRuntimeInfo(targetWorkingDirectory);
       }
 
       const bootstrap: BuildSessionBootstrap = await hostClient.buildStart(
@@ -210,10 +206,7 @@ export const createEnsureRuntime = ({
           tags: { repoPath, taskId, role },
         },
       );
-      return toRuntimeInfo({
-        runtimeId: bootstrap.runtimeId,
-        workingDirectory: bootstrap.workingDirectory,
-      });
+      return toRuntimeInfo(bootstrap.workingDirectory);
     }
 
     if (role === "qa") {
@@ -225,30 +218,12 @@ export const createEnsureRuntime = ({
       if (!workingDirectory) {
         throw new Error(MISSING_BUILD_TARGET_ERROR);
       }
-      const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        queryClient,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-      });
-      return toRuntimeInfo({
-        runtimeId: runtime.runtimeId,
-        workingDirectory,
-      });
+      await hostClient.runtimeEnsure(repoPath, runtimeKind);
+      return toRuntimeInfo(workingDirectory);
     }
 
-    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
-      repoPath,
-      runtimeKind,
-      queryClient,
-      ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-        hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-    });
+    const runtime = await hostClient.runtimeEnsure(repoPath, runtimeKind);
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
-    return toRuntimeInfo({
-      runtimeId: runtime.runtimeId,
-      workingDirectory,
-    });
+    return toRuntimeInfo(workingDirectory);
   };
 };

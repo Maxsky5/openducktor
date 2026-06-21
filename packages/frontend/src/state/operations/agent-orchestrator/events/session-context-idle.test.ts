@@ -1,20 +1,23 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
-  type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
+  createSessionsRef,
+  createSessionTurnMetadata,
+  createSessionUpdater,
+  findSession,
   getSession,
   getSessionMessages,
-  OPENCODE_RUNTIME_DESCRIPTOR,
+  listenToAgentSessionEvents,
   type SessionEventAdapter,
   sessionMessageAt,
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session context usage and idle settlement", () => {
-  test("updates live session context usage from step-finish part tokens", () => {
+  test("updates live session context usage from step-finish part tokens", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -23,76 +26,39 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "spec",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "spec",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      }),
+    ]);
+    const turnMetadata = createSessionTurnMetadata();
+    turnMetadata.recordModel("session-1", {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    });
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      turnModelBySessionRef: {
-        current: {
-          "session-1": {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-        },
-      },
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -111,13 +77,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -125,10 +91,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("does not mark a step message as tokenized when the step update is ignored", () => {
+  test("does not mark a step message as tokenized when the step update is ignored", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -137,43 +103,21 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession(),
-      },
-    };
-    const contextUsageMessageIdBySessionRef = { current: {} as Record<string, string> };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const turnMetadata = createSessionTurnMetadata();
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      contextUsageMessageIdBySessionRef,
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -195,14 +139,19 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       },
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toBeNull();
-    expect(contextUsageMessageIdBySessionRef.current["session-1"]).toBeUndefined();
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
+    expect(
+      turnMetadata.hasContextUsageMessageId(
+        agentSessionIdentityKey(getSession(sessionsRef)),
+        "assistant-live-1",
+      ),
+    ).toBe(false);
   });
 
-  test("keeps live context usage bound to the in-flight turn model after selection changes", () => {
+  test("keeps live context usage bound to the in-flight turn model after selection changes", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -211,86 +160,38 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude-sonnet",
-            profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-              {
-                id: "anthropic/claude-sonnet",
-                providerId: "anthropic",
-                providerName: "Anthropic",
-                modelId: "claude-sonnet",
-                modelName: "Claude Sonnet",
-                variants: [],
-                contextWindow: 100_000,
-                outputLimit: 4_096,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5", anthropic: "claude-sonnet" },
-          },
-        }),
-      },
-    };
-
-    const turnModelBySessionRef = {
-      current: {
-        "session-1": {
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        selectedModel: {
           runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
           profileId: "Hephaestus",
         },
-      } as Record<string, AgentSessionState["selectedModel"]>,
-    };
+      }),
+    ]);
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const turnMetadata = createSessionTurnMetadata();
+    turnMetadata.recordModel(sessionKey, {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    });
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      turnModelBySessionRef,
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -309,13 +210,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -323,10 +224,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("preserves step-derived context usage when the final assistant message omits token metadata", () => {
+  test("preserves step-derived context usage when the final assistant message omits token metadata", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -335,64 +236,29 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -424,6 +290,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
@@ -435,10 +302,9 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Final answer",
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -448,14 +314,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       kind: "assistant",
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
     });
   });
 
-  test("preserves step-derived context usage even when no assistant transcript row exists yet", () => {
+  test("preserves step-derived context usage even when no assistant transcript row exists yet", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -464,64 +329,29 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -540,6 +370,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
@@ -551,10 +382,9 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Final answer",
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -564,14 +394,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       kind: "assistant",
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
     });
   });
 
-  test("does not carry previous-turn context usage into a new final snapshot without token updates", () => {
+  test("does not carry previous-turn context usage into a new final snapshot without token updates", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -580,73 +409,38 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          contextUsage: {
-            totalTokens: 35_022,
-            contextWindow: 200_000,
-            outputLimit: 8_192,
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        contextUsage: {
+          totalTokens: 35_022,
+          contextWindow: 200_000,
+          outputLimit: 8_192,
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -675,7 +469,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Fresh answer",
     });
 
-    expect(sessionsRef.current["session-1"]?.contextUsage).toBeNull();
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
     expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).toMatchObject({
       kind: "assistant",
       agentRole: "spec",
@@ -692,10 +486,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("routes reasoning deltas into thinking draft state without finalizing assistant text", () => {
+  test("keeps reasoning-only deltas out of assistant transcript messages", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -704,39 +498,19 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "build", status: "idle" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -753,8 +527,11 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:02.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
-    expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Reason silently");
+    expect(
+      getSessionMessages(sessionsRef).some((message) =>
+        message.content.includes("Reason silently"),
+      ),
+    ).toBe(false);
 
     handleEvent({
       type: "session_idle",
@@ -762,7 +539,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("");
     expect(
       getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Reason silently"),
@@ -770,10 +546,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     ).toBe(false);
   });
 
-  test("keeps starting sessions active when an early idle event arrives before kickoff send", () => {
+  test("keeps starting sessions active when an early idle event arrives before kickoff send", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -782,39 +558,19 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "build", status: "starting" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "starting" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -828,13 +584,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.status).toBe("starting");
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("starting");
   });
 
-  test("keeps pending outbound sends running when early idle arrives before runtime activity", () => {
+  test("settles pending outbound sends when the runtime emits idle", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -843,43 +599,25 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          status: "running",
-          pendingUserMessageStartedAt: 123,
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        status: "running",
+        pendingUserMessageStartedAt: 123,
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -893,14 +631,14 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.status).toBe("running");
-    expect(sessionsRef.current["session-1"]?.pendingUserMessageStartedAt).toBe(123);
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    expect(findSession(sessionsRef, "session-1")?.pendingUserMessageStartedAt).toBeUndefined();
   });
 
-  test("flushes buffered text drafts before terminal idle settlement", () => {
+  test("keeps streamed text messages through terminal idle settlement", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -909,41 +647,19 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "build", status: "idle" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -960,8 +676,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:02.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
-
     handleEvent({
       type: "session_idle",
       externalSessionId: "session-1",
@@ -977,13 +691,12 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       (message) => message.id === "assistant-buffered-1",
     );
     expect(streamedAssistant?.meta).toMatchObject({ kind: "assistant", isFinal: false });
-    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 
-  test("upserts the finalized assistant message instead of appending a duplicate", () => {
+  test("upserts the finalized assistant message instead of appending a duplicate", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -992,57 +705,37 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "spec",
-          messages: [
-            {
-              id: "msg-final",
-              role: "assistant",
-              content: "Final answer",
-              timestamp: "2026-02-22T08:00:03.000Z",
-            },
-          ],
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            profileId: "Hephaestus",
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "spec",
+        messages: [
+          {
+            id: "msg-final",
+            role: "assistant",
+            content: "Final answer",
+            timestamp: "2026-02-22T08:00:03.000Z",
           },
-        }),
-      },
-    };
+        ],
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "Hephaestus",
+        },
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

@@ -51,6 +51,7 @@ export function AgentSessionQuestionCard({
     return null;
   }
 
+  const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
   const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
@@ -67,10 +68,15 @@ export function AgentSessionQuestionCard({
 
   return (
     <section className="rounded-xl border border-input bg-card shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-input px-3 py-1.5">
-        <div className="flex items-center gap-2 text-foreground">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-input px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2 text-foreground">
           <CircleDotDashed className="size-4 text-muted-foreground" />
           <p className="text-[13px] font-semibold">Input needed</p>
+          {sourceLabel ? (
+            <span className="rounded-full border border-input bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+              {sourceLabel}
+            </span>
+          ) : null}
         </div>
         <p className="text-[11px] font-medium text-foreground">
           {answeredCount}/{requiredCount} answered

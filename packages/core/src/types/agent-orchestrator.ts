@@ -16,7 +16,6 @@ import type {
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
-  TaskPriority,
 } from "@openducktor/contracts";
 
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
@@ -225,72 +224,7 @@ export type AgentRuntimePendingInput = {
   questions: AgentPendingQuestionRequest[];
 };
 
-export type AgentToolCall =
-  | {
-      tool: "odt_set_spec";
-      args: {
-        taskId: string;
-        markdown: string;
-      };
-    }
-  | {
-      tool: "odt_set_plan";
-      args: {
-        taskId: string;
-        markdown: string;
-        subtasks?: Array<{
-          title: string;
-          issueType?: "task" | "feature" | "bug";
-          priority?: TaskPriority;
-          description?: string;
-        }>;
-      };
-    }
-  | {
-      tool: "odt_build_blocked";
-      args: {
-        taskId: string;
-        reason: string;
-      };
-    }
-  | {
-      tool: "odt_build_resumed";
-      args: {
-        taskId: string;
-      };
-    }
-  | {
-      tool: "odt_build_completed";
-      args: {
-        taskId: string;
-        summary?: string;
-      };
-    }
-  | {
-      tool: "odt_set_pull_request";
-      args: {
-        taskId: string;
-        providerId: KnownGitProviderId;
-        number: number;
-      };
-    }
-  | {
-      tool: "odt_qa_approved";
-      args: {
-        taskId: string;
-        reportMarkdown: string;
-      };
-    }
-  | {
-      tool: "odt_qa_rejected";
-      args: {
-        taskId: string;
-        reportMarkdown: string;
-      };
-    };
-
 export type AgentSessionContext = RepoRuntimeRef & {
-  runtimeId?: string;
   workingDirectory: string;
   taskId: string;
   role: AgentRole;
@@ -466,20 +400,6 @@ export type AgentEvent =
       externalSessionId: ExternalSessionId;
       timestamp: string;
       messageId?: RuntimeHistoryAnchor;
-      message: string;
-    }
-  | {
-      type: "tool_call";
-      externalSessionId: ExternalSessionId;
-      timestamp: string;
-      call: AgentToolCall;
-    }
-  | {
-      type: "tool_result";
-      externalSessionId: ExternalSessionId;
-      timestamp: string;
-      tool: AgentToolName;
-      success: boolean;
       message: string;
     }
   | (AgentPendingApprovalRequest & {

@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   buildAgentStudioQuickActions,
   selectPrimaryAgentStudioQuickAction,
 } from "./agent-studio-quick-actions";
-import { createAgentSessionFixture } from "./agent-studio-test-utils";
+import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
 import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture(overrides);
+const buildSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+): AgentSessionSummary => createAgentSessionSummaryFixture(overrides);
 
 const buildPullRequest = () => ({
   providerId: "github",
@@ -115,11 +116,14 @@ describe("agent-studio-quick-actions", () => {
         "human_request_changes",
       ],
     });
+    const humanReviewBuilderSession = buildSession({
+      taskId: "task-1",
+      role: "build",
+      externalSessionId: "builder-1",
+    });
     const humanReviewOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTask,
-      sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
-      ],
+      sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
     });
@@ -129,7 +133,9 @@ describe("agent-studio-quick-actions", () => {
     });
     expect(humanReviewOptions[0]).toMatchObject({
       launchActionId: "build_pull_request_generation",
-      initialSourceExternalSessionId: "builder-1",
+      initialSourceSession: expect.objectContaining({
+        externalSessionId: humanReviewBuilderSession.externalSessionId,
+      }),
     });
     expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
       "build_pull_request_generation",
@@ -394,11 +400,14 @@ describe("agent-studio-quick-actions", () => {
       ...aiReviewTask,
       status: "human_review",
     });
+    const humanReviewBuilderSession = buildSession({
+      taskId: "task-1",
+      role: "build",
+      externalSessionId: "builder-1",
+    });
     const humanReviewOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTask,
-      sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
-      ],
+      sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
     });
@@ -406,7 +415,9 @@ describe("agent-studio-quick-actions", () => {
     expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
         launchActionId: "build_pull_request_generation",
-        initialSourceExternalSessionId: "builder-1",
+        initialSourceSession: expect.objectContaining({
+          externalSessionId: humanReviewBuilderSession.externalSessionId,
+        }),
       }),
     );
   });

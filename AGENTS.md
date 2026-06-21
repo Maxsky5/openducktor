@@ -13,6 +13,16 @@
 - AVOID "normalization" unless it's absolutely necessary
 - NEVER harden code without a good reason
 
+## Critical Notice — Runtime Source Evidence
+
+- When behavior depends on external runtime internals, inspect the runtime source or official contract before designing or changing adapters.
+- Never infer runtime behavior from memory, adapter shape, or assumptions when source evidence is available.
+
+## Critical Notice — Human Validation for Database Schema
+
+- NEVER change database schemas, migration files, persisted record schemas, or durable SQLite/task-store record shapes without explicit human validation.
+- If a fix appears to require persisting new data or changing durable storage shape, stop and ask for approval first.
+
 ## Project
 
 OpenDucktor is a **Bun monorepo** for a macOS-first **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with a workspace-scoped **SQLite task store** as task source-of-truth.
@@ -60,8 +70,9 @@ When adding a new workspace app/package under `apps/*` or `packages/*`, update `
 - Treat runtime definitions, runtime routes, and runtime connections as different layers.
 - Shared host-visible runtime/run payloads live in `packages/contracts/src/run-schemas.ts`.
 - `RuntimeInstanceSummary` is live runtime-instance metadata only: keep `kind`, `runtimeId`, `repoPath`, nullable `taskId`, `role`, `workingDirectory`, `runtimeRoute`, `startedAt`, and `descriptor`. Do not reintroduce top-level `endpoint`, `port`, or duplicate `capabilities` fields there.
+- Keep `runtimeId` and `runtimeRoute` at runtime-registry/adapter depth. UI and orchestration should carry `runtimeKind`, repository path, working directory, and session id.
 - Request-scoped agent engine operations use `runtimeConnection` objects, not raw shared `runtimeEndpoint` strings. Build adapter-local client inputs from the connection at the adapter boundary.
-- Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route during hydration.
+- Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route only at the adapter call boundary.
 - Keep runtime routing fail-fast. Never fall back from a session/build runtime to the repo default runtime when loading session history, todos, diff, or file status.
 - Keep runtime capability definitions in runtime descriptors (`packages/contracts/src/agent-runtime-schemas.ts`). Do not duplicate capability booleans onto runtime-instance summaries.
 
@@ -227,42 +238,3 @@ Keep this contract stable. If you change any item below, update all related laye
 
 - Use Conventional Commits.
 - Verify touched areas with relevant checks before finishing.
-
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
-
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
-
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool | Use when |
-|------|----------|
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.

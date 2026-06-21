@@ -1,134 +1,142 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   ResolvedSessionStartDecision,
+  RunSessionStartWorkflow,
   SessionLaunchActionId,
   SessionStartFlowRequest,
+  SessionStartGate,
   SessionStartLaunchRequest,
+  SessionStartPostAction,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
-  executeSessionStartFromDecision,
+  createSessionStartGate,
+  sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type {
-  ActiveWorkspace,
-  AgentStateContextValue,
-  RepoSettingsInput,
-} from "@/types/state-slices";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
-import { useAgentStudioFreshSessionCreation } from "../use-agent-studio-fresh-session-creation";
-import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 import {
-  applyAgentStudioSelectionQuery,
-  buildAgentStudioAsyncActivityContextKey,
-  buildCreateSessionStartKey,
-  canStartSessionForRole,
-  type QueryUpdate,
-} from "../use-agent-studio-session-action-helpers";
-import { useAgentStudioSessionStartSession } from "./use-agent-studio-session-start-session";
+  buildAgentStudioSelectionQueryUpdate,
+  type AgentStudioQueryUpdate as QueryUpdate,
+} from "../query-sync/agent-studio-navigation";
+import {
+  buildAgentStudioSessionActivityKey,
+  useAgentStudioAsyncActivityTracker,
+} from "../use-agent-studio-async-activity";
+import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
+
+type CanStartRole = (role: AgentRole) => boolean;
 
 type UseAgentStudioSessionStartFlowArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  activeSession: AgentSessionState | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  loadedSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  canStartRole: CanStartRole;
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  workspaceId: string | null;
+  workspaceRepoPath: string | null;
+  runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent?: () => void;
+  scheduleQueryUpdate: (updates: QueryUpdate) => void;
 };
 
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
+type AgentStudioSessionStartGateResult = SessionStartWorkflowResult | undefined;
+
+const buildSessionStartKey = (params: {
+  taskId: string;
+  role: AgentRole;
+  launchActionId: SessionLaunchActionId;
+}): string => {
+  return `${params.taskId}:${params.role}:${params.launchActionId}`;
+};
+
+const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
+  toast.error(sessionStartPostActionErrorTitle(action), {
+    description: error.message,
+  });
+};
 
 export function useAgentStudioSessionStartFlow({
-  activeWorkspace,
   branches = [],
   taskId,
   role,
   launchActionId,
-  activeSession,
+  selectedSessionIdentity,
+  loadedSession,
   sessionsForTask,
   selectedTask,
-  agentStudioReady,
-  isActiveTaskHydrated,
+  canStartRole,
   isSessionWorking,
   selectionForNewSession,
   repoSettings,
-  startAgentSession,
-  settleStartedAgentSession,
-  sendAgentMessage,
+  workspaceId,
+  workspaceRepoPath,
+  runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
-  updateQuery,
-  onContextSwitchIntent,
+  scheduleQueryUpdate,
 }: UseAgentStudioSessionStartFlowArgs): {
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (request: AgentStudioSessionStartRequest) => Promise<string | undefined>;
-  startSession: () => Promise<string | undefined>;
+  startSessionRequest: (
+    request: AgentStudioSessionStartRequest,
+  ) => Promise<SessionStartWorkflowResult | undefined>;
+  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
   startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
-  const queryClient = useQueryClient();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const [startingActivityCountByContext, setStartingActivityCountByContext] = useState<
-    Record<string, number>
-  >({});
-  const isStarting =
-    (startingActivityCountByContext[
-      buildAgentStudioAsyncActivityContextKey({
-        activeWorkspace,
-        taskId,
-        role,
-        externalSessionId: activeSession?.externalSessionId ?? null,
-      })
-    ] ?? 0) > 0;
-
-  const previousRepoForSessionRefs = useRef<string | null>(workspaceRepoPath);
-  const startingSessionByTaskRef = useRef<Map<string, Promise<string | undefined>> | null>(null);
-  if (startingSessionByTaskRef.current === null) {
-    startingSessionByTaskRef.current = new Map<string, Promise<string | undefined>>();
+  const sessionStartGateScopeRef = useRef(workspaceId);
+  const sessionStartGateRef = useRef<SessionStartGate<AgentStudioSessionStartGateResult> | null>(
+    null,
+  );
+  if (sessionStartGateRef.current === null) {
+    sessionStartGateRef.current = createSessionStartGate<AgentStudioSessionStartGateResult>();
   }
-  const startingSessionByTask = startingSessionByTaskRef.current;
+  const sessionStartGate = sessionStartGateRef.current;
+  if (sessionStartGateScopeRef.current !== workspaceId) {
+    sessionStartGateScopeRef.current = workspaceId;
+    sessionStartGate.clear();
+  }
+
+  const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
+    useAgentStudioAsyncActivityTracker();
+  const isStarting = isStartingActivityActive(
+    buildAgentStudioSessionActivityKey({
+      workspaceId,
+      taskId,
+      role,
+      session: null,
+    }),
+  );
+
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
-      activeWorkspace,
       branches,
       repoSettings,
+      workspaceRepoPath,
     });
-
-  useEffect(() => {
-    if (previousRepoForSessionRefs.current === workspaceRepoPath) {
-      return;
-    }
-
-    previousRepoForSessionRefs.current = workspaceRepoPath;
-    startingSessionByTask.clear();
-  }, [startingSessionByTask, workspaceRepoPath]);
 
   const executeRequestedSessionStart = useCallback(
     async <T>(
@@ -144,14 +152,14 @@ export function useAgentStudioSessionStartFlow({
               ? (selectionForNewSession ?? null)
               : null,
           taskSessions: sessionsForTask,
-          activeSession: isWorkflowAgentSession(activeSession) ? activeSession : null,
+          preferredSourceSession: isWorkflowAgentSession(loadedSession) ? loadedSession : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
         async ({ decision }) => executeWithDecision(decision),
       );
     },
     [
-      activeSession,
+      loadedSession,
       role,
       runInternalSessionStartRequest,
       selectionForNewSession,
@@ -161,80 +169,116 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
-  const { startSession, runSessionStart } = useAgentStudioSessionStartSession({
-    activeWorkspace,
-    taskId,
-    role,
-    launchActionId,
-    activeSession,
-    selectedTask,
-    agentStudioReady,
-    isActiveTaskHydrated,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
-    ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
-    setStartingActivityCountByContext,
-    startingSessionByTask,
-    updateQuery,
-    onPostStartActionError: (action, error) => {
-      const message =
-        action === "kickoff"
-          ? "Session started, but the kickoff prompt failed to send."
-          : "Session started, but feedback message failed.";
-      toast.error(message, {
-        description: error.message,
-      });
+  const runSessionStartRequest = useCallback(
+    async (request: SessionStartFlowRequest): Promise<SessionStartWorkflowResult | undefined> => {
+      const executeWithDecision = async (
+        decision: ResolvedSessionStartDecision,
+      ): Promise<SessionStartWorkflowResult | undefined> => {
+        const execute = async (): Promise<SessionStartWorkflowResult> => {
+          const workflow = await runSessionStartWorkflow({
+            request,
+            decision,
+            task: request.taskId === taskId ? selectedTask : null,
+            ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
+            humanRequestChangesTask,
+          });
+          if (workflow.postStartActionError) {
+            showPostStartActionError(request.postStartAction, workflow.postStartActionError);
+          }
+
+          scheduleQueryUpdate(
+            buildAgentStudioSelectionQueryUpdate({
+              taskId: request.taskId,
+              session: workflow,
+              role: request.role,
+            }),
+          );
+          return workflow;
+        };
+
+        const activity = beginStartingActivity(
+          buildAgentStudioSessionActivityKey({
+            workspaceId,
+            taskId: request.taskId,
+            role: request.role,
+            session: null,
+          }),
+        );
+        try {
+          return await execute();
+        } finally {
+          activity.finish();
+        }
+      };
+
+      return executeRequestedSessionStart(request, executeWithDecision);
     },
-    executeRequestedSessionStart,
-  });
+    [
+      beginStartingActivity,
+      executeRequestedSessionStart,
+      humanRequestChangesTask,
+      runSessionStartWorkflow,
+      selectedTask,
+      setTaskTargetBranch,
+      scheduleQueryUpdate,
+      taskId,
+      workspaceId,
+    ],
+  );
 
-  const startSessionRequest = useCallback(
-    async (request: AgentStudioSessionStartRequest): Promise<string | undefined> => {
-      return executeRequestedSessionStart(request, async (decision) => {
-        const workflow = await executeSessionStartFromDecision({
-          activeWorkspace,
-          queryClient,
-          request,
-          decision,
-          task: request.taskId === taskId ? selectedTask : null,
-          ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
-          startAgentSession,
-          settleStartedAgentSession,
-          sendAgentMessage,
-          humanRequestChangesTask,
-          onPostStartActionError: (action, error) => {
-            const message =
-              action === "kickoff"
-                ? "Session started, but the kickoff prompt failed to send."
-                : "Session started, but feedback message failed.";
-            toast.error(message, {
-              description: error.message,
-            });
-          },
-        });
+  const runGatedSessionStartRequest = useCallback(
+    (request: AgentStudioSessionStartRequest): Promise<SessionStartWorkflowResult | undefined> => {
+      const startKey = buildSessionStartKey({
+        taskId: request.taskId,
+        role: request.role,
+        launchActionId: request.launchActionId,
+      });
+      return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
+    },
+    [runSessionStartRequest, sessionStartGate],
+  );
 
-        applyAgentStudioSelectionQuery(updateQuery, {
-          taskId: request.taskId,
-          externalSessionId: workflow.externalSessionId,
-          role: request.role,
-        });
-        return workflow.externalSessionId;
+  const runSessionStart = useCallback(
+    async (params: {
+      postStartAction: SessionStartPostAction;
+    }): Promise<SessionStartWorkflowResult | undefined> => {
+      if (!canStartRole(role)) {
+        return undefined;
+      }
+
+      return runGatedSessionStartRequest({
+        taskId,
+        role,
+        launchActionId,
+        postStartAction: params.postStartAction,
+        initialTargetBranch: selectedTask?.targetBranch ?? null,
+        initialTargetBranchError: selectedTask?.targetBranchError ?? null,
       });
     },
     [
-      activeWorkspace,
-      executeRequestedSessionStart,
-      queryClient,
-      selectedTask,
-      sendAgentMessage,
-      settleStartedAgentSession,
-      setTaskTargetBranch,
-      startAgentSession,
-      humanRequestChangesTask,
+      canStartRole,
+      launchActionId,
+      role,
+      runGatedSessionStartRequest,
+      selectedTask?.targetBranch,
+      selectedTask?.targetBranchError,
       taskId,
-      updateQuery,
     ],
+  );
+
+  const startSession = useCallback(async (): Promise<SessionStartWorkflowResult | undefined> => {
+    return runSessionStart({
+      postStartAction: "none",
+    });
+  }, [runSessionStart]);
+
+  const startSessionRequest = useCallback(
+    async (
+      request: AgentStudioSessionStartRequest,
+    ): Promise<SessionStartWorkflowResult | undefined> => {
+      return runSessionStartRequest(request);
+    },
+    [runSessionStartRequest],
   );
 
   const { humanReviewFeedbackModal, shouldInterceptCreateSession, openHumanReviewFeedback } =
@@ -246,13 +290,7 @@ export function useAgentStudioSessionStartFlow({
     });
 
   const startLaunchKickoff = useCallback(async (): Promise<void> => {
-    if (!taskId || !agentStudioReady) {
-      return;
-    }
-    if (!isActiveTaskHydrated) {
-      return;
-    }
-    if (!canStartSessionForRole(selectedTask, role)) {
+    if (!canStartRole(role)) {
       return;
     }
     if (role === "build" && launchActionId === "build_after_human_request_changes") {
@@ -266,43 +304,33 @@ export function useAgentStudioSessionStartFlow({
     if (!workflow) {
       return;
     }
-  }, [
-    agentStudioReady,
-    isActiveTaskHydrated,
-    openHumanReviewFeedback,
-    launchActionId,
-    role,
-    runSessionStart,
-    selectedTask,
-    taskId,
-  ]);
+  }, [canStartRole, openHumanReviewFeedback, launchActionId, role, runSessionStart]);
 
-  const { handleCreateSession } = useAgentStudioFreshSessionCreation({
-    activeWorkspace,
-    taskId,
-    role,
-    activeSession,
-    selectedTask,
-    agentStudioReady,
-    isActiveTaskHydrated,
-    isSessionWorking,
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
-    updateQuery,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    setStartingActivityCountByContext,
-    startingSessionByTask,
-    executeRequestedSessionStart,
-  });
+  const handleCreateSession = useCallback(
+    (option: SessionCreateOption): void => {
+      const { role: nextRole, launchActionId: nextLaunchActionId } = option;
+      if (selectedSessionIdentity && isSessionWorking) {
+        return;
+      }
+
+      if (!canStartRole(nextRole)) {
+        return;
+      }
+
+      void runGatedSessionStartRequest({
+        taskId,
+        role: nextRole,
+        launchActionId: nextLaunchActionId,
+        postStartAction: "kickoff",
+      });
+    },
+    [canStartRole, isSessionWorking, runGatedSessionStartRequest, selectedSessionIdentity, taskId],
+  );
 
   const handleCreateSessionWithHumanFeedback = useCallback(
     (option: SessionCreateOption): void => {
       if (shouldInterceptCreateSession(option)) {
-        if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
-          return;
-        }
-        if (!canStartSessionForRole(selectedTask, option.role)) {
+        if (!canStartRole(option.role)) {
           return;
         }
         openHumanReviewFeedback();
@@ -310,23 +338,18 @@ export function useAgentStudioSessionStartFlow({
       }
       handleCreateSession(option);
     },
-    [
-      agentStudioReady,
-      handleCreateSession,
-      isActiveTaskHydrated,
-      openHumanReviewFeedback,
-      selectedTask,
-      shouldInterceptCreateSession,
-      taskId,
-    ],
+    [canStartRole, handleCreateSession, openHumanReviewFeedback, shouldInterceptCreateSession],
   );
 
   const handleQuickAction = useCallback(
     (option: AgentStudioQuickActionOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (option.disabled) {
         return;
       }
       if (isSessionWorking) {
+        return;
+      }
+      if (!canStartRole(option.role)) {
         return;
       }
       if (option.requiresHumanFeedback) {
@@ -334,16 +357,7 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      const startKey = buildCreateSessionStartKey({
-        taskId,
-        role: option.role,
-        launchActionId: option.launchActionId,
-      });
-      if (startingSessionByTask.has(startKey)) {
-        return;
-      }
-
-      const startPromise = startSessionRequest({
+      void runGatedSessionStartRequest({
         taskId,
         role: option.role,
         launchActionId: option.launchActionId,
@@ -352,28 +366,12 @@ export function useAgentStudioSessionStartFlow({
         ...(option.existingSessionOptions
           ? { existingSessionOptions: option.existingSessionOptions }
           : {}),
-        ...(option.initialSourceExternalSessionId !== undefined
-          ? { initialSourceExternalSessionId: option.initialSourceExternalSessionId }
+        ...(option.initialSourceSession !== undefined
+          ? { initialSourceSession: option.initialSourceSession }
           : {}),
       });
-      startingSessionByTask.set(startKey, startPromise);
-      void startPromise
-        .finally(() => {
-          if (startingSessionByTask.get(startKey) === startPromise) {
-            startingSessionByTask.delete(startKey);
-          }
-        })
-        .catch(() => {});
     },
-    [
-      agentStudioReady,
-      isActiveTaskHydrated,
-      isSessionWorking,
-      openHumanReviewFeedback,
-      startingSessionByTask,
-      startSessionRequest,
-      taskId,
-    ],
+    [canStartRole, isSessionWorking, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],
   );
 
   return {

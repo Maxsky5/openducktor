@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  createAgentSessionFixture,
   createHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -13,6 +17,7 @@ type UseAgentsPageRightPanelModel =
 type BuildToolsSnapshotModule =
   typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
 type GitActionsModule = typeof import("../use-agent-studio-git-actions");
+type GitActionsArgs = Parameters<GitActionsModule["useAgentStudioGitActions"]>[0];
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
@@ -31,6 +36,15 @@ const buildToolsSnapshotMock = mock(() => buildToolsSnapshotState.current);
 const gitActionsMock = mock(() => gitActionsState.current);
 
 const createSnapshot = (gitConflictId: string | null) => ({
+  context: {
+    repoPath: "/repo",
+    taskId: "task-1",
+    selectedTaskId: "task-1",
+    viewRole: "build",
+    isSelectedBuilderWorking: true,
+    sessionWorkingDirectory: "/repo",
+    hasSelectedTask: true,
+  },
   diffData: {
     fileStatuses: [],
     gitConflict: null,
@@ -110,6 +124,79 @@ const createGitActions = (gitConflictId: string | null) => ({
   pullFromUpstream: async () => {},
 });
 
+type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
+  loadedSession?: AgentSessionState | null;
+  selectedSessionIdentity?: AgentSessionIdentity | null;
+  selectedSessionActivityState?: HookArgs["selectedView"]["selectedSession"]["activityState"];
+  selectedSessionSummary?: AgentSessionSummary | null;
+};
+
+const createSelectedSession = (
+  overrides: Partial<HookArgs["selectedView"]["selectedSession"]> = {},
+): HookArgs["selectedView"]["selectedSession"] => ({
+  identity: null,
+  activityState: null,
+  selectedModel: null,
+  loadedSession: null,
+  runtimeData: {
+    modelCatalog: null,
+    todos: [],
+    isLoadingModelCatalog: false,
+    error: null,
+  },
+  runtimeReadiness: {
+    state: "ready",
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  transcriptState: { kind: "visible" },
+  ...overrides,
+});
+
+const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["selectedView"] => {
+  const {
+    loadedSession: loadedSessionOverride,
+    selectedSessionIdentity: selectedSessionIdentityOverride,
+    selectedSessionSummary: selectedSessionSummaryOverride,
+    role = "build",
+    ...viewOverrides
+  } = overrides;
+  const defaultSession = createAgentSessionFixture({
+    role: "build",
+    status: "running",
+    workingDirectory: "/repo",
+  });
+  const loadedSession =
+    "loadedSession" in overrides ? (loadedSessionOverride ?? null) : defaultSession;
+  const selectedSessionSummary =
+    "selectedSessionSummary" in overrides
+      ? (selectedSessionSummaryOverride ?? null)
+      : loadedSession
+        ? toAgentSessionSummary(loadedSession)
+        : null;
+  const selectedSessionIdentity =
+    "selectedSessionIdentity" in overrides
+      ? (selectedSessionIdentityOverride ?? null)
+      : (selectedSessionSummary ?? (loadedSession ? toAgentSessionIdentity(loadedSession) : null));
+  const selectedSessionActivityState =
+    "selectedSessionActivityState" in overrides
+      ? (overrides.selectedSessionActivityState ?? null)
+      : (selectedSessionSummary?.activityState ?? null);
+
+  return {
+    role,
+    taskId: "task-1",
+    selectedTask: createTaskCardFixture({ id: "task-1" }),
+    selectedSession: createSelectedSession({
+      identity: selectedSessionIdentity,
+      activityState: selectedSessionActivityState,
+      loadedSession,
+    }),
+    ...viewOverrides,
+  };
+};
+
 beforeEach(async () => {
   buildToolsSnapshotState.current = createSnapshot("A");
   gitActionsState.current = createGitActions("A");
@@ -149,36 +236,34 @@ afterEach(async () => {
   ]);
 });
 
+const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  activeWorkspace: { repoPath: "/repo" } as never,
+  branches: [],
+  activeBranch: null,
+  selectedView: createSelectedView(),
+  panelKind: "documents",
+  isPanelOpen: false,
+  documentsModel: { activeDocument: null },
+  repoSettings: { defaultTargetBranch: null } as never,
+  detectingPullRequestTaskId: null,
+  onDetectPullRequest: () => {},
+  onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
+  onGitConflictQuickActionContextChange: () => {},
+  ...overrides,
+});
+
 describe("useAgentsPageRightPanelModel", () => {
   test("publishes conflict context changes without intermediate null and clears on unmount", async () => {
     const events: Array<string | null> = [];
 
-    const harness = createHookHarness(useAgentsPageRightPanelModel, {
-      activeWorkspace: { repoPath: "/repo" } as never,
-      branches: [],
-      activeBranch: null,
-      viewRole: "build",
-      viewTaskId: "task-1",
-      session: {
-        role: "build",
-        status: "running",
-        workingDirectory: "/repo",
-        hasActiveSession: true,
-      },
-      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
-      panelKind: "documents",
-      isPanelOpen: false,
-      isViewSessionHistoryHydrating: false,
-      documentsModel: { activeDocument: null },
-      repoSettings: { defaultTargetBranch: null } as never,
-      worktreeRecoverySignal: 0,
-      detectingPullRequestTaskId: null,
-      onDetectPullRequest: () => {},
-      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
-      onGitConflictQuickActionContextChange: (context) => {
-        events.push(context ? (context.conflict.operation as string) : null);
-      },
-    } as HookArgs);
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        onGitConflictQuickActionContextChange: (context) => {
+          events.push(context ? (context.conflict.operation as string) : null);
+        },
+      }),
+    );
 
     await harness.mount();
 
@@ -187,37 +272,81 @@ describe("useAgentsPageRightPanelModel", () => {
     buildToolsSnapshotState.current = createSnapshot("B");
     gitActionsState.current = createGitActions("B");
 
-    await harness.update({
-      activeWorkspace: { repoPath: "/repo" } as never,
-      branches: [],
-      activeBranch: null,
-      viewRole: "build",
-      viewTaskId: "task-1",
-      session: {
-        role: "build",
-        status: "running",
-        workingDirectory: "/repo",
-        hasActiveSession: true,
-      },
-      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
-      panelKind: "documents",
-      isPanelOpen: false,
-      isViewSessionHistoryHydrating: false,
-      documentsModel: { activeDocument: null },
-      repoSettings: { defaultTargetBranch: null } as never,
-      worktreeRecoverySignal: 1,
-      detectingPullRequestTaskId: null,
-      onDetectPullRequest: () => {},
-      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
-      onGitConflictQuickActionContextChange: (context) => {
-        events.push(context ? (context.conflict.operation as string) : null);
-      },
-    } as HookArgs);
+    await harness.update(
+      createHookArgs({
+        onGitConflictQuickActionContextChange: (context) => {
+          events.push(context ? (context.conflict.operation as string) : null);
+        },
+      }),
+    );
 
     expect(events).toEqual(["A", "B"]);
 
     await harness.unmount();
 
     expect(events).toEqual(["A", "B", null]);
+  });
+
+  test("does not lock git actions for a builder session waiting for input", async () => {
+    const waitingInputSnapshot = createSnapshot("A");
+    buildToolsSnapshotState.current = {
+      ...waitingInputSnapshot,
+      context: {
+        ...waitingInputSnapshot.context,
+        isSelectedBuilderWorking: false,
+      },
+    };
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        selectedView: createSelectedView({
+          loadedSession: createAgentSessionFixture({
+            role: "build",
+            status: "running",
+            workingDirectory: "/repo",
+            pendingQuestions: [{ requestId: "question-1", questions: [] }],
+          }),
+        }),
+        panelKind: "build_tools",
+        isPanelOpen: true,
+      }),
+    );
+
+    await harness.mount();
+
+    const gitActionCalls = gitActionsMock.mock.calls as unknown as Array<[GitActionsArgs]>;
+    const latestGitActionArgs = gitActionCalls.at(-1)?.[0];
+    expect(latestGitActionArgs?.isBuilderSessionWorking).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("locks git actions from selected-session summary while the full session is loading", async () => {
+    const selectedSessionSummary = toAgentSessionSummary(
+      createAgentSessionFixture({
+        role: "build",
+        status: "running",
+        workingDirectory: "/repo/.worktrees/task-1",
+      }),
+    );
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        selectedView: createSelectedView({
+          loadedSession: null,
+          selectedSessionSummary,
+        }),
+        panelKind: "build_tools",
+        isPanelOpen: true,
+      }),
+    );
+
+    await harness.mount();
+
+    const gitActionCalls = gitActionsMock.mock.calls as unknown as Array<[GitActionsArgs]>;
+    const latestGitActionArgs = gitActionCalls.at(-1)?.[0];
+    expect(latestGitActionArgs?.isBuilderSessionWorking).toBe(true);
+
+    await harness.unmount();
   });
 });

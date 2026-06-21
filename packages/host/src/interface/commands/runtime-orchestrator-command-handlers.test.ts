@@ -60,6 +60,30 @@ const createRecordingService = () => {
           }),
       });
     },
+    runtimeRequire(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeRequire", input });
+          return {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/repo",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            startedAt: "2026-05-10T10:00:00.000Z",
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
     runtimeList(input) {
       return Effect.tryPromise({
         try: async () => {
@@ -79,32 +103,6 @@ const createRecordingService = () => {
         try: async () => {
           calls.push({ method: "runtimeStop", input });
           return { ok: true };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
-    },
-    runtimeStartupStatus(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "runtimeStartupStatus", input });
-          return {
-            runtimeKind: "opencode",
-            repoPath: "/repo",
-            stage: "idle",
-            runtime: null,
-            startedAt: null,
-            updatedAt: "2026-05-10T10:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
-            failureKind: null,
-            failureReason: null,
-            detail: null,
-          };
         },
         catch: (cause) =>
           new HostOperationError({
@@ -200,17 +198,14 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
       router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toMatchObject({ runtimeId: "runtime-1" });
     await expect(
+      router.invoke("runtime_require", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
+    await expect(
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toEqual([]);
     await expect(router.invoke("runtime_stop", { runtimeId: "runtime-1" })).resolves.toEqual({
       ok: true,
     });
-    await expect(
-      router.invoke("runtime_startup_status", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({ stage: "idle" });
     await expect(
       router.invoke("repo_runtime_health", {
         runtimeKind: "opencode",
@@ -239,14 +234,14 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
         input: { runtimeKind: "opencode", repoPath: "/repo" },
       },
       {
+        method: "runtimeRequire",
+        input: { runtimeKind: "opencode", repoPath: "/repo" },
+      },
+      {
         method: "runtimeList",
         input: { runtimeKind: "opencode", repoPath: "/repo" },
       },
       { method: "runtimeStop", input: { runtimeId: "runtime-1" } },
-      {
-        method: "runtimeStartupStatus",
-        input: { runtimeKind: "opencode", repoPath: "/repo" },
-      },
       {
         method: "repoRuntimeHealth",
         input: { runtimeKind: "opencode", repoPath: "/repo" },

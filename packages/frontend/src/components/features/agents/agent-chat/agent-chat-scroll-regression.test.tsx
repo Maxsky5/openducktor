@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
@@ -37,8 +38,7 @@ const createRows = (count: number): AgentChatWindowRow[] =>
   }));
 
 const mockResizeObserverControllers = new Set<MockResizeObserverController>();
-const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-let nextAnimationFrameId = 1;
+const animationFrameDriver = createAnimationFrameTestDriver();
 
 class MockResizeObserver implements ResizeObserver {
   private readonly observedElements = new Set<Element>();
@@ -83,36 +83,19 @@ const triggerResizeObservers = (): void => {
   }
 };
 
-const flushAnimationFrames = async (): Promise<void> => {
-  if (animationFrameCallbacks.size === 0) {
-    return;
-  }
-
-  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-  animationFrameCallbacks.clear();
-
-  await act(async () => {
-    for (const callback of queuedCallbacks) {
-      callback(16);
-    }
-    await Promise.resolve();
-  });
-  await flushAnimationFrames();
-};
-
 function ChatScrollRegressionHarness(): ReactElement {
   const [input, setInput] = useState("");
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerTextareaRef, resizeComposerTextarea } = useAgentChatLayout({
     input,
-    activeExternalSessionId: "session-1",
+    displayedSessionKey: "session-1",
     syncBottomAfterComposerLayoutRef,
   });
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
-    activeExternalSessionId: "session-1",
-    isSessionViewLoading: false,
+    displayedSessionKey: "session-1",
+    shouldResetForTranscriptLoad: false,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
@@ -148,14 +131,14 @@ function ChatEditorScrollRegressionHarness(): ReactElement {
   const [input, setInput] = useState("");
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerEditorRef, resizeComposerEditor } = useAgentChatLayout({
-    activeExternalSessionId: "session-1",
+    displayedSessionKey: "session-1",
     syncBottomAfterComposerLayoutRef,
   });
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
-    activeExternalSessionId: "session-1",
-    isSessionViewLoading: false,
+    displayedSessionKey: "session-1",
+    shouldResetForTranscriptLoad: false,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
@@ -190,29 +173,16 @@ function ChatEditorScrollRegressionHarness(): ReactElement {
 
 describe("agent chat scroll regression", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    animationFrameCallbacks.clear();
-    nextAnimationFrameId = 1;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    animationFrameDriver.install();
   });
 
   afterEach(() => {
     globalThis.ResizeObserver = originalResizeObserver;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
   });
 
   test("keeps the transcript pinned after returning to bottom and growing the composer", async () => {
@@ -262,14 +232,14 @@ describe("agent chat scroll regression", () => {
       fireEvent.pointerDown(container);
       fireEvent.scroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("false");
 
     container.scrollTop = 700;
     await act(async () => {
       fireEvent.scroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
 
     await act(async () => {
@@ -282,11 +252,11 @@ describe("agent chat scroll regression", () => {
     expect(textarea.dataset.multiline).toBe("true");
 
     container.clientHeight = 220;
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     await act(async () => {
       triggerResizeObservers();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(1000);
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
@@ -348,14 +318,14 @@ describe("agent chat scroll regression", () => {
       fireEvent.pointerDown(container);
       fireEvent.scroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("false");
 
     container.scrollTop = 700;
     await act(async () => {
       fireEvent.scroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
 
     await act(async () => {
@@ -368,11 +338,11 @@ describe("agent chat scroll regression", () => {
     expect(editor.dataset.multiline).toBe("true");
 
     container.clientHeight = 220;
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
     await act(async () => {
       triggerResizeObservers();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(1000);
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");

@@ -1,5 +1,10 @@
 import { mock } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
+  SendAgentUserMessageInput,
+} from "@openducktor/core";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -18,6 +23,41 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
   startedAt: "2026-05-07T00:00:00.000Z",
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
+
+export const codexSessionRef = (
+  externalSessionId = "thread/start-runtime-live",
+): AgentSessionRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+});
+
+export const codexSessionRuntimeRef = (
+  externalSessionId = "thread/start-runtime-live",
+  overrides: Partial<AgentSessionRuntimeRef> = {},
+): AgentSessionRuntimeRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "build",
+  systemPrompt: "Use the repo rules.",
+  model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+  ...overrides,
+});
+
+export const codexUserMessageInput = (
+  input: Pick<SendAgentUserMessageInput, "parts"> &
+    Partial<Omit<SendAgentUserMessageInput, "parts">>,
+): SendAgentUserMessageInput => {
+  const { model: _defaultModel, ...base } = codexSessionRuntimeRef(input.externalSessionId);
+  return {
+    ...base,
+    ...input,
+  };
+};
 
 export const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -275,7 +315,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         return {
           data: [
             {
-              id: "thread/start-runtime-ensure",
+              id: "thread/start-runtime-live",
               cwd: "/repo",
               createdAt: 1_778_112_000,
               preview: "Live Codex session",
@@ -359,7 +399,6 @@ export const createAdapterWithTransport = (
 ) =>
   new CodexAppServerAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
@@ -383,23 +422,11 @@ export const createHarness = (
     transports.set(runtimeId, transport);
     return transport;
   });
-  const ensureRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
-    ...makeRuntimeSummary("runtime-ensure"),
-    repoPath,
-    kind: runtimeKind,
-    runtimeId: "runtime-ensure",
-  }));
   const requireRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
     ...makeRuntimeSummary("runtime-live"),
     repoPath,
     kind: runtimeKind,
     runtimeId: "runtime-live",
-  }));
-  const requireRuntimeById = mock(async ({ repoPath, runtimeKind }, runtimeId: string) => ({
-    ...makeRuntimeSummary(runtimeId),
-    repoPath,
-    kind: runtimeKind,
-    runtimeId,
   }));
   const drainServerRequests = mock(async (_runtimeId: string) => [] as unknown[]);
   const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
@@ -407,9 +434,7 @@ export const createHarness = (
 
   const adapter = new CodexAppServerAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime,
       requireRepoRuntime,
-      requireRuntimeById,
     },
     transportFactory,
     drainServerRequests,
@@ -422,9 +447,7 @@ export const createHarness = (
     adapter,
     transports,
     transportFactory,
-    ensureRepoRuntime,
     requireRepoRuntime,
-    requireRuntimeById,
     drainServerRequests,
     drainNotifications,
     respondServerRequest,
@@ -444,4 +467,9 @@ export const waitForEvent = async (
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for Codex event.");
+};
+
+export const flushCodexAdapterWork = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
 };

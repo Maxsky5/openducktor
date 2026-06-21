@@ -1,21 +1,202 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
+  createRecordingSessionTodosUpdater,
+  createSessionsRef,
+  createSessionUpdater,
+  findSession,
+  getSession,
   getSessionMessages,
-  OPENCODE_RUNTIME_DESCRIPTOR,
+  listenToAgentSessionEvents,
   type SessionEvent,
   type SessionEventAdapter,
+  type SessionUpdateFn,
   withMockedToast,
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
-  test("records inputReadyAtMs when tool input first becomes meaningful", () => {
+  test("drops deferred stream events when an immediate idle event closes the turn", async () => {
+    const originalDateNow = Date.now;
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+    let unsubscribe: (() => void) | null = null;
+
+    try {
+      unsubscribe = await listenToAgentSessionEvents({
+        adapter,
+        repoPath: "/tmp/repo",
+        externalSessionId: "session-1",
+        sessionsRef,
+        updateSession,
+        eventBatchWindowMs: 0,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: async () => {},
+      });
+
+      const handleEvent = handlers[0];
+      if (!handleEvent) {
+        throw new Error("Expected session event handler to be registered");
+      }
+
+      Date.now = () => 1_000;
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Visible draft",
+          completed: false,
+        },
+      });
+
+      Date.now = () => 1_050;
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.050Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Stale deferred draft",
+          completed: false,
+        },
+      });
+
+      handleEvent({
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+      });
+
+      expect(getSession(sessionsRef).status).toBe("idle");
+      expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
+        "Visible draft",
+      ]);
+
+      Date.now = () => 2_000;
+      unsubscribe();
+      unsubscribe = null;
+
+      expect(getSession(sessionsRef).status).toBe("idle");
+      expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
+        "Visible draft",
+      ]);
+    } finally {
+      unsubscribe?.();
+      Date.now = originalDateNow;
+    }
+  });
+
+  test("preserves explicit history load state when live transcript changes", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ historyLoadState: "loaded" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Final answer",
+    });
+
+    expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
+  });
+
+  test("ignores observed session events after the mounted identity changes", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_sessionRef, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ workingDirectory: "/tmp/other-worktree" }),
+    ]);
+    let updateCount = 0;
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
+      updateCount += 1;
+      return applySessionUpdate(identity, updater);
+    };
+
+    await listenToAgentSessionEvents({
+      adapter,
+      sessionRef: {
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      },
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Wrong worktree event",
+    });
+
+    expect(updateCount).toBe(0);
+    expect(getSessionMessages(sessionsRef)).toEqual([]);
+  });
+
+  test("records inputReadyAtMs when tool input first becomes meaningful", async () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -24,42 +205,20 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ role: "planner" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "planner" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     try {
-      attachAgentSessionListener({
+      await listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
         sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
-        turnStartedAtBySessionRef: { current: {} },
         updateSession,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: async () => {},
-        resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       });
 
       const handleEvent = handlers[0];
@@ -162,29 +321,20 @@ describe("agent-orchestrator session transcript events", () => {
     await withMockedToast(async ({ toastInfoMock }) => {
       const handlers: Array<(event: SessionEvent) => void> = [];
       const adapter: SessionEventAdapter = {
-        subscribeEvents: (_externalSessionId, handler) => {
+        subscribeEvents: async (_externalSessionId, handler) => {
           handlers.push(handler);
           return () => {};
         },
         replyApproval: async () => {},
       };
-      const sessionsRef: { current: Record<string, AgentSessionState> } = {
-        current: {
-          "session-1": buildSession({ role: "build" }),
-        },
-      };
+      const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-      attachAgentSessionListener({
+      await listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
         sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
-        turnStartedAtBySessionRef: { current: {} },
-        updateSession: () => {},
+        updateSession: () => null,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: async () => {},
@@ -238,7 +388,7 @@ describe("agent-orchestrator session transcript events", () => {
         const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
 
         const adapter: SessionEventAdapter = {
-          subscribeEvents: (_externalSessionId, handler) => {
+          subscribeEvents: async (_externalSessionId, handler) => {
             handlers.push(
               handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
             );
@@ -247,36 +397,15 @@ describe("agent-orchestrator session transcript events", () => {
           replyApproval: async () => {},
         };
 
-        const sessionsRef: { current: Record<string, AgentSessionState> } = {
-          current: {
-            "session-1": buildSession({ role: "build" }),
-          },
-        };
+        const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-        const updateSession = (
-          externalSessionId: string,
-          updater: (current: AgentSessionState) => AgentSessionState,
-        ) => {
-          const current = sessionsRef.current[externalSessionId];
-          if (!current) {
-            return;
-          }
-          sessionsRef.current = {
-            ...sessionsRef.current,
-            [externalSessionId]: updater(current),
-          };
-        };
+        const updateSession = createSessionUpdater(sessionsRef);
 
-        attachAgentSessionListener({
+        await listenToAgentSessionEvents({
           adapter,
           repoPath: "/tmp/repo",
           externalSessionId: "session-1",
           sessionsRef,
-          draftRawBySessionRef: { current: {} },
-          draftSourceBySessionRef: { current: {} },
-          draftMessageIdBySessionRef: { current: {} },
-          draftFlushTimeoutBySessionRef: { current: {} },
-          turnStartedAtBySessionRef: { current: {} },
           updateSession,
           resolveTurnDurationMs: () => undefined,
           clearTurnDuration: () => {},
@@ -341,7 +470,7 @@ describe("agent-orchestrator session transcript events", () => {
   test("writes canonical user_message events into the transcript", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -350,41 +479,19 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession(),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession()]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -434,11 +541,11 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessage.meta.state).toBe("read");
   });
 
-  test("appends session compaction notices without changing live session state", () => {
+  test("appends session compaction notices without changing live session state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -452,10 +559,6 @@ describe("agent-orchestrator session transcript events", () => {
     };
     const protectedSessionState = {
       status: "running" as const,
-      draftAssistantText: "draft text",
-      draftAssistantMessageId: "draft-assistant-1",
-      draftReasoningText: "draft reasoning",
-      draftReasoningMessageId: "draft-reasoning-1",
       pendingUserMessageStartedAt: Date.parse("2026-05-18T21:00:00.000Z"),
       pendingApprovals: [
         {
@@ -487,47 +590,28 @@ describe("agent-orchestrator session transcript events", () => {
       selectedModel: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          messages: [previousMessage],
-          ...protectedSessionState,
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        messages: [previousMessage],
+        ...protectedSessionState,
+      }),
+    ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-      options?: { persist?: boolean },
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return applySessionUpdate(identity, updater);
     };
-
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: { "session-1": { reasoning: "draft reasoning" } } },
-      draftSourceBySessionRef: { current: { "session-1": { reasoning: "delta" } } },
-      draftMessageIdBySessionRef: { current: { "session-1": { reasoning: "draft-reasoning-1" } } },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: { "session-1": 1_777_000_000_000 } },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -566,7 +650,7 @@ describe("agent-orchestrator session transcript events", () => {
       message: "Session compacted.",
     });
 
-    const session = sessionsRef.current["session-1"];
+    const session = findSession(sessionsRef, "session-1");
     if (!session) {
       throw new Error("Expected session to exist");
     }
@@ -597,10 +681,10 @@ describe("agent-orchestrator session transcript events", () => {
     );
   });
 
-  test("reconciles queued user_message updates in place when the agent reads the turn", () => {
+  test("merges queued user_message updates in place when the agent reads the turn", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -609,41 +693,19 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession(),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession()]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -688,10 +750,10 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessage.meta.state).toBe("read");
   });
 
-  test("flushes queued non-immediate events in a single session commit", () => {
+  test("flushes queued non-immediate events in a single session commit", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -700,44 +762,29 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "starting" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
+    const todosRecorder = createRecordingSessionTodosUpdater();
     let updateSessionCalls = 0;
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionCalls += 1;
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      updateSessionOptions.push(options);
+      return applySessionUpdate(identity, updater);
     };
 
-    const unsubscribe = attachAgentSessionListener({
+    const unsubscribe = await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -770,9 +817,10 @@ describe("agent-orchestrator session transcript events", () => {
     unsubscribe();
 
     expect(updateSessionCalls).toBe(1);
-    expect(sessionsRef.current["session-1"]?.status).toBe("running");
+    expect(updateSessionOptions).toEqual([undefined]);
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
     expect(getSessionMessages(sessionsRef)).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.todos).toEqual([
+    expect(todosRecorder.getTodos()).toEqual([
       {
         id: "todo-1",
         content: "Investigate live performance",
@@ -782,10 +830,10 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
   });
 
-  test("flushes queued work before applying an immediate event", () => {
+  test("flushes queued work before applying an immediate event", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -794,44 +842,25 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "starting" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
     let updateSessionCalls = 0;
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return applySessionUpdate(identity, updater);
     };
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -868,10 +897,10 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
   });
 
-  test("collapses assistant stream chunks across a queued flush", () => {
+  test("collapses assistant stream chunks across a queued flush", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -880,44 +909,25 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "running", role: "build" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
     let updateSessionCalls = 0;
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      return applySessionUpdate(identity, updater);
     };
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -993,10 +1003,10 @@ describe("agent-orchestrator session transcript events", () => {
     expect(assistantMessage?.content).toBe("Hello world");
   });
 
-  test("prefers final assistant message over earlier streamed text in the same batch", () => {
+  test("prefers final assistant message over earlier streamed text in the same batch", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1005,42 +1015,20 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "running", role: "build" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
-    attachAgentSessionListener({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

@@ -1,45 +1,54 @@
 import type { AgentRole } from "@openducktor/core";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-
-export type KanbanSessionPresentationState = "active" | "waiting_input";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  WorkflowAgentSessionState,
+} from "@/types/agent-orchestrator";
+import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
 
 export type KanbanTaskActivityState = "idle" | "active" | "waiting_input";
 
+export type ActiveAgentSessionSummary = AgentSessionSummary & {
+  activityState: ActiveAgentSessionActivityState;
+};
+
 export type ActiveTaskSessionContext = {
   role: AgentRole;
-  presentationState: KanbanTaskSession["presentationState"];
+  activityState: KanbanTaskSession["activityState"];
 };
 
 export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionContext>;
 
-export type KanbanTaskSession = Pick<
-  WorkflowAgentSessionState,
-  "externalSessionId" | "role" | "status"
-> & {
-  startedAt?: AgentSessionState["startedAt"];
-  runtimeKind?: AgentSessionState["runtimeKind"];
-  presentationState: KanbanSessionPresentationState;
+export type KanbanTaskSession = AgentSessionIdentity &
+  Pick<WorkflowAgentSessionState, "role"> & {
+    startedAt?: AgentSessionState["startedAt"];
+    activityState: ActiveAgentSessionActivityState;
+  };
+
+export const toKanbanTaskSession = (session: ActiveAgentSessionSummary): KanbanTaskSession => ({
+  ...toAgentSessionIdentity(session),
+  role: session.role,
+  startedAt: session.startedAt,
+  activityState: session.activityState,
+});
+
+export const isKanbanActiveTaskSession = (
+  session: AgentSessionSummary,
+): session is ActiveAgentSessionSummary => {
+  return isAgentSessionActivityActive(session.activityState);
 };
 
-const isKanbanSessionWaitingInput = (
-  session: Pick<AgentSessionSummary, "pendingApprovals" | "pendingQuestions">,
-): boolean => isAgentSessionWaitingInput(session);
-
-export const toKanbanSessionPresentationState = (
-  session: Pick<AgentSessionSummary, "pendingApprovals" | "pendingQuestions">,
-): KanbanSessionPresentationState =>
-  isKanbanSessionWaitingInput(session) ? "waiting_input" : "active";
-
 export const toKanbanTaskActivityState = (
-  taskSessions: Array<Pick<KanbanTaskSession, "presentationState">> | undefined,
+  taskSessions: Array<Pick<KanbanTaskSession, "activityState">> | undefined,
 ): KanbanTaskActivityState => {
   if (!taskSessions || taskSessions.length === 0) {
     return "idle";
   }
 
-  return taskSessions.some((session) => session.presentationState === "waiting_input")
+  return taskSessions.some((session) => session.activityState === "waiting_input")
     ? "waiting_input"
     : "active";
 };

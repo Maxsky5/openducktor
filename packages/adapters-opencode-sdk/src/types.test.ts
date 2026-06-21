@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   ClientFactory,
-  McpServerStatus,
   OpencodeSdkAdapterOptions,
   SessionInput,
   SessionRecord,
@@ -35,8 +34,9 @@ describe("types", () => {
         workingDirectory: "/repo",
       }),
       externalSessionId: "external-session-1",
-      eventTransportKey: "http://127.0.0.1:12345",
-      hasIdleSinceActivity: false,
+      runtimeId: "runtime-opencode-1",
+      streamTurnStatus: "active",
+      isSendingUserMessage: false,
       activeAssistantMessageId: null,
       completedAssistantMessageIds: new Set<string>(),
       emittedAssistantMessageIds: new Set<string>(),
@@ -57,7 +57,6 @@ describe("types", () => {
       pendingSubagentPartEmissionsByExternalSessionId: new Map(),
       pendingSubagentInputEventsByExternalSessionId: new Map(),
     };
-    const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {
       now: () => "2026-02-22T12:00:00.000Z",
       createClient,
@@ -65,7 +64,6 @@ describe("types", () => {
     };
 
     expect(sessionRecord.summary.externalSessionId).toBe("external-session-1");
-    expect(status.status).toBe("connected");
     expect(typeof options.createClient).toBe("function");
     expect(typeof options.logEvent).toBe("function");
   });

@@ -27,6 +27,7 @@ export const extractThreadId = (
 
 export const toSessionSummary = (input: {
   externalSessionId: string;
+  workingDirectory: string;
   startedAt: string;
   title?: string;
   role: AgentRole | null;
@@ -34,6 +35,7 @@ export const toSessionSummary = (input: {
 }): AgentSessionSummary => ({
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
+  workingDirectory: input.workingDirectory,
   ...(input.title ? { title: input.title } : {}),
   role: input.role,
   startedAt: input.startedAt,
@@ -42,8 +44,6 @@ export const toSessionSummary = (input: {
 
 export type CodexThreadStatusSnapshot = {
   classification: import("@openducktor/core").AgentSessionActivity;
-  status: import("@openducktor/core").LiveAgentSessionStatus;
-  agentSessionStatus: "running" | "idle";
 };
 
 export type CodexThreadSnapshot = {
@@ -72,22 +72,14 @@ export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSna
   if (normalized === "active") {
     const flags = new Set(activeFlags.map((flag) => flag.toLowerCase()));
     if (flags.has("waitingonapproval") || flags.has("waiting_on_approval")) {
-      return {
-        classification: "waiting_for_permission",
-        status: { type: "busy" },
-        agentSessionStatus: "running",
-      };
+      return { classification: "waiting_for_permission" };
     }
     if (flags.has("waitingonuserinput") || flags.has("waiting_on_user_input")) {
-      return {
-        classification: "waiting_for_question",
-        status: { type: "busy" },
-        agentSessionStatus: "running",
-      };
+      return { classification: "waiting_for_question" };
     }
-    return { classification: "running", status: { type: "busy" }, agentSessionStatus: "running" };
+    return { classification: "running" };
   }
-  return { classification: "idle", status: { type: "idle" }, agentSessionStatus: "idle" };
+  return { classification: "idle" };
 };
 
 const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
@@ -129,7 +121,7 @@ export const codexLoadedThreadIds = (response: unknown): Set<string> =>
       )
     : new Set();
 
-const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
+export const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
   isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
 
 export const requireThreadSnapshotFromReadResponse = (

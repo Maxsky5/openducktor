@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentActivitySummary,
   type AgentActivityTaskTitleLookup,
   summarizeAgentActivity,
 } from "@/state/read-models/agent-activity-read-model";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import { useAgentActivitySessions, useTasksState } from "../app-state-provider";
+import { useAgentActivitySnapshot, useTasksState } from "../app-state-provider";
 
 const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
   activeSessionCount: 0,
@@ -17,7 +16,7 @@ const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
 
 const EMPTY_TASK_TITLES: AgentActivityTaskTitleLookup = {};
 
-const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string[] => {
+const collectActivityTaskIds = (sessions: AgentSessionSummary[]): string[] => {
   const taskIds = new Set<string>();
   for (const session of sessions) {
     taskIds.add(session.taskId);
@@ -25,15 +24,20 @@ const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string
   return [...taskIds];
 };
 
-const filterSessionsForRepo = (
-  sessions: AgentActivitySessionSummary[],
-  activeWorkspace: ActiveWorkspace | null,
-): AgentActivitySessionSummary[] => {
-  if (activeWorkspace === null) {
+const selectVisibleActivitySessions = ({
+  activeWorkspaceRepoPath,
+  workspaceRepoPath,
+  sessions,
+}: {
+  activeWorkspaceRepoPath: string | null;
+  workspaceRepoPath: string | null;
+  sessions: AgentSessionSummary[];
+}): AgentSessionSummary[] => {
+  if (activeWorkspaceRepoPath === null) {
     return [];
   }
 
-  return sessions.filter((session) => session.repoPath === activeWorkspace.repoPath);
+  return workspaceRepoPath === activeWorkspaceRepoPath ? sessions : [];
 };
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
@@ -55,13 +59,18 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
 };
 
 export const useShellAgentActivity = (
-  activeWorkspace: ActiveWorkspace | null,
+  activeWorkspaceRepoPath: string | null,
 ): AgentActivitySummary => {
-  const sessions = useAgentActivitySessions();
+  const activitySnapshot = useAgentActivitySnapshot();
   const { tasks } = useTasksState();
   const visibleSessions = useMemo(
-    () => filterSessionsForRepo(sessions, activeWorkspace),
-    [activeWorkspace, sessions],
+    () =>
+      selectVisibleActivitySessions({
+        activeWorkspaceRepoPath,
+        workspaceRepoPath: activitySnapshot.workspaceRepoPath,
+        sessions: activitySnapshot.sessions,
+      }),
+    [activeWorkspaceRepoPath, activitySnapshot],
   );
   const activityTaskIds = useMemo(() => collectActivityTaskIds(visibleSessions), [visibleSessions]);
   const selectTaskTitles = useMemo(
@@ -71,7 +80,7 @@ export const useShellAgentActivity = (
   const taskTitleById = useMemo(() => selectTaskTitles(tasks), [selectTaskTitles, tasks]);
 
   return useMemo(() => {
-    if (activeWorkspace === null || visibleSessions.length === 0) {
+    if (activeWorkspaceRepoPath === null || visibleSessions.length === 0) {
       return EMPTY_AGENT_ACTIVITY_SUMMARY;
     }
 
@@ -79,5 +88,5 @@ export const useShellAgentActivity = (
       sessions: visibleSessions,
       taskTitleById,
     });
-  }, [activeWorkspace, taskTitleById, visibleSessions]);
+  }, [activeWorkspaceRepoPath, taskTitleById, visibleSessions]);
 };

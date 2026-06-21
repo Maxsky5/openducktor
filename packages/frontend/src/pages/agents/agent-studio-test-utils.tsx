@@ -10,18 +10,31 @@ import {
   createElement,
   type PropsWithChildren,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
-import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  ChecksOperationsContext,
+  ChecksStateContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
+  createRepoRuntimeHealthFixture as createSharedRepoRuntimeHealthFixture,
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 
 type ReactActEnvironment = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -30,11 +43,22 @@ type ReactActEnvironment = typeof globalThis & {
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
 >;
+type ChecksStateContextValue = NonNullable<
+  ComponentProps<typeof ChecksStateContext.Provider>["value"]
+>;
+type RepoRuntimeHealthContextValue = NonNullable<
+  ComponentProps<typeof RepoRuntimeHealthContext.Provider>["value"]
+>;
 
 type HookHarnessOptions = {
   queryClient?: QueryClient;
   runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
+  checksStateContext?: ChecksStateContextValue;
+  checksStateContextRef?: { current: ChecksStateContextValue };
+  repoRuntimeHealthContext?: RepoRuntimeHealthContextValue;
+  repoRuntimeHealthContextRef?: { current: RepoRuntimeHealthContextValue };
+  wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
 export const enableReactActEnvironment = (): void => {
@@ -47,11 +71,29 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   createdAt: "2026-02-22T12:00:00.000Z",
 };
 
-const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
-  repoPath: "/repo",
+type PageAgentSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+  runId?: string | null;
+};
+
+const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
   startedAt: "2026-02-22T10:00:00.000Z",
   workingDirectory: "/repo",
 };
+
+type TranscriptStateFixtureInput =
+  | AgentSessionTranscriptState
+  | { kind: "failed"; message?: string };
+
+export const createSelectedSessionTranscriptStateFixture = (
+  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
+): AgentSessionTranscriptState =>
+  transcriptState.kind === "failed"
+    ? {
+        kind: "failed",
+        message: transcriptState.message ?? "The selected conversation could not be loaded.",
+      }
+    : transcriptState;
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,
@@ -75,7 +117,6 @@ const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescripto
     },
     history: {
       ...descriptor.capabilities.history,
-      hydratedEventTypes: [...descriptor.capabilities.history.hydratedEventTypes],
       limitations: [...descriptor.capabilities.history.limitations],
     },
     approvals: {
@@ -132,7 +173,35 @@ export const createRuntimeDefinitionsContextValue = (
       }),
     loadRepoRuntimeSlashCommands:
       overrides.loadRepoRuntimeSlashCommands ?? (async () => ({ commands: [] })),
+    loadRepoRuntimeSkills: overrides.loadRepoRuntimeSkills ?? (async () => ({ skills: [] })),
     loadRepoRuntimeFileSearch: overrides.loadRepoRuntimeFileSearch ?? (async () => []),
+  };
+};
+
+export const createChecksStateContextValue = (
+  overrides: Partial<ChecksStateContextValue> = {},
+): ChecksStateContextValue => ({
+  runtimeCheck: null,
+  taskStoreCheck: null,
+  runtimeCheckFailureKind: null,
+  taskStoreCheckFailureKind: null,
+  isLoadingChecks: false,
+  refreshChecks: async () => undefined,
+  ...overrides,
+});
+
+export const createRepoRuntimeHealthContextValue = (
+  overrides: Partial<RepoRuntimeHealthContextValue> = {},
+): RepoRuntimeHealthContextValue => {
+  const runtimeHealthByRuntime = overrides.runtimeHealthByRuntime ?? {
+    opencode: createSharedRepoRuntimeHealthFixture(),
+  };
+
+  return {
+    runtimeHealthByRuntime,
+    isLoadingRepoRuntimeHealth: false,
+    refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
+    ...overrides,
   };
 };
 
@@ -153,13 +222,10 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
       {},
       { taskStorePath: "/repo/task-stores/workspace/database.sqlite" },
     ),
-  refreshRepoRuntimeHealthForRepo: async () => ({}),
   clearActiveTaskStoreCheck: () => {},
-  clearActiveRepoRuntimeHealth: () => {},
   setIsLoadingChecks: () => {},
   hasRuntimeCheck: () => false,
   hasCachedTaskStoreCheck: () => false,
-  hasCachedRepoRuntimeHealth: () => false,
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
 
 export const createDeferred = createSharedDeferred;
@@ -170,8 +236,11 @@ export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCa
   createSharedTaskCardFixture(PAGE_TASK_CARD_DEFAULTS, overrides);
 
 export const createAgentSessionFixture = (
-  overrides: Partial<AgentSessionState> & { runId?: string | null } = {},
+  overrides: PageAgentSessionOverrides = {},
 ): AgentSessionState => createSharedAgentSessionFixture(PAGE_SESSION_DEFAULTS, overrides);
+
+export const createAgentSessionSummaryFixture = (overrides: PageAgentSessionOverrides = {}) =>
+  toAgentSessionSummary(createAgentSessionFixture(overrides));
 
 export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
@@ -184,6 +253,12 @@ export const createHookHarness = <Props, State>(
   const runtimeDefinitionsContextRef = options?.runtimeDefinitionsContextRef ?? {
     current: options?.runtimeDefinitionsContext ?? createRuntimeDefinitionsContextValue(),
   };
+  const checksStateContextRef = options?.checksStateContextRef ?? {
+    current: options?.checksStateContext ?? createChecksStateContextValue(),
+  };
+  const repoRuntimeHealthContextRef = options?.repoRuntimeHealthContextRef ?? {
+    current: options?.repoRuntimeHealthContext ?? createRepoRuntimeHealthContextValue(),
+  };
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
     if (options?.queryClient) {
@@ -192,6 +267,13 @@ export const createHookHarness = <Props, State>(
 
     return createElement(QueryProvider, { useIsolatedClient: true }, children);
   };
+  const renderOwnerProviders = (children: ReactNode): ReactNode => {
+    if (!options?.wrapper) {
+      return children;
+    }
+
+    return createElement(options.wrapper, null, children);
+  };
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -199,9 +281,17 @@ export const createHookHarness = <Props, State>(
       { value: checksOperationsContext },
       renderQueryProvider(
         createElement(
-          RuntimeDefinitionsContext.Provider,
-          { value: runtimeDefinitionsContextRef.current },
-          children,
+          RepoRuntimeHealthContext.Provider,
+          { value: repoRuntimeHealthContextRef.current },
+          createElement(
+            ChecksStateContext.Provider,
+            { value: checksStateContextRef.current },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: runtimeDefinitionsContextRef.current },
+              renderOwnerProviders(children),
+            ),
+          ),
         ),
       ),
     );

@@ -1,47 +1,35 @@
 import { useEffect, useRef } from "react";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { findFirstChangedMessageIndex } from "@/pages/agents/agent-session-message-diff";
-import {
-  forEachSessionMessage,
-  forEachSessionMessageFrom,
-} from "@/state/operations/agent-orchestrator/support/messages";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { forEachSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
 
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
 
+type BuildWorktreeRefreshSelectedView = {
+  role: string | null;
+  loadedSession: AgentSessionState | null;
+};
+
 type UseAgentStudioBuildWorktreeRefreshArgs = {
-  viewRole: string | null;
-  activeSession: AgentSessionState | null;
-  isSessionHistoryHydrating: boolean;
+  selectedView: BuildWorktreeRefreshSelectedView;
   refreshWorktree: GitDiffRefresh;
 };
 
-const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> => {
-  const keys = new Set<string>();
+const seedCompletedToolMessageKeys = (
+  sessionKey: string,
+  session: AgentSessionState,
+): Set<string> => {
+  const messageKeys = new Set<string>();
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
     if (meta?.kind !== "tool" || meta.status !== "completed") {
       return;
     }
 
-    keys.add(`${session.externalSessionId}:${message.id}`);
+    messageKeys.add(`${sessionKey}:${message.id}`);
   });
-  return keys;
-};
-
-const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Set<string> => {
-  const keys = new Set<string>();
-  forEachSessionMessage(session, (message) => {
-    const meta = message.meta;
-    if (meta?.kind !== "tool" || meta.status !== "completed") {
-      return;
-    }
-
-    if (shouldRefreshGitPanelAfterToolCompletion(meta)) {
-      keys.add(`${session.externalSessionId}:${message.id}`);
-    }
-  });
-  return keys;
+  return messageKeys;
 };
 
 const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
@@ -52,71 +40,52 @@ const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
 };
 
 export function useAgentStudioBuildWorktreeRefresh({
-  viewRole,
-  activeSession,
-  isSessionHistoryHydrating,
+  selectedView,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
+  const { role, loadedSession } = selectedView;
   const processedToolMessageKeysRef = useRef<Set<string> | null>(null);
   if (processedToolMessageKeysRef.current === null) {
     processedToolMessageKeysRef.current = new Set<string>();
   }
   const processedToolMessageKeys = processedToolMessageKeysRef.current;
-  const previousSessionIdRef = useRef<string | null>(null);
-  const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
-  const wasSessionHistoryHydratingRef = useRef(false);
-  const completedToolKeysBeforeHydrationRef = useRef<Set<string> | null>(null);
+  const currentSessionKeyRef = useRef<string | null>(null);
+  const wasHistoryLoadingRef = useRef(false);
 
   useEffect(() => {
-    if (viewRole !== "build" || activeSession?.role !== "build") {
+    if (role !== "build" || loadedSession?.role !== "build") {
       return;
     }
 
-    if (isSessionHistoryHydrating) {
-      if (!wasSessionHistoryHydratingRef.current) {
-        completedToolKeysBeforeHydrationRef.current =
-          collectCompletedGitPanelRefreshToolKeys(activeSession);
-      }
-      wasSessionHistoryHydratingRef.current = true;
-      return;
-    }
+    const loadedSessionKey = agentSessionIdentityKey(loadedSession);
 
-    if (previousSessionIdRef.current !== activeSession.externalSessionId) {
-      previousSessionIdRef.current = activeSession.externalSessionId;
-      previousMessagesRef.current = activeSession.messages;
-      replaceSetContents(processedToolMessageKeys, seedProcessedToolMessageKeys(activeSession));
-      return;
-    }
-
-    if (wasSessionHistoryHydratingRef.current) {
-      wasSessionHistoryHydratingRef.current = false;
-      previousMessagesRef.current = activeSession.messages;
-      const completedToolKeysBeforeHydration = completedToolKeysBeforeHydrationRef.current;
+    if (currentSessionKeyRef.current !== loadedSessionKey) {
+      currentSessionKeyRef.current = loadedSessionKey;
+      wasHistoryLoadingRef.current = loadedSession.historyLoadState === "loading";
       replaceSetContents(
         processedToolMessageKeys,
-        completedToolKeysBeforeHydration ?? seedProcessedToolMessageKeys(activeSession),
+        seedCompletedToolMessageKeys(loadedSessionKey, loadedSession),
       );
-      completedToolKeysBeforeHydrationRef.current = null;
       return;
     }
 
-    const firstChangedMessageIndex = findFirstChangedMessageIndex(
-      previousMessagesRef.current,
-      activeSession,
-    );
-    if (firstChangedMessageIndex < 0) {
-      previousMessagesRef.current = activeSession.messages;
+    if (loadedSession.historyLoadState === "loading" || wasHistoryLoadingRef.current) {
+      wasHistoryLoadingRef.current = loadedSession.historyLoadState === "loading";
+      replaceSetContents(
+        processedToolMessageKeys,
+        seedCompletedToolMessageKeys(loadedSessionKey, loadedSession),
+      );
       return;
     }
 
     let shouldRefresh = false;
-    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
+    forEachSessionMessage(loadedSession, (message) => {
       const meta = message.meta;
       if (meta?.kind !== "tool" || meta.status !== "completed") {
         return;
       }
 
-      const messageKey = `${activeSession.externalSessionId}:${message.id}`;
+      const messageKey = `${loadedSessionKey}:${message.id}`;
       if (processedToolMessageKeys.has(messageKey)) {
         return;
       }
@@ -127,16 +96,8 @@ export function useAgentStudioBuildWorktreeRefresh({
       }
     });
 
-    previousMessagesRef.current = activeSession.messages;
-
     if (shouldRefresh) {
       void refreshWorktree("soft");
     }
-  }, [
-    activeSession,
-    isSessionHistoryHydrating,
-    processedToolMessageKeys,
-    refreshWorktree,
-    viewRole,
-  ]);
+  }, [loadedSession, processedToolMessageKeys, refreshWorktree, role]);
 }

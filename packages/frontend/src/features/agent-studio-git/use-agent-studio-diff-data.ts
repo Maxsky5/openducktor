@@ -3,11 +3,11 @@ import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { DiffDataState, UseAgentStudioDiffDataInput } from "./contracts";
 import { useAgentStudioDiffController } from "./loading/use-diff-controller";
 import type { DiffRefreshContext } from "./refresh/refresh-types";
-import { useAgentStudioDiffPolling } from "./refresh/use-diff-polling";
 import {
   useAgentStudioDiffRefreshController,
   useAgentStudioDiffRefreshUiState,
 } from "./refresh/use-diff-refresh-controller";
+import { useAgentStudioDiffVisibilityRefresh } from "./refresh/use-diff-visibility-refresh";
 
 export function useAgentStudioDiffData({
   repoPath,
@@ -20,7 +20,7 @@ export function useAgentStudioDiffData({
   defaultTargetBranch,
   preconditionError = null,
   branchIdentityKey = null,
-  enablePolling,
+  enableScheduledRefresh,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const targetBranch = canonicalTargetBranch(defaultTargetBranch);
   const effectiveRepoPath = preconditionError ? null : repoPath;
@@ -80,11 +80,11 @@ export function useAgentStudioDiffData({
     void refresh("scheduled");
   }, [refresh]);
 
-  useAgentStudioDiffPolling({
-    enablePolling,
+  useAgentStudioDiffVisibilityRefresh({
+    enableScheduledRefresh,
     repoPath: effectiveRepoPath,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
-    poll: scheduledPoll,
+    refresh: scheduledPoll,
   });
 
   const displayError =

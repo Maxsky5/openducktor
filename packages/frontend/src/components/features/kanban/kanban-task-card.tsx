@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
@@ -20,6 +20,7 @@ import {
   resolveHistoricalSessionRoles,
   resolvePreferredActiveSession,
   resolveSessionTargetOptions,
+  type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
@@ -28,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -35,16 +37,13 @@ import { AGENT_ROLE_LABELS } from "@/types";
 type KanbanTaskCardProps = {
   task: TaskCard;
   taskSessions?: KanbanTaskSession[] | undefined;
+  historicalSessions?: AgentSessionRecord[] | undefined;
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
@@ -81,7 +80,6 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
   left.pullRequest?.state === right.pullRequest?.state &&
-  areTaskAgentSessionsEqual(left.agentSessions, right.agentSessions) &&
   areStringArraysEqual(left.availableActions, right.availableActions);
 
 const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -98,9 +96,9 @@ const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "reset_implementation",
 ];
 
-const areTaskAgentSessionsEqual = (
-  left: TaskCard["agentSessions"] | undefined,
-  right: TaskCard["agentSessions"] | undefined,
+const areHistoricalSessionsEqual = (
+  left: AgentSessionRecord[] | undefined,
+  right: AgentSessionRecord[] | undefined,
 ): boolean => {
   const leftSessions = left ?? [];
   const rightSessions = right ?? [];
@@ -116,7 +114,7 @@ const areTaskAgentSessionsEqual = (
     }
 
     if (
-      leftSession.externalSessionId !== rightSession.externalSessionId ||
+      agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
       leftSession.startedAt !== rightSession.startedAt
     ) {
@@ -127,7 +125,7 @@ const areTaskAgentSessionsEqual = (
   return true;
 };
 
-const areRunningTaskSessionsEqual = (
+const areTaskSessionsEqual = (
   left: KanbanTaskSession[] | undefined,
   right: KanbanTaskSession[] | undefined,
 ): boolean => {
@@ -147,10 +145,9 @@ const areRunningTaskSessionsEqual = (
       return false;
     }
     if (
-      leftSession.externalSessionId !== rightSession.externalSessionId ||
+      agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
-      leftSession.status !== rightSession.status ||
-      leftSession.presentationState !== rightSession.presentationState
+      leftSession.activityState !== rightSession.activityState
     ) {
       return false;
     }
@@ -163,7 +160,8 @@ const areKanbanTaskCardPropsEqual = (
   next: KanbanTaskCardProps,
 ): boolean =>
   areTaskCardsEquivalent(previous.task, next.task) &&
-  areRunningTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
+  areTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
+  areHistoricalSessionsEqual(previous.historicalSessions, next.historicalSessions) &&
   previous.hasActiveSession === next.hasActiveSession &&
   previous.activeSessionRole === next.activeSessionRole &&
   previous.taskActivityState === next.taskActivityState &&
@@ -197,7 +195,7 @@ const getSessionStatusLabel = ({
     return "Waiting input";
   }
 
-  if (session.status === "starting") {
+  if (session.activityState === "starting") {
     return "Starting";
   }
 
@@ -328,6 +326,7 @@ function TaskActions({
   onHumanRequestChanges,
   onResetImplementation,
   taskSessions,
+  historicalSessions,
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
@@ -338,20 +337,17 @@ function TaskActions({
   onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
   taskSessions: KanbanTaskSession[];
+  historicalSessions: AgentSessionRecord[];
   hasActiveSession: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
 }): ReactElement | null {
-  const historicalSessionRoles = resolveHistoricalSessionRoles(task);
+  const historicalSessionRoles = resolveHistoricalSessionRoles(historicalSessions);
   const workflowActions = resolveTaskCardActions(task, {
     include: TASK_CARD_WORKFLOW_ACTIONS,
     hasActiveSession,
@@ -368,11 +364,11 @@ function TaskActions({
       ? resolvePreferredActiveSession(taskSessions, activeSessionRole)
       : null;
   const primarySessionIsWaitingInput =
-    primaryActiveSession?.presentationState === "waiting_input" ||
+    primaryActiveSession?.activityState === "waiting_input" ||
     (taskActivityState === "waiting_input" && hasActiveSession);
 
   const openRoleSession = (role: AgentRole): void => {
-    const sessionOptions = resolveSessionTargetOptions(task, taskSessions, role);
+    const sessionOptions = resolveSessionTargetOptions(historicalSessions, taskSessions, role);
 
     if (onOpenSession) {
       onOpenSession(task.id, role, sessionOptions);
@@ -477,6 +473,7 @@ function TaskActions({
 export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
   taskSessions = [],
+  historicalSessions = [],
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
@@ -542,6 +539,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <TaskActions
           task={task}
           taskSessions={taskSessions}
+          historicalSessions={historicalSessions}
           hasActiveSession={hasActiveSessionValue}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}

@@ -1,10 +1,8 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { describe, expect, test } from "bun:test";
 import { unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../shared/host";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
   createBuildContinuationTargetFixture,
@@ -15,100 +13,98 @@ import {
   createTaskDependenciesFixture,
 } from "./start-session-strategy-test-fixtures";
 
-const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind?: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
-): AgentSessionRecord => ({
-  runtimeKind: input.runtimeKind ?? "opencode",
-  externalSessionId: input.externalSessionId,
-  role: input.role,
-  startedAt: input.startedAt,
-  workingDirectory: input.workingDirectory,
-  selectedModel: input.selectedModel ?? null,
+const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
+  current: createAgentSessionCollection(sessions),
 });
 
-describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
-  beforeEach(async () => {
-    await clearAppQueryClient();
-  });
-
-  test("hydrates and returns a persisted reusable session", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
-    const sessionsRef = { current: {} as Record<string, AgentSessionState> };
-    let loadCalls = 0;
-    host.agentSessionsList = async () => [
-      persistedSessionRecord({
-        externalSessionId: "ext-build",
-        role: "build",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ];
-
-    try {
-      const sessionDependencies = createSessionDependenciesFixture({
-        sessionsRef,
-        loadAgentSessions: async () => {
-          loadCalls += 1;
-          sessionsRef.current = {
-            "ext-build": createBuildSessionFixture({
-              externalSessionId: "ext-build",
-            }),
-          };
-        },
-      });
-      await expect(
-        executeReuseStart({
-          ctx: createStartSessionContextFixture(),
-          input: {
-            startMode: "reuse",
-            sourceExternalSessionId: "ext-build",
-          },
-          deps: {
-            session: sessionDependencies,
-            runtime: createRuntimeDependenciesFixture({
-              resolveTaskWorktree: async () =>
-                createBuildContinuationTargetFixture("/tmp/repo/worktree"),
-            }),
-            task: createTaskDependenciesFixture(),
-            model: {
-              loadRepoPromptOverrides: async () => ({}),
+const createQaAvailableTaskDependencies = () =>
+  createTaskDependenciesFixture({
+    taskRef: {
+      current: [
+        createTaskCardFixture(
+          {
+            status: "ai_review",
+            agentWorkflows: {
+              spec: { required: false, canSkip: true, available: true, completed: false },
+              planner: { required: false, canSkip: true, available: true, completed: false },
+              builder: { required: true, canSkip: false, available: true, completed: true },
+              qa: { required: false, canSkip: true, available: true, completed: false },
             },
           },
-        }),
-      ).resolves.toEqual({
-        kind: "reused",
+          {},
+        ),
+      ],
+    },
+  });
+
+describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
+  test("loads and returns a persisted reusable session", async () => {
+    const sessionsRef = createSessionsRef();
+    let loadCalls = 0;
+
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef,
+      loadSourceSession: async () => {
+        loadCalls += 1;
+        const session = createBuildSessionFixture({
+          externalSessionId: "ext-build",
+        });
+        sessionsRef.current = createAgentSessionCollection([session]);
+        return session;
+      },
+    });
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture(),
+        input: {
+          sourceSession: {
+            externalSessionId: "ext-build",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        },
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveTaskWorktree: async () =>
+              createBuildContinuationTargetFixture("/tmp/repo/worktree"),
+          }),
+          task: createTaskDependenciesFixture(),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "reused",
+      session: {
         externalSessionId: "ext-build",
-      });
-      expect(loadCalls).toBe(1);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+    expect(loadCalls).toBe(1);
   });
 
   test("rejects reuse when the build continuation target no longer matches", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-build": createBuildSessionFixture({
-            workingDirectory: "/tmp/repo/old-worktree",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-build",
+          workingDirectory: "/tmp/repo/old-worktree",
+        }),
+      ]),
     });
 
     await expect(
       executeReuseStart({
         ctx: createStartSessionContextFixture(),
         input: {
-          startMode: "reuse",
-          sourceExternalSessionId: "ext-build",
+          sourceSession: {
+            externalSessionId: "ext-build",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/old-worktree",
+          },
         },
         deps: {
           session: sessionDependencies,
@@ -127,51 +123,30 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("fails fast for qa reuse when no builder continuation target exists", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-qa": createBuildSessionFixture({
-            externalSessionId: "ext-qa",
-            role: "qa",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+        }),
+      ]),
     });
 
     await expect(
       executeReuseStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
-          startMode: "reuse",
-          sourceExternalSessionId: "ext-qa",
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
+          },
         },
         deps: {
           session: sessionDependencies,
           runtime: createRuntimeDependenciesFixture({
             resolveTaskWorktree: async () => null,
           }),
-          task: createTaskDependenciesFixture({
-            taskRef: {
-              current: [
-                createTaskCardFixture(
-                  {
-                    status: "ai_review",
-                    agentWorkflows: {
-                      spec: { required: false, canSkip: true, available: true, completed: false },
-                      planner: {
-                        required: false,
-                        canSkip: true,
-                        available: true,
-                        completed: false,
-                      },
-                      builder: { required: true, canSkip: false, available: true, completed: true },
-                      qa: { required: false, canSkip: true, available: true, completed: false },
-                    },
-                  },
-                  {},
-                ),
-              ],
-            },
-          }),
+          task: createQaAvailableTaskDependencies(),
           model: {
             loadRepoPromptOverrides: async () => ({}),
           },
@@ -180,16 +155,50 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
   });
 
+  test("rejects qa reuse when the builder continuation target changed", async () => {
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+          workingDirectory: "/tmp/repo/old-worktree",
+        }),
+      ]),
+    });
+
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture({ role: "qa" }),
+        input: {
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/old-worktree",
+          },
+        },
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveTaskWorktree: async () =>
+              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
+          }),
+          task: createQaAvailableTaskDependencies(),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).rejects.toThrow("it does not match the required builder worktree for this QA session");
+  });
+
   test("rejects qa reuse when the task workflow does not allow qa", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-qa": createBuildSessionFixture({
-            externalSessionId: "ext-qa",
-            role: "qa",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+        }),
+      ]),
     });
     const taskCard = createTaskCardFixture(
       {
@@ -208,8 +217,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       executeReuseStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
-          startMode: "reuse",
-          sourceExternalSessionId: "ext-qa",
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
+          },
         },
         deps: {
           session: sessionDependencies,

@@ -1,75 +1,59 @@
-import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useMemo, useRef } from "react";
-import { useAgentChatSessionHydration } from "@/components/features/agents/agent-chat/use-agent-chat-session-hydration";
-import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
-import {
-  firstLaunchAction,
-  resolveBuildContinuationLaunchAction,
-  type SessionLaunchActionId,
-} from "@/features/session-start";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
+import { useMemo } from "react";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { useAgentSession } from "@/state/app-state-provider";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
+import { useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
+import type { RepoSettingsInput } from "@/types/state-slices";
+import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
 import {
-  resolveAgentStudioSessionSelection,
-  resolveAgentStudioTaskId,
+  type AgentStudioRouteSessionResolution,
+  groupSessionsByTaskId,
 } from "./agents-page-selection";
+import {
+  type AgentStudioSelectedSessionView,
+  useAgentStudioSelectedSessionView,
+} from "./selected-session/use-agent-studio-selected-session-view";
+import type {
+  AgentStudioSelectionState,
+  SelectAgentStudioSelection,
+} from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
+  workspaceRepoPath: string | null;
   isRepoNavigationBoundaryPending: boolean;
-  agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  selectionIntent: {
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  } | null;
-  updateQuery: (updates: QueryUpdate) => void;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
-    externalSessionId: string;
-    repoReadinessState: AgentStudioReadinessState;
-  }) => Promise<boolean>;
-  runtimeDefinitions: RuntimeDescriptor[];
-  readSessionModelCatalog: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
-  clearComposerInput: () => void;
-  onContextSwitchIntent?: () => void;
+  selectionState: AgentStudioSelectionState;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
+export type AgentStudioSelectedView = {
+  taskId: string;
+  selectedTask: TaskCard | null;
+  sessionsForTask: AgentSessionSummary[];
+  isTaskReady: boolean;
+} & AgentStudioSelectedSessionView;
+
 export type AgentStudioSelectionControllerResult = {
-  selectedSessionById: AgentSessionSummary | null;
+  routeSessionResolution: AgentStudioRouteSessionResolution;
+  selectedSessionFromRoute: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
   allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
-  activeSessionSummary: AgentSessionSummary | null;
-  activeSession: AgentSessionState | null;
-  activeSessionRuntimeDataError?: string | null;
+  resolvedRouteSession: AgentSessionSummary | null;
+  queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -82,206 +66,57 @@ export type AgentStudioSelectionControllerResult = {
     targetTaskId: string,
     position: "before" | "after",
   ) => void;
-  viewTaskId: string;
-  viewSelectedTask: TaskCard | null;
-  viewSessionsForTask: AgentSessionSummary[];
-  viewActiveSessionSummary: AgentSessionSummary | null;
-  viewActiveSession: AgentSessionState | null;
-  viewSessionRuntimeDataError?: string | null;
-  viewRole: AgentRole;
-  viewLaunchActionId: SessionLaunchActionId;
-  isActiveTaskHydrated: boolean;
-  isActiveTaskHydrationFailed: boolean;
-  isViewSessionHistoryHydrated: boolean;
-  isViewSessionHistoryHydrationFailed: boolean;
-  isViewSessionHistoryHydrating: boolean;
-  isViewSessionWaitingForRuntimeReadiness: boolean;
-};
-
-const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
-
-const compareSessionsByRecency = (
-  left: AgentSessionSummary,
-  right: AgentSessionSummary,
-): number => {
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt > right.startedAt ? -1 : 1;
-  }
-  if (left.externalSessionId === right.externalSessionId) {
-    return 0;
-  }
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
-};
-
-type SessionsByTaskSortCacheEntry = {
-  inputSignature: string;
-  sortedSessionIds: string[];
-};
-
-type SessionsByTaskSortCache = Map<string, SessionsByTaskSortCacheEntry>;
-
-const toTaskInputSignature = (taskSessions: AgentSessionSummary[]): string =>
-  taskSessions
-    .map((session) => `${session.externalSessionId}:${session.startedAt}`)
-    .sort()
-    .join("|");
-
-export const buildSessionsByTaskIdWithCache = (
-  sessions: AgentSessionSummary[],
-  previousCache: SessionsByTaskSortCache,
-): { sessionsByTaskId: Map<string, AgentSessionSummary[]>; nextCache: SessionsByTaskSortCache } => {
-  const grouped = new Map<string, AgentSessionSummary[]>();
-  for (const session of sessions) {
-    const current = grouped.get(session.taskId);
-    if (current) {
-      current.push(session);
-    } else {
-      grouped.set(session.taskId, [session]);
-    }
-  }
-
-  const nextCache: SessionsByTaskSortCache = new Map();
-  for (const [taskId, taskSessions] of grouped) {
-    const inputSignature = toTaskInputSignature(taskSessions);
-    const previous = previousCache.get(taskId);
-    const sessionsById = new Map(
-      taskSessions.map((session) => [session.externalSessionId, session]),
-    );
-
-    let sortedSessions: AgentSessionSummary[];
-    if (previous && previous.inputSignature === inputSignature) {
-      sortedSessions = previous.sortedSessionIds.reduce<AgentSessionSummary[]>(
-        (sessions, externalSessionId) => {
-          const session = sessionsById.get(externalSessionId);
-          if (session) {
-            sessions.push(session);
-          }
-          return sessions;
-        },
-        [],
-      );
-
-      if (sortedSessions.length !== taskSessions.length) {
-        sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
-      }
-    } else {
-      sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
-    }
-
-    grouped.set(taskId, sortedSessions);
-    nextCache.set(taskId, {
-      inputSignature,
-      sortedSessionIds: sortedSessions.map((session) => session.externalSessionId),
-    });
-  }
-
-  return {
-    sessionsByTaskId: grouped,
-    nextCache,
-  };
+  view: AgentStudioSelectedView;
 };
 
 export function useAgentStudioSelectionController({
-  activeWorkspace,
+  activeWorkspaceId,
+  workspaceRepoPath,
   isRepoNavigationBoundaryPending,
-  agentStudioReadinessState,
   tasks,
   isLoadingTasks,
   sessions,
   taskIdParam,
-  sessionParam,
+  sessionKeyParam,
   hasExplicitRoleParam,
   roleFromQuery,
-  selectionIntent,
-  updateQuery,
-  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
-  ensureSessionReadyForView,
-  runtimeDefinitions,
-  readSessionModelCatalog,
-  readSessionTodos,
-  clearComposerInput,
-  onContextSwitchIntent,
+  selectionState,
+  repoSettings,
+  isLoadingRepoSettings,
+  selectAgentStudioSelection,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache | null>(null);
-  if (sessionsByTaskSortCacheRef.current === null) {
-    sessionsByTaskSortCacheRef.current = new Map();
-  }
-  const sessionsByTaskSortCache = sessionsByTaskSortCacheRef.current;
-  const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
-  const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
-  const effectiveHasExplicitRoleParam = isRepoNavigationBoundaryPending
-    ? false
-    : hasExplicitRoleParam;
-  const effectiveRoleFromQuery: AgentRole = isRepoNavigationBoundaryPending
-    ? "spec"
-    : roleFromQuery;
-  const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
-  const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
-  const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
-  const selectedHasExplicitRoleParam =
-    effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
-  const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const keepSelectedExplicitRoleSessionless =
-    effectiveSelectionIntent?.externalSessionId === null && effectiveSessionParam === null;
+  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
 
-  const tasksById = useMemo(() => {
-    return new Map(tasks.map((task) => [task.id, task]));
-  }, [tasks]);
+  const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
-  const sessionSummariesById = useMemo(() => {
-    return new Map(sessions.map((session) => [session.externalSessionId, session]));
-  }, [sessions]);
-
-  const sessionsByTaskId = useMemo(() => {
-    const { sessionsByTaskId: grouped, nextCache } = buildSessionsByTaskIdWithCache(
+  const navigationBase = useMemo(
+    () =>
+      resolveAgentStudioNavigationState({
+        isRepoNavigationBoundaryPending,
+        isLoadingTasks,
+        sessionReadModelLoadState,
+        tasks,
+        sessions,
+        taskIdParam,
+        sessionKeyParam,
+        hasExplicitRoleParam,
+        roleFromQuery,
+        selectionState,
+        activeTaskTabId: "",
+      }),
+    [
+      hasExplicitRoleParam,
+      isLoadingTasks,
+      isRepoNavigationBoundaryPending,
+      roleFromQuery,
+      selectionState,
+      sessionKeyParam,
+      sessionReadModelLoadState,
       sessions,
-      sessionsByTaskSortCache,
-    );
-    sessionsByTaskSortCacheRef.current = nextCache;
-    return grouped;
-  }, [sessions, sessionsByTaskSortCache]);
-
-  const selectedSessionById = useMemo(
-    () => (selectedSessionParam ? (sessionSummariesById.get(selectedSessionParam) ?? null) : null),
-    [selectedSessionParam, sessionSummariesById],
+      taskIdParam,
+      tasks,
+    ],
   );
-
-  const taskId = resolveAgentStudioTaskId({
-    taskIdParam: selectedTaskIdParam,
-    selectedSessionById,
-  });
-
-  const selectedTask = useMemo(
-    () => (taskId ? (tasksById.get(taskId) ?? null) : null),
-    [taskId, tasksById],
-  );
-
-  const sessionsForTask = useMemo(() => {
-    if (!taskId) {
-      return [];
-    }
-    return sessionsByTaskId.get(taskId) ?? [];
-  }, [sessionsByTaskId, taskId]);
-
-  const activeSessionSummary = useMemo(() => {
-    return resolveAgentStudioSessionSelection({
-      sessionsForTask,
-      sessionParam: selectedSessionParam,
-      hasExplicitRoleParam: selectedHasExplicitRoleParam,
-      roleFromQuery: selectedRoleFromQuery,
-      selectedTask,
-      fallbackRole: selectedRoleFromQuery,
-      keepExplicitRoleSessionless: keepSelectedExplicitRoleSessionless,
-    }).activeSession;
-  }, [
-    keepSelectedExplicitRoleSessionless,
-    selectedHasExplicitRoleParam,
-    selectedRoleFromQuery,
-    selectedSessionParam,
-    selectedTask,
-    sessionsForTask,
-  ]);
-  const activeSession = useAgentSession(activeSessionSummary?.externalSessionId ?? null);
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionSummary>();
@@ -299,7 +134,7 @@ export function useAgentStudioSelectionController({
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       let activeSession: AgentSessionSummary | null = null;
       for (const session of taskSessions) {
-        if (ACTIVE_SESSION_STATUS.has(session.status)) {
+        if (isAgentSessionActivityActive(session.activityState)) {
           activeSession = session;
           break;
         }
@@ -320,127 +155,78 @@ export function useAgentStudioSelectionController({
     handleCloseTab,
     handleReorderTab,
   } = useAgentStudioTaskTabs({
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
-    taskId,
-    selectedTask,
+    taskId: navigationBase.taskId,
+    selectedTask: navigationBase.selectedTask,
     tasks,
     isLoadingTasks,
     latestSessionByTaskId,
     activeSessionByTaskId,
-    updateQuery,
-    clearComposerInput,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
+    selectAgentStudioSelection,
   });
 
-  const viewTaskId = activeTaskTabId || taskId;
-
-  const viewSelectedTask = useMemo(
-    () => (viewTaskId ? (tasksById.get(viewTaskId) ?? null) : null),
-    [tasksById, viewTaskId],
-  );
-
-  const viewSessionsForTask = useMemo(() => {
-    if (!viewTaskId) {
-      return [];
+  const navigationState = useMemo(() => {
+    if (!activeTaskTabId || activeTaskTabId === navigationBase.taskId) {
+      return navigationBase;
     }
-    return sessionsByTaskId.get(viewTaskId) ?? [];
-  }, [sessionsByTaskId, viewTaskId]);
-
-  const viewSessionParam = useMemo(() => {
-    if (!effectiveSessionParam) {
-      return null;
-    }
-
-    const belongsToViewTask = viewSessionsForTask.some(
-      (session) => session.externalSessionId === effectiveSessionParam,
-    );
-    return belongsToViewTask ? effectiveSessionParam : null;
-  }, [effectiveSessionParam, viewSessionsForTask]);
-
-  const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
-  const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
-  const viewSelectionIntent =
-    effectiveSelectionIntent && effectiveSelectionIntent.taskId === viewTaskId
-      ? effectiveSelectionIntent
-      : null;
-  const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
-  const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
-  const keepViewExplicitRoleSessionless =
-    viewSelectionIntent?.externalSessionId === null && viewSessionParam === null;
-
-  const viewSelection = useMemo(() => {
-    return resolveAgentStudioSessionSelection({
-      sessionsForTask: viewSessionsForTask,
-      sessionParam: viewSessionParamFromSelection,
-      hasExplicitRoleParam: viewHasExplicitRoleSelection,
-      roleFromQuery: viewRoleFromSelection,
-      selectedTask: viewSelectedTask,
-      fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-      keepExplicitRoleSessionless: keepViewExplicitRoleSessionless,
+    return resolveAgentStudioNavigationState({
+      isRepoNavigationBoundaryPending,
+      isLoadingTasks,
+      sessionReadModelLoadState,
+      tasks,
+      sessions,
+      taskIdParam,
+      sessionKeyParam,
+      hasExplicitRoleParam,
+      roleFromQuery,
+      selectionState,
+      activeTaskTabId,
     });
   }, [
-    viewHasExplicitRoleSelection,
-    isViewTaskDetachedFromQuery,
-    keepViewExplicitRoleSessionless,
-    viewRoleFromSelection,
-    viewSelectedTask,
-    viewSessionParamFromSelection,
-    viewSessionsForTask,
+    activeTaskTabId,
+    hasExplicitRoleParam,
+    isLoadingTasks,
+    isRepoNavigationBoundaryPending,
+    navigationBase,
+    roleFromQuery,
+    selectionState,
+    sessionKeyParam,
+    sessionReadModelLoadState,
+    sessions,
+    taskIdParam,
+    tasks,
   ]);
-  const viewActiveSession = useAgentSession(viewSelection.activeSession?.externalSessionId ?? null);
-  const isActiveSessionSameAsViewSession =
-    activeSession !== null &&
-    viewActiveSession !== null &&
-    activeSession.externalSessionId === viewActiveSession.externalSessionId;
-  const activeSessionRuntimeDataForDistinctSession = useAgentChatSessionRuntimeData({
-    session: isActiveSessionSameAsViewSession ? null : activeSession,
-    runtimeDefinitions,
-    repoReadinessState: agentStudioReadinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
+
+  const selectedSessionView = useAgentStudioSelectedSessionView({
+    workspaceRepoPath,
+    selectedTask: navigationState.view.selectedTask,
+    sessionSummaries: navigationState.view.sessionsForTask,
+    sessionKey: navigationState.view.sessionKey,
+    hasExplicitRoleSelection: navigationState.view.hasExplicitRoleSelection,
+    roleSelection: navigationState.view.role,
+    sessionlessRole: navigationState.view.role,
+    keepExplicitRoleSessionless: navigationState.view.keepExplicitRoleSessionless,
+    sessionIdentityFromRoute: navigationState.view.sessionIdentity,
+    repoSettings,
+    isLoadingRepoSettings,
   });
-  const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
-    session: viewActiveSession,
-    runtimeDefinitions,
-    repoReadinessState: agentStudioReadinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
+  useSelectedSessionHistoryLoad({
+    session: selectedSessionView.selectedSession.loadedSession,
+    repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
-  const activeSessionRuntimeData = isActiveSessionSameAsViewSession
-    ? viewSessionRuntimeData
-    : activeSessionRuntimeDataForDistinctSession;
-  const viewRole = viewSelection.role;
-  const viewLaunchActionId: SessionLaunchActionId =
-    viewRole === "build"
-      ? resolveBuildContinuationLaunchAction(viewSelectedTask)
-      : firstLaunchAction(viewRole);
-  const {
-    isActiveTaskHydrated,
-    isActiveTaskHydrationFailed,
-    isActiveSessionHistoryHydrated,
-    isActiveSessionHistoryHydrationFailed,
-    isActiveSessionHistoryHydrating,
-    isWaitingForRuntimeReadiness,
-  } = useAgentChatSessionHydration({
-    activeWorkspace,
-    activeTaskId: viewTaskId,
-    activeSession: viewSessionRuntimeData.session,
-    repoReadinessState: agentStudioReadinessState,
-    ensureSessionReadyForView,
-  });
+  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.taskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
-      selectedSessionById,
-      taskId,
-      selectedTask,
+      routeSessionResolution: navigationState.routeSessionResolution,
+      selectedSessionFromRoute: navigationState.selectedSessionFromRoute,
+      taskId: navigationState.taskId,
+      selectedTask: navigationState.selectedTask,
       allSessionSummaries: sessions,
-      sessionsForTask,
-      activeSessionSummary,
-      activeSession: activeSessionRuntimeData.session,
-      activeSessionRuntimeDataError: activeSessionRuntimeData.runtimeDataError,
+      sessionsForTask: navigationState.sessionsForTask,
+      resolvedRouteSession: navigationState.resolvedRouteSession,
+      queryUpdate: navigationState.queryUpdate,
       isLoadingTasks,
       activeTaskTabId,
       availableTabTasks,
@@ -449,52 +235,27 @@ export function useAgentStudioSelectionController({
       handleCreateTab,
       handleCloseTab,
       handleReorderTab,
-      viewTaskId,
-      viewSelectedTask,
-      viewSessionsForTask,
-      viewActiveSessionSummary: viewSelection.activeSession,
-      viewActiveSession: viewSessionRuntimeData.session,
-      viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
-      viewRole,
-      viewLaunchActionId,
-      isActiveTaskHydrated,
-      isActiveTaskHydrationFailed,
-      isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,
-      isViewSessionHistoryHydrationFailed: isActiveSessionHistoryHydrationFailed,
-      isViewSessionHistoryHydrating: isActiveSessionHistoryHydrating,
-      isViewSessionWaitingForRuntimeReadiness: isWaitingForRuntimeReadiness,
+      view: {
+        taskId: navigationState.view.taskId,
+        selectedTask: navigationState.view.selectedTask,
+        sessionsForTask: navigationState.view.sessionsForTask,
+        isTaskReady: isActiveTaskReady,
+        ...selectedSessionView,
+      },
     }),
     [
-      activeSessionRuntimeData.runtimeDataError,
-      activeSessionRuntimeData.session,
-      activeSessionSummary,
       activeTaskTabId,
       availableTabTasks,
       handleCloseTab,
       handleCreateTab,
       handleReorderTab,
       handleSelectTab,
-      isActiveSessionHistoryHydrated,
-      isActiveSessionHistoryHydrationFailed,
-      isActiveSessionHistoryHydrating,
-      isActiveTaskHydrated,
-      isActiveTaskHydrationFailed,
+      isActiveTaskReady,
       isLoadingTasks,
-      isWaitingForRuntimeReadiness,
-      selectedSessionById,
-      selectedTask,
+      navigationState,
+      selectedSessionView,
       sessions,
-      sessionsForTask,
-      taskId,
       taskTabs,
-      viewLaunchActionId,
-      viewRole,
-      viewSelectedTask,
-      viewSelection.activeSession,
-      viewSessionRuntimeData.runtimeDataError,
-      viewSessionRuntimeData.session,
-      viewSessionsForTask,
-      viewTaskId,
     ],
   );
 }

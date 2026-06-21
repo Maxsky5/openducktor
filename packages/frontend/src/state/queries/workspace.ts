@@ -13,6 +13,9 @@ import { host } from "../operations/host";
 type SettingsSnapshotQueryHost = Pick<typeof host, "workspaceGetSettingsSnapshot">;
 type RepoConfigQueryHost = Pick<typeof host, "workspaceGetRepoConfig">;
 type WorkspaceListQueryHost = Pick<typeof host, "workspaceList">;
+type WorkspaceRecordUpdate =
+  | WorkspaceRecord[]
+  | ((current: WorkspaceRecord[] | undefined) => WorkspaceRecord[]);
 
 const SETTINGS_SNAPSHOT_STALE_TIME_MS = 15 * 60_000;
 const REPO_CONFIG_STALE_TIME_MS = 10 * 60_000;
@@ -95,7 +98,7 @@ export const repoConfigQueryOptions = (
     staleTime: REPO_CONFIG_STALE_TIME_MS,
   });
 
-const workspaceListQueryOptions = (hostClient: WorkspaceListQueryHost = host) =>
+export const workspaceListQueryOptions = (hostClient: WorkspaceListQueryHost = host) =>
   queryOptions({
     queryKey: workspaceQueryKeys.list(),
     queryFn: (): Promise<WorkspaceRecord[]> => hostClient.workspaceList(),
@@ -119,3 +122,35 @@ export const loadWorkspaceListFromQuery = (
   queryClient: QueryClient,
   hostClient?: WorkspaceListQueryHost,
 ): Promise<WorkspaceRecord[]> => queryClient.fetchQuery(workspaceListQueryOptions(hostClient));
+
+export const writeWorkspaceListToQuery = (
+  queryClient: QueryClient,
+  recordsOrUpdater: WorkspaceRecordUpdate,
+): void => {
+  void queryClient.cancelQueries(
+    {
+      queryKey: workspaceQueryKeys.list(),
+      exact: true,
+    },
+    { revert: false },
+  );
+  queryClient.setQueryData<WorkspaceRecord[]>(
+    workspaceQueryKeys.list(),
+    typeof recordsOrUpdater === "function" ? recordsOrUpdater : recordsOrUpdater,
+  );
+};
+
+export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.list(),
+  });
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.settingsSnapshot(),
+    exact: true,
+  });
+  queryClient.removeQueries({
+    queryKey: workspaceQueryKeys.settingsSnapshot(),
+    exact: true,
+    type: "inactive",
+  });
+};

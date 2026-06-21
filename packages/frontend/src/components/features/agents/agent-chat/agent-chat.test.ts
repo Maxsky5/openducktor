@@ -3,25 +3,29 @@ import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat, AgentChatSurface } from "./agent-chat";
-import { buildModelSelection, buildSession, buildTodoItem } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildThreadTranscriptState,
+  buildTodoItem,
+  completeThreadModel,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
-  mode: "interactive" as const,
   chatSettings: createChatSettingsFixture(),
-  thread: {
+  thread: completeThreadModel({
     session: buildSession({
       status: "running" as const,
-      draftAssistantText: "",
     }),
     isSessionWorking: true,
-    isSessionViewLoading: false,
-    isSessionHistoryLoading: false,
-    isWaitingForRuntimeReadiness: false,
-    readinessState: "ready" as const,
+    transcriptState: buildThreadTranscriptState(),
+    runtimeReadiness: {
+      state: "ready" as const,
+      message: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
     isInteractionEnabled: true,
-    blockedReason: "",
-    isLoadingChecks: false,
-    onRefreshChecks: () => {},
     emptyState: {
       title: "Send a message to start a new session automatically.",
     },
@@ -35,16 +39,16 @@ const buildModel = () => ({
     approvalReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     onReplyApproval: async () => {},
-    sessionRuntimeDataError: null,
+    sessionAuxiliaryError: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
     syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-  },
+  }),
   composer: {
     taskId: "task-1",
-    displayedSessionId: "session-1",
+    displayedSessionKey: "session-1",
     isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,
@@ -117,12 +121,11 @@ describe("AgentChat", () => {
     expect(html).toContain("Header slot");
   });
 
-  test("hides the composer in non-interactive mode", () => {
+  test("hides the composer when the surface has no composer model", () => {
     const interactiveModel = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentChatSurface, {
         model: {
-          mode: "non_interactive",
           chatSettings: interactiveModel.chatSettings,
           thread: {
             ...interactiveModel.thread,
@@ -165,12 +168,11 @@ describe("AgentChat", () => {
           ...buildModel(),
           thread: {
             ...buildModel().thread,
-            sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
             session: buildSession({
               status: "idle",
-              selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
-              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
+            todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            sessionAccentColor: "#123456",
           },
         },
       }),
@@ -182,7 +184,7 @@ describe("AgentChat", () => {
     expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
   });
 
-  test("renders session runtime data errors in the bottom stack above the composer", () => {
+  test("renders session auxiliary errors in the bottom stack above the composer", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
@@ -191,9 +193,9 @@ describe("AgentChat", () => {
             ...buildModel().thread,
             session: buildSession({
               status: "idle",
-              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
-            sessionRuntimeDataError: "todos unavailable",
+            todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            sessionAuxiliaryError: "todos unavailable",
           },
         },
       }),

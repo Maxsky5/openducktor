@@ -4,6 +4,7 @@ import { handleMessageEvent } from "./event-stream/message-events";
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { SubagentSessionLink } from "./event-stream/shared";
 import {
+  type EventStreamRuntime,
   isRelevantEvent,
   readEventDirectory,
   readEventParentExternalSessionId,
@@ -17,16 +18,19 @@ import type {
   SessionRecord,
 } from "./types";
 
-type ProcessOpencodeEventInput = {
+type CreateEventStreamRuntimeInput = {
   context: {
     externalSessionId: string;
     input: SessionInput;
   };
-  event: Event;
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   getSession: (sessionId: string) => SessionRecord | undefined;
   resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
+};
+
+type ProcessOpencodeEventInput = CreateEventStreamRuntimeInput & {
+  event: Event;
 };
 
 type SubscribeGlobalEventsInput = {
@@ -142,12 +146,15 @@ const isEventDirectoryScopedToSubscriber = (
   );
 };
 
-export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
+export const createEventStreamRuntime = (
+  input: CreateEventStreamRuntimeInput,
+): EventStreamRuntime | null => {
   const session = input.getSession(input.context.externalSessionId);
   if (!session) {
-    return;
+    return null;
   }
-  const runtime = {
+
+  return {
     externalSessionId: input.context.externalSessionId,
     input: input.context.input,
     now: input.now,
@@ -171,6 +178,13 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     pendingSubagentInputEventsByExternalSessionId:
       session.pendingSubagentInputEventsByExternalSessionId,
   };
+};
+
+export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
+  const runtime = createEventStreamRuntime(input);
+  if (!runtime) {
+    return;
+  }
 
   if (handleMessageEvent(input.event, runtime)) {
     return;

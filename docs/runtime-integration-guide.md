@@ -78,7 +78,7 @@ It is live runtime-instance metadata only:
 
 `runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
 
-The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind`, `runtimeId`, and the build worktree `workingDirectory` at that boundary. The live route remains attached to the running runtime instance and is resolved again through the runtime registry when adapter operations need it.
+The host keeps this payload at runtime-registry and adapter boundaries. Higher-level orchestration must carry durable request coordinates instead: `runtimeKind`, repository path, working directory, and session id when a session exists. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind` and the build worktree `workingDirectory` at that boundary. The live route belongs to the running runtime instance and is resolved again through the runtime registry when adapter operations need it. Runtime adapters require that live route; runtime startup stays in `runtimeEnsure`, `repoRuntimeHealth`, or build startup orchestration.
 
 ### `RuntimeRoute`
 
@@ -117,7 +117,7 @@ Persisted records keep durable session context only:
 - `workingDirectory`
 - nullable `selectedModel`
 
-Persisted records store durable session context. `selectedModel`, when present, includes its own `runtimeKind` and must round-trip with the session. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are resolved again when the session is loaded.
+Persisted records store durable session context. `selectedModel`, when present, includes its own `runtimeKind` and must round-trip with the session. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are never persisted; they are resolved only at the adapter call boundary.
 
 ### Session routing behavior
 
@@ -129,7 +129,7 @@ Session-scoped operations use the session's runtime kind when loading:
 - file status,
 - model catalog.
 
-If the runtime kind is missing, or hydration cannot resolve a live repo runtime for the stored runtime kind, the operation returns an actionable error instead of silently switching runtimes. The persisted session `workingDirectory` remains the request working directory for adapter operations; it is not required to equal the repo-scoped runtime instance working directory, because build and QA sessions may run against a task worktree while reusing a repo-scoped runtime process.
+If the runtime kind is missing, or loading cannot resolve a live repo runtime for the stored runtime kind, the operation returns an actionable error instead of silently switching runtimes. The persisted session `workingDirectory` remains the request working directory for adapter operations; it is not required to equal the repo-scoped runtime instance working directory, because build and QA sessions may run against a task worktree while reusing a repo-scoped runtime process.
 
 ## Runtime Capability Reference
 
@@ -142,8 +142,8 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `workflow.supportedScopes` | Role-scoped requirement | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
 | `sessionLifecycle.supportedStartModes` | Baseline and launch-action requirement | Declares whether the runtime can start `fresh`, `reuse`, or `fork` sessions | Session start, Builder continuation, PR-generation launch actions | `fresh` is baseline-required; launch validation rejects runtimes missing start modes used by registered workflows |
 | `sessionLifecycle.supportsSessionFork` / `forkTargets` | Launch-action requirement | Runtime can fork or branch an existing session and declares whether forks can target only the parent `session` or also `message`/`item` boundaries | Session controls and workflow continuity | Fork support must be internally consistent with supported start modes and target declarations; a session-only fork runtime must not be treated as message/item-boundary capable |
-| `sessionLifecycle.supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
-| `history` group | Baseline/optional fidelity model | Declares whether history is loadable, whether fidelity is `none`, `message`, or `item`, replay style, stable item IDs/order, completion state, and hydrated event types | Session hydration, transcript reconstruction, adapter compatibility | Item-level history claims require stable IDs/order and completion state; runtimes without loadable history must declare `none` fidelity and replay |
+| `sessionLifecycle.supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history loading | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
+| `history` group | Baseline/optional fidelity model | Declares whether history is loadable, whether fidelity is `none`, `message`, or `item`, replay style, stable item IDs/order, and completion state | Session history loading, transcript reconstruction, adapter compatibility | Item-level history claims require stable IDs/order and completion state; runtimes without loadable history must declare `none` fidelity and replay |
 | `approvals` group | Workflow requirement when prompts exist | Declares approval request types, reply outcomes, omitted-permission behavior, pending visibility, mutating-request classification, and read-only auto-reject safety | Permission prompts and read-only role enforcement | Approval request support must include `reject` plus at least one approve outcome; read-only auto-reject requires classification plus reject support |
 | `structuredInput` group | Workflow requirement when questions exist | Declares structured question support, supported answer modes, pending visibility, and resolution semantics | Runtime-originated user-input requests | Runtimes that claim question support must expose answer modes and resolution state; runtimes without questions keep detail flags/lists empty |
 | `promptInput.supportedParts` | Baseline with optional prompt enrichments | Declares prompt part types such as `text`, `slash_command`, file/folder references, native skill/app/plugin mentions, and `runtime_specific` structured parts | Chat composer and adapter prompt-send boundary | `text` is baseline-required; slash command and file-search flags must match supported structured prompt parts; runtime-specific parts must stay typed until the adapter/runtime boundary |
@@ -234,7 +234,7 @@ When a runtime-specific operation only works over one transport, the adapter or 
 Within that model, runtime behavior looks like this:
 
 - honor the selected model/profile/variant when capabilities claim support,
-- support session hydration from persisted `runtimeKind`, `workingDirectory`, and model/session context,
+- support session loading from persisted `runtimeKind`, `workingDirectory`, and model/session context,
 - cover every OpenDucktor workflow role by implementing all required runtime scopes: `workspace`, `task`, and `build`,
 - fail fast when a requested operation is unsupported,
 - resolve session-scoped reads from the session runtime rather than the repo default runtime,
@@ -302,25 +302,25 @@ For Builder PR generation, the runtime integration is responsible for making pro
 
 ### 3. Frontend and shell runtime orchestration
 
-The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The Electron shell under `apps/electron` and the browser runner under `packages/openducktor-web` both mount `@openducktor/frontend` through shell bridge adapters.
+The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-services.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The Electron shell under `apps/electron` and the browser runner under `packages/openducktor-web` both mount `@openducktor/frontend` through shell bridge adapters.
 
 Frontend/runtime orchestration must keep these rules true:
 
 - session-scoped reads carry explicit `runtimeKind`,
 - build startup carries explicit runtime kind,
 - capability-driven UI behavior comes from runtime descriptors rather than per-session heuristics,
-- persisted session hydration fails on runtime-kind mismatches.
+- persisted session loading fails on runtime-kind mismatches.
 
 Catalog/query helpers, session-start UI, settings, and diagnostics consumers may move, but they must continue to derive runtime behavior from the same descriptor-owned capability model.
 
-### 4. Session persistence and hydration
+### 4. Session persistence and loading
 
-Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the TypeScript host session document/store services under `packages/host/src/application` and `packages/host/src/adapters/sqlite`.
+Persistence and loading live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the TypeScript host session document/store services under `packages/host/src/application` and `packages/host/src/adapters/sqlite`.
 
 This layer must ensure that:
 
 - persisted session records keep `externalSessionId`, `role`, `startedAt`, `runtimeKind`, `workingDirectory`, and nullable `selectedModel` with `selectedModel.runtimeKind` when present,
-- hydration re-resolves a live repo runtime from `runtimeKind` and repo path, then preserves the persisted session `workingDirectory` for adapter requests,
+- session loading re-resolves a live repo runtime from `runtimeKind` and repo path, then preserves the persisted session `workingDirectory` for adapter requests,
 - missing runtimes and mismatched runtime kind or repo identity are rejected,
 - session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime.
 
@@ -344,7 +344,7 @@ Host integration work includes:
 - adding the runtime definition to the host-visible runtime registry so default runtime config and startup validation know about it,
 - implementing runtime startup and registering it in the host registry with the correct default startup config,
 - ensuring runtime config defaults are derived from the same runtime definition set used by the host registry,
-- making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
+- making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `repo_runtime_health`, and `build_start` understand it where applicable,
 - implementing host-managed or external provisioning correctly,
 - preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
@@ -359,9 +359,10 @@ Rules:
 - Agent Studio may only allow a follow-up free-form send while a session is already working when the active runtime descriptor sets `sessionLifecycle.supportsQueuedUserMessages: true`.
 - Waiting-input states still win. If the session is blocked on a permission or question, the composer must keep free-form sends disabled even when queued follow-ups are supported.
 - Queued turns still use the existing `user_message` contract. OpenDucktor does not add a separate queued-message event type.
+- When a runtime accepts a queued user message before a native echo is available, the adapter must emit it through the same `user_message` event contract and dedupe the later native echo.
 - For OpenCode, queued state mirrors the TUI heuristic: a user message is `queued` when its id sorts after the last assistant message whose `time.completed` is still missing; otherwise it is `read`.
 - The adapter must update the same user message id in place as that pending-assistant boundary changes rather than inventing a separate queued-message event type or local placeholder system.
-- History hydration must apply the same pending-assistant rule so live state and reloaded history stay aligned.
+- History loading must apply the same pending-assistant rule so live state and reloaded history stay aligned.
 - If a runtime cannot provide enough information to reproduce its own queued badge behavior through the normal message/event/history surfaces, leave `sessionLifecycle.supportsQueuedUserMessages` disabled instead of simulating the feature in desktop code.
 
 ## Build Runtime Rules
@@ -372,7 +373,7 @@ Current startup routing is split like this:
 
 - `runtime_ensure(runtime_kind, repo)` is the repo-scoped workspace-runtime path used by `spec` and `planner`,
 - `qa` still requires `task` scope, but current frontend orchestration resolves the task/build continuation working directory, ensures the selected repo-scoped runtime, then starts or resumes the QA session with that working directory,
-- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`; internally, the current host prepares the build worktree, ensures the selected repo-scoped runtime, validates that runtime for build bootstrap, and returns the runtime id plus the build worktree working directory.
+- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`; internally, the current host prepares the build worktree, ensures the selected repo-scoped runtime, validates that runtime for build bootstrap, and returns the runtime kind plus the build worktree working directory.
 
 Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while launch-action start-mode compatibility is exported through `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts` and sourced from `packages/frontend/src/lib/session-launch-actions.ts`.
 
@@ -393,7 +394,7 @@ Before you consider a new runtime integrated, verify all of the following.
 
 ### Frontend/runtime orchestration
 
-- session hydration reloads history from the persisted runtime kind,
+- session history loading reads from the persisted runtime kind,
 - todo/model-catalog warmups use the session runtime kind,
 - event-driven todo refresh uses the session runtime kind,
 - runtime-owned diff and file-status requests, where implemented, are capability-gated and route through the correct adapter; host-owned git/worktree views use the intended working directory.
@@ -431,7 +432,7 @@ Also run the focused typecheck/test commands for the touched runtime adapter pac
 
 Add targeted tests for:
 
-- persisted non-default runtime session hydration,
+- persisted non-default runtime session loading,
 - runtime-kind mismatch rejection,
 - build runtime fail-fast behavior,
 - selected-model runtime kind round-trip,
@@ -444,6 +445,12 @@ These constraints describe the current integration surface. If a runtime does no
 ### Reference implementation
 
 The built-in runtime implementations are `opencode` and `codex`. OpenCode is the default and remains the broadest reference implementation. Codex is the reference for a host-managed app-server runtime that uses the stdio route and adapter-owned request/response/event mapping.
+
+Codex startup snapshots are owned by the adapter's thread inventory reader. After
+startup, Codex `thread/status/changed` notifications update that inventory through
+the same low-level live-status write path that updates local session state.
+Snapshot projection must not carry separate stale-status exceptions in higher
+layers.
 
 ### Host-managed startup
 
@@ -480,7 +487,7 @@ Start with these anchor references:
 - `packages/contracts/src/run-schemas.ts`
 - `packages/contracts/src/session-schemas.ts`
 - `packages/core/src/ports/agent-engine.ts`
-- `packages/frontend/src/state/agent-runtime-registry.ts`
+- `packages/frontend/src/state/agent-runtime-services.ts`
 - `packages/frontend/src/lib/agent-runtime.ts`
 - `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`
 - `packages/host/src/adapters/runtimes/runtime-registry.ts`

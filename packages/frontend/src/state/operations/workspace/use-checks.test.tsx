@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
-  type RuntimeKind,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -15,7 +14,7 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DiagnosticsToastApi } from "./use-check-diagnostics-effects";
 import { useChecks } from "./use-checks";
@@ -62,24 +61,30 @@ let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =
   makeTaskStoreCheck();
 const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
 const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
-let repoHealthHandler = async (
-  _repoPath: string,
-  _runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeHealthCheck> => makeRepoHealth();
-const checkRepoRuntimeHealthMock = mock((repoPath: string, runtimeKind: RuntimeKind) =>
-  repoHealthHandler(repoPath, runtimeKind),
+const refreshRepoRuntimeHealthMock = mock(
+  async (): Promise<RepoRuntimeHealthMap> => ({
+    opencode: makeRepoHealth(),
+  }),
 );
 
 type UseChecksHook = typeof import("./use-checks")["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
-type HookHarnessArgs = Partial<Omit<HookArgs, "checkRepoRuntimeHealth">> & {
-  checkRepoRuntimeHealth?: HookArgs["checkRepoRuntimeHealth"];
+type HookHarnessArgs = Partial<HookArgs> & {
   activeRepo?: string | null;
+  runtimeHealthByRuntime?: HookArgs["runtimeHealthByRuntime"];
 };
 type ResolvedHookArgs = HookArgs &
   Required<
-    Pick<HookArgs, "runtimeCheck" | "taskStoreCheck" | "toastApi" | "checkRepoRuntimeHealth">
+    Pick<
+      HookArgs,
+      | "runtimeCheck"
+      | "taskStoreCheck"
+      | "toastApi"
+      | "runtimeHealthByRuntime"
+      | "isLoadingRepoRuntimeHealth"
+      | "refreshRepoRuntimeHealth"
+    >
   >;
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
@@ -115,11 +120,16 @@ const buildHookArgs = (
     runtimeCheck: args.runtimeCheck ?? previous?.runtimeCheck ?? runtimeCheckMock,
     taskStoreCheck: args.taskStoreCheck ?? previous?.taskStoreCheck ?? taskStoreCheckMock,
     toastApi: args.toastApi ?? previous?.toastApi ?? testToastApi,
-    checkRepoRuntimeHealth:
-      args.checkRepoRuntimeHealth ??
-      previous?.checkRepoRuntimeHealth ??
-      ((repoPath: string, runtimeKind: RuntimeKind) =>
-        checkRepoRuntimeHealthMock(repoPath, runtimeKind)),
+    runtimeHealthByRuntime: args.runtimeHealthByRuntime ??
+      previous?.runtimeHealthByRuntime ?? {
+        opencode: makeRepoHealth(),
+      },
+    isLoadingRepoRuntimeHealth:
+      args.isLoadingRepoRuntimeHealth ?? previous?.isLoadingRepoRuntimeHealth ?? false,
+    refreshRepoRuntimeHealth:
+      args.refreshRepoRuntimeHealth ??
+      previous?.refreshRepoRuntimeHealth ??
+      refreshRepoRuntimeHealthMock,
   };
 };
 
@@ -180,18 +190,12 @@ const captureDeferredRejection = <T,>(promise: Promise<T>): Promise<T> => {
   return promise;
 };
 
-const waitForInitialChecksToSettle = async (
-  harness: HookHarness,
-  runtimeKinds: RuntimeKind[] = ["opencode"],
-) => {
+const waitForInitialChecksToSettle = async (harness: HookHarness) => {
   await harness.mount();
   await harness.waitFor((value) => {
     return (
       value.runtimeCheck !== null &&
       value.activeTaskStoreCheck !== null &&
-      runtimeKinds.every(
-        (runtimeKind) => value.activeRepoRuntimeHealthByRuntime[runtimeKind] != null,
-      ) &&
       value.isLoadingChecks === false
     );
   });
@@ -203,10 +207,9 @@ beforeEach(async () => {
   toastDismiss.mockClear();
   runtimeCheckMock.mockClear();
   taskStoreCheckMock.mockClear();
-  checkRepoRuntimeHealthMock.mockClear();
+  refreshRepoRuntimeHealthMock.mockClear();
   runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
   taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
-  repoHealthHandler = async () => makeRepoHealth();
 });
 
 describe("use-checks", () => {
@@ -228,7 +231,7 @@ describe("use-checks", () => {
       await harness.mount();
       runtimeCheck.mockClear();
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
+      refreshRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
@@ -236,7 +239,7 @@ describe("use-checks", () => {
 
       expect(runtimeCheck).not.toHaveBeenCalled();
       expect(taskStoreCheck).not.toHaveBeenCalled();
-      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
+      expect(refreshRepoRuntimeHealthMock).not.toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -273,16 +276,23 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("automatically refreshes runtime health while MCP connectivity is still checking", async () => {
+  test("does not refresh runtime health while mounted", async () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
-    let repoHealthCallCount = 0;
-    repoHealthHandler = async () => {
-      repoHealthCallCount += 1;
-      if (repoHealthCallCount === 1) {
-        return makeRepoHealth({
+    const refreshRepoRuntimeHealth = mock(async () => ({
+      opencode: makeRepoHealth(),
+    }));
+
+    runtimeCheckHandler = runtimeCheck;
+    taskStoreCheckHandler = taskStoreCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
           status: "checking",
           runtime: {
             status: "ready",
@@ -297,50 +307,64 @@ describe("use-checks", () => {
             detail: "Checking OpenDucktor MCP",
             failureKind: null,
           },
-        });
-      }
-
-      return makeRepoHealth();
-    };
-
-    runtimeCheckHandler = runtimeCheck;
-    taskStoreCheckHandler = taskStoreCheck;
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        }),
+      },
+      refreshRepoRuntimeHealth,
     });
 
     try {
       await waitForInitialChecksToSettle(harness);
 
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.status).toBe(
-        "checking",
-      );
+      expect(refreshRepoRuntimeHealth).not.toHaveBeenCalled();
 
-      await harness.waitFor(
-        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
-        5000,
-      );
+      await harness.run(async (value) => {
+        await value.refreshChecks();
+      });
 
-      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(2);
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.status).toBe(
-        "connected",
-      );
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
   }, 5000);
 
-  test("tracks per-repo cache and projects cached checks when active repo changes", async () => {
+  test("does not own runtime health loading when runtime definitions become available after mount", async () => {
+    const refreshRepoRuntimeHealth = mock(async () => ({
+      opencode: makeRepoHealth(),
+    }));
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [],
+      runtimeHealthByRuntime: {},
+      refreshRepoRuntimeHealth,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          value.runtimeCheck !== null &&
+          value.activeTaskStoreCheck !== null &&
+          value.isLoadingChecks === false,
+      );
+
+      expect(refreshRepoRuntimeHealth).not.toHaveBeenCalled();
+
+      await harness.updateArgs({ runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR] });
+      await harness.waitFor((value) => value.isLoadingChecks === false);
+
+      expect(refreshRepoRuntimeHealth).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  }, 5000);
+
+  test("tracks per-repo task-store cache when active repo changes", async () => {
     const taskStoreCheck = mock(
       async (repoPath: string): Promise<TaskStoreCheck> =>
         makeTaskStoreCheck({
           taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
         }),
     );
-    repoHealthHandler = async (repoPath: string) =>
-      makeRepoHealth({ checkedAt: `${repoPath}-checked`, mcp: { toolIds: [repoPath] } });
 
     taskStoreCheckHandler = taskStoreCheck;
 
@@ -357,42 +381,35 @@ describe("use-checks", () => {
           "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
       );
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
-        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
       await harness.waitFor((value) => value.hasCachedTaskStoreCheck("/repo-b"));
-      await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
         "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
       );
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
-        "/repo-a",
-      ]);
       expect(harness.getLatest().hasCachedTaskStoreCheck("/repo-b")).toBe(true);
-      expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
       expect(taskStoreCheck).toHaveBeenCalledTimes(1);
-      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
-      await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+      });
+      await harness.waitFor(
+        (value) =>
+          value.activeTaskStoreCheck?.taskStorePath ===
+          "/repo-b/.openducktor/task-stores/workspace/database.sqlite",
+      );
       expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
         "/repo-b/.openducktor/task-stores/workspace/database.sqlite",
       );
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
-        "/repo-b",
-      ]);
 
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
-        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
       expect(taskStoreCheck).not.toHaveBeenCalled();
-      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -403,30 +420,30 @@ describe("use-checks", () => {
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
-    repoHealthHandler = async () =>
-      makeRepoHealth({
-        status: "error",
-        mcp: {
-          supported: true,
-          status: "error",
-          serverName: "openducktor",
-          serverStatus: null,
-          toolIds: [],
-          detail: "mcp offline",
-          failureKind: "error",
-        },
-      });
-
     runtimeCheckHandler = runtimeCheck;
     taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "error",
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "mcp offline",
+            failureKind: "error",
+          },
+        }),
+      },
     });
 
     try {
-      await waitForInitialChecksToSettle(harness, ["opencode"]);
+      await waitForInitialChecksToSettle(harness);
       await harness.waitFor(() => toastError.mock.calls.length === 1);
 
       expect(toastError).toHaveBeenCalledWith(
@@ -495,7 +512,7 @@ describe("use-checks", () => {
     });
 
     try {
-      await waitForInitialChecksToSettle(harness, ["opencode"]);
+      await waitForInitialChecksToSettle(harness);
       toastError.mockClear();
 
       await harness.run(async (value) => {
@@ -524,10 +541,9 @@ describe("use-checks", () => {
   test("refreshChecks starts independent probes in parallel", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
     const beadsDeferred = createDeferred<TaskStoreCheck>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
-    let runtimeHealthCallCount = 0;
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
@@ -536,10 +552,7 @@ describe("use-checks", () => {
       beadsCallCount += 1;
       return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
-    repoHealthHandler = async () => {
-      runtimeHealthCallCount += 1;
-      return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
-    };
+    const refreshRepoRuntimeHealth = mock(async () => runtimeHealthDeferred.promise);
 
     runtimeCheckHandler = runtimeCheck;
     taskStoreCheckHandler = taskStoreCheck;
@@ -547,6 +560,7 @@ describe("use-checks", () => {
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      refreshRepoRuntimeHealth,
     });
 
     let refreshPromise: Promise<void> | null = null;
@@ -555,7 +569,6 @@ describe("use-checks", () => {
       await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
@@ -565,12 +578,11 @@ describe("use-checks", () => {
       expect(runtimeCheck).toHaveBeenCalledTimes(1);
       expect(runtimeCheck.mock.calls[0]).toEqual([true]);
       expect(taskStoreCheck).toHaveBeenCalledTimes(1);
-      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
-      expect(checkRepoRuntimeHealthMock.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
 
       runtimeDeferred.resolve(makeRuntimeCheck());
       beadsDeferred.resolve(makeTaskStoreCheck());
-      runtimeHealthDeferred.resolve(makeRepoHealth());
+      runtimeHealthDeferred.resolve({ opencode: makeRepoHealth() });
       await harness.run(async () => {
         await refreshPromise;
       });
@@ -594,7 +606,6 @@ describe("use-checks", () => {
         }),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
-    repoHealthHandler = async () => makeRepoHealth();
 
     runtimeCheckHandler = runtimeCheck;
     taskStoreCheckHandler = taskStoreCheck;
@@ -633,10 +644,9 @@ describe("use-checks", () => {
   test("refreshChecks waits for all failed probes before surfacing unavailable diagnostics", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
     const beadsDeferred = createDeferred<TaskStoreCheck>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
-    let runtimeHealthCallCount = 0;
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
@@ -645,10 +655,7 @@ describe("use-checks", () => {
       beadsCallCount += 1;
       return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
-    repoHealthHandler = async () => {
-      runtimeHealthCallCount += 1;
-      return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
-    };
+    const refreshRepoRuntimeHealth = mock(async () => runtimeHealthDeferred.promise);
 
     runtimeCheckHandler = runtimeCheck;
     taskStoreCheckHandler = taskStoreCheck;
@@ -656,6 +663,7 @@ describe("use-checks", () => {
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      refreshRepoRuntimeHealth,
     });
 
     let refreshPromise: Promise<void> | null = null;
@@ -664,7 +672,6 @@ describe("use-checks", () => {
       await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
@@ -676,7 +683,7 @@ describe("use-checks", () => {
       expect(toastError).not.toHaveBeenCalled();
 
       beadsDeferred.reject(new Error("task store down"));
-      runtimeHealthDeferred.resolve(makeRepoHealth());
+      runtimeHealthDeferred.resolve({ opencode: makeRepoHealth() });
       await harness.run(async () => {
         return expect(refreshPromise).rejects.toThrow("runtime down");
       });
@@ -720,7 +727,6 @@ describe("use-checks", () => {
       beadsCallCount += 1;
       return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
-    repoHealthHandler = async () => makeRepoHealth();
 
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
@@ -770,7 +776,6 @@ describe("use-checks", () => {
       diagnosticsTimeoutHandlers.clear();
       runtimeCheck.mockClear();
       taskStoreCheck.mockClear();
-      checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
@@ -814,7 +819,6 @@ describe("use-checks", () => {
 
     runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
     taskStoreCheckHandler = mock(async () => beadsDeferred.promise);
-    repoHealthHandler = async () => makeRepoHealth();
 
     globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
       if (typeof handler !== "function") {
@@ -866,184 +870,4 @@ describe("use-checks", () => {
       beadsDeferred.reject(new Error("cleanup"));
     }
   }, 5000);
-
-  test("projects runtime health query failures as unhealthy runtime state", async () => {
-    repoHealthHandler = async () => {
-      throw new Error("runtime health unreachable");
-    };
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-
-      await harness.run(async (value) => {
-        return expect(
-          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
-        ).resolves.toBeDefined();
-      });
-
-      await harness.waitFor((value) => {
-        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth?.status === "error";
-      });
-
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
-        expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "runtime health unreachable",
-            failureKind: "error",
-          }),
-        }),
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("prefers runtime health query error state over stale successful data", async () => {
-    let shouldFailRefresh = false;
-    repoHealthHandler = async () => {
-      if (shouldFailRefresh) {
-        throw new Error("runtime health refresh failed");
-      }
-      return makeRepoHealth({ mcp: { toolIds: ["healthy"] } });
-    };
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((value) => {
-        return value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready";
-      });
-
-      shouldFailRefresh = true;
-
-      await harness.run(async (value) => {
-        return expect(
-          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
-        ).resolves.toBeDefined();
-      });
-
-      await harness.waitFor((value) => {
-        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth?.status === "error";
-      });
-
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
-        expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "runtime health refresh failed",
-            failureKind: "error",
-          }),
-        }),
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("retries timeout-classified runtime health without duplicating toasts", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    let scheduledRetryCount = 0;
-    globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
-      if (typeof handler !== "function") {
-        throw new Error("Expected retry timer handler to be a function");
-      }
-
-      if (delay === 2_000) {
-        scheduledRetryCount += 1;
-        return 0 as unknown as ReturnType<typeof globalThis.setTimeout>;
-      }
-
-      return originalSetTimeout(() => {
-        handler();
-      }, delay);
-    }) as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = ((timerId: ReturnType<typeof globalThis.setTimeout>) => {
-      return originalClearTimeout(timerId);
-    }) as typeof globalThis.clearTimeout;
-
-    let callCount = 0;
-    repoHealthHandler = async () => {
-      callCount += 1;
-
-      if (callCount < 3) {
-        return makeRepoHealth({
-          status: "checking",
-          runtime: {
-            status: "checking",
-            stage: "waiting_for_runtime",
-            observation: null,
-            instance: null,
-            startedAt: null,
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
-            detail: "Timed out waiting for OpenCode runtime startup readiness",
-            failureKind: "timeout",
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "waiting_for_runtime",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "Runtime is unavailable, so MCP cannot be verified.",
-            failureKind: "timeout",
-          },
-        });
-      }
-
-      return makeRepoHealth();
-    };
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor(
-        (value) =>
-          value.activeRepoRuntimeHealthByRuntime.opencode?.runtime.failureKind === "timeout" &&
-          value.isLoadingChecks === false,
-      );
-
-      expect(toastMessage).not.toHaveBeenCalled();
-      expect(scheduledRetryCount).toBeGreaterThan(0);
-
-      await harness.run(async () => {
-        await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
-      });
-      await harness.waitFor(() => checkRepoRuntimeHealthMock.mock.calls.length === 2);
-      expect(toastMessage).not.toHaveBeenCalled();
-
-      await harness.run(async () => {
-        await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
-      });
-      await harness.waitFor(
-        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
-      );
-
-      expect(toastMessage).not.toHaveBeenCalled();
-      expect(toastDismiss).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
-    }
-  });
 });

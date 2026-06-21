@@ -1,13 +1,14 @@
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
-import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
-import { historyToChatMessages } from "../support/persistence";
+import { throwIfRepoStale } from "../support/core";
+import { createSessionMessagesState } from "../support/messages";
+import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
+import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type {
+  StartAgentSessionInput,
   StartOrReuseResult,
   StartSessionContext,
-  StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
@@ -18,40 +19,35 @@ import {
   rollbackStartedSessionBeforeRegistration,
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
-import { resolvePromptContext } from "./start-session-runtime";
+import { loadStartSystemPrompt } from "./start-session-runtime";
 
-// Match the requested-history hydration cap so newly forked child sessions load
+// Match the requested-history loading cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
 const FORK_START_HISTORY_LIMIT = 600;
 
 type ForkStrategyInput = {
   ctx: StartSessionContext;
-  input: Extract<StartSessionCreationInput, { startMode: "fork" }>;
+  input: Pick<
+    Extract<StartAgentSessionInput, { startMode: "fork" }>,
+    "selectedModel" | "sourceSession"
+  >;
   deps: StartSessionExecutionDependencies;
 };
 
-const requireForkSourceRuntime = (
-  sourceExternalSessionId: string,
+const readForkSourceRuntime = (
   sourceSession: AgentSessionState,
 ): {
-  runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
+  runtimeKind: AgentSessionState["runtimeKind"];
   workingDirectory: string;
 } => {
-  const sourceRuntimeKind = sourceSession.runtimeKind;
-  if (!sourceRuntimeKind) {
-    throw new Error(
-      `Session "${sourceExternalSessionId}" is missing runtime kind metadata required for forking.`,
-    );
-  }
-
   const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
   if (!sourceWorkingDirectory) {
     throw new Error(
-      `Session "${sourceExternalSessionId}" is missing working directory metadata required for forking.`,
+      `Session "${sourceSession.externalSessionId}" is missing working directory metadata required for forking.`,
     );
   }
 
-  return { runtimeKind: sourceRuntimeKind, workingDirectory: sourceWorkingDirectory };
+  return { runtimeKind: sourceSession.runtimeKind, workingDirectory: sourceWorkingDirectory };
 };
 
 export const executeForkStart = async ({
@@ -62,22 +58,19 @@ export const executeForkStart = async ({
   const sourceSession = await resolveLoadedSourceSession({
     ctx,
     deps,
-    sourceExternalSessionId: input.sourceExternalSessionId,
+    sourceSession: input.sourceSession,
   });
-  const { runtimeKind: sourceRuntimeKind, workingDirectory } = requireForkSourceRuntime(
-    input.sourceExternalSessionId,
-    sourceSession,
-  );
+  const { runtimeKind: sourceRuntimeKind, workingDirectory } = readForkSourceRuntime(sourceSession);
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
   if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
     throw new Error(
-      `Session "${input.sourceExternalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+      `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
     );
   }
 
-  const promptContext = await resolvePromptContext({
+  const systemPrompt = await loadStartSystemPrompt({
     ctx,
     taskCard,
     deps,
@@ -91,8 +84,7 @@ export const executeForkStart = async ({
     workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
-    systemPrompt: promptContext.systemPrompt,
-    ...(sourceSession.runtimeId ? { runtimeId: sourceSession.runtimeId } : {}),
+    systemPrompt,
     ...(selectedModel ? { model: selectedModel } : {}),
     parentExternalSessionId: sourceSession.externalSessionId,
   });
@@ -112,10 +104,7 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
-      repoPath: ctx.repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId: summary.externalSessionId,
+      ...toRuntimeSessionRef(ctx.repoPath, summary),
       limit: FORK_START_HISTORY_LIMIT,
     })
     .catch((error) =>
@@ -139,36 +128,27 @@ export const executeForkStart = async ({
   const initialMessages: AgentSessionState["messages"] = createSessionMessagesState(
     summary.externalSessionId,
     [
-      ...getSessionMessagesSlice(
-        {
-          externalSessionId: summary.externalSessionId,
-          messages: buildSessionHeaderMessages({
-            externalSessionId: summary.externalSessionId,
-            systemPrompt: promptContext.systemPrompt,
-            startedAt: summary.startedAt,
-          }),
-        },
-        0,
-      ),
+      ...buildSessionHeaderMessages({
+        externalSessionId: summary.externalSessionId,
+        systemPrompt,
+        startedAt: summary.startedAt,
+      }),
       ...historyToChatMessages(forkHistory, {
         role: ctx.role,
-        selectedModel,
       }),
     ],
   );
 
-  const forkedRuntime: RuntimeInfo = {
-    runtimeKind,
-    runtimeId: sourceSession.runtimeId,
-    workingDirectory,
+  const forkedRuntime = {
+    runtimeKind: summary.runtimeKind,
+    workingDirectory: summary.workingDirectory,
   };
 
   return registerStartedSession({
     ctx,
     startedCtx,
     runtimeInfo: forkedRuntime,
-    systemPrompt: promptContext.systemPrompt,
-    promptOverrides: promptContext.promptOverrides,
+    systemPrompt,
     selectedModel,
     initialMessages,
     deps,

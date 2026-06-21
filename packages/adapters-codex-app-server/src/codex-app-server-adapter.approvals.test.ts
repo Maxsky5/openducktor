@@ -1,5 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  codexSessionRef,
+  codexSessionRuntimeRef,
+  codexUserMessageInput,
   createDeferred,
   createHarness,
   waitForEvent,
@@ -27,12 +30,13 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
     );
 
     streamListeners[0]?.({
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       kind: "server_request",
       message: { id: 71, method: "approval/request", params: { tool: "network" } },
     });
@@ -77,7 +81,7 @@ describe("CodexAppServerAdapter approvals", () => {
       id: 17,
       method: "item/tool/call",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         turnId: "turn-1",
         callId: "call-1",
         tool: "odt_set_spec",
@@ -85,10 +89,11 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     };
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
     );
-    streamListeners[0]?.({ runtimeId: "runtime-ensure", kind: "server_request", message: request });
+    streamListeners[0]?.({ runtimeId: "runtime-live", kind: "server_request", message: request });
     await waitForEvent(
       events,
       (event) =>
@@ -100,7 +105,7 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       17,
       {
         contentItems: [
@@ -139,13 +144,13 @@ describe("CodexAppServerAdapter approvals", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    const transport = transports.get("runtime-ensure");
+    const transport = transports.get("runtime-live");
     drainServerRequests.mockImplementationOnce(async () => [
       {
         id: 19,
         method: "item/unknown",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-3",
           callId: "call-3",
           tool: "odt_read_task",
@@ -154,15 +159,23 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
+      events.push(event),
+    );
 
     await expect(
-      adapter.sendUserMessage({
-        externalSessionId: "thread/start-runtime-ensure",
-        parts: [{ kind: "text", text: "Read the task" }],
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    ).resolves.toBeUndefined();
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Read the task" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "user_message",
+      externalSessionId: "thread/start-runtime-live",
+      message: "Read the task",
+    });
 
     expect(respondServerRequest).not.toHaveBeenCalled();
     expect(events).toContainEqual(
@@ -174,12 +187,12 @@ describe("CodexAppServerAdapter approvals", () => {
       }),
     );
     await adapter.replyApproval({
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
       requestId: "19",
       outcome: "reject",
     });
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       19,
       expect.objectContaining({ approved: false, outcome: "reject" }),
       undefined,
@@ -187,7 +200,60 @@ describe("CodexAppServerAdapter approvals", () => {
     transport?.turnStartDeferred.resolve({});
   });
 
-  test("preserves initial-turn approvals for late listeners and presence snapshots", async () => {
+  test("rejects approval replies routed through another session", async () => {
+    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    drainServerRequests.mockImplementationOnce(async () => [
+      {
+        id: 33,
+        method: "approval/request",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-approval-owner",
+          tool: "network",
+          url: "https://example.com",
+        },
+      },
+    ]);
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Need approval" }],
+      }),
+    );
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      () => {},
+    );
+
+    await expect(
+      adapter.replyApproval({
+        ...codexSessionRuntimeRef("thread-saved"),
+        requestId: "33",
+        outcome: "reject",
+      }),
+    ).rejects.toThrow(
+      "Codex approval request '33' belongs to session 'thread/start-runtime-live', not 'thread-saved'.",
+    );
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
     const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
     drainServerRequests.mockImplementationOnce(async () => [
       {
@@ -206,26 +272,30 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       classification: "waiting_for_permission",
       pendingApprovals: [expect.objectContaining({ requestId: "31" })],
     });
 
     const replayedEvents: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => replayedEvents.push(event));
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
+      replayedEvents.push(event),
+    );
     expect(replayedEvents).toContainEqual(
       expect.objectContaining({ type: "approval_required", requestId: "31" }),
     );
@@ -242,7 +312,7 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 32,
         method: "item/tool/requestUserInput",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-question",
           itemId: "item-1",
           questions: [
@@ -267,11 +337,15 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
+      events.push(event),
+    );
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
 
     await expect(
       waitForEvent(
@@ -300,14 +374,14 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       classification: "waiting_for_question",
       pendingQuestions: [
         expect.objectContaining({
@@ -325,13 +399,13 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await adapter.replyQuestion({
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
       requestId: "32",
       answers: [["Safe"]],
     });
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       32,
       { answers: { "question-1": { answers: ["Safe"] } } },
       undefined,
@@ -368,7 +442,7 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 36,
         method: "item/tool/requestUserInput",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-question",
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
@@ -385,35 +459,35 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toMatchObject({
       classification: "waiting_for_question",
       pendingQuestions: [expect.objectContaining({ requestId: "36" })],
     });
 
-    await adapter.stopSession("thread/start-runtime-ensure");
+    await adapter.stopSession(codexSessionRef("thread/start-runtime-live"));
 
     await expect(
       adapter.replyQuestion({
-        externalSessionId: "thread/start-runtime-ensure",
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
+        externalSessionId: "thread/start-runtime-live",
         requestId: "36",
         answers: [["yes"]],
       }),
     ).rejects.toThrow("Unknown Codex question request '36'.");
-    expect(() => adapter.subscribeEvents("thread/start-runtime-ensure", () => {})).toThrow(
-      "Unknown Codex session 'thread/start-runtime-ensure'.",
-    );
   });
 
   test("steers active Codex turns for queued user messages", async () => {
@@ -426,7 +500,7 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 33,
         method: "item/tool/requestUserInput",
         params: {
-          threadId: "thread/start-runtime-ensure",
+          threadId: "thread/start-runtime-live",
           turnId: "turn-active",
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
@@ -443,20 +517,24 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Also inspect failing tests" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Also inspect failing tests" }],
+      }),
+    );
 
-    expect(transports.get("runtime-ensure")?.calls).toContainEqual({
+    expect(transports.get("runtime-live")?.calls).toContainEqual({
       method: "turn/steer",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         input: [{ type: "text", text: "Also inspect failing tests" }],
         expectedTurnId: "turn-active",
       },
@@ -468,7 +546,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyApproval({
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
         requestId: "not-a-number",
         outcome: "approve_once",
       }),
@@ -482,7 +560,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyQuestion({
-        externalSessionId: "thread/start-runtime-ensure",
+        externalSessionId: "thread/start-runtime-live",
         requestId: "32.5",
         answers: [["yes"]],
       }),
@@ -515,7 +593,7 @@ describe("CodexAppServerAdapter approvals", () => {
       id: 41,
       method: "approval/request",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         tool: "network",
         url: "https://example.com",
       },
@@ -524,7 +602,7 @@ describe("CodexAppServerAdapter approvals", () => {
       id: 42,
       method: "item/tool/call",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         turnId: "turn-4",
         callId: "call-4",
         tool: "odt_read_task",
@@ -541,16 +619,19 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
     );
     streamListeners[0]?.({
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       kind: "server_request",
       message: approvalRequest,
     });
@@ -564,12 +645,12 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     await adapter.replyApproval({
-      externalSessionId: "thread/start-runtime-ensure",
+      externalSessionId: "thread/start-runtime-live",
       requestId: "41",
       outcome: "approve_once",
     });
     streamListeners[0]?.({
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       kind: "server_request",
       message: toolRequest,
     });
@@ -577,13 +658,13 @@ describe("CodexAppServerAdapter approvals", () => {
     await dynamicToolRejected.promise;
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       41,
       expect.objectContaining({ approved: true, outcome: "approve_once" }),
       undefined,
     );
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       42,
       expect.objectContaining({
         success: false,
@@ -630,19 +711,20 @@ describe("CodexAppServerAdapter approvals", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
     );
     const execRequest = {
       id: 23,
       method: "command/exec",
-      params: { threadId: "thread/start-runtime-ensure", command: "rm -rf tmp" },
+      params: { threadId: "thread/start-runtime-live", command: "rm -rf tmp" },
     };
     const toolRequest = {
       id: 24,
       method: "item/tool/call",
       params: {
-        threadId: "thread/start-runtime-ensure",
+        threadId: "thread/start-runtime-live",
         turnId: "turn-5",
         callId: "call-5",
         tool: "odt_read_task",
@@ -651,12 +733,12 @@ describe("CodexAppServerAdapter approvals", () => {
     };
 
     streamListeners[0]?.({
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       kind: "server_request",
       message: execRequest,
     });
     streamListeners[0]?.({
-      runtimeId: "runtime-ensure",
+      runtimeId: "runtime-live",
       kind: "server_request",
       message: toolRequest,
     });
@@ -664,13 +746,13 @@ describe("CodexAppServerAdapter approvals", () => {
     await dynamicToolRejected.promise;
 
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       23,
       expect.objectContaining({ approved: false, outcome: "reject" }),
       undefined,
     );
     expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
+      "runtime-live",
       24,
       expect.objectContaining({
         success: false,

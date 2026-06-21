@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createSessionEventBatcher, type SessionEvent } from "./session-events-test-harness";
 
 describe("agent-orchestrator session event batching rules", () => {
-  test("centralizes assistant batch coalescing rules in one reducer", () => {
+  test("centralizes assistant batch coalescing rules in one reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -89,7 +89,7 @@ describe("agent-orchestrator session event batching rules", () => {
     ]);
   });
 
-  test("keeps per-type replacement behavior configurable inside the central reducer", () => {
+  test("keeps per-type replacement behavior configurable inside the central reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -163,7 +163,7 @@ describe("agent-orchestrator session event batching rules", () => {
     ]);
   });
 
-  test("defers repeated final assistant message snapshots within the emit gate", () => {
+  test("defers repeated final assistant message snapshots within the emit gate", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({
       nowMs: () => now,
@@ -237,36 +237,45 @@ describe("agent-orchestrator session event batching rules", () => {
     expect(second.nextDelayMs).toBe(400);
   });
 
-  test("dedupes identical tool events in the central reducer", () => {
+  test("dedupes tool part updates in the central reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_spec",
-          args: {
-            taskId: "task-1",
-            markdown: "# Spec",
-          },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Spec" },
         },
       },
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.000Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_spec",
-          args: {
-            taskId: "task-1",
-            markdown: "# Spec",
-          },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Spec" },
         },
       },
     ] satisfies SessionEvent[]);
 
     expect(prepared.readyEvents).toHaveLength(1);
-    expect(prepared.readyEvents[0]?.type).toBe("tool_call");
+    expect(prepared.readyEvents[0]?.type).toBe("assistant_part");
+    expect(
+      prepared.readyEvents[0]?.type === "assistant_part" ? prepared.readyEvents[0].part.kind : null,
+    ).toBe("tool");
   });
 });

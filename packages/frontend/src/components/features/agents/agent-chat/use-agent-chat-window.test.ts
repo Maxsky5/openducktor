@@ -7,6 +7,7 @@ import {
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
 } from "./agent-chat-thread-windowing";
+import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { resolveAgentChatEffectiveTurnStart } from "./use-agent-chat-history-window";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
@@ -18,8 +19,8 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type HarnessProps = {
   rows: AgentChatWindowRow[];
-  activeExternalSessionId: string | null;
-  isSessionViewLoading: boolean;
+  displayedSessionKey: string | null;
+  shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
   syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
 };
@@ -34,8 +35,7 @@ type MockResizeObserverController = {
 
 const ROW_HEIGHT_PX = 40;
 const mockResizeObserverControllers = new Set<MockResizeObserverController>();
-const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-let nextAnimationFrameId = 1;
+const animationFrameDriver = createAnimationFrameTestDriver();
 
 class MockResizeObserver implements ResizeObserver {
   private readonly observedElements = new Set<Element>();
@@ -116,23 +116,6 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
-};
-
-const flushAnimationFrames = async (): Promise<void> => {
-  if (animationFrameCallbacks.size === 0) {
-    return;
-  }
-
-  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-  animationFrameCallbacks.clear();
-
-  await act(async () => {
-    for (const callback of queuedCallbacks) {
-      callback(16);
-    }
-    await flush();
-  });
-  await flushAnimationFrames();
 };
 
 const getMaxScrollTop = (container: HTMLDivElement): number => {
@@ -274,37 +257,24 @@ const dispatchPointerDown = async (container: HTMLDivElement): Promise<void> => 
 
 describe("useAgentChatWindow", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    animationFrameCallbacks.clear();
-    nextAnimationFrameId = 1;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    animationFrameDriver.install();
   });
 
   afterEach(() => {
     globalThis.ResizeObserver = originalResizeObserver;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    animationFrameDriver.restore();
   });
 
   test("starts with the latest turn window", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
     });
 
     const turns = buildAgentChatWindowTurns(rows);
@@ -319,16 +289,16 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
     });
 
     const initialWindowedRows = harness.getLatestResult().windowedRows;
 
     await harness.update({
       rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
     });
 
     expect(harness.getLatestResult().windowedRows).toBe(initialWindowedRows);
@@ -341,8 +311,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       {
         attachDom: true,
@@ -353,7 +323,7 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
@@ -365,8 +335,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -381,7 +351,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(320);
@@ -394,8 +364,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       {
         attachDom: true,
@@ -414,7 +384,7 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBeGreaterThanOrEqual(200);
@@ -427,8 +397,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -457,8 +427,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -488,20 +458,20 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("keeps the latest turn window on the first populated render after a deferred empty frame", async () => {
+  test("keeps the latest turn window on the first populated render after an empty frame", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows: [],
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: true,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: true,
     });
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
     await harness.update({
       rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
     });
 
     expect(harness.getLatestResult().windowStart).toBe(
@@ -511,11 +481,11 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("resolves the latest turn window immediately when the active session changes", () => {
+  test("resolves the latest turn window immediately when the displayed session changes", () => {
     expect(
       resolveAgentChatEffectiveTurnStart({
-        activeExternalSessionId: "session-2",
-        previousSessionId: "session-1",
+        displayedSessionKey: "session-2",
+        previousSessionKey: "session-1",
         turnStart: 0,
         latestTurnStart: 12,
         rowsLength: 40,
@@ -530,8 +500,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -540,14 +510,14 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-2",
+      shouldResetForTranscriptLoad: false,
     });
 
     expect(harness.getLatestResult().windowStart).toBe(
@@ -564,8 +534,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true, extraContentHeightPx },
     );
@@ -580,14 +550,14 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-2",
+      shouldResetForTranscriptLoad: false,
     });
 
     extraContentHeightPx.current = 200;
@@ -595,7 +565,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(container.style.overflowAnchor).toBe("none");
@@ -604,15 +574,15 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("deferred session hydration after a switch stays pinned through late content growth", async () => {
+  test("late session content after a switch stays pinned through content growth", async () => {
     const firstSessionRows = createTurnRows(12, "session-1");
     const secondSessionRows = createTurnRows(12, "session-2");
     const extraContentHeightPx = { current: 0 };
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true, extraContentHeightPx },
     );
@@ -627,20 +597,20 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
 
     await harness.update({
       rows: [],
-      activeExternalSessionId: "session-2",
-      isSessionViewLoading: true,
+      displayedSessionKey: "session-2",
+      shouldResetForTranscriptLoad: true,
     });
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-2",
+      shouldResetForTranscriptLoad: false,
     });
 
     extraContentHeightPx.current = 200;
@@ -648,7 +618,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(container.style.overflowAnchor).toBe("none");
@@ -662,8 +632,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -677,13 +647,13 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     await act(async () => {
       harness.getLatestResult().scrollToBottom();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(
       buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
@@ -698,8 +668,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
       },
       { attachDom: true },
     );
@@ -726,8 +696,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
       { attachDom: true, extraContentHeightPx },
@@ -743,94 +713,17 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(false);
     expect(container.scrollTop).toBe(120);
-
-    await harness.unmount();
-  });
-
-  test("preserves the visible anchor when staged history prepends while scrolled", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const harness = await mountHarness(
-      {
-        rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: false,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = 120;
-    await act(async () => {
-      await dispatchWheelUp(container);
-      await dispatchScroll(container);
-    });
-    await flushAnimationFrames();
-
-    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
-    extraContentHeightPx.current = 200;
-    await harness.update({
-      rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(320);
-    expect(harness.getLatestResult().isNearBottom).toBe(false);
-
-    await harness.unmount();
-  });
-
-  test("does not delta-preserve staged prepends while following the transcript", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const harness = await mountHarness(
-      {
-        rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: false,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = getMaxScrollTop(container);
-    await act(async () => {
-      await dispatchScroll(container);
-    });
-
-    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
-    extraContentHeightPx.current = 200;
-    await harness.update({
-      rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(getMaxScrollTop(container) - 200);
 
     await harness.unmount();
   });
@@ -841,8 +734,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
       { attachDom: true, extraContentHeightPx },
@@ -860,7 +753,7 @@ describe("useAgentChatWindow", () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -874,8 +767,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: initialRows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
       { attachDom: true },
@@ -891,7 +784,7 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     await act(async () => {
       harness.getLatestResult().scrollToBottomOnSend();
@@ -900,15 +793,15 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: nextRows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
       isSessionWorking: true,
     });
     await act(async () => {
       triggerResizeObservers();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(initialWindowStart);
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -922,8 +815,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
       { attachDom: true },
@@ -944,7 +837,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToBottomOnSend();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().isNearBottom).toBe(true);
     expect(harness.getLatestResult().windowStart).toBe(
@@ -960,8 +853,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
       },
       { attachDom: true },
@@ -976,13 +869,13 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     container.scrollTop = getMaxScrollTop(container);
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
 
@@ -990,7 +883,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToBottomOnSend();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
@@ -1005,8 +898,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,
       },
@@ -1025,14 +918,14 @@ describe("useAgentChatWindow", () => {
     await act(async () => {
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       syncBottomAfterComposerLayoutRef.current?.();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -1047,8 +940,8 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,
       },
@@ -1068,14 +961,14 @@ describe("useAgentChatWindow", () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     extraContentHeightPx.current = 200;
     await act(async () => {
       syncBottomAfterComposerLayoutRef.current?.();
       await flush();
     });
-    await flushAnimationFrames();
+    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(120);
     expect(harness.getLatestResult().isNearBottom).toBe(false);

@@ -3,25 +3,29 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildThreadTranscriptState,
+  completeThreadModel,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
-  mode: "interactive" as const,
   chatSettings: createChatSettingsFixture(),
-  thread: {
+  thread: completeThreadModel({
     session: buildSession({
       status: "running" as const,
-      draftAssistantText: "",
     }),
     isSessionWorking: true,
-    isSessionViewLoading: false,
-    isSessionHistoryLoading: false,
-    isWaitingForRuntimeReadiness: false,
-    readinessState: "ready" as const,
+    transcriptState: buildThreadTranscriptState(),
+    runtimeReadiness: {
+      state: "ready" as const,
+      message: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
     isInteractionEnabled: true,
-    blockedReason: "",
-    isLoadingChecks: false,
-    onRefreshChecks: () => {},
+    emptyState: null,
     isStarting: false,
     isSending: false,
     sessionAgentColors: {},
@@ -32,16 +36,16 @@ const buildModel = () => ({
     approvalReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     onReplyApproval: async () => {},
-    sessionRuntimeDataError: null,
+    sessionAuxiliaryError: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
     syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-  },
+  }),
   composer: {
     taskId: "task-1",
-    displayedSessionId: "session-1",
+    displayedSessionKey: "session-1",
     isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,

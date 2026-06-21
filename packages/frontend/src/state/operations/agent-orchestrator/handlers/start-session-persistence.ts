@@ -1,7 +1,8 @@
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
+import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import type {
-  ResolvedRuntimeAndModel,
   StartedSessionContext,
   StartOrReuseResult,
   StartSessionContext,
@@ -9,15 +10,16 @@ import type {
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { buildInitialSession, persistInitialSession } from "./start-session-local-state";
-import { rollbackStartedSessionAfterPersistenceFailure } from "./start-session-rollback";
-import { createSessionStartTags } from "./start-session-support";
+import {
+  rollbackStartedSessionAfterPersistenceFailure,
+  stopSessionOnStaleAndThrow,
+} from "./start-session-rollback";
 
 export const registerStartedSession = async ({
   ctx,
   startedCtx,
   runtimeInfo,
   systemPrompt,
-  promptOverrides,
   selectedModel,
   initialMessages,
   deps,
@@ -25,39 +27,41 @@ export const registerStartedSession = async ({
 }: {
   ctx: StartSessionContext;
   startedCtx: StartedSessionContext;
-  runtimeInfo: ResolvedRuntimeAndModel["runtime"];
+  runtimeInfo: RuntimeInfo;
   systemPrompt: string;
-  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   selectedModel: AgentModelSelection;
   initialMessages?: import("@/types/agent-orchestrator").AgentSessionState["messages"];
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
-  taskCard: ResolvedRuntimeAndModel["taskCard"];
+  taskCard: TaskCard;
 }): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const initialSession = buildInitialSession({
     startedCtx,
     selectedModel,
-    runtime: runtimeInfo,
     systemPrompt,
-    promptOverrides,
     ...(initialMessages ? { initialMessages } : {}),
   });
 
-  deps.session.setSessionsById((current) => {
-    if (ctx.isStaleRepoOperation()) {
-      return current;
-    }
-    return {
-      ...current,
-      [startedCtx.summary.externalSessionId]: initialSession,
-    };
-  });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  deps.session.replaceSession(initialSession);
+  if (ctx.isStaleRepoOperation()) {
+    deps.session.removeSession(initialSession);
+    await stopSessionOnStaleAndThrow({
+      reason: "start-session-stop-on-stale-after-local-registration",
+      runtime: deps.runtime,
+      startedCtx,
+    });
+  }
 
   try {
     await persistInitialSession({
       initialSession,
       session: deps.session,
-      tags: createSessionStartTags(startedCtx),
+      tags: {
+        repoPath: startedCtx.repoPath,
+        taskId: startedCtx.taskId,
+        role: startedCtx.role,
+        externalSessionId: startedCtx.summary.externalSessionId,
+      },
     });
   } catch (error) {
     await rollbackStartedSessionAfterPersistenceFailure({
@@ -73,6 +77,5 @@ export const registerStartedSession = async ({
     runtimeInfo,
     taskCard,
     ctx: startedCtx,
-    promptOverrides,
   };
 };

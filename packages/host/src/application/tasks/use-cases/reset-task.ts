@@ -64,7 +64,9 @@ export const createTaskFullResetUseCase = ({
         );
       }
 
-      if (taskHasSessionsForRoles(current, taskResetSessionRoles)) {
+      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const currentSessions = currentMetadata.agentSessions;
+      if (taskHasSessionsForRoles(currentSessions, taskResetSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -79,7 +81,7 @@ export const createTaskFullResetUseCase = ({
         yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
           repoPath,
           taskId,
-          sessions: current.agentSessions ?? [],
+          sessions: currentSessions,
           operationLabel: "reset task",
           sessionRoles: [...taskResetSessionRoleNames],
         });
@@ -97,7 +99,8 @@ export const createTaskFullResetUseCase = ({
         dependencies,
         effectiveRepoPath,
         branchPrefix,
-        current,
+        current.id,
+        currentSessions,
         taskResetSessionRoles,
         "reset task",
       );

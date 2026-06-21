@@ -9,7 +9,7 @@ export type AgentWorkflowStep = {
   label: string;
   icon: AgentRoleOption["icon"];
   state: AgentWorkflowStepState;
-  externalSessionId: string | null;
+  sessionValue: string | null;
 };
 
 export type AgentStudioSessionSelectorModel = {
@@ -45,10 +45,9 @@ export type AgentStudioHeaderModel = {
   taskTitle: string | null;
   taskId: string | null;
   onOpenTaskDetails: (() => void) | null;
-  sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
   selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];
-  onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   sessionSelector: AgentStudioSessionSelectorModel;
   sessionCreateOptions: AgentSessionCreateOption[];
   onPrepareMessageFirstSession: (option: AgentSessionCreateOption) => void;

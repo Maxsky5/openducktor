@@ -1,11 +1,18 @@
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
-export type AgentActivitySessionItem = {
-  externalSessionId: string;
+type VisibleAgentActivityState = Extract<
+  AgentSessionSummary["activityState"],
+  "starting" | "running" | "waiting_input"
+>;
+
+export type AgentActivitySessionItem = AgentSessionIdentity & {
   taskId: string;
   taskTitle: string;
-  role: AgentActivitySessionSummary["role"];
-  status: AgentActivitySessionSummary["status"];
+  role: AgentSessionSummary["role"];
+  activityState: VisibleAgentActivityState;
   startedAt: string;
 };
 
@@ -18,11 +25,6 @@ export type AgentActivitySummary = {
 
 export type AgentActivityTaskTitleLookup = Readonly<Record<string, string>>;
 
-const ACTIVE_SESSION_STATUS: ReadonlySet<AgentActivitySessionSummary["status"]> = new Set([
-  "starting",
-  "running",
-]);
-
 const byNewestSession = (
   left: AgentActivitySessionItem,
   right: AgentActivitySessionItem,
@@ -30,38 +32,31 @@ const byNewestSession = (
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
-  if (left.externalSessionId === right.externalSessionId) {
+  const leftSessionKey = agentSessionIdentityKey(left);
+  const rightSessionKey = agentSessionIdentityKey(right);
+  if (leftSessionKey === rightSessionKey) {
     return 0;
   }
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
+  return leftSessionKey > rightSessionKey ? -1 : 1;
 };
 
 export const summarizeAgentActivity = ({
   sessions,
   taskTitleById,
 }: {
-  sessions: AgentActivitySessionSummary[];
+  sessions: AgentSessionSummary[];
   taskTitleById?: AgentActivityTaskTitleLookup;
 }): AgentActivitySummary => {
   const activeSessions: AgentActivitySessionItem[] = [];
   const waitingForInputSessions: AgentActivitySessionItem[] = [];
 
   for (const session of sessions) {
-    const sessionItem: AgentActivitySessionItem = {
-      externalSessionId: session.externalSessionId,
-      taskId: session.taskId,
-      taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
-      role: session.role,
-      status: session.status,
-      startedAt: session.startedAt,
-    };
-
-    const isWaiting = session.hasPendingApprovals || session.hasPendingQuestions;
-
-    if (isWaiting) {
-      waitingForInputSessions.push(sessionItem);
-    } else if (ACTIVE_SESSION_STATUS.has(session.status)) {
-      activeSessions.push(sessionItem);
+    if (session.activityState === "waiting_input") {
+      waitingForInputSessions.push(toActivitySessionItem(session, taskTitleById, "waiting_input"));
+      continue;
+    }
+    if (isAgentSessionActivityWorking(session.activityState)) {
+      activeSessions.push(toActivitySessionItem(session, taskTitleById, session.activityState));
     }
   }
 
@@ -75,3 +70,16 @@ export const summarizeAgentActivity = ({
     waitingForInputSessions,
   };
 };
+
+const toActivitySessionItem = (
+  session: AgentSessionSummary,
+  taskTitleById: AgentActivityTaskTitleLookup | undefined,
+  activityState: VisibleAgentActivityState,
+): AgentActivitySessionItem => ({
+  ...toAgentSessionIdentity(session),
+  taskId: session.taskId,
+  taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
+  role: session.role,
+  activityState,
+  startedAt: session.startedAt,
+});

@@ -1,10 +1,11 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
+  RepoRuntimeRef,
+  RepoRuntimeRouteResolution,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type {
@@ -40,13 +41,16 @@ export type SessionMessageMetadata = {
   displayParts?: AgentUserMessageDisplayPart[];
 };
 
+export type SessionStreamTurnStatus = "active" | "idle";
+
 export type SessionRecord = {
   summary: AgentSessionSummary;
   input: SessionInput;
   client: OpencodeClient;
   externalSessionId: string;
-  eventTransportKey: string;
-  hasIdleSinceActivity: boolean;
+  runtimeId: string;
+  streamTurnStatus: SessionStreamTurnStatus;
+  isSendingUserMessage: boolean;
   activeAssistantMessageId: string | null;
   completedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;
@@ -78,7 +82,7 @@ export type EventStreamSubscriber = {
 };
 
 export type RuntimeEventTransportRecord = {
-  key: string;
+  runtimeId: string;
   runtimeEndpoint: string;
   controller: AbortController;
   streamDone: Promise<void>;
@@ -91,8 +95,7 @@ export type ClientFactory = (input: {
 }) => OpencodeClient;
 
 export type RepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 
 export type OpencodeStreamEventLog = {
@@ -108,9 +111,4 @@ export type OpencodeSdkAdapterOptions = {
   createClient?: ClientFactory;
   repoRuntimeResolver?: RepoRuntimeResolverPort;
   logEvent?: OpencodeEventLogger;
-};
-
-export type McpServerStatus = {
-  status: string;
-  error?: string;
 };

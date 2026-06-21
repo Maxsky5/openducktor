@@ -95,6 +95,11 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       databasePath,
     });
     await expect(access(databasePath)).resolves.toBeNull();
+
+    await expect(Effect.runPromise(store.diagnoseRepoStore({ repoPath }))).resolves.toMatchObject({
+      status: "ready",
+    });
+
     const tableNames = readTableNames(databasePath);
     expect(tableNames).toEqual(
       expect.arrayContaining(["__drizzle_migrations", "task_documents", "tasks"]),
@@ -103,10 +108,6 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-
-    await expect(Effect.runPromise(store.diagnoseRepoStore({ repoPath }))).resolves.toMatchObject({
-      status: "ready",
-    });
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(1);
   });
 

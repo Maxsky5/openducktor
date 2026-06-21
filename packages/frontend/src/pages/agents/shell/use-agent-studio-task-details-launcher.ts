@@ -1,3 +1,4 @@
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { type ComponentProps, type RefObject, useCallback, useMemo, useRef } from "react";
 import type {
   ActiveTaskSessionContextByTaskId,
@@ -31,6 +32,7 @@ export type AgentStudioTaskDetailsLauncherModel = {
 };
 
 const EMPTY_TASK_SESSIONS_BY_TASK_ID = new Map<string, KanbanTaskSession[]>();
+const EMPTY_HISTORICAL_SESSIONS_BY_TASK_ID = new Map<string, AgentSessionRecord[]>();
 const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTaskId = new Map();
 
 export function useAgentStudioTaskDetailsLauncher({
@@ -56,6 +58,7 @@ export function useAgentStudioTaskDetailsLauncher({
       activeWorkspace,
       allTasks: tasks,
       taskSessionsByTaskId: EMPTY_TASK_SESSIONS_BY_TASK_ID,
+      historicalSessionsByTaskId: EMPTY_HISTORICAL_SESSIONS_BY_TASK_ID,
       activeTaskSessionContextByTaskId: EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID,
       workflowActionsEnabled: false,
       onDetectPullRequest,

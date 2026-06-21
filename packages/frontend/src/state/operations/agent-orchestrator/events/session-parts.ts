@@ -2,121 +2,24 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { toReasoningMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
-import {
-  findLastSessionMessageByRole,
-  findSessionMessageById,
-  getSessionMessagesSlice,
-  removeSessionMessageById,
-  upsertSessionMessage,
-} from "../support/messages";
-import {
-  formatSubagentContent,
-  mergeSubagentMeta,
-  type SubagentMeta,
-} from "../support/subagent-messages";
+import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import { type SubagentMeta, upsertSubagentMessage } from "../support/subagent-messages";
 import type {
-  DraftChannel,
   SessionEvent,
   SessionPart,
   SessionPartEvent,
   SessionPartEventContext,
 } from "./session-event-types";
-import {
-  createPrePartTodoSettlement,
-  eventTimestampMs,
-  scheduleDraftFlush,
-} from "./session-helpers";
+import { createPrePartTodoSettlement, eventTimestampMs } from "./session-helpers";
 import { handleToolPart } from "./session-tool-parts";
 
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
+const withRunningStatus = (session: AgentSessionState): AgentSessionState =>
+  session.status === "running" ? session : { ...session, status: "running" };
+
 const markSessionRunning = (context: SessionPartEventContext): void => {
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) =>
-      current.status === "running"
-        ? current
-        : {
-            ...current,
-            status: "running",
-          },
-    { persist: false },
-  );
-};
-
-const updateDraftChannelBuffer = (
-  context: SessionPartEventContext,
-  channel: DraftChannel,
-  raw: string,
-  messageId: string | undefined,
-  source: "delta" | "part",
-): void => {
-  const currentRaw =
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = {
-    ...currentRaw,
-    [channel]: raw,
-  };
-
-  const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] = {
-    ...currentSource,
-    [channel]: source,
-  };
-
-  if (context.drafts.draftMessageIdBySessionRef) {
-    const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] = {
-      ...currentMessageIds,
-      ...(messageId ? { [channel]: messageId } : {}),
-    };
-  }
-};
-
-const clearDraftChannelBuffer = (
-  context: SessionPartEventContext,
-  channel: DraftChannel,
-  source?: "delta" | "part",
-  messageId?: string,
-): void => {
-  const timeoutId =
-    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
-  if (timeoutId !== undefined) {
-    clearTimeout(timeoutId);
-    if (context.drafts.draftFlushTimeoutBySessionRef) {
-      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-    }
-  }
-
-  const currentRaw =
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
-  const nextRaw = { ...currentRaw };
-  delete nextRaw[channel];
-  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = nextRaw;
-
-  const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] =
-    source === undefined
-      ? Object.fromEntries(Object.entries(currentSource).filter(([key]) => key !== channel))
-      : {
-          ...currentSource,
-          [channel]: source,
-        };
-
-  if (context.drafts.draftMessageIdBySessionRef) {
-    const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] =
-      messageId === undefined
-        ? Object.fromEntries(Object.entries(currentMessageIds).filter(([key]) => key !== channel))
-        : {
-            ...currentMessageIds,
-            [channel]: messageId,
-          };
-  }
+  context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
 };
 
 const resolvePartModelSelection = (
@@ -140,7 +43,7 @@ const resolvePartModelSelection = (
     };
   }
 
-  const turnModel = context.turn.turnModelBySessionRef?.current[context.store.externalSessionId];
+  const turnModel = context.turn.turnMetadata.readModel(context.session.key);
   return turnModel ?? current.selectedModel ?? null;
 };
 
@@ -159,11 +62,7 @@ const upsertLiveAssistantMessage = ({
 }): AgentSessionState => {
   const nextContent = sanitizeStreamingText(text);
   if (nextContent.trim().length === 0) {
-    return {
-      ...current,
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-    };
+    return current;
   }
 
   const existingMessage = findSessionMessageById(current, messageId);
@@ -177,8 +76,6 @@ const upsertLiveAssistantMessage = ({
 
   return {
     ...current,
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
     messages: upsertSessionMessage(current, {
       id: messageId,
       role: "assistant",
@@ -193,67 +90,33 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
-  context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, event.timestamp);
+  context.turn.recordTurnActivityTimestamp(context.session.key, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
     }
     const messageId = event.messageId;
     markSessionRunning(context);
-    context.store.updateSession(
-      context.store.externalSessionId,
-      (current) => {
-        const existingMessage = findSessionMessageById(current, messageId);
-        const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
-        return upsertLiveAssistantMessage({
-          current: {
-            ...current,
-            status: "running",
-          },
-          model: resolvePartModelSelection(context, current, messageId),
-          messageId,
-          text: `${baseContent}${event.delta}`,
-          timestamp: event.timestamp,
-        });
-      },
-      { persist: false },
-    );
+    context.store.updateSession(context.session.identity, (current) => {
+      const existingMessage = findSessionMessageById(current, messageId);
+      const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
+      return upsertLiveAssistantMessage({
+        current: {
+          ...current,
+          status: "running",
+        },
+        model: resolvePartModelSelection(context, current, messageId),
+        messageId,
+        text: `${baseContent}${event.delta}`,
+        timestamp: event.timestamp,
+      });
+    });
     return;
   }
 
-  if (
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId]?.[
-      event.channel
-    ] === "part"
-  ) {
-    return;
+  if (event.delta.length > 0) {
+    markSessionRunning(context);
   }
-  const nextRaw = `${
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId]?.[event.channel] ??
-    ""
-  }${event.delta}`;
-  updateDraftChannelBuffer(context, event.channel, nextRaw, event.messageId, "delta");
-  markSessionRunning(context);
-  scheduleDraftFlush(context);
-};
-
-const settleSessionBeforeDraftUpdate = (
-  context: SessionPartEventContext,
-  prepareCurrent: PrepareCurrent,
-): void => {
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const prepared = prepareCurrent(current);
-      return prepared.status === "running"
-        ? prepared
-        : {
-            ...prepared,
-            status: "running",
-          };
-    },
-    { persist: false },
-  );
 };
 
 const handleTextPart = (
@@ -265,32 +128,23 @@ const handleTextPart = (
   if (part.synthetic) {
     return;
   }
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const prepared = prepareCurrent(current);
-      if (part.text.trim().length === 0) {
-        return prepared.status === "running"
-          ? prepared
-          : {
-              ...prepared,
-              status: "running",
-            };
-      }
+  context.store.updateSession(context.session.identity, (current) => {
+    const prepared = prepareCurrent(current);
+    if (part.text.trim().length === 0) {
+      return withRunningStatus(prepared);
+    }
 
-      return upsertLiveAssistantMessage({
-        current: {
-          ...prepared,
-          status: "running",
-        },
-        model: resolvePartModelSelection(context, prepared, part.messageId),
-        messageId: part.messageId,
-        text: part.text,
-        timestamp: event.timestamp,
-      });
-    },
-    { persist: false },
-  );
+    return upsertLiveAssistantMessage({
+      current: {
+        ...prepared,
+        status: "running",
+      },
+      model: resolvePartModelSelection(context, prepared, part.messageId),
+      messageId: part.messageId,
+      text: part.text,
+      timestamp: event.timestamp,
+    });
+  });
 };
 
 const handleReasoningPart = (
@@ -299,52 +153,34 @@ const handleReasoningPart = (
   part: Extract<SessionPart, { kind: "reasoning" }>,
   prepareCurrent: PrepareCurrent,
 ): void => {
-  settleSessionBeforeDraftUpdate(context, prepareCurrent);
-  updateDraftChannelBuffer(context, "reasoning", part.text, part.messageId, "part");
+  context.store.updateSession(context.session.identity, (current) => {
+    const prepared = withRunningStatus(prepareCurrent(current));
+    if (!part.completed) {
+      return prepared;
+    }
 
-  if (!part.completed) {
-    scheduleDraftFlush(context);
-    return;
-  }
+    const messageId = toReasoningMessageId(part.messageId, part.partId);
+    const existingMessage = findSessionMessageById(prepared, messageId);
+    const nextContent = part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
+    if (nextContent.trim().length === 0) {
+      return prepared;
+    }
 
-  clearDraftChannelBuffer(context, "reasoning");
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const prepared = prepareCurrent(current);
-      const messageId = toReasoningMessageId(part.messageId, part.partId);
-      const existingMessage = findSessionMessageById(prepared, messageId);
-      const nextContent =
-        part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
-      if (nextContent.trim().length === 0) {
-        return {
-          ...prepared,
-          status: "running",
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-        };
-      }
-
-      return {
-        ...prepared,
-        status: "running",
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        messages: upsertSessionMessage(prepared, {
-          id: messageId,
-          role: "thinking",
-          content: nextContent,
-          timestamp: event.timestamp,
-          meta: {
-            kind: "reasoning",
-            partId: part.partId,
-            completed: part.completed,
-          },
-        }),
-      };
-    },
-    { persist: false },
-  );
+    return {
+      ...prepared,
+      messages: upsertSessionMessage(prepared, {
+        id: messageId,
+        role: "thinking",
+        content: nextContent,
+        timestamp: event.timestamp,
+        meta: {
+          kind: "reasoning",
+          partId: part.partId,
+          completed: part.completed,
+        },
+      }),
+    };
+  });
 };
 
 const handleSubagentPart = (
@@ -355,93 +191,36 @@ const handleSubagentPart = (
 ): void => {
   const eventTimestamp = eventTimestampMs(event.timestamp);
 
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const prepared = prepareCurrent(current);
-      const fallbackMatches =
-        typeof part.externalSessionId === "string" &&
-        part.correlationKey.startsWith("session:") &&
-        typeof part.agent === "string" &&
-        typeof part.prompt === "string"
-          ? getSessionMessagesSlice(prepared, 0).filter(
-              (message) =>
-                message.role === "system" &&
-                message.meta?.kind === "subagent" &&
-                !message.meta.externalSessionId &&
-                message.meta.correlationKey.startsWith("part:") &&
-                message.meta.agent === part.agent &&
-                message.meta.prompt === part.prompt,
-            )
-          : [];
-      const correlationMessage = findLastSessionMessageByRole(
-        prepared,
-        "system",
-        (message) =>
-          message.meta?.kind === "subagent" && message.meta.correlationKey === part.correlationKey,
-      );
-      const sessionMessage = part.externalSessionId
-        ? findLastSessionMessageByRole(
-            prepared,
-            "system",
-            (message) =>
-              message.meta?.kind === "subagent" &&
-              message.meta.externalSessionId === part.externalSessionId,
-          )
-        : undefined;
-      const fallbackMessage =
-        correlationMessage || sessionMessage || fallbackMatches.length !== 1
-          ? undefined
-          : fallbackMatches[0];
-      const existingMessage = correlationMessage ?? sessionMessage ?? fallbackMessage;
-      const existingMeta = existingMessage?.meta?.kind === "subagent" ? existingMessage.meta : null;
-      const incomingMeta: SubagentMeta = {
-        kind: "subagent",
-        partId: part.partId,
-        correlationKey: part.correlationKey,
-        status: part.status,
-        ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
-        ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
-        ...(typeof part.description === "string" ? { description: part.description } : {}),
-        ...(typeof part.error === "string" ? { error: part.error } : {}),
-        ...(typeof part.externalSessionId === "string"
-          ? { externalSessionId: part.externalSessionId }
-          : {}),
-        ...(part.executionMode ? { executionMode: part.executionMode } : {}),
-        ...(part.metadata ? { metadata: part.metadata } : {}),
-        ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-        ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-      };
-      const nextMeta = mergeSubagentMeta(existingMeta, incomingMeta, {
+  context.store.updateSession(context.session.identity, (current) => {
+    const prepared = prepareCurrent(current);
+    const incomingMeta: SubagentMeta = {
+      kind: "subagent",
+      partId: part.partId,
+      correlationKey: part.correlationKey,
+      status: part.status,
+      ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
+      ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
+      ...(typeof part.description === "string" ? { description: part.description } : {}),
+      ...(typeof part.error === "string" ? { error: part.error } : {}),
+      ...(typeof part.externalSessionId === "string"
+        ? { externalSessionId: part.externalSessionId }
+        : {}),
+      ...(part.executionMode ? { executionMode: part.executionMode } : {}),
+      ...(part.metadata ? { metadata: part.metadata } : {}),
+      ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+      ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+    };
+    return {
+      ...prepared,
+      status: "running",
+      messages: upsertSubagentMessage({
+        owner: prepared,
+        incomingMeta,
+        timestamp: event.timestamp,
         startedAtMsFallback: eventTimestamp,
-      });
-      const duplicateMessageId =
-        correlationMessage &&
-        sessionMessage &&
-        correlationMessage.id !== sessionMessage.id &&
-        existingMessage?.id === correlationMessage.id
-          ? sessionMessage.id
-          : null;
-      const nextPrepared =
-        duplicateMessageId === null
-          ? prepared
-          : { ...prepared, messages: removeSessionMessageById(prepared, duplicateMessageId) };
-      const nextMessageId = existingMessage?.id ?? `subagent:${part.correlationKey}`;
-
-      return {
-        ...nextPrepared,
-        status: "running",
-        messages: upsertSessionMessage(nextPrepared, {
-          id: nextMessageId,
-          role: "system",
-          content: formatSubagentContent(nextMeta),
-          timestamp: existingMessage?.timestamp ?? event.timestamp,
-          meta: nextMeta,
-        }),
-      };
-    },
-    { persist: false },
-  );
+      }),
+    };
+  });
 };
 
 const handleStepPart = (
@@ -453,38 +232,26 @@ const handleStepPart = (
     return;
   }
 
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => {
-      const prepared = prepareCurrent(current);
-      const model = resolvePartModelSelection(context, prepared, part.messageId);
-      const baseContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
-      const nextContextUsage =
-        baseContextUsage && typeof part.contextWindow === "number"
-          ? { ...baseContextUsage, contextWindow: part.contextWindow }
-          : baseContextUsage;
-      if (!nextContextUsage) {
-        return prepared.status === "running"
-          ? prepared
-          : {
-              ...prepared,
-              status: "running",
-            };
-      }
+  context.store.updateSession(context.session.identity, (current) => {
+    const prepared = prepareCurrent(current);
+    const model = resolvePartModelSelection(context, prepared, part.messageId);
+    const baseContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
+    const nextContextUsage =
+      baseContextUsage && typeof part.contextWindow === "number"
+        ? { ...baseContextUsage, contextWindow: part.contextWindow }
+        : baseContextUsage;
+    if (!nextContextUsage) {
+      return withRunningStatus(prepared);
+    }
 
-      if (context.turn.contextUsageMessageIdBySessionRef) {
-        context.turn.contextUsageMessageIdBySessionRef.current[context.store.externalSessionId] =
-          part.messageId;
-      }
+    context.turn.turnMetadata.recordContextUsageMessageId(context.session.key, part.messageId);
 
-      return {
-        ...prepared,
-        status: "running",
-        contextUsage: nextContextUsage,
-      };
-    },
-    { persist: false },
-  );
+    return {
+      ...prepared,
+      status: "running",
+      contextUsage: nextContextUsage,
+    };
+  });
 };
 
 export const handleAssistantPart = (
@@ -497,7 +264,7 @@ export const handleAssistantPart = (
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
-    context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, activityTimestamp);
+    context.turn.recordTurnActivityTimestamp(context.session.key, activityTimestamp);
   }
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 

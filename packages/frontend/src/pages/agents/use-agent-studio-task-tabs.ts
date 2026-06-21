@@ -2,32 +2,19 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import { getAvailableTabTasks } from "./agent-studio-task-tabs-list";
+import { buildTaskTabs } from "./agents-page-session-tabs";
 import {
-  AGENT_STUDIO_QUERY_KEYS,
-  type AgentStudioQueryUpdate as QueryUpdate,
-} from "./agent-studio-navigation";
-import { buildTaskTabs, getAvailableTabTasks } from "./agents-page-session-tabs";
+  emptyAgentStudioSelectionState,
+  type SelectAgentStudioSelection,
+  toAgentStudioTaskSelection,
+} from "./shell/agent-studio-selection-state";
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
 
-const toTaskIntentQueryUpdate = (taskId: string): QueryUpdate => {
-  return {
-    [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
-    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-  };
-};
-
-const toClearTaskQueryUpdate = (): QueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-});
-
 export function useAgentStudioTaskTabs(args: {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
   selectedTask: TaskCard | null;
@@ -35,9 +22,7 @@ export function useAgentStudioTaskTabs(args: {
   isLoadingTasks: boolean;
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
-  updateQuery: (updates: QueryUpdate) => void;
-  clearComposerInput: () => void;
-  onContextSwitchIntent?: () => void;
+  selectAgentStudioSelection: SelectAgentStudioSelection;
 }): {
   tabTaskIds: string[];
   activeTaskTabId: string;
@@ -53,7 +38,7 @@ export function useAgentStudioTaskTabs(args: {
   ) => void;
 } {
   const {
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending = false,
     taskId,
     selectedTask,
@@ -61,17 +46,14 @@ export function useAgentStudioTaskTabs(args: {
     isLoadingTasks,
     latestSessionByTaskId,
     activeSessionByTaskId,
-    updateQuery,
-    clearComposerInput,
-    onContextSwitchIntent,
+    selectAgentStudioSelection,
   } = args;
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
-  const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
-  const [tabsStorageHydratedWorkspaceId, setTabsStorageHydratedWorkspaceId] = useState<
-    string | null
-  >(null);
+  const [loadedTabsStorageWorkspaceId, setLoadedTabsStorageWorkspaceId] = useState<string | null>(
+    null,
+  );
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
   const selectableTaskIds = useMemo(
@@ -91,62 +73,54 @@ export function useAgentStudioTaskTabs(args: {
     [openTaskTabs, selectableTaskIds],
   );
 
-  const navigateToTaskIntent = useCallback(
+  const selectTask = useCallback(
     (nextTaskId: string) => {
-      updateQuery(toTaskIntentQueryUpdate(nextTaskId));
+      selectAgentStudioSelection(toAgentStudioTaskSelection(nextTaskId));
     },
-    [updateQuery],
+    [selectAgentStudioSelection],
   );
 
   const clearTaskSelection = useCallback((): void => {
-    updateQuery(toClearTaskQueryUpdate());
-  }, [updateQuery]);
-  const clearTaskTabsStorageHydration = useCallback((): void => {
+    selectAgentStudioSelection(emptyAgentStudioSelectionState());
+  }, [selectAgentStudioSelection]);
+  const resetLoadedTaskTabsStorage = useCallback((): void => {
     setOpenTaskTabs([]);
     setPersistedActiveTaskId(null);
-    setIntentActiveTaskId(null);
-    setTabsStorageHydratedWorkspaceId(null);
+    setLoadedTabsStorageWorkspaceId(null);
   }, []);
-  const hydrateTaskTabsStorage = useCallback(
+  const applyLoadedTaskTabsStorage = useCallback(
     (tabs: string[], activeTaskId: string | null, workspaceId: string): void => {
       setOpenTaskTabs(tabs);
       setPersistedActiveTaskId(activeTaskId);
-      setTabsStorageHydratedWorkspaceId(workspaceId);
+      setLoadedTabsStorageWorkspaceId(workspaceId);
     },
     [],
   );
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,
     persistedActiveTaskId,
-    intentActiveTaskId,
-    tabsStorageHydratedWorkspaceId,
-    clearComposerInput,
-    onContextSwitchIntent,
-    navigateToTaskIntent,
+    loadedTabsStorageWorkspaceId,
+    selectTask,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   });
 
   useTaskTabPersistence({
-    activeWorkspace,
+    activeWorkspaceId,
     taskId: taskIdForTabs,
     selectedTask,
     tasks,
     isLoadingTasks,
     openTaskTabs,
-    tabsStorageHydratedWorkspaceId,
+    loadedTabsStorageWorkspaceId,
     activeTaskTabId,
     setOpenTaskTabs,
-    setPersistedActiveTaskId,
-    setIntentActiveTaskId,
-    setTabsStorageHydratedWorkspaceId,
-    clearTaskTabsStorageHydration,
-    hydrateTaskTabsStorage,
+    resetLoadedTaskTabsStorage,
+    applyLoadedTaskTabsStorage,
   });
 
   const availableTabTasks = useMemo(
@@ -168,14 +142,11 @@ export function useAgentStudioTaskTabs(args: {
   const { handleCreateTab, handleCloseTab, handleReorderTab } = useTaskTabActions({
     tabTaskIds,
     activeTaskTabId,
-    clearComposerInput,
-    onContextSwitchIntent,
     clearTaskSelection,
-    navigateToTaskIntent,
+    selectTask,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setIntentActiveTaskId,
   });
 
   return {

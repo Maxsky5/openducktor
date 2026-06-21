@@ -244,12 +244,24 @@ describe("task-details-sheet-model", () => {
       },
       {
         resolveSessionOptions: (role) =>
-          role === "build" ? { externalSessionId: "session-build" } : undefined,
+          role === "build"
+            ? {
+                session: {
+                  externalSessionId: "session-build",
+                  runtimeKind: "opencode",
+                  workingDirectory: "/repo/worktrees/build",
+                },
+              }
+            : undefined,
       },
     );
 
     expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", {
-      externalSessionId: "session-build",
+      session: {
+        externalSessionId: "session-build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build",
+      },
     });
   });
 });

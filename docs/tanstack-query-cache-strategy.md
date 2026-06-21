@@ -126,7 +126,7 @@ Used for imperative operational reads where callers want the shared query behavi
 Examples:
 
 - task/runs refreshes
-- session hydration reads
+- session history reads
 - document reads
 - worktree status reads
 

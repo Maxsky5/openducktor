@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   getAgentSessionWaitingInputPlaceholder,
+  hasAgentSessionPendingApprovals,
+  hasAgentSessionPendingQuestions,
   isAgentSessionWaitingInput,
 } from "./agent-session-waiting-input";
 
@@ -12,6 +14,8 @@ describe("agent-session-waiting-input", () => {
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(false);
+    expect(hasAgentSessionPendingApprovals(session)).toBe(false);
+    expect(hasAgentSessionPendingQuestions(session)).toBe(false);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBeNull();
   });
 
@@ -22,6 +26,8 @@ describe("agent-session-waiting-input", () => {
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(true);
+    expect(hasAgentSessionPendingApprovals(session)).toBe(false);
+    expect(hasAgentSessionPendingQuestions(session)).toBe(true);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBe(
       "Answer the pending question above to continue",
     );
@@ -49,6 +55,8 @@ describe("agent-session-waiting-input", () => {
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(true);
+    expect(hasAgentSessionPendingApprovals(session)).toBe(true);
+    expect(hasAgentSessionPendingQuestions(session)).toBe(false);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBe(
       "Respond to the pending approval request above to continue",
     );
@@ -76,6 +84,8 @@ describe("agent-session-waiting-input", () => {
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(true);
+    expect(hasAgentSessionPendingApprovals(session)).toBe(true);
+    expect(hasAgentSessionPendingQuestions(session)).toBe(true);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBe(
       "Resolve the pending questions and approval requests above to continue",
     );

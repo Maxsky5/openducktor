@@ -10,13 +10,11 @@ import {
   type PullRequest,
   pullRequestSchema,
   type RepoRuntimeHealthCheck,
-  type RepoRuntimeStartupStatus,
   type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   type RuntimeKind,
   repoRuntimeHealthCheckSchema,
-  repoRuntimeStartupStatusSchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
   runtimeInstanceSummarySchema,
@@ -213,16 +211,16 @@ const runtimeEnsure = async (
   }
 };
 
-const runtimeStartupStatus = async (
+const runtimeRequire = async (
   invokeFn: InvokeFn,
   repoPath: string,
   runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeStartupStatus> => {
-  const payload = await invokeFn("runtime_startup_status", {
+): Promise<RuntimeInstanceSummary> => {
+  const payload = await invokeFn("runtime_require", {
     repoPath,
     runtimeKind,
   });
-  return repoRuntimeStartupStatusSchema.parse(payload);
+  return runtimeInstanceSummarySchema.parse(payload);
 };
 
 const repoRuntimeHealth = async (
@@ -552,11 +550,11 @@ export class HostAgentClient {
     return runtimeEnsure(this.invokeFn, repoPath, runtimeKind);
   }
 
-  async runtimeStartupStatus(
+  async runtimeRequire(
     repoPath: string,
     runtimeKind: RuntimeKind,
-  ): Promise<RepoRuntimeStartupStatus> {
-    return runtimeStartupStatus(this.invokeFn, repoPath, runtimeKind);
+  ): Promise<RuntimeInstanceSummary> {
+    return runtimeRequire(this.invokeFn, repoPath, runtimeKind);
   }
 
   async repoRuntimeHealth(

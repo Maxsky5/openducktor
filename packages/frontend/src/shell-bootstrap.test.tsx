@@ -290,17 +290,14 @@ describe("shell entrypoints", () => {
     expectNoManualShellBootstrapSteps(source);
   });
 
-  test("the production renderer keeps the crash shell and shell-selected router composition", () => {
+  test("the production renderer keeps the crash shell and passes the selected router mode", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 
     expect(source).toContain("kanbanLocationForRouter");
     expect(source).toContain(
       "<AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>",
     );
-    expect(source).toContain("BrowserRouter");
-    expect(source).toContain("HashRouter");
-    expect(source).toContain("ROUTERS");
-    expect(source).toContain("<App />");
+    expect(source).toContain("<App routerMode={routerMode} />");
     expect(source).toContain("routerMode");
   });
 

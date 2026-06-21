@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createTaskCardFixture } from "../test-utils";
-import { resolveReuseValidationError, resolveStartTask } from "./start-session-policies";
+import { resolveStartTask } from "./start-session-policies";
 
 describe("agent-orchestrator/handlers/start-session-policies", () => {
   test("resolveStartTask returns the matching task when the role is available", () => {
@@ -16,6 +16,7 @@ describe("agent-orchestrator/handlers/start-session-policies", () => {
           workspaceId: "workspace-1",
           taskId: "task-1",
           role: "build",
+          holdForPostStartMessage: false,
           isStaleRepoOperation: () => false,
         },
         task: {
@@ -26,21 +27,5 @@ describe("agent-orchestrator/handlers/start-session-policies", () => {
         },
       }),
     ).toEqual(task);
-  });
-
-  test("resolveReuseValidationError distinguishes qa and build mismatches", () => {
-    expect(
-      resolveReuseValidationError({
-        matchesQaTarget: false,
-        matchesBuildTarget: true,
-      }),
-    ).toBe("it does not match the required builder worktree for this QA session");
-
-    expect(
-      resolveReuseValidationError({
-        matchesQaTarget: true,
-        matchesBuildTarget: false,
-      }),
-    ).toBe("it does not match the current builder continuation target");
   });
 });

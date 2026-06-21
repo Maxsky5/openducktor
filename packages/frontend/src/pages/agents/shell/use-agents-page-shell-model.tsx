@@ -1,16 +1,14 @@
 import { useMemo } from "react";
-import {
-  useChecksOperationsContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSessionSummaries,
-  useChecksState,
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
+import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import { useAgentStudioGitConflictQuickActionState } from "./use-agent-studio-git-conflict-quick-action-state";
 import {
@@ -47,15 +45,12 @@ type AgentsPageShellModel = {
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const {
-    availableRuntimeDefinitions: runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-  } = useRuntimeAvailabilityContext();
-  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
-    useChecksOperationsContext();
-  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
+  const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
+  const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
+    activeWorkspaceId,
+  });
   const {
     isForegroundLoadingTasks,
     tasks,
@@ -71,22 +66,18 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     setTaskTargetBranch,
   } = useTasksState();
   const {
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
-    ensureSessionReadyForView,
-    readSessionFileSearch,
-    readSessionModelCatalog,
-    readSessionSlashCommands,
-    readSessionSkills,
-    readSessionTodos,
     startAgentSession,
-    settleStartedAgentSession,
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
+  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+    workspaceId: activeWorkspaceId,
+    startAgentSession,
+    sendAgentMessage,
+  });
   const sessions = useAgentSessionSummaries();
 
   const {
@@ -95,35 +86,20 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onGitConflictQuickActionContextChange,
   } = useAgentStudioGitConflictQuickActionState();
   const routeSession = useAgentsPageRouteSessionModel({
-    activeWorkspace,
+    activeWorkspaceId,
     workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
-    refreshRepoRuntimeHealthForRepo,
-    hasCachedRepoRuntimeHealth,
     tasks,
     isForegroundLoadingTasks,
     sessions,
-    hydrateRequestedTaskSessionHistory,
-    ensureSessionReadyForView,
-    readSessionModelCatalog,
-    readSessionTodos,
+    repoSettings,
+    isLoadingRepoSettings,
   });
-  const {
-    navigationPersistenceError,
-    retryNavigationPersistence,
-    selection,
-    worktreeRecoverySignal,
-  } = routeSession;
+  const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
     tasks,
-    selectedTaskId: selection.viewSelectedTask?.id ?? null,
+    selectedTaskId: selection.view.selectedTask?.id ?? null,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
@@ -140,23 +116,19 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     handleResolveRebaseConflict,
     agentStudioHeaderModel,
   } = useAgentsPageOrchestrationShellModel({
-    activeWorkspace,
+    activeWorkspaceId,
     branches: branches ?? [],
     runtimeDefinitions,
+    repoSettings,
+    workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
     hasActiveGitConflict: gitConflictQuickActionContext !== null,
     gitConflictQuickActionContext,
     gitConflictQuickActionContextRef,
     openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
+    runSessionStartWorkflow,
     agentOperations: {
-      bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory,
-      readSessionFileSearch,
-      readSessionSlashCommands,
-      ...(readSessionSkills ? { readSessionSkills } : {}),
-      startAgentSession,
-      settleStartedAgentSession,
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
@@ -175,7 +147,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     panel: orchestration.rightPanel,
     documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
     repoSettings: orchestration.repoSettings,
-    worktreeRecoverySignal,
     setTaskTargetBranch,
     detectingPullRequestTaskId,
     onDetectPullRequest: taskActions.onDetectPullRequest,
@@ -208,7 +179,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onTabValueChange: selection.handleSelectTab,
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
-    hasSelectedTask: Boolean(selection.viewTaskId),
+    hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,

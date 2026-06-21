@@ -1,6 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
-  buildRoleSessionSequenceById,
+  buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
@@ -17,26 +18,27 @@ export const buildReusableSessionOptions = ({
   role: AgentRole;
 }): SessionStartExistingSessionOption[] => {
   const roleSessions = sessions.filter((session) => session.role === role);
-  const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
+  const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
 
   return roleSessions.sort(compareAgentSessionRecency).map((session, index) => {
-    const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind ?? null;
+    const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind;
     return {
-      value: session.externalSessionId,
-      runtimeKind: session.runtimeKind ?? null,
+      value: agentSessionIdentityKey(session),
+      sourceSession: toAgentSessionIdentity(session),
+      runtimeKind: session.runtimeKind,
       label: formatAgentSessionOptionLabel({
         session,
-        sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
+        sessionNumber:
+          roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
         roleLabelByRole: AGENT_ROLE_LABELS,
       }),
       description: formatAgentSessionOptionDescription(session),
-      selectedModel:
-        session.selectedModel && runtimeKind
-          ? {
-              ...session.selectedModel,
-              runtimeKind,
-            }
-          : null,
+      selectedModel: session.selectedModel
+        ? {
+            ...session.selectedModel,
+            runtimeKind,
+          }
+        : null,
       ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
     };
   });

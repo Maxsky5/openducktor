@@ -1,6 +1,6 @@
-import { toContextStorageKey } from "./agent-studio-navigation";
+import { toPersistedTaskTabs } from "./agent-studio-task-tabs-storage";
 import { toTabsStorageKey } from "./agents-page-selection";
-import { toPersistedTaskTabs } from "./agents-page-session-tabs";
+import { toContextStorageKey } from "./query-sync/agent-studio-navigation";
 
 export type TestStorageLike = Pick<
   Storage,

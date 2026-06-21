@@ -45,14 +45,9 @@ const rememberProcessedExternalTaskEvent = (
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
-  refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
+  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  refreshRepoRuntimeHealthForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<RepoRuntimeHealthMap>;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -66,11 +61,9 @@ type UseAppLifecycleArgs = {
 export function useAppLifecycle({
   activeWorkspace,
   runtimeDefinitions,
-  refreshWorkspaces,
   refreshBranches,
-  refreshRuntimeCheck,
+  refreshRepoRuntimeHealth,
   refreshTaskStoreCheckForRepo,
-  refreshRepoRuntimeHealthForRepo,
   refreshTaskData,
   startRepoRuntime,
   clearBranchData,
@@ -79,7 +72,6 @@ export function useAppLifecycle({
   const repoLoadVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const refreshTaskDataRef = useRef(refreshTaskData);
-  const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
   const processedTaskEventIdsRef = useRef<Set<string> | null>(null);
   if (processedTaskEventIdsRef.current === null) {
     processedTaskEventIdsRef.current = new Set<string>();
@@ -102,17 +94,7 @@ export function useAppLifecycle({
     refreshTaskDataRef.current = refreshTaskData;
   }, [activeWorkspace, refreshTaskData]);
 
-  useEffect(() => {
-    Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
-      ([workspaceResult]) => {
-        if (workspaceResult.status === "rejected") {
-          toast.error("Workspace load failed", {
-            description: errorMessage(workspaceResult.reason),
-          });
-        }
-      },
-    );
-  }, [refreshRuntimeCheck, refreshWorkspaces]);
+  const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
 
   useEffect(() => {
     const repoPath = activeWorkspace?.repoPath ?? null;
@@ -121,10 +103,10 @@ export function useAppLifecycle({
     }
 
     let disposed = false;
+    let startupStatusRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const runtimeKinds = runtimeKindsKey.split(",") as RuntimeKind[];
-
-    const refreshRuntimeHealth = (): void => {
-      void refreshRepoRuntimeHealthForRepo(repoPath, true).catch((error: unknown) => {
+    const refreshHealth = (): void => {
+      void refreshRepoRuntimeHealth().catch((error: unknown) => {
         if (
           disposed ||
           activeWorkspaceRef.current?.repoPath !== repoPath ||
@@ -137,8 +119,6 @@ export function useAppLifecycle({
         });
       });
     };
-
-    refreshRuntimeHealth();
 
     for (const runtimeKind of runtimeKinds) {
       void startRepoRuntime(repoPath, runtimeKind)
@@ -154,19 +134,22 @@ export function useAppLifecycle({
           if (disposed || activeWorkspaceRef.current?.repoPath !== repoPath) {
             return;
           }
-          refreshRuntimeHealth();
+          refreshHealth();
         });
     }
 
+    startupStatusRefreshTimer = setTimeout(() => {
+      startupStatusRefreshTimer = null;
+      refreshHealth();
+    }, 0);
+
     return () => {
       disposed = true;
+      if (startupStatusRefreshTimer !== null) {
+        clearTimeout(startupStatusRefreshTimer);
+      }
     };
-  }, [
-    activeWorkspace?.repoPath,
-    refreshRepoRuntimeHealthForRepo,
-    runtimeKindsKey,
-    startRepoRuntime,
-  ]);
+  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKindsKey, startRepoRuntime]);
 
   useEffect(() => {
     let disposed = false;
@@ -372,7 +355,6 @@ export function useAppLifecycle({
         dismissTaskStorePreparationToast();
       }
     })();
-    const runtimeCheckPromise = refreshRuntimeCheck(false);
     const isStaleRepoLoad = (): boolean =>
       repoLoadVersionRef.current !== loadVersion ||
       activeWorkspaceRef.current?.repoPath !== activeRepoPath;
@@ -386,26 +368,20 @@ export function useAppLifecycle({
       });
     });
 
-    Promise.allSettled([taskLoadPromise, runtimeCheckPromise])
-      .then(([tasksResult]) => {
-        if (isStaleRepoLoad()) {
-          return;
-        }
+    void taskLoadPromise.catch((reason: unknown) => {
+      if (isStaleRepoLoad()) {
+        return;
+      }
 
-        if (tasksResult.status === "rejected" && !(tasksResult.reason instanceof CancelledError)) {
-          toast.error("Repository tasks unavailable", {
-            description: summarizeTaskLoadError({
-              error: tasksResult.reason,
-              repoStoreHealth,
-            }),
-          });
-        }
-      })
-      .finally(() => {
-        if (repoLoadVersionRef.current !== loadVersion) {
-          return;
-        }
-      });
+      if (!(reason instanceof CancelledError)) {
+        toast.error("Repository tasks unavailable", {
+          description: summarizeTaskLoadError({
+            error: reason,
+            repoStoreHealth,
+          }),
+        });
+      }
+    });
 
     return () => {
       if (taskStorePreparationTimer !== null) {
@@ -420,7 +396,6 @@ export function useAppLifecycle({
     clearBranchData,
     refreshTaskStoreCheckForRepo,
     refreshBranches,
-    refreshRuntimeCheck,
     refreshTaskData,
   ]);
 }

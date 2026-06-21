@@ -1,55 +1,57 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  executeSessionStartFromDecision,
-  type ResolvedSessionStartDecision,
+import type {
+  ResolvedSessionStartDecision,
+  RunSessionStartWorkflow,
+  SessionStartPostAction,
 } from "@/features/session-start";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
-import { addTaskToPersistedAgentStudioTabs } from "../agents/agents-page-session-tabs";
+import { sessionStartPostActionErrorTitle } from "@/features/session-start";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { addTaskToPersistedAgentStudioTabs } from "../agents/agent-studio-task-tabs-storage";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
-  activeWorkspace: ActiveWorkspace | null;
   request: KanbanSessionStartIntent;
   decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
   openAgentStudioTabOnBackgroundSessionStart: boolean;
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
-  queryClient: QueryClient;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
+  workspaceId: string | null;
+  runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  openSessionInAgentStudio: (intent: KanbanSessionStartIntent, externalSessionId: string) => void;
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  openSessionInAgentStudio: (
+    intent: KanbanSessionStartIntent,
+    session: AgentSessionIdentity,
+  ) => void;
+};
+
+const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
+  toast.error(sessionStartPostActionErrorTitle(action), {
+    description: error.message,
+  });
 };
 
 export const startKanbanSessionFlow = async ({
-  activeWorkspace,
   request,
   decision,
   startInBackground,
   openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   roleLabels,
-  queryClient,
-  startAgentSession,
-  settleStartedAgentSession,
+  workspaceId,
+  runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
   openSessionInAgentStudio,
-  sendAgentMessage,
-}: StartKanbanSessionFlowInput): Promise<string> => {
+}: StartKanbanSessionFlowInput): Promise<AgentSessionIdentity> => {
   const effectivePostStartAction =
     startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
-  const workflow = await executeSessionStartFromDecision({
-    activeWorkspace,
-    queryClient,
+  const workflow = await runSessionStartWorkflow({
     request: {
       ...request,
       postStartAction: effectivePostStartAction,
@@ -57,24 +59,14 @@ export const startKanbanSessionFlow = async ({
     decision,
     task,
     ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
-    startAgentSession,
-    settleStartedAgentSession,
-    sendAgentMessage,
     humanRequestChangesTask,
-    onPostStartActionError: (action, error) => {
-      const failureMessage =
-        action === "kickoff"
-          ? "Session started, but the kickoff prompt failed to send."
-          : "Session started, but feedback message failed.";
-      toast.error(failureMessage, {
-        description: error.message,
-      });
-    },
   });
+  if (workflow.postStartActionError) {
+    showPostStartActionError(effectivePostStartAction, workflow.postStartActionError);
+  }
 
   if (startInBackground) {
     if (openAgentStudioTabOnBackgroundSessionStart) {
-      const workspaceId = activeWorkspace?.workspaceId;
       if (!workspaceId) {
         toast.warning("Session started, but Agent Studio tab could not be saved.", {
           description: "No active workspace is selected.",
@@ -97,15 +89,11 @@ export const startKanbanSessionFlow = async ({
     const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
     toast.success(`Started ${roleLabel} session in background for ${request.taskId}.`, {
       duration: 10000,
-      description: renderSessionStartedToastAction(
-        request,
-        workflow.externalSessionId,
-        openSessionInAgentStudio,
-      ),
+      description: renderSessionStartedToastAction(request, workflow, openSessionInAgentStudio),
     });
   } else {
-    openSessionInAgentStudio(request, workflow.externalSessionId);
+    openSessionInAgentStudio(request, workflow);
   }
 
-  return workflow.externalSessionId;
+  return workflow;
 };

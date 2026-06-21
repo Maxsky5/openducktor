@@ -1,6 +1,6 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
-import { attachSessionToRuntimeEvents } from "./session-registry";
+import { subscribeSessionToRuntimeEvents } from "./session-registry";
 import type {
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
@@ -57,6 +57,8 @@ export const makeSessionInput = (): SessionInput => ({
 export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   summary: {
     externalSessionId: "external-session-1",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
     role: "spec",
     startedAt: "2026-02-22T12:00:00.000Z",
     status: "running",
@@ -64,8 +66,9 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   input: makeSessionInput(),
   client,
   externalSessionId: "external-session-1",
-  eventTransportKey: "http://127.0.0.1:12345",
-  hasIdleSinceActivity: false,
+  runtimeId: "runtime-opencode-1",
+  streamTurnStatus: "active",
+  isSendingUserMessage: false,
   activeAssistantMessageId: null,
   completedAssistantMessageIds: new Set<string>(),
   emittedAssistantMessageIds: new Set<string>(),
@@ -101,20 +104,21 @@ export const runEventStreamWithSession = async (
 
   const sessions = new Map([[sessionRecord.externalSessionId, sessionRecord]]);
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
-  attachSessionToRuntimeEvents({
+  subscribeSessionToRuntimeEvents({
     sessions,
     runtimeEventTransports,
     createClient: () => client,
-    runtimeEndpoint: sessionRecord.eventTransportKey,
+    runtimeId: sessionRecord.runtimeId,
+    runtimeEndpoint: "http://127.0.0.1:12345",
     externalSessionId: sessionRecord.externalSessionId,
     sessionInput: sessionRecord.input,
     now: () => "2026-02-22T12:00:00.000Z",
-    emit: (_externalSessionId, event) => {
+    emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
     ...(options.logEvent ? { logEvent: options.logEvent } : {}),
   });
-  const streamDone = runtimeEventTransports.get(sessionRecord.eventTransportKey)?.streamDone;
+  const streamDone = runtimeEventTransports.get(sessionRecord.runtimeId)?.streamDone;
   if (!streamDone) {
     throw new Error("Expected OpenCode event transport to start.");
   }

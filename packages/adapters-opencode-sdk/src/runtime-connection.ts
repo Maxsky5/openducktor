@@ -1,18 +1,29 @@
-import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
+import type { RepoRuntimeResolverPort } from "./types";
 
 export type OpencodeRuntimeClientInput = {
   runtimeEndpoint: string;
   workingDirectory: string;
 };
 
+export type ResolvedOpencodeRuntimeClientInput = OpencodeRuntimeClientInput & {
+  runtimeId: string;
+};
+
 export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
 };
 
+export type ResolveOpencodeRuntimeClientInputRequest = {
+  repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
+  input: OpencodeRuntimeResolutionInput;
+  action: string;
+};
+
 const requireOpencodeRuntimeEndpoint = (
-  runtime: RuntimeInstanceSummary,
+  runtime: RepoRuntimeRouteResolution,
   input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
   action: string,
 ): string => {
@@ -43,8 +54,8 @@ const requireOpencodeRuntimeEndpoint = (
   return endpoint;
 };
 
-export const toOpencodeRuntimeClientInput = (input: {
-  runtime: RuntimeInstanceSummary;
+const toOpencodeRuntimeClientInput = (input: {
+  runtime: RepoRuntimeRouteResolution;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
   workingDirectory: string | null | undefined;
@@ -53,3 +64,29 @@ export const toOpencodeRuntimeClientInput = (input: {
   runtimeEndpoint: requireOpencodeRuntimeEndpoint(input.runtime, input, input.action),
   workingDirectory: requireSessionWorkingDirectory(input.workingDirectory, input.action),
 });
+
+export const resolveOpencodeRuntimeClientInput = async ({
+  repoRuntimeResolver,
+  input,
+  action,
+}: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
+  if (!repoRuntimeResolver) {
+    throw new Error(
+      `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+    );
+  }
+
+  const runtimeRef = requireRepoRuntimeRef(input, action);
+  const runtime = await repoRuntimeResolver.requireRepoRuntime(runtimeRef);
+
+  return {
+    ...toOpencodeRuntimeClientInput({
+      runtime,
+      repoPath: runtimeRef.repoPath,
+      runtimeKind: runtimeRef.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      action,
+    }),
+    runtimeId: runtime.runtimeId,
+  };
+};

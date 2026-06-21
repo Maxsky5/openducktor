@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import {
   collectDeleteImpactTaskIds,
   collectResetImpactTaskIds,
@@ -74,9 +75,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onQaOpen: TaskDetailsSheetProps["onQaOpen"] | undefined;
   onBuild: TaskDetailsSheetProps["onBuild"] | undefined;
   onOpenSession: TaskDetailsSheetProps["onOpenSession"] | undefined;
-  resolveSessionOptionsByRole?:
-    | ((role: AgentRole) => { externalSessionId?: string | null } | undefined)
-    | undefined;
+  resolveSessionOptionsByRole?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
   onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
   onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
