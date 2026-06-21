@@ -90,6 +90,11 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
 
       return latest;
     },
+    waitFor: async (
+      predicate: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => boolean,
+    ) => {
+      await sharedHarness.waitFor(() => Boolean(latest && predicate(latest)));
+    },
     unmount: async () => {
       await sharedHarness.unmount();
     },
@@ -195,6 +200,7 @@ describe("use-workspace-selection-operations", () => {
       await harness.run((value) => {
         value.applyWorkspaceRecord(workspace("/repo-c", true));
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       expect(harness.getLatest().workspaces).toEqual([
         workspace("/repo-old", false),
@@ -233,9 +239,11 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
       await harness.run(async (value) => {
         await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
       });
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-c");
 
       expect(workspaceReorder).toHaveBeenCalledWith(["repo-c", "repo-a", "repo-b"]);
       expect(harness.getLatest().workspaces).toEqual([
@@ -279,6 +287,7 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       const firstCall = harness.run(async (value) => {
         await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
@@ -300,6 +309,7 @@ describe("use-workspace-selection-operations", () => {
         workspace("/repo-b"),
       ]);
       await firstCall;
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-b");
 
       expect(workspaceReorder).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().workspaces).toEqual([
@@ -333,11 +343,13 @@ describe("use-workspace-selection-operations", () => {
           workspace("/repo-c"),
         ]);
       });
+      await harness.waitFor((state) => state.workspaces.length === 3);
 
       let pendingReorder: Promise<void> | null = null;
       await harness.run((value) => {
         pendingReorder = value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
       });
+      await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-c");
 
       expect(harness.getLatest().workspaces).toEqual([
         workspace("/repo-c"),

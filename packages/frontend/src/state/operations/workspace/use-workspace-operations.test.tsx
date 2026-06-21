@@ -249,6 +249,9 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
       }
       return latest;
     },
+    waitFor: async (predicate: (value: ReturnType<typeof useWorkspaceOperations>) => boolean) => {
+      await sharedHarness.waitFor(() => Boolean(latest && predicate(latest)));
+    },
     unmount: async () => {
       await sharedHarness.unmount();
     },
@@ -438,6 +441,7 @@ describe("use-workspace-operations", () => {
       await harness.run(async (value) => {
         await value.refreshWorkspaces();
       });
+      await harness.waitFor((state) => state.workspaces.length === 2);
 
       expect(harness.getLatest().workspaces).toHaveLength(2);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-b");
