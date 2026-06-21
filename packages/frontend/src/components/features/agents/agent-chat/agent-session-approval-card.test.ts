@@ -53,6 +53,29 @@ describe("resolveApprovalReplyOutcomes", () => {
     expect(html).not.toContain("Approve for turn");
   });
 
+  test("renders persistent approval outcomes advertised by the request and runtime", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          supportedReplyOutcomes: ["approve_once", "approve_session", "approve_always", "reject"],
+        },
+        runtimeSupportedReplyOutcomes: [
+          "approve_once",
+          "approve_session",
+          "approve_always",
+          "reject",
+        ],
+        onReply: async () => {},
+      }),
+    );
+
+    expect(html).toContain("Approve once");
+    expect(html).toContain("Approve for session");
+    expect(html).toContain("Always allow");
+    expect(html).toContain("Reject");
+  });
+
   test("renders affected paths in a scrollable code list", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {

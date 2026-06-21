@@ -6,11 +6,12 @@ import {
   type CodexAppServerMcpServerElicitationRequestResponse,
   type CodexAppServerPermissionsApprovalResponse,
   isCodexAppServerRequestPermissionProfile,
+  type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
 import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
 
-export type CodexApprovalOutcome = "approve_once" | "reject";
+export type CodexApprovalOutcome = RuntimeApprovalReplyOutcome;
 
 type GenericCodexApprovalResponse = {
   approved: boolean;
@@ -27,8 +28,9 @@ export type CodexApprovalResponse =
 
 const permissionsResponse = (
   request: CodexServerRequestRecord,
-  approved: boolean,
+  outcome: CodexApprovalOutcome,
 ): CodexAppServerPermissionsApprovalResponse => {
+  const approved = outcome !== "reject";
   const params = isPlainObject(request.params) ? request.params : {};
   if (!approved || !isCodexAppServerRequestPermissionProfile(params.permissions)) {
     return { permissions: {}, scope: "turn" };
@@ -41,7 +43,26 @@ const permissionsResponse = (
   if (params.permissions.fileSystem) {
     permissions.fileSystem = params.permissions.fileSystem;
   }
-  return { permissions, scope: "turn" };
+  return { permissions, scope: outcome === "approve_session" ? "session" : "turn" };
+};
+
+const mcpElicitationResponse = (
+  outcome: CodexApprovalOutcome,
+): CodexAppServerMcpServerElicitationRequestResponse => {
+  switch (outcome) {
+    case "approve_once":
+      return { action: "accept", content: null, _meta: null };
+    case "approve_session":
+      return { action: "accept", content: null, _meta: { persist: "session" } };
+    case "approve_always":
+      return { action: "accept", content: null, _meta: { persist: "always" } };
+    case "reject":
+      return { action: "decline", content: null, _meta: null };
+    case "approve_turn":
+      throw new Error(
+        "Codex MCP elicitation approvals do not support approval outcome 'approve_turn'.",
+      );
+  }
 };
 
 export const codexApprovalResponseForRequest = ({
@@ -53,7 +74,7 @@ export const codexApprovalResponseForRequest = ({
   outcome: CodexApprovalOutcome;
   request: CodexServerRequestRecord;
 }): CodexApprovalResponse => {
-  const approved = outcome === "approve_once";
+  const approved = outcome !== "reject";
   switch (request.method) {
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
       return { decision: approved ? "approved" : "denied" };
@@ -61,9 +82,9 @@ export const codexApprovalResponseForRequest = ({
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL:
       return { decision: approved ? "accept" : "decline" };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST:
-      return { action: approved ? "accept" : "decline", content: null, _meta: null };
+      return mcpElicitationResponse(outcome);
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL:
-      return permissionsResponse(request, approved);
+      return permissionsResponse(request, outcome);
     default:
       return {
         approved,

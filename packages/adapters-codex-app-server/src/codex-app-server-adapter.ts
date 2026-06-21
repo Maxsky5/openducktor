@@ -394,8 +394,11 @@ export class CodexAppServerAdapter
       input.requestId,
       input.externalSessionId,
     );
-    if (input.outcome === "approve_session" || input.outcome === "approve_turn") {
-      throw new Error(`Codex approval outcome '${input.outcome}' is not supported.`);
+    const supportedOutcomes = pending.request.supportedReplyOutcomes ?? ["approve_once", "reject"];
+    if (!supportedOutcomes.includes(input.outcome)) {
+      throw new Error(
+        `Codex approval request '${input.requestId}' does not support outcome '${input.outcome}'.`,
+      );
     }
     const metadata = isPlainObject(pending.request.metadata) ? pending.request.metadata : {};
     const requestMethod =

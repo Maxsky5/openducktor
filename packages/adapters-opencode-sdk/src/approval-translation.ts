@@ -126,5 +126,9 @@ export const toOpenCodePermissionReply = (
       throw new Error(
         "OpenCode runtime does not support approval outcome 'approve_turn'. Supported outcomes: approve_once, approve_session, reject.",
       );
+    case "approve_always":
+      throw new Error(
+        "OpenCode runtime does not support approval outcome 'approve_always'. Supported outcomes: approve_once, approve_session, reject.",
+      );
   }
 };

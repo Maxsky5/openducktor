@@ -20,6 +20,9 @@ export { codexApprovalResponseForRequest } from "./codex-approval-responses";
 
 const MCP_APPROVAL_KIND_KEY = "codex_approval_kind";
 const MCP_APPROVAL_KIND_TOOL_CALL = "mcp_tool_call";
+const MCP_APPROVAL_PERSIST_KEY = "persist";
+const MCP_APPROVAL_PERSIST_ALWAYS = "always";
+const MCP_APPROVAL_PERSIST_SESSION = "session";
 const MCP_APPROVAL_TOOL_DESCRIPTION_KEY = "tool_description";
 const MCP_APPROVAL_TOOL_NAME_KEY = "tool_name";
 const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
@@ -110,6 +113,33 @@ const mcpToolApprovalMeta = (request: CodexServerRequestRecord): Record<string, 
     : null;
 };
 
+const mcpToolApprovalSupportsPersistMode = (
+  meta: Record<string, unknown>,
+  expectedMode: typeof MCP_APPROVAL_PERSIST_SESSION | typeof MCP_APPROVAL_PERSIST_ALWAYS,
+): boolean => {
+  const persist = meta[MCP_APPROVAL_PERSIST_KEY];
+  if (persist === expectedMode) {
+    return true;
+  }
+  return Array.isArray(persist) && persist.some((entry) => entry === expectedMode);
+};
+
+const mcpToolApprovalSupportedReplyOutcomes = (
+  meta: Record<string, unknown>,
+): NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> => {
+  const outcomes: NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> = [
+    "approve_once",
+  ];
+  if (mcpToolApprovalSupportsPersistMode(meta, MCP_APPROVAL_PERSIST_SESSION)) {
+    outcomes.push("approve_session");
+  }
+  if (mcpToolApprovalSupportsPersistMode(meta, MCP_APPROVAL_PERSIST_ALWAYS)) {
+    outcomes.push("approve_always");
+  }
+  outcomes.push("reject");
+  return outcomes;
+};
+
 export const toMcpElicitationApprovalRequest = (
   request: CodexServerRequestRecord,
 ): AgentPendingApprovalRequest | null => {
@@ -145,7 +175,7 @@ export const toMcpElicitationApprovalRequest = (
       ...(isPlainObject(toolParams) ? { input: toolParams } : {}),
     },
     mutation: "unknown",
-    supportedReplyOutcomes: ["approve_once", "reject"],
+    supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
     metadata: {
       codexMethod: request.method,
       params: request.params,

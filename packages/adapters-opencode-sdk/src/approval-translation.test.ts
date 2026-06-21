@@ -15,6 +15,9 @@ describe("OpenCode approval translation", () => {
     expect(() => toOpenCodePermissionReply("approve_turn")).toThrow(
       "OpenCode runtime does not support approval outcome 'approve_turn'. Supported outcomes: approve_once, approve_session, reject.",
     );
+    expect(() => toOpenCodePermissionReply("approve_always")).toThrow(
+      "OpenCode runtime does not support approval outcome 'approve_always'. Supported outcomes: approve_once, approve_session, reject.",
+    );
   });
 
   test("normalizes an OpenCode permission request into a neutral approval request", () => {
