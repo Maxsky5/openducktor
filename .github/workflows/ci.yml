@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run React Doctor
-        uses: millionco/react-doctor@829655c4049342fc0b967e8c60c865f1586875a4 # main
+        uses: millionco/react-doctor@bac7c82950e2392ac4b21448f3e9cf86b605567f # main
         with:
           project: "@openducktor/frontend,@openducktor/electron"
           fail-on: warning
