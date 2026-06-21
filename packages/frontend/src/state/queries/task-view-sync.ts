@@ -21,6 +21,8 @@ type BaseRepoTaskViewRefreshOptions = {
   refreshInactiveViews?: boolean;
 };
 
+type RepoTaskViewRefreshMode = "passive" | "after_mutation";
+
 const isCancelledQueryError = (error: unknown): boolean => isCancelledError(error);
 
 export type RepoTaskViewRefreshOptions = BaseRepoTaskViewRefreshOptions &
@@ -62,6 +64,19 @@ const runAncillaryRefresh = async (
 export const refreshRepoTaskViewsFromQuery = async (
   queryClient: QueryClient,
   repoPath: string,
+  options?: RepoTaskViewRefreshOptions,
+): Promise<void> => refreshRepoTaskViews(queryClient, repoPath, "passive", options);
+
+export const refreshRepoTaskViewsAfterMutation = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  options?: RepoTaskViewRefreshOptions,
+): Promise<void> => refreshRepoTaskViews(queryClient, repoPath, "after_mutation", options);
+
+const refreshRepoTaskViews = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  mode: RepoTaskViewRefreshMode,
   options?: RepoTaskViewRefreshOptions,
 ): Promise<void> => {
   const settingsQueryKey = workspaceQueryKeys.settingsSnapshot();
@@ -111,6 +126,16 @@ export const refreshRepoTaskViewsFromQuery = async (
 
   if (options?.taskDocumentStrategy === "remove") {
     removeCachedTaskDocumentQueries(queryClient, repoPath, options.taskIds);
+  }
+
+  if (mode === "after_mutation") {
+    await queryClient.cancelQueries(
+      {
+        queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+        exact: false,
+      },
+      { silent: true },
+    );
   }
 
   await invalidateRepoTaskQueries(queryClient, repoPath);

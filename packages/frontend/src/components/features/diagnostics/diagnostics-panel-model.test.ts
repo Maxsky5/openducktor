@@ -499,9 +499,11 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["gh not found in PATH", "runtime failed", "task store failed"]),
+      expect.arrayContaining(["runtime failed", "task store failed"]),
     );
-    expect(model.sections[1]?.errors).toEqual(["gh not found in PATH"]);
+    expect(model.criticalReasons).not.toContain("gh not found in PATH");
+    expect(model.sections[1]?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(model.sections[1]?.errors).toEqual([]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
     expect(taskStoreSection?.errors).toEqual(["task store failed"]);
@@ -947,7 +949,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
   });
 
-  test("treats GitHub CLI auth failures as CLI issues even without query failure classification", () => {
+  test("treats GitHub CLI auth failures as optional warnings", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -977,8 +979,8 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.criticalReasons).toContain("gh auth missing");
-    expect(model.sections[1]?.badge).toEqual({ label: "Issue", variant: "danger" });
-    expect(model.sections[1]?.errors).toEqual(["gh auth missing"]);
+    expect(model.criticalReasons).not.toContain("gh auth missing");
+    expect(model.sections[1]?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(model.sections[1]?.errors).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -715,10 +716,10 @@ describe("CodexAppServerAdapter approvals", () => {
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
     );
-    const execRequest = {
+    const fileChangeRequest = {
       id: 23,
-      method: "command/exec",
-      params: { threadId: "thread/start-runtime-live", command: "rm -rf tmp" },
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL,
+      params: { threadId: "thread/start-runtime-live", path: "src/main.ts" },
     };
     const toolRequest = {
       id: 24,
@@ -735,7 +736,7 @@ describe("CodexAppServerAdapter approvals", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "server_request",
-      message: execRequest,
+      message: fileChangeRequest,
     });
     streamListeners[0]?.({
       runtimeId: "runtime-live",
@@ -748,7 +749,7 @@ describe("CodexAppServerAdapter approvals", () => {
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
       23,
-      expect.objectContaining({ approved: false, outcome: "reject" }),
+      { decision: "decline" },
       undefined,
     );
     expect(respondServerRequest).toHaveBeenCalledWith(

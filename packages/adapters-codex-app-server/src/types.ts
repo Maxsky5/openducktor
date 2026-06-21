@@ -1,6 +1,9 @@
 import type {
+  CodexAppServerAskForApproval,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
+  CodexAppServerSandboxMode,
+  CodexAppServerSandboxPolicy,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type {
@@ -154,24 +157,30 @@ export type CodexInitializeParams = {
 };
 
 export type CodexThreadStartParams = {
+  approvalPolicy: CodexAppServerAskForApproval;
   cwd: string;
   developerInstructions: string;
+  sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
 };
 
 export type CodexThreadResumeParams = {
+  approvalPolicy: CodexAppServerAskForApproval;
   threadId: string;
   cwd: string;
   developerInstructions?: string;
+  sandbox: CodexAppServerSandboxMode;
   model?: string;
   effort?: string;
 };
 
 export type CodexThreadForkParams = {
+  approvalPolicy: CodexAppServerAskForApproval;
   threadId: string;
   cwd: string;
   developerInstructions: string;
+  sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
 };
@@ -182,8 +191,10 @@ export type CodexThreadSetNameParams = {
 };
 
 export type CodexTurnStartParams = {
+  approvalPolicy: CodexAppServerAskForApproval;
   threadId: string;
   input: CodexUserInput[];
+  sandboxPolicy: CodexAppServerSandboxPolicy;
   model?: string;
   effort?: string;
 };

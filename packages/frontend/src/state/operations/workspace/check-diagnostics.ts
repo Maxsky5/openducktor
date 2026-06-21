@@ -84,8 +84,12 @@ export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): Task
 });
 
 export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
+  return runtimeCheck !== null && !runtimeCheck.gitOk;
+};
+
+export const hasGithubIntegrationWarning = (runtimeCheck: RuntimeCheck | null): boolean => {
   return (
-    runtimeCheck !== null && (!runtimeCheck.gitOk || !runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
+    runtimeCheck !== null && runtimeCheck.gitOk && (!runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
   );
 };
 
@@ -138,12 +142,6 @@ export const getCliToolsCheckFailureDetail = (
   }
   if (!runtimeCheck.gitOk) {
     return runtimeCheck.errors[0] ?? "Git is unavailable.";
-  }
-  if (!runtimeCheck.ghOk) {
-    return runtimeCheck.ghAuthError ?? runtimeCheck.errors[0] ?? "GitHub CLI is unavailable.";
-  }
-  if (!runtimeCheck.ghAuthOk) {
-    return runtimeCheck.ghAuthError ?? "GitHub CLI authentication is unavailable.";
   }
   return null;
 };

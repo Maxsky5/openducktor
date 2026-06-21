@@ -11,6 +11,10 @@ import {
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
+import {
+  codexWorkspaceWriteSandboxPolicy,
+  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+} from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
@@ -191,8 +195,10 @@ export const startCodexTurnForSession = async (
 
   const turnStartPromise = client
     .turnStart({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       threadId: session.threadId,
       input,
+      sandboxPolicy: codexWorkspaceWriteSandboxPolicy(session.workingDirectory),
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     })

@@ -1,31 +1,48 @@
 import { describe, expect, test } from "bun:test";
 import { HostValidationError } from "../../effect/host-errors";
-import { buildWindowsBatchCommandLine } from "./process-windows-command-line";
+import {
+  assertNoWindowsShellNewlines,
+  buildWindowsBatchEnvCommandLine,
+  escapeWindowsQuotedArgumentValue,
+} from "./process-windows-command-line";
 
-describe("buildWindowsBatchCommandLine", () => {
-  test("builds the single cmd.exe /c payload for a batch command", () => {
+describe("assertNoWindowsShellNewlines", () => {
+  test("rejects carriage returns and newlines", () => {
+    expect(() => assertNoWindowsShellNewlines("safe\nunsafe", "argument")).toThrow(
+      HostValidationError,
+    );
+    expect(() => assertNoWindowsShellNewlines("safe\runsafe", "argument")).toThrow(
+      HostValidationError,
+    );
+  });
+});
+
+describe("escapeWindowsQuotedArgumentValue", () => {
+  test("escapes values that are expanded inside an already quoted Windows argument", () => {
+    expect(escapeWindowsQuotedArgumentValue('quote="value"')).toBe('quote=\\"value\\"');
+    expect(escapeWindowsQuotedArgumentValue("path=C:\\tools\\")).toBe("path=C:\\tools\\\\");
+    expect(escapeWindowsQuotedArgumentValue('path=C:\\tools\\"bin"')).toBe(
+      'path=C:\\tools\\\\\\"bin\\"',
+    );
+  });
+});
+
+describe("buildWindowsBatchEnvCommandLine", () => {
+  test("builds the single cmd.exe /c payload from environment references", () => {
     expect(
-      buildWindowsBatchCommandLine(String.raw`C:\Program Files\Codex\codex.cmd`, [
-        "--config",
-        'mcp_servers.openducktor.command="mcp-bin"',
-        String.raw`path=%APPDATA%\foo`,
-        "caret=foo^bar",
+      buildWindowsBatchEnvCommandLine("OPENDUCKTOR_WINDOWS_COMMAND", [
+        "OPENDUCKTOR_WINDOWS_ARG_0",
+        "OPENDUCKTOR_WINDOWS_ARG_1",
       ]),
     ).toBe(
-      String.raw`""C:\Program Files\Codex\codex.cmd" "--config" "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%APPDATA%\foo" "caret=foo^^bar""`,
+      '""%OPENDUCKTOR_WINDOWS_COMMAND%" "%OPENDUCKTOR_WINDOWS_ARG_0%" "%OPENDUCKTOR_WINDOWS_ARG_1%""',
     );
   });
 
-  test("rejects carriage returns and newlines in commands", () => {
-    expect(() => buildWindowsBatchCommandLine("tool.cmd\nwhoami", [])).toThrow(HostValidationError);
-  });
-
-  test("rejects carriage returns and newlines in arguments", () => {
-    expect(() => buildWindowsBatchCommandLine("tool.cmd", ["safe\nunsafe"])).toThrow(
-      HostValidationError,
-    );
-    expect(() => buildWindowsBatchCommandLine("tool.cmd", ["safe\runsafe"])).toThrow(
-      HostValidationError,
-    );
+  test("rejects invalid environment reference names", () => {
+    expect(() => buildWindowsBatchEnvCommandLine("bad-name", [])).toThrow(HostValidationError);
+    expect(() =>
+      buildWindowsBatchEnvCommandLine("OPENDUCKTOR_WINDOWS_COMMAND", ["bad-name"]),
+    ).toThrow(HostValidationError);
   });
 });

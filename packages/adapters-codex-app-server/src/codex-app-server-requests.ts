@@ -1,7 +1,29 @@
-import type { RuntimeApprovalRequestType } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  isCodexAppServerCommandRequestMethod,
+  isCodexAppServerFileMutationRequestMethod,
+  isCodexAppServerMcpServerElicitationRequestParams,
+  isCodexAppServerPermissionRequestMethod,
+  type RuntimeApprovalRequestType,
+} from "@openducktor/contracts";
+import type {
+  AgentApprovalMutation,
+  AgentPendingApprovalRequest,
+  AgentRole,
+} from "@openducktor/core";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
+import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
+import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
+
+export { codexApprovalResponseForRequest } from "./codex-approval-responses";
+
+const MCP_APPROVAL_KIND_KEY = "codex_approval_kind";
+const MCP_APPROVAL_KIND_TOOL_CALL = "mcp_tool_call";
+const MCP_APPROVAL_TOOL_DESCRIPTION_KEY = "tool_description";
+const MCP_APPROVAL_TOOL_NAME_KEY = "tool_name";
+const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
+const MCP_APPROVAL_TOOL_TITLE_KEY = "tool_title";
 
 export const parseServerRequestRecord = (value: unknown): CodexServerRequestRecord => {
   if (!isPlainObject(value)) {
@@ -23,23 +45,20 @@ export const parseServerRequestRecord = (value: unknown): CodexServerRequestReco
   };
 };
 
-export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
-
-export const isMutatingCodexRequest = (request: CodexServerRequestRecord): boolean => {
-  const haystack = `${request.method} ${JSON.stringify(request.params ?? {})}`.toLowerCase();
-  return [
-    "exec",
-    "shell",
-    "command",
-    "write",
-    "edit",
-    "patch",
-    "apply",
-    "file",
-    "network",
-    "permission",
-    "approval",
-  ].some((needle) => haystack.includes(needle));
+export const classifyCodexRequestMutation = (
+  request: CodexServerRequestRecord,
+): AgentApprovalMutation => {
+  const method = request.method.trim();
+  if (isCodexAppServerFileMutationRequestMethod(method)) {
+    return "mutating";
+  }
+  if (isCodexAppServerPermissionRequestMethod(method)) {
+    return classifyCodexPermissionRequestMutation(request);
+  }
+  if (isCodexAppServerCommandRequestMethod(method)) {
+    return classifyCodexCommandRequestMutation(request);
+  }
+  return "unknown";
 };
 
 const classifyApprovalRequestType = (
@@ -61,13 +80,13 @@ const classifyApprovalRequestType = (
 export const toApprovalRequest = (
   request: CodexServerRequestRecord,
   role: AgentRole,
-): import("@openducktor/core").AgentPendingApprovalRequest => ({
+): AgentPendingApprovalRequest => ({
   requestId: String(request.id),
   requestType: classifyApprovalRequestType(request),
   title: `Codex ${request.method}`,
   summary: `Codex requested ${request.method}.`,
   details: JSON.stringify(request.params ?? {}, null, 2),
-  mutation: isMutatingCodexRequest(request) ? "mutating" : "unknown",
+  mutation: classifyCodexRequestMutation(request),
   supportedReplyOutcomes: ["approve_once", "reject"],
   metadata: {
     codexMethod: request.method,
@@ -75,6 +94,65 @@ export const toApprovalRequest = (
     params: request.params,
   },
 });
+
+const mcpToolApprovalMeta = (request: CodexServerRequestRecord): Record<string, unknown> | null => {
+  if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
+    return null;
+  }
+  if (!isCodexAppServerMcpServerElicitationRequestParams(request.params)) {
+    throw new Error("Codex MCP elicitation request params must match the app-server schema.");
+  }
+  if (request.params.mode !== "form" || !isPlainObject(request.params._meta)) {
+    return null;
+  }
+  return request.params._meta[MCP_APPROVAL_KIND_KEY] === MCP_APPROVAL_KIND_TOOL_CALL
+    ? request.params._meta
+    : null;
+};
+
+export const toMcpElicitationApprovalRequest = (
+  request: CodexServerRequestRecord,
+): AgentPendingApprovalRequest | null => {
+  if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
+    return null;
+  }
+  if (request.id === undefined) {
+    throw new Error("Codex MCP elicitation request is missing a numeric id.");
+  }
+
+  const meta = mcpToolApprovalMeta(request);
+  if (!meta || !isCodexAppServerMcpServerElicitationRequestParams(request.params)) {
+    return null;
+  }
+
+  const toolName =
+    extractStringField(meta, [MCP_APPROVAL_TOOL_NAME_KEY]) ??
+    extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ??
+    `${request.params.serverName} MCP tool`;
+  const toolTitle = extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ?? toolName;
+  const toolDescription = extractStringField(meta, [MCP_APPROVAL_TOOL_DESCRIPTION_KEY]);
+  const toolParams = meta[MCP_APPROVAL_TOOL_PARAMS_KEY];
+
+  return {
+    requestId: String(request.id),
+    requestType: "runtime_tool",
+    title: "MCP Tool Approval",
+    summary: request.params.message,
+    ...(toolDescription ? { details: toolDescription } : {}),
+    tool: {
+      name: toolName,
+      title: toolTitle,
+      ...(isPlainObject(toolParams) ? { input: toolParams } : {}),
+    },
+    mutation: "unknown",
+    supportedReplyOutcomes: ["approve_once", "reject"],
+    metadata: {
+      codexMethod: request.method,
+      params: request.params,
+      serverName: request.params.serverName,
+    },
+  };
+};
 
 export const extractTurnId = (value: unknown): string | null => {
   if (!isPlainObject(value)) {

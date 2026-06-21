@@ -191,6 +191,64 @@ describe("createTaskService task mutations and reset", () => {
       availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
     });
   });
+  test("creates a standalone task without listing the whole task store first", async () => {
+    const calls: unknown[] = [];
+    const createdTask = task({ id: "task-2", status: "open" });
+    const taskStore: TaskStorePort = {
+      listTasks() {
+        return Effect.dieMessage("unexpected list");
+      },
+      createTask(input) {
+        return Effect.sync(() => {
+          calls.push({ type: "create", input });
+          return createdTask;
+        });
+      },
+      updateTask() {
+        return Effect.dieMessage("unexpected update");
+      },
+      getTask() {
+        return Effect.dieMessage("unexpected get");
+      },
+      transitionTask() {
+        return Effect.dieMessage("unexpected transition");
+      },
+      deleteTask() {
+        return Effect.dieMessage("unexpected delete");
+      },
+    };
+
+    const created = await Effect.runPromise(
+      createTaskService({ taskStore }).createTask({
+        repoPath: "/repo",
+        task: {
+          title: "Standalone",
+          issueType: "task",
+          priority: 2,
+          aiReviewEnabled: true,
+        },
+      }),
+    );
+
+    expect(calls).toEqual([
+      {
+        type: "create",
+        input: {
+          repoPath: "/repo",
+          task: {
+            title: "Standalone",
+            issueType: "task",
+            priority: 2,
+            aiReviewEnabled: true,
+          },
+        },
+      },
+    ]);
+    expect(created.id).toBe("task-2");
+    expect(created.availableActions).toEqual(
+      expect.arrayContaining(["view_details", "set_spec", "set_plan", "build_start"]),
+    );
+  });
   test("rejects subtasks under non-epic parents before creating", async () => {
     const taskStore: TaskStorePort = {
       listTasks() {

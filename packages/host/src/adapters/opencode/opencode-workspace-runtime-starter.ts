@@ -199,6 +199,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             detached: shouldStartDetachedProcessGroup(platform),
             env: command.env,
             stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
           }) as OpenCodeChildProcess,
         catch: (cause) =>
@@ -324,6 +325,9 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
 
           return {
             runtime,
+            isAlive() {
+              return !closed;
+            },
             stop() {
               return stopRuntime.pipe(
                 Effect.zipRight(

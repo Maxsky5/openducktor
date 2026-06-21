@@ -89,6 +89,7 @@ export const createSystemCommandRunner = ({
             cwd: options.cwd,
             env: launch.env,
             stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: launch.windowsHide,
             windowsVerbatimArguments: launch.windowsVerbatimArguments,
           });
         } catch (error) {

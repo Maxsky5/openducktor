@@ -40,6 +40,26 @@ describe("build Electron release artifact", () => {
     ]);
   });
 
+  it("builds local unsigned Windows packages without signing the executable", () => {
+    expect(
+      resolveElectronBuilderArgs({
+        arch: "x64",
+        platform: "windows",
+        signed: false,
+        stageReleaseArtifacts: false,
+      }),
+    ).toEqual([
+      "--config",
+      "electron-builder.yml",
+      "--win",
+      "nsis",
+      "--x64",
+      "--publish",
+      "never",
+      "-c.win.signExecutable=false",
+    ]);
+  });
+
   it("builds local unsigned macOS packages without update metadata", () => {
     expect(
       resolveElectronBuilderArgs({

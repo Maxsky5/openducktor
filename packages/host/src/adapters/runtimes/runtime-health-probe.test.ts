@@ -64,6 +64,35 @@ describe("createRuntimeHealthProbe", () => {
     });
   });
 
+  test("probes OpenCode version with non-interactive config and default command timeout", async () => {
+    const calls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command) {
+        return Effect.succeed(command === "opencode" ? "/usr/local/bin/opencode" : null);
+      },
+      versionCommand(...input) {
+        calls.push(input);
+        return Effect.succeed("1.16.2");
+      },
+    };
+    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
+
+    expect(health.ok).toBe(true);
+    expect(calls).toEqual([
+      [
+        "/usr/local/bin/opencode",
+        ["--version"],
+        {
+          env: { OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}' },
+          timeoutMs: 10_000,
+        },
+      ],
+    ]);
+  });
+
   test("reports actionable missing Codex diagnostics", async () => {
     const probe = createMissingProbe({
       applicationsDir: "/missing/Applications",

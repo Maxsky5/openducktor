@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
   closeRendererServer,
+  electronGracefulShutdownSignal,
   electronRuntimeEnv,
   resolveMacosAppBundlePath,
   resolveMacosDevExecutablePath,
@@ -53,6 +54,12 @@ describe("electron dev script", () => {
         "Electron",
       ),
     ).toBe("/repo/apps/electron/.electron-dev/OpenDucktor.app/Contents/MacOS/Electron");
+  });
+
+  test("requests interrupt-driven Electron shutdown on Windows", () => {
+    expect(electronGracefulShutdownSignal("win32")).toBe("SIGINT");
+    expect(electronGracefulShutdownSignal("darwin")).toBe("SIGTERM");
+    expect(electronGracefulShutdownSignal("linux")).toBe("SIGTERM");
   });
 
   test("restarts Electron for main-process dependencies", () => {

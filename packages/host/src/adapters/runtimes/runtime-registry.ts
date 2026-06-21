@@ -113,17 +113,22 @@ export const createRuntimeRegistry = ({
           runtimeKind: input.runtimeKind,
         });
         if (existingRuntime) {
-          return yield* Effect.try({
-            try: () => runtimeInstanceSummarySchema.parse(existingRuntime),
-            catch: (cause) =>
-              new HostValidationError({
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause,
-                details: {
-                  runtimeId: existingRuntime.runtimeId,
-                },
-              }),
-          });
+          const existingHandle = handles.get(existingRuntime.runtimeId);
+          if (existingHandle && !existingHandle.isAlive()) {
+            yield* stopRegisteredRuntime(existingRuntime.runtimeId);
+          } else {
+            return yield* Effect.try({
+              try: () => runtimeInstanceSummarySchema.parse(existingRuntime),
+              catch: (cause) =>
+                new HostValidationError({
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause,
+                  details: {
+                    runtimeId: existingRuntime.runtimeId,
+                  },
+                }),
+            });
+          }
         }
         if (!workspaceStarter) {
           return yield* Effect.fail(

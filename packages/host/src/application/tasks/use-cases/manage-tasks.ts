@@ -14,8 +14,11 @@ export const createTaskCrudUseCases = ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      yield* validateParentRelationshipsForCreateEffect(currentTasks, task);
+      const needsParentValidation = Boolean(task.parentId?.trim());
+      const currentTasks = needsParentValidation ? yield* taskStore.listTasks({ repoPath }) : [];
+      if (needsParentValidation) {
+        yield* validateParentRelationshipsForCreateEffect(currentTasks, task);
+      }
       const created = yield* taskStore.createTask({ repoPath, task });
 
       return enrichTask(created, [...currentTasks, created]);

@@ -198,7 +198,7 @@ export const createSystemDiagnosticsService = ({
           enabled: enabledForRuntime(config, definition.kind),
         });
       }
-      const errors = [gitError, ghError].filter((error): error is string => error !== null);
+      const errors = [gitError].filter((error): error is string => error !== null);
       for (const runtime of runtimes) {
         if (runtime.enabled && runtime.error) {
           errors.push(runtime.error);

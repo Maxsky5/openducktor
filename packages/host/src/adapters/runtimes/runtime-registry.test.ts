@@ -7,6 +7,7 @@ import {
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
+import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import { createRuntimeRegistry as createEffectRuntimeRegistry } from "./runtime-registry";
 
 const createRuntimeRegistry = (...args: Parameters<typeof createEffectRuntimeRegistry>) =>
@@ -45,6 +46,14 @@ const createCodexRuntime = (
     descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
     ...overrides,
   });
+const createRuntimeHandle = (
+  runtime: RuntimeInstanceSummary,
+  stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
+): RuntimeWorkspaceHandle => ({
+  runtime,
+  isAlive: () => true,
+  stop,
+});
 describe("createRuntimeRegistry", () => {
   test("returns an existing workspace runtime during ensure", async () => {
     const runtime = createRuntime();
@@ -87,10 +96,7 @@ describe("createRuntimeRegistry", () => {
       workspaceStarter: {
         startWorkspaceRuntime(input) {
           starts.push(input);
-          return Effect.succeed({
-            runtime: workspaceRuntime,
-            stop: () => Effect.succeed(undefined),
-          });
+          return Effect.succeed(createRuntimeHandle(workspaceRuntime));
         },
       },
     });
@@ -162,10 +168,7 @@ describe("createRuntimeRegistry", () => {
       workspaceStarter: {
         startWorkspaceRuntime(input) {
           starts.push(input);
-          return Effect.succeed({
-            runtime,
-            stop: () => Effect.succeed(undefined),
-          });
+          return Effect.succeed(createRuntimeHandle(runtime));
         },
       },
     });
@@ -212,10 +215,7 @@ describe("createRuntimeRegistry", () => {
       runtimes: [originalRuntime],
       workspaceStarter: {
         startWorkspaceRuntime() {
-          return Effect.succeed({
-            runtime: replacementRuntime,
-            stop: () => Effect.succeed(undefined),
-          });
+          return Effect.succeed(createRuntimeHandle(replacementRuntime));
         },
       },
     });
@@ -248,10 +248,7 @@ describe("createRuntimeRegistry", () => {
           return Effect.tryPromise({
             try: async () => {
               starts += 1;
-              return {
-                runtime: await started,
-                stop: () => Effect.succeed(undefined),
-              };
+              return createRuntimeHandle(await started);
             },
             catch: (cause) =>
               toHostOperationError(cause, "test.workspaceStarter.startWorkspaceRuntime"),
@@ -288,10 +285,7 @@ describe("createRuntimeRegistry", () => {
           return Effect.tryPromise({
             try: async () => {
               starts += 1;
-              return {
-                runtime: await started,
-                stop: () => Effect.succeed(undefined),
-              };
+              return createRuntimeHandle(await started);
             },
             catch: (cause) =>
               toHostOperationError(cause, "test.workspaceStarter.startWorkspaceRuntime"),
@@ -336,13 +330,11 @@ describe("createRuntimeRegistry", () => {
           return Effect.tryPromise({
             try: async () => {
               const runtime = await started;
-              return {
-                runtime,
-                stop: () =>
-                  Effect.sync(() => {
-                    stops.push(runtime.runtimeId);
-                  }),
-              };
+              return createRuntimeHandle(runtime, () =>
+                Effect.sync(() => {
+                  stops.push(runtime.runtimeId);
+                }),
+              );
             },
             catch: (cause) =>
               toHostOperationError(cause, "test.workspaceStarter.startWorkspaceRuntime"),
@@ -380,16 +372,16 @@ describe("createRuntimeRegistry", () => {
     const registry = createRuntimeRegistry({
       workspaceStarter: {
         startWorkspaceRuntime() {
-          return Effect.succeed({
-            runtime,
-            stop: () =>
+          return Effect.succeed(
+            createRuntimeHandle(runtime, () =>
               Effect.try({
                 try: () => {
                   stops.push(runtime.runtimeId);
                 },
                 catch: (cause) => toHostOperationError(cause, "test.workspaceRuntime.stop"),
               }),
-          });
+            ),
+          );
         },
       },
     });

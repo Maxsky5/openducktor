@@ -35,9 +35,11 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
+import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
   CODEX_USER_INPUT_REQUEST_METHOD,
+  isPlainObject,
   unsupported,
 } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
@@ -57,6 +59,10 @@ import {
   sessionStateFromThreadResume,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
+import {
+  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+  OPENDUCKTOR_CODEX_SANDBOX_MODE,
+} from "./codex-session-policy";
 import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
@@ -146,8 +152,10 @@ export class CodexAppServerAdapter
     const transportModel = toTransportModelSelection(model);
 
     const response = await client.threadStart({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: transportModel.model,
       effort: transportModel.effort,
     });
@@ -171,9 +179,11 @@ export class CodexAppServerAdapter
     await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadResume({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
+      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -192,9 +202,11 @@ export class CodexAppServerAdapter
     await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadFork({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -333,11 +345,13 @@ export class CodexAppServerAdapter
     }
 
     const response = await client.threadResume({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...("systemPrompt" in input && input.systemPrompt
         ? { developerInstructions: input.systemPrompt }
         : {}),
+      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
@@ -383,15 +397,22 @@ export class CodexAppServerAdapter
     if (input.outcome === "approve_session" || input.outcome === "approve_turn") {
       throw new Error(`Codex approval outcome '${input.outcome}' is not supported.`);
     }
-    const approved = input.outcome === "approve_once";
+    const metadata = isPlainObject(pending.request.metadata) ? pending.request.metadata : {};
+    const requestMethod =
+      typeof metadata.codexMethod === "string" ? metadata.codexMethod : "approval/request";
+    const requestParams = metadata.params;
     await this.options.respondServerRequest(
       pending.runtimeId,
       requestId,
-      {
-        approved,
+      codexApprovalResponseForRequest({
         outcome: input.outcome,
-        message: input.message ?? (approved ? "Approved once." : "Rejected."),
-      },
+        request: {
+          id: requestId,
+          method: requestMethod,
+          ...(requestParams !== undefined ? { params: requestParams } : {}),
+        },
+        message: input.message,
+      }),
       undefined,
     );
     const activeTurn = this.pendingInput.resolveApproval(input.requestId);

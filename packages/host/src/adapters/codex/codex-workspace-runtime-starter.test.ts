@@ -200,6 +200,7 @@ lines.on("line", (line) => {
   }
 });
 const stop = () => process.exit(0);
+lines.on("close", stop);
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
@@ -270,8 +271,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       }
     };
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
+      const repo = process.cwd();
       const capturePath = join(root, "capture.json");
       process.env.CODEX_CAPTURE_PATH = capturePath;
       const codexBinary = await createFakeCodex(root, { runtimePidPath });
@@ -350,8 +350,18 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           "--config",
           "mcp_servers.openducktor.env_vars=['ODT_WORKSPACE_ID', 'ODT_HOST_URL', 'ODT_HOST_TOKEN', 'ODT_FORBID_WORKSPACE_ID_INPUT', 'ODT_ALLOWED_TOOLS']",
           "--config",
+          "mcp_servers.openducktor.default_tools_approval_mode='prompt'",
+          "--config",
           "mcp_servers.openducktor.enabled=true",
         ]),
+      );
+      expect(capture.args).not.toContain("mcp_servers.openducktor.env.ODT_WORKSPACE_ID='repo'");
+      expect(capture.args).not.toContain(
+        "mcp_servers.openducktor.env.ODT_HOST_URL='http://127.0.0.1:14327'",
+      );
+      expect(capture.args).not.toContain("mcp_servers.openducktor.env.ODT_HOST_TOKEN='token-1'");
+      expect(capture.args).not.toContain(
+        "mcp_servers.openducktor.env.ODT_FORBID_WORKSPACE_ID_INPUT='true'",
       );
       expect(capture.args).toContain("app-server");
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
@@ -528,12 +538,23 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const codexBinary = await createFakeCodex(root);
       const codexAppServer = createCodexAppServerTransportRegistry();
       const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
+      const localAppData = join(root, "local-app-data");
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommandRunner({
-          env: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+          env: {
+            ...process.env,
+            LOCALAPPDATA: localAppData,
+            PATH: pathWithFakeRuntime,
+            PATHEXT: ".CMD",
+          },
           platform: "win32",
         }),
-        processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+        processEnv: {
+          ...process.env,
+          LOCALAPPDATA: localAppData,
+          PATH: pathWithFakeRuntime,
+          PATHEXT: ".CMD",
+        },
         codexAppServer,
         clientVersion: "0.3.1-test",
         resolveMcpBridgeConnection: () =>

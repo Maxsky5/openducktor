@@ -1,13 +1,15 @@
 import type { AgentEvent } from "@openducktor/core";
 import {
+  classifyCodexRequestMutation,
+  codexApprovalResponseForRequest,
   extractTurnId,
-  isMutatingCodexRequest,
   parseQuestionRequest,
-  READ_ONLY_ROLES,
   toApprovalRequest,
+  toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import { READ_ONLY_ROLES } from "./codex-session-policy";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
@@ -48,6 +50,22 @@ export const handleCodexServerRequest = async (
   const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (requestTurnId && activeTurn && context.bindActiveTurnId(activeTurn, requestTurnId)) {
     context.flushQueuedUserMessagesLater(activeTurn);
+  }
+
+  const mcpElicitationApproval = toMcpElicitationApprovalRequest(rawRequest);
+  if (mcpElicitationApproval) {
+    context.pendingInput.addApproval({
+      runtimeId: session.runtimeId,
+      threadId: session.threadId,
+      request: mcpElicitationApproval,
+    });
+    context.emitSessionEvent(session.threadId, {
+      ...mcpElicitationApproval,
+      type: "approval_required",
+      externalSessionId: session.threadId,
+      timestamp: new Date().toISOString(),
+    });
+    return true;
   }
 
   if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
@@ -105,7 +123,18 @@ export const handleCodexServerRequest = async (
     if (requestId === undefined) {
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
-    const isMutatingRequest = isMutatingCodexRequest(rawRequest);
+    const requestMutation = classifyCodexRequestMutation(rawRequest);
+    if (session.role && READ_ONLY_ROLES.has(session.role) && requestMutation === "read_only") {
+      await context.respondServerRequest(
+        session.runtimeId,
+        requestId,
+        codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
+        undefined,
+      );
+      return false;
+    }
+
+    const isMutatingRequest = requestMutation === "mutating";
     const shouldRejectForRole =
       !session.role || (isMutatingRequest && READ_ONLY_ROLES.has(session.role));
     if (shouldRejectForRole) {
@@ -115,11 +144,11 @@ export const handleCodexServerRequest = async (
       await context.respondServerRequest(
         session.runtimeId,
         requestId,
-        {
-          approved: false,
+        codexApprovalResponseForRequest({
           outcome: "reject",
+          request: rawRequest,
           message: `Codex request '${rawRequest.method}' was rejected because ${roleReason}.`,
-        },
+        }),
         undefined,
       );
       context.emitSessionEvent(session.threadId, {

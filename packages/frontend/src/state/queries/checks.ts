@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
+import { isRepoRuntimeHealthPendingReadiness } from "@/lib/repo-runtime-health";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -21,6 +22,7 @@ export type ChecksQueryDependencies = {
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
 const READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
+export const PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS = 2_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -101,6 +103,16 @@ export const repoRuntimeHealthStaleTime = (
     : 0;
 };
 
+export const repoRuntimeHealthRefetchInterval = (
+  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
+): number | false => {
+  const runtimeHealthEntries = Object.values(runtimeHealthByRuntime ?? {});
+  const hasPendingRuntimeHealth = runtimeHealthEntries.some((runtimeHealth) =>
+    isRepoRuntimeHealthPendingReadiness(runtimeHealth),
+  );
+  return hasPendingRuntimeHealth ? PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS : false;
+};
+
 export const runtimeCheckQueryOptions = (
   force = false,
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
@@ -145,6 +157,7 @@ export const repoRuntimeHealthQueryOptions = (
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
     staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),
+    refetchInterval: (query) => repoRuntimeHealthRefetchInterval(query.state.data),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

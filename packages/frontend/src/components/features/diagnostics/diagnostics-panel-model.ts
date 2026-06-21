@@ -26,6 +26,7 @@ import {
 import {
   getCliToolsCheckFailureDetail,
   hasCliToolCheckFailure,
+  hasGithubIntegrationWarning,
   hasTaskStoreCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -431,17 +432,23 @@ export const buildDiagnosticsPanelModel = (
     ...(activeWorkspace ? {} : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
-  const cliToolsHealthy = runtimeCheck === null ? null : !hasCliToolCheckFailure(runtimeCheck);
+  const cliToolsBlockingFailure = hasCliToolCheckFailure(runtimeCheck);
+  const cliToolsGithubWarning =
+    runtimeCheck !== null && !cliToolsBlockingFailure && hasGithubIntegrationWarning(runtimeCheck);
+  const cliToolsHealthy = runtimeCheck === null ? null : !cliToolsBlockingFailure;
+  const cliToolsBadge: DiagnosticsSectionModel["badge"] = cliToolsGithubWarning
+    ? { label: "GitHub optional", variant: "warning" }
+    : getFailureBadge(cliToolsHealthy, cliToolsFailureKind, {
+        healthy: "Available",
+        timeout: "Timed out",
+        error: "Issue",
+        checking: "Checking",
+      });
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",
     title: "CLI Tools",
-    badge: getFailureBadge(cliToolsHealthy, cliToolsFailureKind, {
-      healthy: "Available",
-      timeout: "Timed out",
-      error: "Issue",
-      checking: "Checking",
-    }),
+    badge: cliToolsBadge,
     rows: runtimeCheck
       ? [
           { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },

@@ -128,6 +128,7 @@ const createMainWindow = async (
     height: 960,
     minWidth: 1024,
     minHeight: 720,
+    autoHideMenuBar: process.platform !== "darwin",
     title: "OpenDucktor",
     icon: resolveElectronWindowIcon(),
     webPreferences: {

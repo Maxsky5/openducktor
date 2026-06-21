@@ -79,6 +79,7 @@ const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
     `mcp_servers.openducktor.command=${tomlString(mcpBinary)}`,
     `mcp_servers.openducktor.args=${tomlStringArray(mcpArgs)}`,
     `mcp_servers.openducktor.env_vars=${tomlStringArray(OPENDUCKTOR_MCP_ENV_VAR_NAMES)}`,
+    `mcp_servers.openducktor.default_tools_approval_mode=${tomlString("prompt")}`,
     "mcp_servers.openducktor.enabled=true",
   ].flatMap((config) => ["--config", config]);
 };
@@ -105,6 +106,7 @@ const cleanupCodexRuntime = ({
   Effect.gen(function* () {
     const errors: string[] = [];
     codexAppServer.unregisterTransport(nextRuntimeId);
+    yield* transport.close();
 
     const processExit = yield* Effect.either(
       processTreeTerminator({
@@ -122,8 +124,6 @@ const cleanupCodexRuntime = ({
     if (processExit._tag === "Left") {
       errors.push(`process tree: ${processExit.left.message}`);
     }
-
-    yield* transport.close();
 
     if (errors.length > 0) {
       return yield* Effect.fail(
@@ -212,6 +212,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
             detached: shouldStartDetachedProcessGroup(platform),
             env: command.env,
             stdio: ["pipe", "pipe", "pipe"],
+            windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
           }) as CodexChildProcess,
         catch: (cause) =>
@@ -324,6 +325,9 @@ export const createCodexWorkspaceRuntimeStarter = ({
 
       return {
         runtime,
+        isAlive() {
+          return !closed;
+        },
         stop() {
           return closeRuntime.pipe(
             Effect.zipRight(Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore)),

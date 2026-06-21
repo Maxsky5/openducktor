@@ -6,10 +6,16 @@ import type {
 import {
   CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS,
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
+  type CodexAppServerCommandExecutionRequestApprovalParams,
   type CodexAppServerExecCommandApprovalParams,
+  type CodexAppServerPermissionsRequestApprovalParams,
   type CodexAppServerServerNotificationMethod,
   type CodexAppServerServerRequestMethod,
+  isCodexAppServerCommandAction,
   isCodexAppServerJsonValue,
+  isCodexAppServerLegacyParsedCommand,
+  isCodexAppServerMcpServerElicitationRequestParams,
+  isCodexAppServerRequestPermissionProfile,
 } from "../../ports/codex-app-server-protocol";
 
 const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
@@ -39,8 +45,54 @@ const isExecCommandApprovalParams = (
   typeof value.conversationId === "string" &&
   typeof value.cwd === "string" &&
   Array.isArray(value.parsedCmd) &&
-  value.parsedCmd.every(isCodexAppServerJsonValue) &&
+  value.parsedCmd.every(isCodexAppServerLegacyParsedCommand) &&
   (value.reason === null || typeof value.reason === "string");
+
+const isOptionalString = (value: unknown): boolean =>
+  value === undefined || value === null || typeof value === "string";
+
+const isOptionalJsonArray = (value: unknown): boolean =>
+  value === undefined ||
+  value === null ||
+  (Array.isArray(value) && value.every(isCodexAppServerJsonValue));
+
+const isCommandExecutionApprovalParams = (
+  value: unknown,
+): value is CodexAppServerCommandExecutionRequestApprovalParams =>
+  isJsonRecord(value) &&
+  typeof value.itemId === "string" &&
+  typeof value.startedAtMs === "number" &&
+  Number.isFinite(value.startedAtMs) &&
+  typeof value.threadId === "string" &&
+  typeof value.turnId === "string" &&
+  isOptionalString(value.approvalId) &&
+  isOptionalString(value.command) &&
+  isOptionalString(value.cwd) &&
+  isOptionalString(value.reason) &&
+  (value.commandActions === undefined ||
+    value.commandActions === null ||
+    (Array.isArray(value.commandActions) &&
+      value.commandActions.every(isCodexAppServerCommandAction))) &&
+  (value.networkApprovalContext === undefined ||
+    value.networkApprovalContext === null ||
+    isCodexAppServerJsonValue(value.networkApprovalContext)) &&
+  (value.proposedExecpolicyAmendment === undefined ||
+    value.proposedExecpolicyAmendment === null ||
+    isCodexAppServerJsonValue(value.proposedExecpolicyAmendment)) &&
+  isOptionalJsonArray(value.proposedNetworkPolicyAmendments);
+
+const isPermissionsRequestApprovalParams = (
+  value: unknown,
+): value is CodexAppServerPermissionsRequestApprovalParams =>
+  isJsonRecord(value) &&
+  typeof value.threadId === "string" &&
+  typeof value.turnId === "string" &&
+  typeof value.itemId === "string" &&
+  typeof value.startedAtMs === "number" &&
+  Number.isFinite(value.startedAtMs) &&
+  typeof value.cwd === "string" &&
+  (value.reason === null || typeof value.reason === "string") &&
+  isCodexAppServerRequestPermissionProfile(value.permissions);
 
 export const resolveAfterQueuedMessages = (
   resolve: (value: CodexAppServerRequestResult) => void,
@@ -124,6 +176,48 @@ export const parseStreamMessage = (
       if (!isExecCommandApprovalParams(message.params)) {
         throw new HostValidationError({
           message: `Codex app-server execCommandApproval request for ${runtimeId} has invalid params`,
+          field: "params",
+          details: { runtimeId, kind, method: message.method },
+        });
+      }
+      return {
+        method: message.method,
+        id: serverRequestId,
+        params: message.params,
+      };
+    }
+    if (message.method === "item/commandExecution/requestApproval") {
+      if (!isCommandExecutionApprovalParams(message.params)) {
+        throw new HostValidationError({
+          message: `Codex app-server command execution approval request for ${runtimeId} has invalid params`,
+          field: "params",
+          details: { runtimeId, kind, method: message.method },
+        });
+      }
+      return {
+        method: message.method,
+        id: serverRequestId,
+        params: message.params,
+      };
+    }
+    if (message.method === "item/permissions/requestApproval") {
+      if (!isPermissionsRequestApprovalParams(message.params)) {
+        throw new HostValidationError({
+          message: `Codex app-server permissions approval request for ${runtimeId} has invalid params`,
+          field: "params",
+          details: { runtimeId, kind, method: message.method },
+        });
+      }
+      return {
+        method: message.method,
+        id: serverRequestId,
+        params: message.params,
+      };
+    }
+    if (message.method === "mcpServer/elicitation/request") {
+      if (!isCodexAppServerMcpServerElicitationRequestParams(message.params)) {
+        throw new HostValidationError({
+          message: `Codex app-server MCP server elicitation request for ${runtimeId} has invalid params`,
           field: "params",
           details: { runtimeId, kind, method: message.method },
         });

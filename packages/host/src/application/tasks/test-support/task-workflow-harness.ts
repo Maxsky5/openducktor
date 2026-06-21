@@ -435,8 +435,9 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
-    shareGitCommonDirectory() {
+    shareGitCommonDirectory(repoPath, workingDir) {
       return Effect.sync(() => {
+        calls.push({ type: "shareGitCommonDirectory", repoPath, workingDir });
         return true;
       });
     },
@@ -456,8 +457,11 @@ const createBuildStartGitPort = ({
         return [];
       });
     },
-    getCurrentBranch() {
-      return Effect.dieMessage("unexpected current branch");
+    getCurrentBranch(workingDir) {
+      return Effect.sync(() => {
+        calls.push({ type: "currentBranch", workingDir });
+        return { name: "odt/task-1-task-1", detached: false };
+      });
     },
     getStatus() {
       return Effect.sync(() => {

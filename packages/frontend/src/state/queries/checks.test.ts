@@ -4,7 +4,9 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   classifyDiagnosticsQueryError,
   DiagnosticsQueryTimeoutError,
+  PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS,
   repoRuntimeHealthQueryOptions,
+  repoRuntimeHealthRefetchInterval,
   repoRuntimeHealthStaleTime,
 } from "./checks";
 
@@ -58,6 +60,22 @@ const reconnectingRuntimeHealth = {
     detail: "The operation was aborted due to timeout",
     failureKind: "timeout",
   },
+} as const;
+
+const errorRuntimeHealth = {
+  ...readyRuntimeHealth,
+  status: "error",
+  runtime: {
+    ...readyRuntimeHealth.runtime,
+    status: "error",
+    stage: "startup_failed",
+    observation: null,
+    startedAt: null,
+    detail: "runtime failed",
+    failureKind: "error",
+    failureReason: "runtime failed",
+  },
+  mcp: null,
 } as const;
 
 describe("classifyDiagnosticsQueryError", () => {
@@ -190,7 +208,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
     }
   });
 
-  test("does not poll runtime health from the query layer", () => {
+  test("polls runtime health only while readiness is pending", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -199,10 +217,19 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(queryOptions.refetchInterval).toBeUndefined();
+    expect(typeof queryOptions.refetchInterval).toBe("function");
+    expect(repoRuntimeHealthRefetchInterval(undefined)).toBe(false);
+    expect(repoRuntimeHealthRefetchInterval({ opencode: readyRuntimeHealth })).toBe(false);
+    expect(repoRuntimeHealthRefetchInterval({ opencode: errorRuntimeHealth })).toBe(false);
+    expect(repoRuntimeHealthRefetchInterval({ opencode: notStartedRuntimeHealth })).toBe(
+      PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS,
+    );
+    expect(repoRuntimeHealthRefetchInterval({ opencode: reconnectingRuntimeHealth })).toBe(
+      PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS,
+    );
   });
 
-  test("keeps runtime health explicit without background refetching", () => {
+  test("keeps runtime health explicit without ambient refetch triggers", () => {
     const queryOptions = repoRuntimeHealthQueryOptions(
       "/repo",
       [OPENCODE_RUNTIME_DESCRIPTOR],

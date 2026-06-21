@@ -242,7 +242,7 @@ describe("createSystemDiagnosticsService", () => {
     expect(cached.gitVersion).toBe("git version 1.0.0");
     expect(refreshed.gitVersion).toBe("git version 2.0.0");
   });
-  test("runtimeCheck reports actionable missing git and gh diagnostics", async () => {
+  test("runtimeCheck reports missing gh without making it a blocking diagnostic error", async () => {
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
       runtimeHealth: createRuntimeHealthPort(),
@@ -262,7 +262,6 @@ describe("createSystemDiagnosticsService", () => {
     );
     expect(check.errors).toEqual([
       "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
-      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
     ]);
   });
   test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
@@ -285,10 +284,7 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.ghVersion).toBeNull();
     expect(check.ghAuthOk).toBe(false);
     expect(check.ghAuthError).toBe("Failed reading gh --version from gh.");
-    expect(check.errors).toEqual([
-      "Failed reading git --version from git.",
-      "Failed reading gh --version from gh.",
-    ]);
+    expect(check.errors).toEqual(["Failed reading git --version from git."]);
   });
   test("taskStoreCheck delegates active repo store readiness through the task store", async () => {
     const blockingHealth: RepoStoreHealth = {
