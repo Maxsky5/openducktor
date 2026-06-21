@@ -23,7 +23,11 @@ import {
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
@@ -1697,10 +1701,23 @@ describe("useAgentStudioSessionActions", () => {
 
   test("submits question answers when session is active", async () => {
     const answerAgentQuestion = mock(async () => {});
+    const questionRequest = {
+      requestId: "req-1",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Continue?",
+          options: [{ label: "Yes", description: "Continue the session" }],
+        },
+      ],
+    } satisfies AgentQuestionRequest;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-9" }),
+      ...selectedSessionArgs({
+        externalSessionId: "session-9",
+        pendingQuestions: [questionRequest],
+      }),
       answerAgentQuestion,
     });
 
@@ -1711,9 +1728,8 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(answerAgentQuestion).toHaveBeenCalledWith(
       localSessionIdentity("session-9"),
-      "req-1",
+      questionRequest,
       [["yes"]],
-      [localSessionIdentity("session-9")],
     );
 
     await harness.unmount();
@@ -1721,20 +1737,19 @@ describe("useAgentStudioSessionActions", () => {
 
   test("replies to approval requests when session is active", async () => {
     const replyAgentApproval = mock(async () => {});
+    const approvalRequest = {
+      requestId: "approval-1",
+      requestType: "permission_grant",
+      title: "Approve command",
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    } satisfies AgentApprovalRequest;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       ...selectedSessionArgs({
         externalSessionId: "session-approval",
-        pendingApprovals: [
-          {
-            requestId: "approval-1",
-            requestType: "permission_grant",
-            title: "Approve command",
-            mutation: "mutating",
-            supportedReplyOutcomes: ["approve_once", "reject"],
-          },
-        ],
+        pendingApprovals: [approvalRequest],
       }),
       replyAgentApproval,
     });
@@ -1746,10 +1761,9 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(replyAgentApproval).toHaveBeenCalledWith(
       localSessionIdentity("session-approval"),
-      "approval-1",
+      approvalRequest,
       "approve_once",
       undefined,
-      [localSessionIdentity("session-approval")],
     );
 
     await harness.unmount();
