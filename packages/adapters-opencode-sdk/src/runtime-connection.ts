@@ -54,7 +54,7 @@ const requireOpencodeRuntimeEndpoint = (
   return endpoint;
 };
 
-export const toOpencodeRuntimeClientInput = (input: {
+const toOpencodeRuntimeClientInput = (input: {
   runtime: RepoRuntimeRouteResolution;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];

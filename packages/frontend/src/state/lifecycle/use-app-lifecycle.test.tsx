@@ -47,6 +47,46 @@ const createDeferred = <T,>() => {
   };
 };
 
+type TimeoutHandler = Parameters<typeof globalThis.setTimeout>[0];
+type TimeoutDelay = Parameters<typeof globalThis.setTimeout>[1];
+type TimeoutId = ReturnType<typeof globalThis.setTimeout>;
+const TASK_STORE_PREPARATION_TEST_DELAY_MS = 60_000;
+
+const withTrackedTaskStorePreparationTimer = async (
+  run: (isPreparationTimerPending: () => boolean) => Promise<void>,
+): Promise<void> => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const preparationTimerIds = new Set<TimeoutId>();
+
+  globalThis.setTimeout = ((
+    handler: TimeoutHandler,
+    timeout?: TimeoutDelay,
+    ...args: unknown[]
+  ) => {
+    const timerId = originalSetTimeout(handler, timeout, ...args);
+    if (timeout === TASK_STORE_PREPARATION_TEST_DELAY_MS) {
+      preparationTimerIds.add(timerId);
+    }
+    return timerId;
+  }) as typeof globalThis.setTimeout;
+
+  globalThis.clearTimeout = ((timerId: Parameters<typeof globalThis.clearTimeout>[0]) => {
+    preparationTimerIds.delete(timerId as TimeoutId);
+    originalClearTimeout(timerId);
+  }) as typeof globalThis.clearTimeout;
+
+  try {
+    await run(() => preparationTimerIds.size > 0);
+  } finally {
+    for (const timerId of preparationTimerIds) {
+      originalClearTimeout(timerId);
+    }
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+};
+
 const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>
   createTaskStoreCheckFixture({}, overrides);
 
@@ -1605,7 +1645,7 @@ describe("useAppLifecycle", () => {
       refreshTaskStoreCheckForRepo: mock(async () => taskStoreDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
       clearBranchData: mock(() => {}),
-      taskStorePreparationToastDelayMs: 15,
+      taskStorePreparationToastDelayMs: TASK_STORE_PREPARATION_TEST_DELAY_MS,
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
@@ -1613,39 +1653,38 @@ describe("useAppLifecycle", () => {
       return null;
     };
 
-    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+    await withTrackedTaskStorePreparationTimer(async (isPreparationTimerPending) => {
+      const harness = createSharedHookHarness(Harness, { args: baseArgs });
 
-    try {
-      await harness.mount();
+      try {
+        await harness.mount();
 
-      await harness.update({
-        args: {
-          ...baseArgs,
-          activeRepo: "/repo",
-        },
-      });
+        await harness.update({
+          args: {
+            ...baseArgs,
+            activeRepo: "/repo",
+          },
+        });
 
-      await harness.run(async () => {
+        await harness.run(async () => {
+          taskStoreDeferred.resolve(makeTaskStoreCheck({ taskStorePath: null }));
+          taskDeferred.reject(new Error("init failed"));
+          branchesDeferred.resolve();
+        });
+
+        expect(isPreparationTimerPending()).toBe(false);
+        expect(toastLoading).not.toHaveBeenCalled();
+        expect(toastDismiss).not.toHaveBeenCalled();
+        expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
+          description: "init failed",
+        });
+      } finally {
         taskStoreDeferred.resolve(makeTaskStoreCheck({ taskStorePath: null }));
-        taskDeferred.reject(new Error("init failed"));
+        taskDeferred.resolve();
         branchesDeferred.resolve();
-      });
-
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 30));
-      });
-
-      expect(toastLoading).not.toHaveBeenCalled();
-      expect(toastDismiss).not.toHaveBeenCalled();
-      expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
-        description: "init failed",
-      });
-    } finally {
-      taskStoreDeferred.resolve(makeTaskStoreCheck({ taskStorePath: null }));
-      taskDeferred.resolve();
-      branchesDeferred.resolve();
-      await harness.unmount();
-    }
+        await harness.unmount();
+      }
+    });
   });
 
   test("dismisses the task-store preparation toast when task loading fails after it is shown", async () => {

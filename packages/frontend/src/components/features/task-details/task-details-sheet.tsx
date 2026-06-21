@@ -40,13 +40,14 @@ const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
   (action) => action !== "reset_task",
 );
 const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
+const EMPTY_HISTORICAL_SESSIONS: NonNullable<TaskDetailsSheetProps["historicalSessions"]> = [];
 
 export function TaskDetailsSheet({
   activeWorkspace = null,
   task,
   allTasks,
   taskSessions = EMPTY_TASK_SESSIONS,
-  historicalSessions = [],
+  historicalSessions = EMPTY_HISTORICAL_SESSIONS,
   hasActiveSession = false,
   activeSessionRole,
   open,

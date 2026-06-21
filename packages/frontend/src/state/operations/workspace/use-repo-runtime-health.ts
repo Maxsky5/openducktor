@@ -1,9 +1,10 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { repoRuntimeHealthQueryOptions } from "../../queries/checks";
+import { classifyDiagnosticsQueryError, repoRuntimeHealthQueryOptions } from "../../queries/checks";
 
 type UseRepoRuntimeHealthArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -18,6 +19,48 @@ type UseRepoRuntimeHealthResult = {
   activeRepoRuntimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingRepoRuntimeHealth: boolean;
   refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
+};
+
+const buildRuntimeHealthQueryErrorMap = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  error: unknown,
+): RepoRuntimeHealthMap => {
+  const checkedAt = new Date().toISOString();
+  const { failureKind, message } = classifyDiagnosticsQueryError(error);
+  const entries = runtimeDefinitions.map((definition) => {
+    const runtimeHealth: RepoRuntimeHealthCheck = {
+      status: "error",
+      checkedAt,
+      runtime: {
+        status: "error",
+        stage: "startup_failed",
+        observation: null,
+        instance: null,
+        startedAt: null,
+        updatedAt: checkedAt,
+        elapsedMs: null,
+        attempts: null,
+        detail: message,
+        failureKind,
+        failureReason: message,
+      },
+      mcp: definition.capabilities.optionalSurfaces.supportsMcpStatus
+        ? {
+            supported: true,
+            status: "error",
+            serverName: ODT_MCP_SERVER_NAME,
+            serverStatus: null,
+            toolIds: [],
+            detail: "Runtime health check failed before MCP status could be read.",
+            failureKind,
+          }
+        : null,
+    };
+
+    return [definition.kind, runtimeHealth] as const;
+  });
+
+  return Object.fromEntries(entries);
 };
 
 export function useRepoRuntimeHealth({
@@ -60,8 +103,16 @@ export function useRepoRuntimeHealth({
       return {};
     }
 
-    return runtimeHealthQuery.data ?? {};
-  }, [activeRepoPath, runtimeHealthQuery.data]);
+    if (runtimeHealthQuery.data) {
+      return runtimeHealthQuery.data;
+    }
+
+    if (runtimeHealthQuery.error) {
+      return buildRuntimeHealthQueryErrorMap(runtimeDefinitions, runtimeHealthQuery.error);
+    }
+
+    return {};
+  }, [activeRepoPath, runtimeDefinitions, runtimeHealthQuery.data, runtimeHealthQuery.error]);
 
   return {
     activeRepoRuntimeHealthByRuntime,

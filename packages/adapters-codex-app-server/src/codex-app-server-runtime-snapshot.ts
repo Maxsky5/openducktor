@@ -22,7 +22,7 @@ export type ResolveCodexRuntimeSnapshotSourceInput = {
   hasActiveTurn: boolean;
 };
 
-export const resolveCodexRuntimeSnapshotSource = ({
+const resolveCodexRuntimeSnapshotSource = ({
   session,
   thread,
   threadIsLoaded,
@@ -46,7 +46,7 @@ export const resolveCodexRuntimeSnapshotSource = ({
   return { type: "thread", thread };
 };
 
-export const toRuntimeSnapshot = (
+const toRuntimeSnapshot = (
   session: CodexSessionState,
   pendingApprovals: AgentPendingApprovalRequest[],
   pendingQuestions: AgentPendingQuestionRequest[],
@@ -90,7 +90,7 @@ export const toRuntimeSnapshotFromThread = (
   pendingQuestions: [],
 });
 
-export const codexSessionRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({
+const codexSessionRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({
   externalSessionId: session.threadId,
   repoPath: session.repoPath,
   runtimeKind: "codex",

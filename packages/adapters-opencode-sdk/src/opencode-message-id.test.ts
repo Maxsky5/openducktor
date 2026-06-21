@@ -15,4 +15,13 @@ describe("opencode message ids", () => {
     expect(first < second).toBe(true);
     expect(second < third).toBe(true);
   });
+
+  test("keeps sortable prefixes for modern timestamps beyond the old millisecond wrap window", () => {
+    const first = createOpenCodeMessageId(Date.parse("2026-06-21T00:00:00.000Z"));
+    const second = createOpenCodeMessageId(Date.parse("2036-06-21T00:00:00.000Z"));
+
+    expect(first).toMatch(OPENCODE_MESSAGE_ID_PATTERN);
+    expect(second).toMatch(OPENCODE_MESSAGE_ID_PATTERN);
+    expect(first < second).toBe(true);
+  });
 });

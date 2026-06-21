@@ -127,7 +127,7 @@ describe("useRepoRuntimeHealth", () => {
     }
   });
 
-  test("does not invent runtime health when the runtime health query fails", async () => {
+  test("maps initial runtime health query failures to runtime diagnostics", async () => {
     repoHealthHandler = async () => {
       throw new Error("runtime health unreachable");
     };
@@ -136,12 +136,26 @@ describe("useRepoRuntimeHealth", () => {
     try {
       await harness.mount();
       await harness.waitFor(
-        (state) =>
-          state.isLoadingRepoRuntimeHealth === false &&
-          checkRepoRuntimeHealth.mock.calls.length > 0,
+        (state) => state.activeRepoRuntimeHealthByRuntime.opencode?.status === "error",
       );
 
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeUndefined();
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          status: "error",
+          runtime: expect.objectContaining({
+            status: "error",
+            stage: "startup_failed",
+            detail: "runtime health unreachable",
+            failureKind: "error",
+            failureReason: "runtime health unreachable",
+          }),
+          mcp: expect.objectContaining({
+            status: "error",
+            detail: "Runtime health check failed before MCP status could be read.",
+            failureKind: "error",
+          }),
+        }),
+      );
     } finally {
       await harness.unmount();
     }

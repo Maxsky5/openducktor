@@ -90,7 +90,7 @@ const toOpencodeSessionStatusMap = (
   return payload as Record<string, unknown>;
 };
 
-export const normalizeSessionDirectory = (directory: unknown): string | undefined => {
+const normalizeSessionDirectory = (directory: unknown): string | undefined => {
   if (typeof directory !== "string") {
     return undefined;
   }
@@ -104,9 +104,7 @@ export const normalizeSessionDirectory = (directory: unknown): string | undefine
   return normalized.length > 0 ? normalized : undefined;
 };
 
-export const toOpencodeLocalRuntimeSnapshot = (
-  session: SessionRecord,
-): OpencodeRuntimeSnapshotSource => ({
+const toOpencodeLocalRuntimeSnapshot = (session: SessionRecord): OpencodeRuntimeSnapshotSource => ({
   externalSessionId: session.externalSessionId,
   title: session.input.role
     ? formatWorkflowAgentSessionTitle(session.input.role, session.input.taskId)

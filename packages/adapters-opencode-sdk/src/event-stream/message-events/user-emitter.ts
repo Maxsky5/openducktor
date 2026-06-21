@@ -206,18 +206,3 @@ export const seedHistoryUserMessage = (
   session?.emittedUserMessageStates.set(message.messageId, message.state);
   return true;
 };
-
-export const emitHistoryUserMessage = (
-  runtime: EventStreamRuntime,
-  message: UserHistoryMessage,
-): boolean => {
-  seedHistoryUserMessageMetadata(runtime, message);
-  return emitUserMessage(runtime, {
-    messageId: message.messageId,
-    timestamp: message.timestamp,
-    message: message.text,
-    parts: message.displayParts,
-    state: message.state,
-    ...(message.model ? { model: message.model } : {}),
-  });
-};

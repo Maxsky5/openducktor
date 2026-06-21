@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { toRefreshedRuntimeSnapshot } from "./codex-app-server-runtime-snapshot";
 import {
-  resolveCodexRuntimeSnapshotSource,
-  toRuntimeSnapshot,
-} from "./codex-app-server-runtime-snapshot";
-import { type CodexThreadSnapshot, codexThreadStatusSnapshot } from "./codex-app-server-threads";
+  type CodexThreadInventory,
+  type CodexThreadSnapshot,
+  codexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
 
 const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessionState => ({
@@ -32,11 +33,31 @@ const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot
   status: codexThreadStatusSnapshot(status),
 });
 
+const createInventory = ({
+  thread = null,
+  threadIsLoaded = thread !== null,
+}: {
+  thread?: CodexThreadSnapshot | null;
+  threadIsLoaded?: boolean;
+} = {}): CodexThreadInventory => ({
+  runtimeId: "runtime-1",
+  loadedIds: thread && threadIsLoaded ? new Set([thread.id]) : new Set(),
+  threadsById: thread ? new Map([[thread.id, thread]]) : new Map(),
+});
+
 describe("toRuntimeSnapshot", () => {
   test("uses a neutral Codex title and does not infer activity from summary status", () => {
     const session = createSession();
 
-    expect(toRuntimeSnapshot(session, [], [])).toMatchObject({
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session,
+        inventory: createInventory(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: true,
+      }),
+    ).toMatchObject({
       availability: "runtime",
       classification: "idle",
       ref: {
@@ -52,7 +73,15 @@ describe("toRuntimeSnapshot", () => {
   test("keeps runtime-reported waiting activity behind the shared classifier", () => {
     const session = createSession({ classification: "waiting_for_permission" });
 
-    expect(toRuntimeSnapshot(session, [], [])).toMatchObject({
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session,
+        inventory: createInventory(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({
       availability: "runtime",
       classification: "waiting_for_permission",
     });
@@ -62,7 +91,13 @@ describe("toRuntimeSnapshot", () => {
     const session = createSession({ classification: "waiting_for_permission" });
 
     expect(
-      toRuntimeSnapshot(session, [], [{ requestId: "question-1", questions: [] }]),
+      toRefreshedRuntimeSnapshot({
+        session,
+        inventory: createInventory(),
+        pendingApprovals: [],
+        pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        hasActiveTurn: false,
+      }),
     ).toMatchObject({
       availability: "runtime",
       classification: "waiting_for_question",
@@ -73,49 +108,64 @@ describe("toRuntimeSnapshot", () => {
 describe("resolveCodexRuntimeSnapshotSource", () => {
   test("uses thread inventory when local state has no live status", () => {
     expect(
-      resolveCodexRuntimeSnapshotSource({
+      toRefreshedRuntimeSnapshot({
         session: createSession(),
-        thread: createThread("active"),
-        threadIsLoaded: true,
-        hasPendingInput: false,
+        inventory: createInventory({ thread: createThread("active") }),
+        pendingApprovals: [],
+        pendingQuestions: [],
         hasActiveTurn: false,
       }),
-    ).toEqual({ type: "thread", thread: createThread("active") });
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "running",
+      title: "Codex thread",
+    });
   });
 
   test("uses loaded inventory when no pending input or active turn needs local state", () => {
     expect(
-      resolveCodexRuntimeSnapshotSource({
+      toRefreshedRuntimeSnapshot({
         session: createSession(codexThreadStatusSnapshot("idle")),
-        thread: createThread("active"),
-        threadIsLoaded: true,
-        hasPendingInput: false,
+        inventory: createInventory({ thread: createThread("active") }),
+        pendingApprovals: [],
+        pendingQuestions: [],
         hasActiveTurn: false,
       }),
-    ).toEqual({ type: "thread", thread: createThread("active") });
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "running",
+      title: "Codex thread",
+    });
   });
 
   test("keeps active local turns visible while inventory catches up", () => {
     expect(
-      resolveCodexRuntimeSnapshotSource({
+      toRefreshedRuntimeSnapshot({
         session: createSession(),
-        thread: createThread("idle"),
-        threadIsLoaded: true,
-        hasPendingInput: false,
+        inventory: createInventory({ thread: createThread("idle") }),
+        pendingApprovals: [],
+        pendingQuestions: [],
         hasActiveTurn: true,
       }),
-    ).toEqual({ type: "local" });
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "idle",
+      title: "Codex",
+    });
   });
 
   test("returns missing only when neither inventory nor local runtime state can prove a runtime snapshot", () => {
     expect(
-      resolveCodexRuntimeSnapshotSource({
+      toRefreshedRuntimeSnapshot({
         session: createSession(),
-        thread: null,
-        threadIsLoaded: false,
-        hasPendingInput: false,
+        inventory: createInventory(),
+        pendingApprovals: [],
+        pendingQuestions: [],
         hasActiveTurn: false,
       }),
-    ).toEqual({ type: "missing" });
+    ).toMatchObject({
+      availability: "missing",
+      classification: "missing",
+    });
   });
 });
