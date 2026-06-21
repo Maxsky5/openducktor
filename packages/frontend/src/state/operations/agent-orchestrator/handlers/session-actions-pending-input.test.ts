@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { createAgentSessionRuntimeSnapshotFixture } from "../test-utils";
 import {
@@ -11,6 +12,37 @@ import {
   getSession,
   mockAgentSessionRuntimeSnapshot,
 } from "./session-actions.test-helpers";
+
+const readPendingApproval = (session: ReturnType<typeof getSession>, requestId: string) => {
+  const request = session.pendingApprovals.find((approval) => approval.requestId === requestId);
+  if (!request) {
+    throw new Error(`Expected pending approval '${requestId}'`);
+  }
+  return request;
+};
+
+const readPendingQuestion = (session: ReturnType<typeof getSession>, requestId: string) => {
+  const request = session.pendingQuestions.find((question) => question.requestId === requestId);
+  if (!request) {
+    throw new Error(`Expected pending question '${requestId}'`);
+  }
+  return request;
+};
+
+const missingApprovalRequest = (requestId: string): AgentApprovalRequest => ({
+  requestId,
+  requestType: "permission_grant",
+  title: "Approve permission: read",
+  summary: "Approval request for read.",
+  action: { name: "read" },
+  mutation: "read_only",
+  supportedReplyOutcomes: ["approve_once", "reject"],
+});
+
+const missingQuestionRequest = (requestId: string): AgentQuestionRequest => ({
+  requestId,
+  questions: [],
+});
 
 describe("agent-orchestrator/handlers/session-actions pending input", () => {
   test("removes resolved permission", async () => {
@@ -59,7 +91,12 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
 
     try {
-      await actions.replyAgentApproval(getSession(sessionsRef), "perm-1", "approve_once");
+      const session = getSession(sessionsRef);
+      await actions.replyAgentApproval(
+        session,
+        readPendingApproval(session, "perm-1"),
+        "approve_once",
+      );
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
       expect(updateSessionOptions).toEqual([undefined]);
@@ -150,7 +187,12 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
 
     try {
-      await actions.replyAgentApproval(getSession(sessionsRef), "perm-1", "approve_once");
+      const session = getSession(sessionsRef);
+      await actions.replyAgentApproval(
+        session,
+        readPendingApproval(session, "perm-1"),
+        "approve_once",
+      );
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingApprovals).toEqual([]);
@@ -183,7 +225,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       await expect(
         actions.replyAgentApproval(
           buildSession({ externalSessionId: "session-transcript-1" }),
-          "perm-1",
+          missingApprovalRequest("perm-1"),
           "approve_once",
         ),
       ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
@@ -256,7 +298,10 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
 
     try {
-      await actions.answerAgentQuestion(getSession(sessionsRef), "question-1", [["yes"]]);
+      const session = getSession(sessionsRef);
+      await actions.answerAgentQuestion(session, readPendingQuestion(session, "question-1"), [
+        ["yes"],
+      ]);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
       expect(updateSessionOptions).toEqual([undefined]);
@@ -293,7 +338,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       await expect(
         actions.answerAgentQuestion(
           buildSession({ externalSessionId: "session-transcript-1" }),
-          "question-1",
+          missingQuestionRequest("question-1"),
           [["yes"]],
         ),
       ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
@@ -375,7 +420,10 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
 
     try {
-      await actions.answerAgentQuestion(getSession(sessionsRef), "question-1", [["yes"]]);
+      const session = getSession(sessionsRef);
+      await actions.answerAgentQuestion(session, readPendingQuestion(session, "question-1"), [
+        ["yes"],
+      ]);
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingQuestions).toEqual([]);

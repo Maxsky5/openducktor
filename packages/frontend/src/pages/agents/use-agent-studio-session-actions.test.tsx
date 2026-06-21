@@ -1709,9 +1709,12 @@ describe("useAgentStudioSessionActions", () => {
       await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
     });
 
-    expect(answerAgentQuestion).toHaveBeenCalledWith(localSessionIdentity("session-9"), "req-1", [
-      ["yes"],
-    ]);
+    expect(answerAgentQuestion).toHaveBeenCalledWith(
+      localSessionIdentity("session-9"),
+      "req-1",
+      [["yes"]],
+      [localSessionIdentity("session-9")],
+    );
 
     await harness.unmount();
   });
@@ -1745,6 +1748,8 @@ describe("useAgentStudioSessionActions", () => {
       localSessionIdentity("session-approval"),
       "approval-1",
       "approve_once",
+      undefined,
+      [localSessionIdentity("session-approval")],
     );
 
     await harness.unmount();

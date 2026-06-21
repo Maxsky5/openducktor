@@ -456,6 +456,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       store: {
         updateSession: createSessionUpdater(sessionsRef),
         readSession: (identity) => findSession(sessionsRef, identity.externalSessionId) ?? null,
+        ensureSession: (_identity, createSession) => createSession(),
         isSessionObserved: (identity) => identity.externalSessionId === session.externalSessionId,
       },
       turn: {

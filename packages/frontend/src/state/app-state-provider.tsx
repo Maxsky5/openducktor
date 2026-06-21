@@ -20,6 +20,7 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeServices } from "./agent-runtime-services";
+import type { AgentSessionVisiblePendingInput } from "./agent-session-visible-pending-input";
 import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
 import {
   ChecksStateContext,
@@ -134,5 +135,16 @@ export const useAgentSession = (
     sessionStore.subscribe,
     () => sessionStore.getSessionSnapshot(identity),
     () => sessionStore.getSessionSnapshot(identity),
+  );
+};
+
+export const useAgentSessionVisiblePendingInput = (
+  identity: AgentSessionIdentity | null,
+): AgentSessionVisiblePendingInput => {
+  const sessionStore = useAgentSessionsContext();
+  return useSyncExternalStore(
+    sessionStore.subscribe,
+    () => sessionStore.getVisiblePendingInputSnapshot(identity),
+    () => sessionStore.getVisiblePendingInputSnapshot(identity),
   );
 };

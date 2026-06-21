@@ -1,7 +1,11 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type {
+  AgentApprovalRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { createSessionTurnState } from "../support/session-turn-state";
 import type { SessionEventAdapter } from "./session-event-types";
 import { listenToAgentSessionEvents } from "./session-events";
@@ -15,7 +19,7 @@ export type ObserveTransientAgentSessionEventsParams = {
   subscribeEvents: SessionEventAdapter["subscribeEvents"];
   replyApproval: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
@@ -34,13 +38,26 @@ export const observeTransientAgentSessionEvents = async ({
   const unsubscribe = await listenToAgentSessionEvents({
     adapter: {
       subscribeEvents,
-      replyApproval: ({ requestId, outcome, message, ...session }) =>
-        replyApproval(session, requestId, outcome, message),
+      replyApproval: ({ requestId, outcome, message, ...session }) => {
+        const pendingApproval = readSession()?.pendingApprovals.find(
+          (approval) => approval.requestId === requestId,
+        );
+        if (!pendingApproval) {
+          throw new Error(`Approval request '${requestId}' is not loaded.`);
+        }
+        return replyApproval(toAgentSessionIdentity(session), pendingApproval, outcome, message);
+      },
     },
     sessionRef,
     turnMetadata: turnState.metadata,
     readSession: (identity) =>
       matchesAgentSessionIdentity(identity, sessionRef) ? readSession() : null,
+    ensureSession: (identity, createSession) => {
+      if (!matchesAgentSessionIdentity(identity, sessionRef)) {
+        return createSession();
+      }
+      return readSession() ?? applySessionEvent(() => createSession());
+    },
     updateSession: (identity, updater) => {
       if (!matchesAgentSessionIdentity(identity, sessionRef)) {
         return null;

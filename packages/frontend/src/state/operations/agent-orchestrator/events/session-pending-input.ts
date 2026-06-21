@@ -1,14 +1,20 @@
 import type { AgentRole } from "@openducktor/core";
 import { isReadOnlyAgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
+import type { PendingInputRecordTarget } from "../pending-input-projection";
 import { appendSessionMessage } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import { readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import {
   resolvePendingInputRoute,
-  resolveResolvedPendingInputSession,
+  resolveResolvedPendingInputSessions,
 } from "./session-pending-input-routing";
 import { patchParentSubagentSessionLink } from "./session-subagent-links";
 
@@ -45,6 +51,14 @@ const removePendingInput = <Entry extends { requestId: string }>(
   requestId: string,
 ): Entry[] => entries.filter((entry) => entry.requestId !== requestId);
 
+const shouldStoreResponseSession = (target: PendingInputRecordTarget): boolean =>
+  agentSessionIdentityKey(target.session) !== agentSessionIdentityKey(target.replySession);
+
+const pendingInputRouting = (target: PendingInputRecordTarget) => ({
+  ...(target.source ? { source: target.source } : {}),
+  ...(shouldStoreResponseSession(target) ? { responseSession: target.replySession } : {}),
+});
+
 const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: ApprovalRequiredEvent,
@@ -61,29 +75,38 @@ const resolvePermissionPolicyRole = (
 
 const recordSessionPendingApproval = (
   context: SessionLifecycleEventContext,
-  targetSession: AgentSessionIdentity | null,
+  target: PendingInputRecordTarget,
   event: ApprovalRequiredEvent,
-): void => {
-  if (!targetSession) {
-    return;
-  }
-  context.store.updateSession(targetSession, (current) => ({
-    ...current,
-    pendingApprovals: upsertPendingInput(current.pendingApprovals, toPendingApproval(event)),
-  }));
+): boolean => {
+  const nextApproval = {
+    ...toPendingApproval(event),
+    ...pendingInputRouting(target),
+  };
+  let didCreateRequest = false;
+  context.store.updateSession(target.session, (current) => {
+    didCreateRequest = current.pendingApprovals.every(
+      (approval) => approval.requestId !== event.requestId,
+    );
+    return {
+      ...current,
+      pendingApprovals: upsertPendingInput(current.pendingApprovals, nextApproval),
+    };
+  });
+  return didCreateRequest;
 };
 
 const recordSessionPendingQuestion = (
   context: SessionLifecycleEventContext,
-  targetSession: AgentSessionIdentity | null,
+  target: PendingInputRecordTarget,
   event: QuestionRequiredEvent,
 ): void => {
-  if (!targetSession) {
-    return;
-  }
-  context.store.updateSession(targetSession, (current) => ({
+  const nextQuestion = {
+    ...toPendingQuestion(event),
+    ...pendingInputRouting(target),
+  };
+  context.store.updateSession(target.session, (current) => ({
     ...current,
-    pendingQuestions: upsertPendingInput(current.pendingQuestions, toPendingQuestion(event)),
+    pendingQuestions: upsertPendingInput(current.pendingQuestions, nextQuestion),
   }));
 };
 
@@ -98,22 +121,56 @@ const shouldAutoRejectApproval = (
   return context.approvals.readOnlyApprovalAutoRejectSafe;
 };
 
+const readLoadedPendingInputTarget = (
+  context: SessionLifecycleEventContext,
+  target: PendingInputRecordTarget,
+): { target: PendingInputRecordTarget; session: AgentSessionState } | null => {
+  const session = context.store.readSession(target.session);
+  return session ? { target, session } : null;
+};
+
+const findFirstLoadedPendingInputTarget = (
+  context: SessionLifecycleEventContext,
+  targets: readonly PendingInputRecordTarget[],
+): { target: PendingInputRecordTarget; session: AgentSessionState } | null => {
+  for (const target of targets) {
+    const loadedTarget = readLoadedPendingInputTarget(context, target);
+    if (loadedTarget) {
+      return loadedTarget;
+    }
+  }
+  return null;
+};
+
 const autoRejectMutatingApproval = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent,
   role: AgentRole,
   {
-    pendingSession,
+    pendingTarget,
+    recordedTargets,
     replySession,
   }: {
-    pendingSession: AgentSessionIdentity | null;
+    pendingTarget: PendingInputRecordTarget;
+    recordedTargets: readonly PendingInputRecordTarget[];
     replySession: AgentSessionIdentity;
   },
 ): void => {
-  const pendingApproval = toPendingApproval(event);
+  const shouldPersistSession = (session: AgentSessionIdentity): boolean => {
+    const loadedSession = context.store.readSession(session);
+    return loadedSession !== null && loadedSession.role !== null;
+  };
+  const persistOptionsForSession = (session: AgentSessionIdentity) =>
+    shouldPersistSession(session) ? ({ persist: true } as const) : undefined;
   const markManualResponseRequired = (error: unknown): void => {
-    const manualResponseSession =
-      pendingSession && context.store.readSession(pendingSession) ? pendingSession : replySession;
+    const workflowTarget = recordedTargets.find((target) => shouldPersistSession(target.session));
+    const loadedPendingTarget = readLoadedPendingInputTarget(context, pendingTarget);
+    const manualTarget = workflowTarget ?? loadedPendingTarget?.target ?? null;
+    const manualResponseSession = manualTarget?.session ?? replySession;
+    const pendingApproval = {
+      ...toPendingApproval(event),
+      ...pendingInputRouting(manualTarget ?? pendingTarget),
+    };
     context.store.updateSession(
       manualResponseSession,
       (current) => ({
@@ -126,12 +183,16 @@ const autoRejectMutatingApproval = (
           timestamp: event.timestamp,
         }),
       }),
-      { persist: true },
+      persistOptionsForSession(manualResponseSession),
     );
     patchParentSubagentSessionLink(context, event);
   };
 
-  const loadedReplySession = context.store.readSession(replySession);
+  const loadedReplySession =
+    context.store.readSession(replySession) ??
+    readLoadedPendingInputTarget(context, pendingTarget)?.session ??
+    findFirstLoadedPendingInputTarget(context, recordedTargets)?.session ??
+    null;
   if (!loadedReplySession) {
     markManualResponseRequired(
       new Error(`Session '${replySession.externalSessionId}' is not loaded.`),
@@ -141,7 +202,12 @@ const autoRejectMutatingApproval = (
 
   let replyTarget: ReturnType<typeof toRuntimeSessionContextRef>;
   try {
-    replyTarget = toRuntimeSessionContextRef(context.session.repoPath, loadedReplySession);
+    replyTarget = toRuntimeSessionContextRef(context.session.repoPath, {
+      ...loadedReplySession,
+      externalSessionId: replySession.externalSessionId,
+      runtimeKind: replySession.runtimeKind,
+      workingDirectory: replySession.workingDirectory,
+    });
   } catch (error) {
     markManualResponseRequired(error);
     return;
@@ -158,23 +224,22 @@ const autoRejectMutatingApproval = (
       }),
     )
     .then(() => {
-      if (!pendingSession) {
-        return;
-      }
-      context.store.updateSession(
-        pendingSession,
-        (current) => ({
-          ...current,
-          pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
-          messages: appendSessionMessage(current, {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Auto-rejected mutating approval (${event.title}) for ${role} session.`,
-            timestamp: event.timestamp,
+      for (const target of recordedTargets) {
+        context.store.updateSession(
+          target.session,
+          (current) => ({
+            ...current,
+            pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
+            messages: appendSessionMessage(current, {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: `Auto-rejected mutating approval (${event.title}) for ${role} session.`,
+              timestamp: event.timestamp,
+            }),
           }),
-        }),
-        { persist: true },
-      );
+          persistOptionsForSession(target.session),
+        );
+      }
     })
     .catch((error) => {
       markManualResponseRequired(error);
@@ -193,33 +258,42 @@ export const handlePermissionRequired = (
   }
 
   if (role && shouldAutoRejectApproval(context, role, event)) {
-    recordSessionPendingApproval(context, route.pendingSession, event);
-    if (!route.approvalReplySession) {
+    const [primaryTarget] = route.targets;
+    if (!primaryTarget) {
+      return;
+    }
+    let didCreateRequest = false;
+    for (const target of route.targets) {
+      const targetWasCreated = recordSessionPendingApproval(context, target, event);
+      didCreateRequest = didCreateRequest || targetWasCreated;
+    }
+    if (!didCreateRequest) {
       return;
     }
     autoRejectMutatingApproval(context, event, role, {
-      pendingSession: route.pendingSession,
-      replySession: route.approvalReplySession,
+      pendingTarget: primaryTarget,
+      recordedTargets: route.targets,
+      replySession: primaryTarget.replySession,
     });
     return;
   }
 
-  recordSessionPendingApproval(context, route.pendingSession, event);
+  for (const target of route.targets) {
+    recordSessionPendingApproval(context, target, event);
+  }
 };
 
 export const handlePermissionResolved = (
   context: SessionLifecycleEventContext,
   event: ApprovalResolvedEvent,
 ): void => {
-  const targetSession = resolveResolvedPendingInputSession(context, event);
-  if (!targetSession) {
-    return;
+  const targetSessions = resolveResolvedPendingInputSessions(context, event);
+  for (const targetSession of targetSessions) {
+    context.store.updateSession(targetSession, (current) => ({
+      ...current,
+      pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
+    }));
   }
-
-  context.store.updateSession(targetSession, (current) => ({
-    ...current,
-    pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
-  }));
 };
 
 export const handleQuestionRequired = (
@@ -232,20 +306,20 @@ export const handleQuestionRequired = (
     patchParentSubagentSessionLink(context, event);
   }
 
-  recordSessionPendingQuestion(context, route.pendingSession, event);
+  for (const target of route.targets) {
+    recordSessionPendingQuestion(context, target, event);
+  }
 };
 
 export const handleQuestionResolved = (
   context: SessionLifecycleEventContext,
   event: QuestionResolvedEvent,
 ): void => {
-  const targetSession = resolveResolvedPendingInputSession(context, event);
-  if (!targetSession) {
-    return;
+  const targetSessions = resolveResolvedPendingInputSessions(context, event);
+  for (const targetSession of targetSessions) {
+    context.store.updateSession(targetSession, (current) => ({
+      ...current,
+      pendingQuestions: removePendingInput(current.pendingQuestions, event.requestId),
+    }));
   }
-
-  context.store.updateSession(targetSession, (current) => ({
-    ...current,
-    pendingQuestions: removePendingInput(current.pendingQuestions, event.requestId),
-  }));
 };

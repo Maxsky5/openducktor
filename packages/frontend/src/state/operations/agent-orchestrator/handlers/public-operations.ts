@@ -10,7 +10,12 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { StartAgentSession } from "@/types/agent-session-start";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 
@@ -24,13 +29,13 @@ type SessionActions = {
   ) => void;
   replyAgentApproval: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;
 };

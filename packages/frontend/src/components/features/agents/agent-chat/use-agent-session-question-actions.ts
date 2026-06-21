@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   type AgentSessionRequestState,
@@ -11,14 +11,14 @@ import {
 
 type UseAgentSessionQuestionActionsArgs = {
   sessionIdentity: AgentSessionIdentity | null;
-  pendingQuestionRequestIds: readonly string[];
+  pendingQuestions: readonly AgentQuestionRequest[];
   canAnswerQuestions: boolean;
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
 export function useAgentSessionQuestionActions({
   sessionIdentity,
-  pendingQuestionRequestIds,
+  pendingQuestions,
   canAnswerQuestions,
   answerAgentQuestion,
 }: UseAgentSessionQuestionActionsArgs): {
@@ -32,6 +32,16 @@ export function useAgentSessionQuestionActions({
   const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
   const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
   const sessionKey = sessionIdentity ? agentSessionIdentityKey(sessionIdentity) : null;
+  const pendingQuestionRequestIds = useMemo(
+    () => pendingQuestions.map((request) => request.requestId),
+    [pendingQuestions],
+  );
+  const pendingQuestionByRequestId = useMemo(
+    () => new Map(pendingQuestions.map((request) => [request.requestId, request])),
+    [pendingQuestions],
+  );
+  const pendingQuestionByRequestIdRef = useRef(pendingQuestionByRequestId);
+  pendingQuestionByRequestIdRef.current = pendingQuestionByRequestId;
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
@@ -49,12 +59,16 @@ export function useAgentSessionQuestionActions({
         runtimeKind: sessionRuntimeKind,
         workingDirectory: sessionWorkingDirectory,
       });
+      const request = pendingQuestionByRequestIdRef.current.get(requestId);
+      if (!request) {
+        return;
+      }
 
       setSubmittingQuestionBySessionKey((current) =>
         setAgentSessionRequestValue(current, sessionKey, requestId, true),
       );
       try {
-        await answerAgentQuestion(sessionActionTarget, requestId, answers);
+        await answerAgentQuestion(sessionActionTarget, request, answers);
       } finally {
         setSubmittingQuestionBySessionKey((current) =>
           removeAgentSessionRequestValue(current, sessionKey, requestId),

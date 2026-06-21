@@ -10,7 +10,7 @@ import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-ru
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { UpdateSession } from "../events/session-event-types";
+import type { EnsureSession, UpdateSession } from "../events/session-event-types";
 import { listenToAgentSessionEvents } from "../events/session-events";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
@@ -23,6 +23,7 @@ type UseAgentSessionObserversArgs = {
   sessionObserversRef: { current: SessionObservers };
   sessionTurnState: SessionTurnState;
   readSession: AgentSessionsStore["getSessionSnapshot"];
+  ensureSession: EnsureSession;
   updateSession: UpdateSession;
   queryClient: QueryClient;
   refreshTaskData: (
@@ -39,6 +40,7 @@ export const useAgentSessionObservers = ({
   sessionObserversRef,
   sessionTurnState,
   readSession,
+  ensureSession,
   updateSession,
   queryClient,
   refreshTaskData,
@@ -80,6 +82,7 @@ export const useAgentSessionObservers = ({
           sessionRef: target,
           turnMetadata: sessionTurnState.metadata,
           readSession,
+          ensureSession,
           updateSession,
           updateSessionTodos: (updater) =>
             updateSessionTodosQueryData(queryClient, target, updater),
@@ -103,6 +106,7 @@ export const useAgentSessionObservers = ({
       buildReadOnlyApprovalRejectionMessage,
       refreshTaskData,
       readSession,
+      ensureSession,
       queryClient,
       sessionObserversRef,
       sessionTurnState,

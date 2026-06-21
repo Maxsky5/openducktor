@@ -119,7 +119,19 @@ export type SessionMessagesState = {
 
 export type AgentSessionMessages = SessionMessagesState;
 
-export type AgentApprovalRequest = AgentPendingApprovalRequest;
+export type AgentPendingInputSource = {
+  kind: "subagent";
+  parentExternalSessionId: string;
+  childExternalSessionId: string;
+  subagentCorrelationKey?: string;
+};
+
+type AgentPendingInputRouting = {
+  source?: AgentPendingInputSource;
+  responseSession?: AgentSessionIdentity;
+};
+
+export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInputRouting;
 
 export type AgentQuestionRequest = {
   requestId: string;
@@ -130,7 +142,7 @@ export type AgentQuestionRequest = {
     multiple?: boolean;
     custom?: boolean;
   }>;
-};
+} & AgentPendingInputRouting;
 
 export type AgentSessionContextUsage = {
   totalTokens: number;

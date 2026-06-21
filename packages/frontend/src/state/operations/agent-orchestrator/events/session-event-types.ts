@@ -6,7 +6,7 @@ import type {
   AgentSessionRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
@@ -19,6 +19,10 @@ export type UpdateSession = (
 ) => AgentSessionState | null;
 
 export type ReadSession = (identity: AgentSessionIdentity) => AgentSessionState | null;
+export type EnsureSession = (
+  identity: AgentSessionIdentity,
+  createSession: () => AgentSessionState,
+) => AgentSessionState;
 
 export type ResolveTurnDuration = (
   sessionKey: string,
@@ -48,6 +52,7 @@ export type ObserveAgentSessionParams = {
   eventBatchWindowMs?: number;
   turnMetadata: SessionTurnMetadata;
   readSession: ReadSession;
+  ensureSession: EnsureSession;
   updateSession: UpdateSession;
   updateSessionTodos: UpdateSessionTodos;
   isSessionObserved: (sessionIdentity: AgentSessionIdentity) => boolean;
@@ -76,6 +81,7 @@ export type SessionStoreContext = Pick<
   "updateSession" | "isSessionObserved"
 > & {
   readSession: ReadSession;
+  ensureSession: EnsureSession;
 };
 
 export type SessionTodosContext = Pick<ObserveAgentSessionParams, "updateSessionTodos">;
@@ -124,12 +130,13 @@ export type SessionToolPartEventContext = Pick<
 >;
 
 const createSessionContext = (context: ObserveAgentSessionParams): SessionEventSessionContext => ({
-  identity: context.sessionRef,
+  identity: toAgentSessionIdentity(context.sessionRef),
   key: agentSessionIdentityKey(context.sessionRef),
   repoPath: context.sessionRef.repoPath,
 });
 
 const createStoreContext = (context: ObserveAgentSessionParams): SessionStoreContext => ({
+  ensureSession: context.ensureSession,
   updateSession: context.updateSession,
   readSession: context.readSession,
   isSessionObserved: context.isSessionObserved,

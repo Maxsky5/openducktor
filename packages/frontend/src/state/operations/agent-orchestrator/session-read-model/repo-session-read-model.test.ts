@@ -889,9 +889,31 @@ describe("repo session read model", () => {
     });
 
     const parentSession = getReadModelSession(readModel, parentRecord.externalSessionId);
+    const childResponseSession = {
+      externalSessionId: "child-session",
+      runtimeKind: "opencode" as const,
+      workingDirectory: parentRecord.workingDirectory,
+    };
+    const childSource = {
+      kind: "subagent",
+      parentExternalSessionId: parentRecord.externalSessionId,
+      childExternalSessionId: "child-session",
+    } as const;
     expect(parentSession?.status).toBe("idle");
-    expect(parentSession?.pendingApprovals).toEqual([childApproval]);
-    expect(parentSession?.pendingQuestions).toEqual([childQuestion]);
+    expect(parentSession?.pendingApprovals).toEqual([
+      {
+        ...childApproval,
+        responseSession: childResponseSession,
+        source: childSource,
+      },
+    ]);
+    expect(parentSession?.pendingQuestions).toEqual([
+      {
+        ...childQuestion,
+        responseSession: childResponseSession,
+        source: childSource,
+      },
+    ]);
     expect(getReadModelSession(readModel, "child-session")).toBeNull();
     expect(readModel.liveSessionRefs).toEqual([
       {
@@ -940,7 +962,16 @@ describe("repo session read model", () => {
       getReadModelSession(readModel, parentRecord.externalSessionId)?.pendingQuestions,
     ).toEqual([]);
     expect(getReadModelSession(readModel, childRecord.externalSessionId)?.pendingQuestions).toEqual(
-      [childQuestion],
+      [
+        {
+          ...childQuestion,
+          source: {
+            kind: "subagent",
+            parentExternalSessionId: parentRecord.externalSessionId,
+            childExternalSessionId: childRecord.externalSessionId,
+          },
+        },
+      ],
     );
   });
 

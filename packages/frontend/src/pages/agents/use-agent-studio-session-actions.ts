@@ -7,7 +7,7 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
@@ -20,7 +20,7 @@ import type {
 } from "@/features/session-start";
 import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -38,8 +38,8 @@ import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
-const EMPTY_PENDING_QUESTION_REQUEST_IDS: readonly string[] = Object.freeze([]);
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
+const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuestionRequest[];
 
 type UseAgentStudioSessionActionsArgs = {
   activeWorkspaceId: string | null;
@@ -130,12 +130,6 @@ export function useAgentStudioSessionActions({
   });
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
-  const loadedSessionPendingQuestionRequestIds = useMemo(
-    () =>
-      loadedSession?.pendingQuestions.map((pendingQuestion) => pendingQuestion.requestId) ??
-      EMPTY_PENDING_QUESTION_REQUEST_IDS,
-    [loadedSession],
-  );
   const canStartRole = useCallback(
     (nextRole: AgentRole): boolean =>
       canStartAgentStudioSessionRole({
@@ -214,7 +208,7 @@ export function useAgentStudioSessionActions({
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentSessionQuestionActions({
       sessionIdentity: selectedSessionIdentity,
-      pendingQuestionRequestIds: loadedSessionPendingQuestionRequestIds,
+      pendingQuestions: loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS,
       canAnswerQuestions: agentStudioReady,
       answerAgentQuestion,
     });

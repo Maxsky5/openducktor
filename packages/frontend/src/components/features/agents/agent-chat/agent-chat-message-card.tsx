@@ -4,10 +4,6 @@ import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
-import { getSubagentMessageSessionKey } from "./subagent-session-key";
-
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
@@ -15,9 +11,7 @@ type AgentChatMessageCardProps = {
   sessionAgentColors?: Record<string, string>;
   sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount?: number;
-  subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCount?: number;
-  subagentPendingQuestionCountBySessionKey?: Record<string, number>;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
@@ -25,10 +19,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   isStreamingAssistantMessage = false,
   sessionAgentColors,
   sessionIdentity,
-  subagentPendingApprovalCount,
-  subagentPendingApprovalCountBySessionKey = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-  subagentPendingQuestionCount,
-  subagentPendingQuestionCountBySessionKey = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+  subagentPendingApprovalCount = 0,
+  subagentPendingQuestionCount = 0,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = use(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
@@ -43,17 +35,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     workflowToolAliasesByCanonical,
   });
-  const subagentSessionKey = getSubagentMessageSessionKey({
-    message,
-    parentSession: sessionIdentity,
-  });
-  const resolvedSubagentPendingApprovalCount =
-    subagentPendingApprovalCount ??
-    (subagentSessionKey ? (subagentPendingApprovalCountBySessionKey[subagentSessionKey] ?? 0) : 0);
-  const resolvedSubagentPendingQuestionCount =
-    subagentPendingQuestionCount ??
-    (subagentSessionKey ? (subagentPendingQuestionCountBySessionKey[subagentSessionKey] ?? 0) : 0);
-
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
       <MessageHeader
@@ -72,8 +53,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        subagentPendingApprovalCount={resolvedSubagentPendingApprovalCount}
-        subagentPendingQuestionCount={resolvedSubagentPendingQuestionCount}
+        subagentPendingApprovalCount={subagentPendingApprovalCount}
+        subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
     </article>
   );

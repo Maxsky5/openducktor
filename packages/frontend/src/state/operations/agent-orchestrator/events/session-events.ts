@@ -113,7 +113,6 @@ const applyQueuedSessionEvents = (
   if (!nextSession) {
     return;
   }
-
   const queuedContext = createSessionEventContext({
     ...context,
     readSession: (identity) => {
@@ -121,6 +120,15 @@ const applyQueuedSessionEvents = (
         return nextSession;
       }
       return context.readSession(identity);
+    },
+    ensureSession: (identity, createSession) => {
+      if (!matchesAgentSessionIdentity(identity, context.sessionRef)) {
+        return context.ensureSession(identity, createSession);
+      }
+      if (!nextSession) {
+        nextSession = createSession();
+      }
+      return nextSession;
     },
     updateSession: (targetSessionIdentity, updater, options) => {
       if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {

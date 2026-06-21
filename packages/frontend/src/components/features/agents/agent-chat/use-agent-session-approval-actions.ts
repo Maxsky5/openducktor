@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
@@ -15,8 +15,9 @@ type UseAgentSessionApprovalActionsParams = {
   canReplyToApprovals: boolean;
   replyAgentApproval: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
+    message?: string,
   ) => Promise<void>;
 };
 
@@ -44,6 +45,12 @@ export function useAgentSessionApprovalActions({
     () => pendingApprovals.map((request) => request.requestId),
     [pendingApprovals],
   );
+  const pendingApprovalByRequestId = useMemo(
+    () => new Map(pendingApprovals.map((request) => [request.requestId, request])),
+    [pendingApprovals],
+  );
+  const pendingApprovalByRequestIdRef = useRef(pendingApprovalByRequestId);
+  pendingApprovalByRequestIdRef.current = pendingApprovalByRequestId;
 
   const isSubmittingApprovalByRequestId = useMemo(() => {
     if (!sessionKey) {
@@ -83,6 +90,10 @@ export function useAgentSessionApprovalActions({
         runtimeKind: sessionRuntimeKind,
         workingDirectory: sessionWorkingDirectory,
       });
+      const request = pendingApprovalByRequestIdRef.current.get(requestId);
+      if (!request) {
+        return;
+      }
 
       setSubmittingApprovalBySessionKey((current) =>
         setAgentSessionRequestValue(current, sessionKey, requestId, true),
@@ -92,7 +103,7 @@ export function useAgentSessionApprovalActions({
       );
 
       try {
-        await replyAgentApproval(sessionActionTarget, requestId, outcome);
+        await replyAgentApproval(sessionActionTarget, request, outcome, undefined);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0

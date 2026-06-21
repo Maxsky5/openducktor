@@ -1,3 +1,4 @@
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
@@ -14,6 +15,10 @@ import {
   createAgentActivitySnapshot,
   createEmptyAgentActivitySnapshot,
 } from "@/state/agent-session-snapshots";
+import {
+  type AgentSessionVisiblePendingInput,
+  getAgentSessionVisiblePendingInput,
+} from "@/state/agent-session-visible-pending-input";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
 export {
@@ -32,6 +37,9 @@ export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
+  getVisiblePendingInputSnapshot: (
+    identity: AgentSessionIdentity | null,
+  ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
@@ -49,6 +57,11 @@ export const createAgentSessionsStore = (
   let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
+  let visiblePendingInputSnapshot: {
+    collection: AgentSessionCollection;
+    identityKey: string | null;
+    snapshot: AgentSessionVisiblePendingInput;
+  } | null = null;
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
@@ -91,6 +104,19 @@ export const createAgentSessionsStore = (
     },
     getActivitySnapshot: () => activitySnapshot,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
+    getVisiblePendingInputSnapshot: (identity) => {
+      const identityKey = identity ? agentSessionIdentityKey(identity) : null;
+      if (
+        visiblePendingInputSnapshot?.collection === sessionCollection &&
+        visiblePendingInputSnapshot.identityKey === identityKey
+      ) {
+        return visiblePendingInputSnapshot.snapshot;
+      }
+
+      const snapshot = getAgentSessionVisiblePendingInput(sessionCollection, identity);
+      visiblePendingInputSnapshot = { collection: sessionCollection, identityKey, snapshot };
+      return snapshot;
+    },
     commitSessionCollection,
     setSessionCollection,
     replaceSession: (session) => {

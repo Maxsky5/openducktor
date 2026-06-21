@@ -99,6 +99,25 @@ describe("AgentSessionQuestionCard", () => {
     console.error = originalConsoleError;
   });
 
+  test("labels subagent question requests", async () => {
+    const harness = createCardHarness({
+      request: buildRequest({
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "parent-session",
+          childExternalSessionId: "child-session",
+        },
+      }),
+      onSubmit: async () => {},
+    });
+
+    await harness.mount();
+
+    expect(harness.asText()).toContain("Subagent request");
+
+    await harness.unmount();
+  });
+
   test("navigates from summary to a selected question tab", async () => {
     const harness = createCardHarness({
       request: buildRequest({

@@ -7,7 +7,7 @@ import type {
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
-import type { UpdateSession } from "./events/session-event-types";
+import type { EnsureSession, UpdateSession } from "./events/session-event-types";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createLoadAgentSessionHistory } from "./history/session-history-loader";
@@ -113,6 +113,19 @@ export function useAgentOrchestratorOperations({
     },
     [persistSessionRecord, sessionStore, workspaceRepoPath],
   );
+  const ensureSession = useCallback<EnsureSession>(
+    (identity, createSession) => {
+      const current = sessionStore.getSessionSnapshot(identity);
+      if (current) {
+        return current;
+      }
+
+      const nextSession = createSession();
+      sessionStore.replaceSession(nextSession);
+      return nextSession;
+    },
+    [sessionStore],
+  );
   const queryBackedPromptOverrides = useCallback(
     (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
     [queryClient],
@@ -124,6 +137,7 @@ export function useAgentOrchestratorOperations({
     sessionObserversRef,
     sessionTurnState,
     readSession: sessionStore.getSessionSnapshot,
+    ensureSession,
     updateSession,
     queryClient,
     refreshTaskData,

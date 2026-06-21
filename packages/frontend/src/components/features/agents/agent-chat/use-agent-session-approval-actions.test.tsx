@@ -78,7 +78,12 @@ describe("useAgentSessionApprovalActions", () => {
       });
 
       await harness.waitFor((state) => state.isSubmittingApprovalByRequestId["req-1"] === true);
-      expect(replyAgentApproval).toHaveBeenCalledWith(sessionIdentity(), "req-1", "approve_once");
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        sessionIdentity(),
+        expect.objectContaining({ requestId: "req-1" }),
+        "approve_once",
+        undefined,
+      );
 
       await harness.run(async () => {
         deferredReply.resolve(undefined);
@@ -89,6 +94,48 @@ describe("useAgentSessionApprovalActions", () => {
       expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBeUndefined();
     } finally {
       deferredReply.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("passes surfaced approval requests to the operation boundary", async () => {
+    const replyAgentApproval = mock(async () => {});
+    const parentSession = sessionIdentity("parent-session");
+    const childSession = sessionIdentity("child-session");
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessionIdentity: parentSession,
+        pendingApprovals: [
+          {
+            ...createApprovalRequest("subagent-approval"),
+            responseSession: childSession,
+            source: {
+              kind: "subagent",
+              parentExternalSessionId: parentSession.externalSessionId,
+              childExternalSessionId: childSession.externalSessionId,
+            },
+          },
+        ],
+        replyAgentApproval,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.onReplyApproval("subagent-approval", "approve_once");
+      });
+
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        parentSession,
+        expect.objectContaining({
+          requestId: "subagent-approval",
+          responseSession: childSession,
+        }),
+        "approve_once",
+        undefined,
+      );
+    } finally {
       await harness.unmount();
     }
   });
@@ -123,7 +170,12 @@ describe("useAgentSessionApprovalActions", () => {
         await state.onReplyApproval("req-1", "reject");
       });
 
-      expect(replyAgentApproval).toHaveBeenCalledWith(sessionIdentity(), "req-1", "reject");
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        sessionIdentity(),
+        expect.objectContaining({ requestId: "req-1" }),
+        "reject",
+        undefined,
+      );
       expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBe("approval denied");
       expect(harness.getLatest().isSubmittingApprovalByRequestId["req-1"]).toBeUndefined();
     } finally {

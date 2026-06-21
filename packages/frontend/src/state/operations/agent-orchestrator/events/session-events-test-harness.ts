@@ -9,6 +9,7 @@ import {
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
+  replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
@@ -123,6 +124,7 @@ type ObserveAgentSessionEventsTestParams = Omit<
   | "sessionRef"
   | "turnMetadata"
   | "readSession"
+  | "ensureSession"
   | "updateSessionTodos"
   | "recordTurnActivityTimestamp"
   | "recordTurnUserMessageTimestamp"
@@ -136,6 +138,7 @@ type ObserveAgentSessionEventsTestParams = Omit<
       ObserveAgentSessionParams,
       | "sessionRef"
       | "turnMetadata"
+      | "ensureSession"
       | "updateSessionTodos"
       | "recordTurnActivityTimestamp"
       | "recordTurnUserMessageTimestamp"
@@ -159,6 +162,7 @@ export const listenToAgentSessionEvents = (
     sessionsRef,
     sessionRef: providedSessionRef,
     turnMetadata,
+    ensureSession,
     updateSessionTodos,
     recordTurnActivityTimestamp,
     recordTurnUserMessageTimestamp,
@@ -202,6 +206,17 @@ export const listenToAgentSessionEvents = (
       isSessionObserved ??
       ((candidateSession) =>
         agentSessionIdentityKey(candidateSession) === agentSessionIdentityKey(sessionRef)),
+    ensureSession:
+      ensureSession ??
+      ((identity, createSession) => {
+        const current = getAgentSession(sessionsRef.current, identity);
+        if (current) {
+          return current;
+        }
+        const nextSession = createSession();
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
+        return nextSession;
+      }),
     updateSessionTodos: updateSessionTodos ?? (() => {}),
     readSession: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionRef,

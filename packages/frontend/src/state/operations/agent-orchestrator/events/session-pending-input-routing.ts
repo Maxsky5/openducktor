@@ -2,7 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type PendingInputRoute,
   projectPendingInputRoute,
-  projectResolvedPendingInputSession,
+  projectResolvedPendingInputSessions,
 } from "../pending-input-projection";
 import { readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
@@ -22,15 +22,17 @@ export const resolvePendingInputRoute = (
     observedSession: context.session.identity,
     parentExternalSessionId: event.parentExternalSessionId,
     childExternalSessionId: event.childExternalSessionId,
+    subagentCorrelationKey: event.subagentCorrelationKey,
     readSession: (externalSessionId) => readSessionInEventRuntime(context, externalSessionId),
-    isSessionObserved: (session) => context.store.isSessionObserved(session),
   });
 
-export const resolveResolvedPendingInputSession = (
+export const resolveResolvedPendingInputSessions = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
   event: PendingInputResolvedEvent,
-): AgentSessionState | null =>
-  projectResolvedPendingInputSession({
+): AgentSessionState[] =>
+  projectResolvedPendingInputSessions({
+    observedSession: context.session.identity,
+    parentExternalSessionId: event.parentExternalSessionId,
     externalSessionId: event.externalSessionId,
     childExternalSessionId: event.childExternalSessionId,
     readSession: (externalSessionId) => readSessionInEventRuntime(context, externalSessionId),

@@ -278,6 +278,15 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       },
       turnMetadata: createSessionTurnMetadata(),
       readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+      ensureSession: (identity, createSession) => {
+        const current = getAgentSession(sessionsRef.current, identity);
+        if (current) {
+          return current;
+        }
+        const nextSession = createSession();
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
+        return nextSession;
+      },
       updateSession,
       updateSessionTodos: () => {},
       isSessionObserved: (identity) => identity.externalSessionId === "session-1",

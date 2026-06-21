@@ -1,13 +1,22 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentPendingInputSource,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { RepoRuntimeSessionSnapshots } from "./session-read-model/repo-runtime-session-snapshots";
 import type { AgentSessionRuntimeSnapshot } from "./session-read-model/session-runtime-snapshot";
 
 export type PendingInputRoute = {
   shouldPatchParentLink: boolean;
-  pendingSession: AgentSessionIdentity | null;
-  approvalReplySession: AgentSessionIdentity | null;
+  targets: PendingInputRecordTarget[];
+};
+
+export type PendingInputRecordTarget = {
+  session: AgentSessionIdentity;
+  replySession: AgentSessionIdentity;
+  source?: AgentPendingInputSource;
 };
 
 type PendingInputProjection = {
@@ -20,6 +29,29 @@ export const normalizePendingInputSessionId = (
 ): string | null => {
   const trimmed = externalSessionId?.trim();
   return trimmed ? trimmed : null;
+};
+
+type PendingInputLink = {
+  parentExternalSessionId: string;
+  childExternalSessionId: string;
+};
+
+const toPendingInputLink = ({
+  parentExternalSessionId,
+  childExternalSessionId,
+}: {
+  parentExternalSessionId: string | undefined;
+  childExternalSessionId: string | undefined;
+}): PendingInputLink | null => {
+  const parentId = normalizePendingInputSessionId(parentExternalSessionId);
+  const childId = normalizePendingInputSessionId(childExternalSessionId);
+  if (!parentId || !childId || parentId === childId) {
+    return null;
+  }
+  return {
+    parentExternalSessionId: parentId,
+    childExternalSessionId: childId,
+  };
 };
 
 const sameRuntimeScope = (
@@ -66,6 +98,38 @@ const appendPendingInput = <Entry>(current: Entry[], additional: readonly Entry[
   return [...current, ...additional];
 };
 
+const toSubagentPendingInputSource = ({
+  parentExternalSessionId,
+  childExternalSessionId,
+  subagentCorrelationKey,
+}: {
+  parentExternalSessionId: string;
+  childExternalSessionId: string;
+  subagentCorrelationKey?: string | undefined;
+}): AgentPendingInputSource => ({
+  kind: "subagent",
+  parentExternalSessionId,
+  childExternalSessionId,
+  ...(subagentCorrelationKey ? { subagentCorrelationKey } : {}),
+});
+
+const withSubagentPendingInputSource = <
+  Entry extends {
+    requestId: string;
+    source?: AgentPendingInputSource;
+    responseSession?: AgentSessionIdentity;
+  },
+>(
+  entries: readonly Entry[],
+  source: AgentPendingInputSource,
+  responseSession: AgentSessionIdentity,
+): Entry[] =>
+  entries.map((entry) => ({
+    ...entry,
+    source,
+    responseSession,
+  }));
+
 export const projectRuntimeChildPendingInputToSession = ({
   session,
   runtimeSnapshots,
@@ -83,9 +147,27 @@ export const projectRuntimeChildPendingInputToSession = ({
     if (!shouldProjectChildPendingInput({ session, snapshot, materializedSessionKeys })) {
       continue;
     }
+    if (snapshot.availability !== "runtime") {
+      continue;
+    }
 
-    pendingApprovals = appendPendingInput(pendingApprovals, snapshot.pendingApprovals);
-    pendingQuestions = appendPendingInput(pendingQuestions, snapshot.pendingQuestions);
+    const childSession = toAgentSessionIdentity(snapshot.ref);
+    const parentExternalSessionId = snapshot.parentExternalSessionId;
+    if (!parentExternalSessionId) {
+      continue;
+    }
+    const source = toSubagentPendingInputSource({
+      parentExternalSessionId,
+      childExternalSessionId: childSession.externalSessionId,
+    });
+    pendingApprovals = appendPendingInput(
+      pendingApprovals,
+      withSubagentPendingInputSource(snapshot.pendingApprovals, source, childSession),
+    );
+    pendingQuestions = appendPendingInput(
+      pendingQuestions,
+      withSubagentPendingInputSource(snapshot.pendingQuestions, source, childSession),
+    );
     hasProjectedChildPendingInput = true;
   }
 
@@ -103,83 +185,112 @@ export const projectRuntimeChildPendingInputToSession = ({
   };
 };
 
-const isLinkedChildEvidenceForObservedSession = ({
-  observedSession,
-  parentExternalSessionId,
-  childExternalSessionId,
-}: {
-  observedSession: AgentSessionIdentity;
-  parentExternalSessionId: string | undefined;
-  childExternalSessionId: string | null;
-}): boolean =>
-  Boolean(
-    childExternalSessionId &&
-      parentExternalSessionId === observedSession.externalSessionId &&
-      childExternalSessionId !== observedSession.externalSessionId,
-  );
-
 export const projectPendingInputRoute = ({
   observedSession,
   parentExternalSessionId,
   childExternalSessionId,
+  subagentCorrelationKey,
   readSession,
-  isSessionObserved,
 }: {
   observedSession: AgentSessionIdentity;
   parentExternalSessionId: string | undefined;
   childExternalSessionId: string | undefined;
+  subagentCorrelationKey?: string | undefined;
   readSession: (externalSessionId: string) => AgentSessionState | null;
-  isSessionObserved: (session: AgentSessionIdentity) => boolean;
 }): PendingInputRoute => {
-  const normalizedChildExternalSessionId = normalizePendingInputSessionId(childExternalSessionId);
-  const shouldPatchParentLink = Boolean(
-    parentExternalSessionId && normalizedChildExternalSessionId,
-  );
-
-  if (
-    !isLinkedChildEvidenceForObservedSession({
-      observedSession,
-      parentExternalSessionId,
-      childExternalSessionId: normalizedChildExternalSessionId,
-    })
-  ) {
+  const link = toPendingInputLink({ parentExternalSessionId, childExternalSessionId });
+  if (!link) {
     return {
-      shouldPatchParentLink,
-      pendingSession: observedSession,
-      approvalReplySession: observedSession,
+      shouldPatchParentLink: false,
+      targets: [{ session: observedSession, replySession: observedSession }],
     };
   }
 
-  const childSession = normalizedChildExternalSessionId
-    ? readSession(normalizedChildExternalSessionId)
-    : null;
+  const childSession = readSession(link.childExternalSessionId);
+  const parentSession = readSession(link.parentExternalSessionId);
+  const observedIsChild = observedSession.externalSessionId === link.childExternalSessionId;
+  const observedIsParent = observedSession.externalSessionId === link.parentExternalSessionId;
+  const childIdentity = toAgentSessionIdentity(
+    childSession ??
+      (observedIsChild
+        ? observedSession
+        : {
+            ...observedSession,
+            externalSessionId: link.childExternalSessionId,
+          }),
+  );
+  const source = toSubagentPendingInputSource({
+    parentExternalSessionId: link.parentExternalSessionId,
+    childExternalSessionId: link.childExternalSessionId,
+    subagentCorrelationKey,
+  });
+  const targets = new Map<string, PendingInputRecordTarget>();
+  const addTarget = (target: PendingInputRecordTarget): void => {
+    targets.set(agentSessionIdentityKey(target.session), target);
+  };
 
-  if (childSession && isSessionObserved(childSession)) {
-    return {
-      shouldPatchParentLink,
-      pendingSession: null,
-      approvalReplySession: null,
-    };
+  addTarget({
+    session: childIdentity,
+    replySession: childIdentity,
+    source,
+  });
+
+  if (parentSession || observedIsParent) {
+    const parentIdentity = toAgentSessionIdentity(parentSession ?? observedSession);
+    addTarget({
+      session: parentIdentity,
+      replySession: childIdentity,
+      source,
+    });
   }
 
   return {
-    shouldPatchParentLink,
-    pendingSession: childSession,
-    approvalReplySession: observedSession,
+    shouldPatchParentLink: true,
+    targets: Array.from(targets.values()),
   };
 };
 
-export const projectResolvedPendingInputSession = ({
+export const projectResolvedPendingInputSessions = ({
+  observedSession,
+  parentExternalSessionId,
   externalSessionId,
   childExternalSessionId,
   readSession,
 }: {
+  observedSession: AgentSessionIdentity;
+  parentExternalSessionId: string | undefined;
   externalSessionId: string | undefined;
   childExternalSessionId: string | undefined;
   readSession: (externalSessionId: string) => AgentSessionState | null;
-}): AgentSessionState | null => {
-  const targetSessionId =
-    normalizePendingInputSessionId(childExternalSessionId) ??
-    normalizePendingInputSessionId(externalSessionId);
-  return targetSessionId ? readSession(targetSessionId) : null;
+}): AgentSessionState[] => {
+  const resolvedSessions = new Map<string, AgentSessionState>();
+  const addSession = (session: AgentSessionState | null): void => {
+    if (!session) {
+      return;
+    }
+    resolvedSessions.set(agentSessionIdentityKey(session), session);
+  };
+
+  const childSessionId = normalizePendingInputSessionId(childExternalSessionId);
+  if (childSessionId) {
+    addSession(readSession(childSessionId));
+  }
+
+  const isLinkedChildForObservedSession =
+    childSessionId &&
+    parentExternalSessionId === observedSession.externalSessionId &&
+    childSessionId !== observedSession.externalSessionId;
+  if (isLinkedChildForObservedSession) {
+    addSession(readSession(observedSession.externalSessionId));
+    return Array.from(resolvedSessions.values());
+  }
+
+  if (!childSessionId) {
+    const targetSessionId = normalizePendingInputSessionId(externalSessionId);
+    if (targetSessionId) {
+      addSession(readSession(targetSessionId));
+    }
+  }
+
+  return Array.from(resolvedSessions.values());
 };

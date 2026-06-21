@@ -72,6 +72,25 @@ describe("resolveApprovalReplyOutcomes", () => {
     );
   });
 
+  test("labels subagent approval requests", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          source: {
+            kind: "subagent",
+            parentExternalSessionId: "parent-session",
+            childExternalSessionId: "child-session",
+          },
+        },
+        runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+        onReply: async () => {},
+      }),
+    );
+
+    expect(html).toContain("Subagent request");
+  });
+
   test("keeps reply controls disabled when runtime capabilities are unavailable", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {

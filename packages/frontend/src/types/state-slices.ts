@@ -27,7 +27,12 @@ import type {
   EventUnsubscribe,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "./agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
@@ -186,13 +191,13 @@ export type AgentOperationsContextValue = {
   ) => void;
   replyAgentApproval: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
     session: AgentSessionIdentity,
-    requestId: string,
+    request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;
 };

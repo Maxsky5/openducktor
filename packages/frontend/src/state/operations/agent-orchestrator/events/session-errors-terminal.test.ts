@@ -99,14 +99,16 @@ describe("agent-orchestrator session errors and terminal state", () => {
       subagentCorrelationKey: "part:assistant-parent:subtask-fail",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
     await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals[0]?.requestId).toBe("perm-fail");
+    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
     expect(
-      getSessionMessages(sessionsRef).some((message) =>
+      findSession(sessionsRef, "external-parent-session")?.pendingApprovals[0]?.requestId,
+    ).toBe("perm-fail");
+    expect(
+      getSessionMessages(sessionsRef, "external-parent-session").some((message) =>
         message.content.includes("Automatic approval rejection failed"),
       ),
     ).toBe(true);

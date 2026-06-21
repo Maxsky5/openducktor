@@ -7,6 +7,7 @@ import {
   createAgentSessionFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT } from "@/state/agent-session-visible-pending-input";
 import type {
   AgentActivitySessionsSnapshot,
   AgentSessionSummary,
@@ -86,6 +87,7 @@ const createActivityStore = (
     },
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
+    getVisiblePendingInputSnapshot: () => EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT,
     commitSessionCollection: () => {
       throw new Error("commitSessionCollection is not used in this test");
     },

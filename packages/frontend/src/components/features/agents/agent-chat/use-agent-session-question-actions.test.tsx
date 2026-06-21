@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionQuestionActions } from "./use-agent-session-question-actions";
 
 (
@@ -21,10 +21,21 @@ const sessionIdentity = (
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sessionIdentity: sessionIdentity(),
-  pendingQuestionRequestIds: ["req-1"],
+  pendingQuestions: [createQuestionRequest("req-1")],
   canAnswerQuestions: true,
   answerAgentQuestion: async () => {},
   ...overrides,
+});
+
+const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
+  requestId,
+  questions: [
+    {
+      header: "Confirm",
+      question: "Continue?",
+      options: [{ label: "Yes", description: "Continue" }],
+    },
+  ],
 });
 
 describe("useAgentSessionQuestionActions", () => {
@@ -70,7 +81,11 @@ describe("useAgentSessionQuestionActions", () => {
       });
 
       await harness.waitFor((state) => state.isSubmittingQuestionByRequestId["req-1"] === true);
-      expect(answerAgentQuestion).toHaveBeenCalledWith(sessionIdentity(), "req-1", [["yes"]]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        sessionIdentity(),
+        expect.objectContaining({ requestId: "req-1" }),
+        [["yes"]],
+      );
 
       await harness.run(async () => {
         answerDeferred.resolve(undefined);
@@ -80,6 +95,48 @@ describe("useAgentSessionQuestionActions", () => {
       await harness.waitFor((state) => state.isSubmittingQuestionByRequestId["req-1"] !== true);
     } finally {
       answerDeferred.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("passes surfaced question requests to the operation boundary", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const parentSession = sessionIdentity("parent-session");
+    const childSession = sessionIdentity("child-session");
+    const harness = createHookHarness(
+      useAgentSessionQuestionActions,
+      createBaseArgs({
+        sessionIdentity: parentSession,
+        pendingQuestions: [
+          {
+            ...createQuestionRequest("subagent-question"),
+            responseSession: childSession,
+            source: {
+              kind: "subagent",
+              parentExternalSessionId: parentSession.externalSessionId,
+              childExternalSessionId: childSession.externalSessionId,
+            },
+          },
+        ],
+        answerAgentQuestion,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.onSubmitQuestionAnswers("subagent-question", [["Yes"]]);
+      });
+
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        parentSession,
+        expect.objectContaining({
+          requestId: "subagent-question",
+          responseSession: childSession,
+        }),
+        [["Yes"]],
+      );
+    } finally {
       await harness.unmount();
     }
   });
@@ -156,7 +213,7 @@ describe("useAgentSessionQuestionActions", () => {
       await harness.waitFor((state) => state.isSubmittingQuestionByRequestId["req-1"] === true);
 
       await harness.update(
-        createBaseArgs({ pendingQuestionRequestIds: ["req-2"], answerAgentQuestion }),
+        createBaseArgs({ pendingQuestions: [createQuestionRequest("req-2")], answerAgentQuestion }),
       );
 
       expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});

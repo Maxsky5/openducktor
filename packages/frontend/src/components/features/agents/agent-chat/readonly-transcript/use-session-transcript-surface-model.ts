@@ -1,8 +1,13 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
+import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
+import {
+  useAgentOperations,
+  useAgentSession,
+  useAgentSessionVisiblePendingInput,
+} from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
@@ -11,6 +16,29 @@ import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-inter
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 const EMPTY_TODOS = Object.freeze([]) as readonly AgentSessionTodoItem[];
+
+const mergePendingRequests = <Entry extends { requestId: string }>(
+  primary: readonly Entry[],
+  additional: readonly Entry[],
+): readonly Entry[] => {
+  if (primary.length === 0) {
+    return additional;
+  }
+  if (additional.length === 0) {
+    return primary;
+  }
+
+  const requestIds = new Set(primary.map((entry) => entry.requestId));
+  const merged = [...primary];
+  for (const entry of additional) {
+    if (requestIds.has(entry.requestId)) {
+      continue;
+    }
+    requestIds.add(entry.requestId);
+    merged.push(entry);
+  }
+  return merged;
+};
 
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -26,6 +54,7 @@ export function useSessionTranscriptSurfaceModel({
   const hasWorkspace = workspaceRepoPath !== null;
   const { replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const liveSession = useAgentSession(isOpen ? target : null);
+  const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
   });
@@ -42,9 +71,26 @@ export function useSessionTranscriptSurfaceModel({
     repoReadinessState: runtimeReadiness.state,
     liveSession,
   });
+  const pendingApprovalRequests = useMemo(
+    () =>
+      mergePendingRequests(
+        visiblePendingInput.pendingApprovals,
+        sessionHistory.interactionSession?.pendingApprovals ?? [],
+      ),
+    [sessionHistory.interactionSession, visiblePendingInput.pendingApprovals],
+  );
+  const pendingQuestionRequests = useMemo(
+    () =>
+      mergePendingRequests(
+        visiblePendingInput.pendingQuestions,
+        sessionHistory.interactionSession?.pendingQuestions ?? [],
+      ),
+    [sessionHistory.interactionSession, visiblePendingInput.pendingQuestions],
+  );
   const transcriptInteractions = useRuntimeTranscriptInteractions({
-    liveSession: sessionHistory.interactionSession,
     target,
+    pendingApprovalRequests,
+    pendingQuestionRequests,
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval,
     answerAgentQuestion,

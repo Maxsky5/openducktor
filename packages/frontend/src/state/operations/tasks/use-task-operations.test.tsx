@@ -28,6 +28,7 @@ import { createSessionMessagesState } from "../agent-orchestrator/support/messag
 import { createSessionTurnMetadata } from "../agent-orchestrator/support/session-turn-metadata";
 import {
   createAgentSessionCollectionRefFixture,
+  replaceAgentSessionFixture,
   updateAgentSessionFixture,
 } from "../agent-orchestrator/test-utils";
 import { host } from "../shared/host";
@@ -1880,6 +1881,15 @@ describe("use-task-operations", () => {
         },
         turnMetadata: createSessionTurnMetadata(),
         readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+        ensureSession: (identity, createSession) => {
+          const current = getAgentSession(sessionsRef.current, identity);
+          if (current) {
+            return current;
+          }
+          const nextSession = createSession();
+          sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, nextSession);
+          return nextSession;
+        },
         updateSession,
         updateSessionTodos: () => {},
         isSessionObserved: (identity) => identity.externalSessionId === "session-1",

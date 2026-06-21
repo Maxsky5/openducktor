@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -806,13 +805,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountBySessionKey: {
-          [agentSessionIdentityKey({
-            externalSessionId: "session-child-waiting",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo",
-          })]: 1,
-        },
+        subagentPendingApprovalCount: 1,
       }),
     );
 
@@ -839,13 +832,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingQuestionCountBySessionKey: {
-          [agentSessionIdentityKey({
-            externalSessionId: "session-child-question",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo",
-          })]: 1,
-        },
+        subagentPendingQuestionCount: 1,
       }),
     );
 
@@ -873,13 +860,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountBySessionKey: {
-          [agentSessionIdentityKey({
-            externalSessionId: "session-child-completed",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo",
-          })]: 1,
-        },
+        subagentPendingApprovalCount: 1,
       }),
     );
 

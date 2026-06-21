@@ -118,6 +118,36 @@ function makeLiveTranscriptSession(): AgentSessionState {
   };
 }
 
+function makeParentSessionWithMirroredSubagentApproval(): AgentSessionState {
+  const target = makeTranscriptTarget();
+  return {
+    runtimeKind: "opencode",
+    externalSessionId: "session-parent-1",
+    taskId: "task-a",
+    role: "build",
+    status: "running",
+    startedAt: "2026-02-22T12:00:00.000Z",
+    workingDirectory: "/repo-a",
+    historyLoadState: "not_requested",
+    messages: createSessionMessagesState("session-parent-1"),
+    contextUsage: null,
+    pendingApprovals: [
+      {
+        ...makePendingApproval(),
+        responseSession: target,
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "session-parent-1",
+          childExternalSessionId: target.externalSessionId,
+          subagentCorrelationKey: "part:assistant-parent:subtask-1",
+        },
+      },
+    ],
+    pendingQuestions: [],
+    selectedModel: null,
+  };
+}
+
 function setLiveTranscriptSessions(...sessions: AgentSessionState[]): void {
   sessionStore.setSessionCollection(() => createAgentSessionCollection(sessions));
 }
@@ -640,6 +670,35 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("uses parent-visible subagent approvals when opening the child transcript", async () => {
+    const pendingApproval = makePendingApproval();
+    setLiveTranscriptSessions(makeParentSessionWithMirroredSubagentApproval());
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.session !== null);
+
+      expect(harness.getLatest().model.thread.pendingApprovalRequests).toMatchObject([
+        pendingApproval,
+      ]);
+      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("replies to live subagent approvals through the runtime transcript session", async () => {
     setLiveTranscriptSessions(makeLiveTranscriptSession());
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -665,8 +724,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
         makeTranscriptTarget(),
-        "permission-1",
+        makePendingApproval(),
         "approve_once",
+        undefined,
       );
     } finally {
       await harness.unmount();
@@ -698,9 +758,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
         await harness.getLatest().model.thread.onSubmitQuestionAnswers("question-1", [["A"]]);
       });
 
-      expect(answerAgentQuestion).toHaveBeenCalledWith(makeTranscriptTarget(), "question-1", [
-        ["A"],
-      ]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        makeTranscriptTarget(),
+        makePendingQuestion(),
+        [["A"]],
+      );
     } finally {
       await harness.unmount();
     }

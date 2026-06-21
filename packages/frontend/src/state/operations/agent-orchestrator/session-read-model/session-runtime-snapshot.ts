@@ -2,7 +2,7 @@ import {
   agentSessionStatusFromActivity,
   type AgentSessionRuntimeSnapshot as CoreAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentPendingInputSource, AgentSessionState } from "@/types/agent-orchestrator";
 
 export type { AgentSessionRuntimeSnapshot } from "@openducktor/core";
 
@@ -28,18 +28,55 @@ const statusFromRuntimeSnapshot = (
 const nextPendingApprovals = (
   current: AgentSessionState,
   snapshot: AvailableAgentSessionRuntimeSnapshot,
-): AgentSessionState["pendingApprovals"] =>
-  current.pendingApprovals.length === 0 && snapshot.pendingApprovals.length === 0
-    ? current.pendingApprovals
-    : snapshot.pendingApprovals;
+): AgentSessionState["pendingApprovals"] => {
+  if (current.pendingApprovals.length === 0 && snapshot.pendingApprovals.length === 0) {
+    return current.pendingApprovals;
+  }
+  return annotateSnapshotPendingInput(snapshot.pendingApprovals, snapshot);
+};
 
 const nextPendingQuestions = (
   current: AgentSessionState,
   snapshot: AvailableAgentSessionRuntimeSnapshot,
-): AgentSessionState["pendingQuestions"] =>
-  current.pendingQuestions.length === 0 && snapshot.pendingQuestions.length === 0
-    ? current.pendingQuestions
-    : snapshot.pendingQuestions;
+): AgentSessionState["pendingQuestions"] => {
+  if (current.pendingQuestions.length === 0 && snapshot.pendingQuestions.length === 0) {
+    return current.pendingQuestions;
+  }
+  return annotateSnapshotPendingInput(snapshot.pendingQuestions, snapshot);
+};
+
+const snapshotPendingInputSource = (
+  snapshot: AvailableAgentSessionRuntimeSnapshot,
+): AgentPendingInputSource | null => {
+  const parentExternalSessionId = snapshot.parentExternalSessionId;
+  if (!parentExternalSessionId || parentExternalSessionId === snapshot.ref.externalSessionId) {
+    return null;
+  }
+  return {
+    kind: "subagent",
+    parentExternalSessionId,
+    childExternalSessionId: snapshot.ref.externalSessionId,
+  };
+};
+
+const annotateSnapshotPendingInput = <
+  Entry extends {
+    requestId: string;
+    source?: AgentPendingInputSource;
+  },
+>(
+  entries: readonly Entry[],
+  snapshot: AvailableAgentSessionRuntimeSnapshot,
+): Entry[] => {
+  const source = snapshotPendingInputSource(snapshot);
+  if (!source) {
+    return [...entries];
+  }
+  return entries.map((entry) => ({
+    ...entry,
+    source,
+  }));
+};
 
 const isTerminalLocalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";

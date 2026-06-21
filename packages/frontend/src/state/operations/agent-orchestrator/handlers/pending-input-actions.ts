@@ -1,14 +1,16 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { annotateQuestionToolMessage } from "../support/question-messages";
-import {
-  type ReadSessionSnapshot,
-  requireLoadedSession,
-  requireWorkspaceRepoPath,
-} from "../support/session-invariants";
+import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
@@ -70,56 +72,123 @@ const applyQuestionAnswerToSession = (
   };
 };
 
+type PendingInputReplyContext = {
+  runtimeSession: AgentSessionState;
+  loadedSessionsToUpdate: AgentSessionState[];
+};
+
+const readUniqueLoadedSessions = (
+  readSessionSnapshot: ReadSessionSnapshot,
+  identities: readonly AgentSessionIdentity[],
+): AgentSessionState[] => {
+  const sessions = new Map<string, AgentSessionState>();
+  for (const identity of identities) {
+    const session = readSessionSnapshot(identity);
+    if (session) {
+      sessions.set(agentSessionIdentityKey(session), session);
+    }
+  }
+  return Array.from(sessions.values());
+};
+
+const resolvePendingInputReplyContext = ({
+  readSessionSnapshot,
+  currentSession,
+  request,
+}: {
+  readSessionSnapshot: ReadSessionSnapshot;
+  currentSession: AgentSessionIdentity;
+  request: AgentApprovalRequest | AgentQuestionRequest;
+}): PendingInputReplyContext => {
+  const { responseSession, sessions } = resolveAgentPendingInputParticipants(
+    currentSession,
+    request,
+  );
+  const loadedResponseSession = readSessionSnapshot(responseSession);
+  const loadedParticipantSessions = readUniqueLoadedSessions(readSessionSnapshot, sessions);
+  const contextSession = loadedResponseSession ?? loadedParticipantSessions[0] ?? null;
+
+  if (!contextSession) {
+    throw new Error(`Session '${responseSession.externalSessionId}' is not loaded.`);
+  }
+
+  const runtimeSession: AgentSessionState = {
+    ...contextSession,
+    externalSessionId: responseSession.externalSessionId,
+    runtimeKind: responseSession.runtimeKind,
+    workingDirectory: responseSession.workingDirectory,
+  };
+
+  return {
+    runtimeSession,
+    loadedSessionsToUpdate: loadedParticipantSessions,
+  };
+};
+
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
   const replyAgentApproval = async (
     identity: AgentSessionIdentity,
-    requestId: string,
+    request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const session = requireLoadedSession(dependencies.readSessionSnapshot, identity);
-    markTurnUserAnchorIfMissing(dependencies, session);
+    const { runtimeSession, loadedSessionsToUpdate } = resolvePendingInputReplyContext({
+      readSessionSnapshot: dependencies.readSessionSnapshot,
+      currentSession: identity,
+      request,
+    });
+    markTurnUserAnchorIfMissing(dependencies, runtimeSession);
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
     await dependencies.adapter.replyApproval({
-      ...toRuntimeSessionContextRef(repoPath, session),
-      requestId,
+      ...toRuntimeSessionContextRef(repoPath, runtimeSession),
+      requestId: request.requestId,
       outcome,
       ...(message ? { message } : {}),
     });
 
-    dependencies.updateSession(session, (current) => ({
-      ...current,
-      pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
-    }));
+    for (const session of loadedSessionsToUpdate) {
+      dependencies.updateSession(session, (current) => ({
+        ...current,
+        pendingApprovals: current.pendingApprovals.filter(
+          (entry) => entry.requestId !== request.requestId,
+        ),
+      }));
+    }
   };
 
   const answerAgentQuestion = async (
     identity: AgentSessionIdentity,
-    requestId: string,
+    request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {
-    const session = requireLoadedSession(dependencies.readSessionSnapshot, identity);
-    markTurnUserAnchorIfMissing(dependencies, session);
+    const { runtimeSession, loadedSessionsToUpdate } = resolvePendingInputReplyContext({
+      readSessionSnapshot: dependencies.readSessionSnapshot,
+      currentSession: identity,
+      request,
+    });
+    markTurnUserAnchorIfMissing(dependencies, runtimeSession);
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
     await dependencies.adapter.replyQuestion({
-      ...toRuntimeSessionContextRef(repoPath, session),
-      requestId,
+      ...toRuntimeSessionContextRef(repoPath, runtimeSession),
+      requestId: request.requestId,
       answers,
     });
 
-    dependencies.updateSession(session, (current) => {
-      const { pendingQuestions, messages } = applyQuestionAnswerToSession(
-        current,
-        requestId,
-        answers,
-      );
+    for (const session of loadedSessionsToUpdate) {
+      dependencies.updateSession(session, (current) => {
+        const { pendingQuestions, messages } = applyQuestionAnswerToSession(
+          current,
+          request.requestId,
+          answers,
+        );
 
-      return {
-        ...current,
-        pendingQuestions,
-        messages,
-      };
-    });
+        return {
+          ...current,
+          pendingQuestions,
+          messages,
+        };
+      });
+    }
   };
 
   return {
