@@ -455,6 +455,7 @@ export type CodexAppServerLegacyParsedCommand =
   | { cmd: string; path: string | null; query: string | null; type: "search" }
   | { cmd: string; type: "unknown" };
 export type CodexAppServerCommandExecutionRequestApprovalParams = {
+  additionalPermissions?: CodexAppServerRequestPermissionProfile | null;
   approvalId?: string | null;
   command?: string | null;
   commandActions?: CodexAppServerCommandAction[] | null;

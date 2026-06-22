@@ -358,6 +358,11 @@ const stopElectron = async (electron: ManagedElectronProcess | null): Promise<vo
     );
     electron.kill(9);
     await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
+    if (!exited) {
+      throw new Error(
+        `[electron:dev] Electron did not exit after forced shutdown within ${ELECTRON_STOP_TIMEOUT_MS}ms.`,
+      );
+    }
   }
 };
 

@@ -79,14 +79,17 @@ export const prepareNewBuildWorktree = (
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
     let createdTrackingRef: string | null = null;
+    let createdBuildWorktree = false;
     const cleanup = (): ReturnType<typeof rollbackFailedBuildWorktree> =>
-      rollbackFailedBuildWorktree(
-        dependencies,
-        canonicalRepoPath,
-        worktreePath,
-        branch,
-        createdTrackingRef,
-      );
+      createdBuildWorktree
+        ? rollbackFailedBuildWorktree(
+            dependencies,
+            canonicalRepoPath,
+            worktreePath,
+            branch,
+            createdTrackingRef,
+          )
+        : Effect.succeed("");
     const setupResult = yield* Effect.either(
       Effect.gen(function* () {
         const targetBranch = yield* effectiveTargetBranchForTask(
@@ -107,6 +110,7 @@ export const prepareNewBuildWorktree = (
           true,
           startPoint.reference,
         );
+        createdBuildWorktree = true;
 
         if (startPoint.upstreamRemote) {
           const upstreamSetup = yield* dependencies.gitPort.configureBranchUpstream(

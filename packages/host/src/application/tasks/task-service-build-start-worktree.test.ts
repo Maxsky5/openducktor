@@ -228,6 +228,63 @@ describe("createTaskService build start worktree handling", () => {
     ).toBe(false);
   });
 
+  test("does not roll back a build worktree when worktree creation fails before creating it", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      getTask(input) {
+        return taskStoreEffect(async () => {
+          calls.push({ type: "getTask", input });
+          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+        });
+      },
+      transitionTask() {
+        return taskStoreEffect(async () => {
+          throw new Error("unexpected transition");
+        });
+      },
+    };
+    const gitPort = {
+      ...createBuildStartGitPort({ calls }),
+      createWorktree() {
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.createWorktree",
+            message: "worktree create failed",
+          }),
+        );
+      },
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          taskStore,
+          gitPort,
+          runtimeDefinitionsService: createRuntimeDefinitionsService(),
+          runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          systemCommands: createBuildSystemCommands(calls),
+          worktreeFiles: createBuildStartWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      ),
+    ).rejects.toThrow("worktree create failed");
+
+    expect(
+      calls.filter(
+        (call) =>
+          typeof call === "object" &&
+          call !== null &&
+          "type" in call &&
+          ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(String(call.type)),
+      ),
+    ).toEqual([]);
+  });
+
   test("rolls back the build worktree when the task transition fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

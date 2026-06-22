@@ -73,6 +73,9 @@ const isCommandExecutionApprovalParams = (
     value.commandActions === null ||
     (Array.isArray(value.commandActions) &&
       value.commandActions.every(isCodexAppServerCommandAction))) &&
+  (value.additionalPermissions === undefined ||
+    value.additionalPermissions === null ||
+    isCodexAppServerRequestPermissionProfile(value.additionalPermissions)) &&
   (value.networkApprovalContext === undefined ||
     value.networkApprovalContext === null ||
     isCodexAppServerJsonValue(value.networkApprovalContext)) &&
@@ -91,7 +94,7 @@ const isPermissionsRequestApprovalParams = (
   typeof value.startedAtMs === "number" &&
   Number.isFinite(value.startedAtMs) &&
   typeof value.cwd === "string" &&
-  (value.reason === null || typeof value.reason === "string") &&
+  isOptionalString(value.reason) &&
   isCodexAppServerRequestPermissionProfile(value.permissions);
 
 export const resolveAfterQueuedMessages = (

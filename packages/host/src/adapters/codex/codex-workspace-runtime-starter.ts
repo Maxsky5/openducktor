@@ -106,7 +106,6 @@ const cleanupCodexRuntime = ({
   Effect.gen(function* () {
     const errors: string[] = [];
     codexAppServer.unregisterTransport(nextRuntimeId);
-    yield* transport.close();
 
     const processExit = yield* Effect.either(
       processTreeTerminator({
@@ -123,6 +122,11 @@ const cleanupCodexRuntime = ({
     );
     if (processExit._tag === "Left") {
       errors.push(`process tree: ${processExit.left.message}`);
+    }
+
+    const transportExit = yield* Effect.exit(transport.close());
+    if (transportExit._tag === "Failure") {
+      errors.push(`transport: ${transportExit.cause}`);
     }
 
     if (errors.length > 0) {

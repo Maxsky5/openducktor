@@ -62,6 +62,10 @@ const mcpElicitationResponse = (
       throw new Error(
         "Codex MCP elicitation approvals do not support approval outcome 'approve_turn'.",
       );
+    default: {
+      const unexpectedOutcome: never = outcome;
+      throw new Error(`Unhandled Codex MCP elicitation outcome: ${String(unexpectedOutcome)}`);
+    }
   }
 };
 
@@ -77,8 +81,25 @@ export const codexApprovalResponseForRequest = ({
   const approved = outcome !== "reject";
   switch (request.method) {
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
-      return { decision: approved ? "approved" : "denied" };
+      if (!approved) {
+        return { decision: "denied" };
+      }
+      return {
+        decision:
+          outcome === "approve_session" || outcome === "approve_always"
+            ? "approved_for_session"
+            : "approved",
+      };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL:
+      if (!approved) {
+        return { decision: "decline" };
+      }
+      return {
+        decision:
+          outcome === "approve_session" || outcome === "approve_always"
+            ? "acceptForSession"
+            : "accept",
+      };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL:
       return { decision: approved ? "accept" : "decline" };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST:

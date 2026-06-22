@@ -83,20 +83,26 @@ const classifyApprovalRequestType = (
 export const toApprovalRequest = (
   request: CodexServerRequestRecord,
   role: AgentRole,
-): AgentPendingApprovalRequest => ({
-  requestId: String(request.id),
-  requestType: classifyApprovalRequestType(request),
-  title: `Codex ${request.method}`,
-  summary: `Codex requested ${request.method}.`,
-  details: JSON.stringify(request.params ?? {}, null, 2),
-  mutation: classifyCodexRequestMutation(request),
-  supportedReplyOutcomes: ["approve_once", "reject"],
-  metadata: {
-    codexMethod: request.method,
-    role,
-    params: request.params,
-  },
-});
+): AgentPendingApprovalRequest => {
+  if (request.id === undefined) {
+    throw new Error("Codex app-server approval request is missing a numeric id.");
+  }
+
+  return {
+    requestId: String(request.id),
+    requestType: classifyApprovalRequestType(request),
+    title: `Codex ${request.method}`,
+    summary: `Codex requested ${request.method}.`,
+    details: JSON.stringify(request.params ?? {}, null, 2),
+    mutation: classifyCodexRequestMutation(request),
+    supportedReplyOutcomes: ["approve_once", "reject"],
+    metadata: {
+      codexMethod: request.method,
+      role,
+      params: request.params,
+    },
+  };
+};
 
 const mcpToolApprovalMeta = (request: CodexServerRequestRecord): Record<string, unknown> | null => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   codexApprovalResponseForRequest,
+  toApprovalRequest,
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 
@@ -58,5 +59,56 @@ describe("Codex MCP approval requests", () => {
         request,
       }),
     ).toEqual({ action: "accept", content: null, _meta: { persist: "always" } });
+  });
+
+  test("maps persistent command approvals to Codex session approval decisions", () => {
+    const commandRequest = {
+      id: 11,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        startedAtMs: 1,
+      },
+    };
+    const legacyCommandRequest = {
+      id: 12,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
+      params: {
+        conversationId: "thread-1",
+        callId: "call-1",
+        approvalId: null,
+        command: ["true"],
+        cwd: "/repo",
+        reason: null,
+        parsedCmd: [],
+      },
+    };
+
+    expect(
+      codexApprovalResponseForRequest({
+        outcome: "approve_session",
+        request: commandRequest,
+      }),
+    ).toEqual({ decision: "acceptForSession" });
+    expect(
+      codexApprovalResponseForRequest({
+        outcome: "approve_session",
+        request: legacyCommandRequest,
+      }),
+    ).toEqual({ decision: "approved_for_session" });
+  });
+
+  test("rejects approval requests without a request id", () => {
+    expect(() =>
+      toApprovalRequest(
+        {
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {},
+        },
+        "spec",
+      ),
+    ).toThrow("Codex app-server approval request is missing a numeric id.");
   });
 });

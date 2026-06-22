@@ -4,6 +4,7 @@ import {
   type CodexAppServerLegacyParsedCommand,
   isCodexAppServerCommandAction,
   isCodexAppServerLegacyParsedCommand,
+  isCodexAppServerRequestPermissionProfile,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
@@ -22,6 +23,28 @@ const READ_ONLY_COMMAND_ACTION_TYPES = new Set<ReadOnlyCommandActionType>([
 
 const isReadOnlyCommandActionType = (value: string): value is ReadOnlyCommandActionType =>
   READ_ONLY_COMMAND_ACTION_TYPES.has(value as ReadOnlyCommandActionType);
+
+const hasEntries = <T>(value: readonly T[] | null | undefined): boolean =>
+  Array.isArray(value) && value.length > 0;
+
+const classifyAdditionalPermissions = (value: unknown): AgentApprovalMutation => {
+  if (value === undefined || value === null) {
+    return "unknown";
+  }
+  if (!isCodexAppServerRequestPermissionProfile(value)) {
+    return "unknown";
+  }
+  if (value.network?.enabled === true) {
+    return "mutating";
+  }
+  if (hasEntries(value.fileSystem?.write)) {
+    return "mutating";
+  }
+  if (value.fileSystem?.entries?.some((entry) => entry.access === "write")) {
+    return "mutating";
+  }
+  return "unknown";
+};
 
 const classifyCommandActions = (
   value: unknown,
@@ -46,6 +69,10 @@ export const classifyCodexCommandRequestMutation = (
   }
   if (request.params.networkApprovalContext != null) {
     return "mutating";
+  }
+  const additionalPermissions = classifyAdditionalPermissions(request.params.additionalPermissions);
+  if (additionalPermissions === "mutating") {
+    return additionalPermissions;
   }
 
   if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {

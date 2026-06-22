@@ -110,15 +110,7 @@ export const createTaskBuildStartUseCase = ({
               ),
             );
 
-          if (task.status !== "in_progress") {
-            yield* taskStore.transitionTask({
-              repoPath: canonicalRepoPath,
-              taskId,
-              status: "in_progress",
-            });
-          }
-
-          return yield* Effect.try({
+          const bootstrap = yield* Effect.try({
             try: () =>
               buildSessionBootstrapSchema.parse({
                 runtimeKind,
@@ -130,6 +122,16 @@ export const createTaskBuildStartUseCase = ({
                 cause,
               }),
           });
+
+          if (task.status !== "in_progress") {
+            yield* taskStore.transitionTask({
+              repoPath: canonicalRepoPath,
+              taskId,
+              status: "in_progress",
+            });
+          }
+
+          return bootstrap;
         }),
       );
       if (finalizeResult._tag === "Left") {
