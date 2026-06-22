@@ -169,11 +169,11 @@ describe("createProcessCommandLaunch", () => {
     );
   });
 
-  test("keeps quoted Windows batch metacharacters in env-backed arguments", () => {
-    const unsafeOutsideQuotes = "value=a&b|c<d>e^f";
-    const launch = createProcessCommandLaunch("tool.cmd", [unsafeOutsideQuotes], {}, "win32");
+  test("keeps Windows batch metacharacters in env-backed arguments", () => {
+    const metacharacters = "value=a&b|c<d>e^f";
+    const launch = createProcessCommandLaunch("tool.cmd", [metacharacters], {}, "win32");
 
-    expect(launch.env.OPENDUCKTOR_WINDOWS_ARG_0).toBe(unsafeOutsideQuotes);
+    expect(launch.env.OPENDUCKTOR_WINDOWS_ARG_0).toBe(metacharacters);
   });
 
   test("rejects Windows batch values that can break out of quoted expansion", () => {

@@ -1,6 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
-import { handleCodexServerRequest } from "./codex-app-server-server-requests";
+import {
+  type CodexServerRequestHandlerContext,
+  handleCodexServerRequest,
+} from "./codex-app-server-server-requests";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexServerRequestRecord, CodexSessionState } from "./types";
 
@@ -30,8 +33,8 @@ const createRequestContext = ({
 }: {
   events: unknown[];
   pendingInput?: CodexPendingInputState;
-  respondServerRequest?: ReturnType<typeof mock>;
-}) => ({
+  respondServerRequest?: CodexServerRequestHandlerContext["respondServerRequest"];
+}): CodexServerRequestHandlerContext => ({
   respondServerRequest,
   pendingInput,
   activeTurnsBySessionId: new Map(),
