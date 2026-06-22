@@ -52,7 +52,7 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@biomejs/biome": "^2.5.0",
-    "@types/node": "^25.9.2",
+    "@types/node": "^26.0.0",
     "husky": "^9.1.7",
     "knip": "^6.17.1",
     "typescript": "^5.7.3",
