@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
+  classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
@@ -98,6 +99,45 @@ describe("Codex MCP approval requests", () => {
         request: legacyCommandRequest,
       }),
     ).toEqual({ decision: "approved_for_session" });
+  });
+
+  test("classifies unparsed command approvals as mutating", () => {
+    expect(
+      classifyCodexRequestMutation({
+        id: 13,
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          startedAtMs: 1,
+          commandActions: [],
+        },
+      }),
+    ).toBe("mutating");
+  });
+
+  test("classifies known read-only command approvals as read-only", () => {
+    expect(
+      classifyCodexRequestMutation({
+        id: 14,
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          startedAtMs: 1,
+          commandActions: [
+            {
+              type: "read",
+              command: "Get-Content README.md",
+              name: "README.md",
+              path: "README.md",
+            },
+          ],
+        },
+      }),
+    ).toBe("read_only");
   });
 
   test("rejects approval requests without a request id", () => {

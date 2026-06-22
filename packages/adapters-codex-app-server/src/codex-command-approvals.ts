@@ -53,12 +53,12 @@ const classifyCommandActions = (
   ) => action is CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
 ): AgentApprovalMutation => {
   if (!Array.isArray(value) || value.length === 0) {
-    return "unknown";
+    return "mutating";
   }
 
   return value.every((action) => isAction(action) && isReadOnlyCommandActionType(action.type))
     ? "read_only"
-    : "unknown";
+    : "mutating";
 };
 
 export const classifyCodexCommandRequestMutation = (

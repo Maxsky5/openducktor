@@ -2,6 +2,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import { normalizeProcessEnvironment } from "./process-environment";
 import {
   assertNoWindowsShellNewlines,
+  assertSafeWindowsBatchValue,
   buildWindowsBatchEnvCommandLine,
   escapeWindowsQuotedArgumentValue,
 } from "./process-windows-command-line";
@@ -33,11 +34,12 @@ export const createProcessCommandLaunch = (
 ): ProcessCommandLaunchPlan => {
   const launchEnv = normalizeProcessEnvironment(env, platform);
 
-  if (platform === "win32") {
+  const isWindowsBatchScript = isWindowsCommandScript(command, platform);
+  if (platform === "win32" && !isWindowsBatchScript) {
     assertNoWindowsShellNewlines(command, "command");
   }
 
-  if (!isWindowsCommandScript(command, platform)) {
+  if (!isWindowsBatchScript) {
     return {
       command,
       args,
@@ -47,13 +49,14 @@ export const createProcessCommandLaunch = (
     };
   }
 
+  assertSafeWindowsBatchValue(command, "command");
   const windowsCommandShell = launchEnv.ComSpec?.trim() || "cmd.exe";
   const commandEnv: NodeJS.ProcessEnv = {
     ...launchEnv,
     [WINDOWS_COMMAND_ENV_NAME]: escapeWindowsQuotedArgumentValue(command),
   };
   const argEnvNames = args.map((arg, index) => {
-    assertNoWindowsShellNewlines(arg, "argument");
+    assertSafeWindowsBatchValue(arg, "argument");
     const envName = `${WINDOWS_COMMAND_ARG_ENV_PREFIX}${index}`;
     commandEnv[envName] = escapeWindowsQuotedArgumentValue(arg);
     return envName;

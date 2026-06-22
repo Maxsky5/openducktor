@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   assertNoWindowsShellNewlines,
+  assertSafeWindowsBatchValue,
   buildWindowsBatchEnvCommandLine,
   escapeWindowsQuotedArgumentValue,
 } from "./process-windows-command-line";
@@ -12,6 +13,18 @@ describe("assertNoWindowsShellNewlines", () => {
       HostValidationError,
     );
     expect(() => assertNoWindowsShellNewlines("safe\runsafe", "argument")).toThrow(
+      HostValidationError,
+    );
+  });
+});
+
+describe("assertSafeWindowsBatchValue", () => {
+  test("accepts metacharacters that stay inside quoted variable expansion", () => {
+    expect(() => assertSafeWindowsBatchValue("value=a&b|c<d>e^f", "argument")).not.toThrow();
+  });
+
+  test("rejects double quotes that can break out of quoted variable expansion", () => {
+    expect(() => assertSafeWindowsBatchValue('quote="value"', "argument")).toThrow(
       HostValidationError,
     );
   });

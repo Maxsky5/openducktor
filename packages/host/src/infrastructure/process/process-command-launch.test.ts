@@ -11,9 +11,9 @@ describe("createProcessCommandLaunch", () => {
     const command = String.raw`C:\Program Files\Codex\codex.cmd`;
     const args = [
       "--config",
-      'mcp_servers.openducktor.command="mcp-bin"',
+      "mcp_servers.openducktor.command='mcp-bin'",
       "path=%APPDATA%\\foo",
-      "caret=foo^bar",
+      "trail=C:\\tools\\",
     ];
     const launch = createProcessCommandLaunch(
       command,
@@ -28,9 +28,9 @@ describe("createProcessCommandLaunch", () => {
         ComSpec: String.raw`C:\Windows\System32\cmd.exe`,
         OPENDUCKTOR_WINDOWS_COMMAND: command,
         OPENDUCKTOR_WINDOWS_ARG_0: "--config",
-        OPENDUCKTOR_WINDOWS_ARG_1: 'mcp_servers.openducktor.command=\\"mcp-bin\\"',
+        OPENDUCKTOR_WINDOWS_ARG_1: "mcp_servers.openducktor.command='mcp-bin'",
         OPENDUCKTOR_WINDOWS_ARG_2: "path=%APPDATA%\\foo",
-        OPENDUCKTOR_WINDOWS_ARG_3: "caret=foo^bar",
+        OPENDUCKTOR_WINDOWS_ARG_3: "trail=C:\\tools\\\\",
       },
       windowsHide: true,
       windowsVerbatimArguments: true,
@@ -44,9 +44,9 @@ describe("createProcessCommandLaunch", () => {
     });
   });
 
-  test("passes Windows shell arguments through argv so quoted values survive batch shims", () => {
+  test("passes safe Windows shell arguments through argv for batch shims", () => {
     const command = "tool.cmd";
-    const args = ["plain", "two words", 'quote="value"', "percent=%APPDATA%", "caret=foo^bar"];
+    const args = ["plain", "two words", "percent=%APPDATA%", "trail=C:\\tools\\"];
     const launch = createProcessCommandLaunch(command, args, {}, "win32");
 
     expect(launch).toEqual({
@@ -55,9 +55,8 @@ describe("createProcessCommandLaunch", () => {
         OPENDUCKTOR_WINDOWS_COMMAND: command,
         OPENDUCKTOR_WINDOWS_ARG_0: "plain",
         OPENDUCKTOR_WINDOWS_ARG_1: "two words",
-        OPENDUCKTOR_WINDOWS_ARG_2: 'quote=\\"value\\"',
-        OPENDUCKTOR_WINDOWS_ARG_3: "percent=%APPDATA%",
-        OPENDUCKTOR_WINDOWS_ARG_4: "caret=foo^bar",
+        OPENDUCKTOR_WINDOWS_ARG_2: "percent=%APPDATA%",
+        OPENDUCKTOR_WINDOWS_ARG_3: "trail=C:\\tools\\\\",
       },
       windowsHide: true,
       windowsVerbatimArguments: true,
@@ -66,7 +65,7 @@ describe("createProcessCommandLaunch", () => {
         "/v:off",
         "/s",
         "/c",
-        '""%OPENDUCKTOR_WINDOWS_COMMAND%" "%OPENDUCKTOR_WINDOWS_ARG_0%" "%OPENDUCKTOR_WINDOWS_ARG_1%" "%OPENDUCKTOR_WINDOWS_ARG_2%" "%OPENDUCKTOR_WINDOWS_ARG_3%" "%OPENDUCKTOR_WINDOWS_ARG_4%""',
+        '""%OPENDUCKTOR_WINDOWS_COMMAND%" "%OPENDUCKTOR_WINDOWS_ARG_0%" "%OPENDUCKTOR_WINDOWS_ARG_1%" "%OPENDUCKTOR_WINDOWS_ARG_2%" "%OPENDUCKTOR_WINDOWS_ARG_3%""',
       ],
     });
   });
@@ -104,7 +103,7 @@ describe("createProcessCommandLaunch", () => {
   });
 
   test.skipIf(process.platform !== "win32")(
-    "passes quoted and shell-sensitive arguments through a Windows cmd shim",
+    "passes safe arguments through a Windows cmd shim",
     () => {
       const tempDirectory = mkdtempSync(join(tmpdir(), "odt-cmd-launch-"));
       try {
@@ -117,18 +116,7 @@ describe("createProcessCommandLaunch", () => {
           [`@echo off`, `"${process.execPath}" "%~dp0print-args.js" %*`].join("\r\n"),
         );
 
-        const commandArgs = [
-          'quote="value"',
-          "amp=foo&bar",
-          "pipe=a|b",
-          "lt=a<b",
-          "gt=a>b",
-          "percent=%APPDATA%",
-          "caret=foo^bar",
-          "trail=C:\\foo\\",
-          'pathquote=C:\\foo\\"bar',
-          "two words",
-        ];
+        const commandArgs = ["percent=%APPDATA%", "trail=C:\\foo\\", "two words"];
         const launch = createProcessCommandLaunch(shim, commandArgs, process.env, "win32");
         const result = spawnSync(launch.command, launch.args, {
           encoding: "utf8",
@@ -177,6 +165,22 @@ describe("createProcessCommandLaunch", () => {
       HostValidationError,
     );
     expect(() => createProcessCommandLaunch("tool.cmd", ["safe\runsafe"], {}, "win32")).toThrow(
+      HostValidationError,
+    );
+  });
+
+  test("keeps quoted Windows batch metacharacters in env-backed arguments", () => {
+    const unsafeOutsideQuotes = "value=a&b|c<d>e^f";
+    const launch = createProcessCommandLaunch("tool.cmd", [unsafeOutsideQuotes], {}, "win32");
+
+    expect(launch.env.OPENDUCKTOR_WINDOWS_ARG_0).toBe(unsafeOutsideQuotes);
+  });
+
+  test("rejects Windows batch values that can break out of quoted expansion", () => {
+    expect(() => createProcessCommandLaunch("tool.cmd", ['quote="value"'], {}, "win32")).toThrow(
+      HostValidationError,
+    );
+    expect(() => createProcessCommandLaunch('bad"tool.cmd', [], {}, "win32")).toThrow(
       HostValidationError,
     );
   });

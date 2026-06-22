@@ -49,9 +49,10 @@ const createCodexRuntime = (
 const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
   stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
+  isAlive = true,
 ): RuntimeWorkspaceHandle => ({
   runtime,
-  isAlive: () => true,
+  isAlive: () => isAlive,
   stop,
 });
 describe("createRuntimeRegistry", () => {
@@ -199,6 +200,48 @@ describe("createRuntimeRegistry", () => {
         descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
       },
     ]);
+  });
+  test("restarts a registered workspace runtime whose handle is no longer alive", async () => {
+    const staleRuntime = createRuntime({ runtimeId: "runtime-stale" });
+    const freshRuntime = createRuntime({ runtimeId: "runtime-fresh" });
+    const stops: string[] = [];
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          if (starts === 1) {
+            return Effect.succeed(
+              createRuntimeHandle(
+                staleRuntime,
+                () =>
+                  Effect.sync(() => {
+                    stops.push(staleRuntime.runtimeId);
+                  }),
+                false,
+              ),
+            );
+          }
+          return Effect.succeed(createRuntimeHandle(freshRuntime));
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      staleRuntime,
+    );
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      freshRuntime,
+    );
+    await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([freshRuntime]);
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-stale"]);
   });
   test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({

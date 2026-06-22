@@ -1,6 +1,7 @@
 import { HostValidationError } from "../../effect/host-errors";
 
 const WINDOWS_SHELL_NEWLINE_PATTERN = /[\r\n]/u;
+const WINDOWS_BATCH_QUOTE_PATTERN = /["]/u;
 const WINDOWS_BATCH_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/iu;
 
 export const assertNoWindowsShellNewlines = (
@@ -11,6 +12,16 @@ export const assertNoWindowsShellNewlines = (
     throw new HostValidationError({
       field,
       message: `Windows shell ${field} cannot contain carriage returns or newlines.`,
+    });
+  }
+};
+
+export const assertSafeWindowsBatchValue = (value: string, field: "argument" | "command"): void => {
+  assertNoWindowsShellNewlines(value, field);
+  if (WINDOWS_BATCH_QUOTE_PATTERN.test(value)) {
+    throw new HostValidationError({
+      field,
+      message: `Windows batch ${field} cannot contain double quotes.`,
     });
   }
 };
