@@ -88,9 +88,7 @@ export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boole
 };
 
 export const hasGithubIntegrationWarning = (runtimeCheck: RuntimeCheck | null): boolean => {
-  return (
-    runtimeCheck !== null && runtimeCheck.gitOk && (!runtimeCheck.ghOk || !runtimeCheck.ghAuthOk)
-  );
+  return Boolean(runtimeCheck?.gitOk && (!runtimeCheck.ghOk || !runtimeCheck.ghAuthOk));
 };
 
 export const hasTaskStoreCheckFailure = (taskStoreCheck: TaskStoreCheck | null): boolean => {

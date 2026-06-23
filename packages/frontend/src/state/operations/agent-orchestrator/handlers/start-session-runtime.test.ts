@@ -27,18 +27,23 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
     });
   });
 
-  test("maps missing build continuation target to null for fresh build starts", async () => {
+  test("does not resolve task worktree for regular fresh build starts", async () => {
+    let resolveTaskWorktreeCalls = 0;
     const result = await resolveFreshStartTargetWorkingDirectoryForStart({
       ctx: createStartSessionContextFixture(),
       runtime: createRuntimeDependenciesFixture({
-        resolveTaskWorktree: async () => null,
+        resolveTaskWorktree: async () => {
+          resolveTaskWorktreeCalls += 1;
+          return createBuildContinuationTargetFixture("/tmp/repo/worktree");
+        },
       }),
     });
 
     expect(result).toEqual({
-      targetWorkingDirectory: null,
+      targetWorkingDirectory: undefined,
       normalizedTargetWorkingDirectory: "",
     });
+    expect(resolveTaskWorktreeCalls).toBe(0);
   });
 
   test("serializeSelectedModelKey stays stable across all model dimensions", () => {

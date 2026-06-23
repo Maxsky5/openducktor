@@ -6,7 +6,8 @@ import { resolveRuntimeDescriptorForBuild } from "../support/builder-worktree-cl
 import {
   type PreparedBuildWorktree,
   prepareNewBuildWorktree,
-  validateExistingBuildWorktree,
+  removeInvalidExistingBuildWorktree,
+  validateExistingGitBuildWorktree,
 } from "../support/builder-worktree-start";
 import {
   requireBuildStartDependencies,
@@ -65,20 +66,8 @@ export const createTaskBuildStartUseCase = ({
         : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
       const worktreePath = dependencies.settingsConfig.join(worktreeBase, taskId);
       const worktreeAlreadyExists = yield* dependencies.settingsConfig.pathExists(worktreePath);
-      let preparedWorktree: PreparedBuildWorktree = {
-        cleanup: () => Effect.succeed(""),
-        worktreePath,
-      };
-      if (worktreeAlreadyExists) {
-        yield* validateExistingBuildWorktree(
-          dependencies,
-          canonicalRepoPath,
-          worktreePath,
-          taskId,
-          branch,
-        );
-      } else {
-        preparedWorktree = yield* prepareNewBuildWorktree(
+      const prepareBuildWorktree = () =>
+        prepareNewBuildWorktree(
           dependencies,
           repoConfig,
           task,
@@ -87,6 +76,31 @@ export const createTaskBuildStartUseCase = ({
           worktreePath,
           branch,
         );
+      let preparedWorktree: PreparedBuildWorktree = {
+        cleanup: () => Effect.succeed(""),
+        worktreePath,
+      };
+      if (worktreeAlreadyExists) {
+        const worktreeIsGitRepository = yield* dependencies.gitPort.isGitRepository(worktreePath);
+        if (worktreeIsGitRepository) {
+          yield* validateExistingGitBuildWorktree(
+            dependencies,
+            canonicalRepoPath,
+            worktreePath,
+            taskId,
+            branch,
+          );
+        } else {
+          yield* removeInvalidExistingBuildWorktree(
+            dependencies,
+            canonicalRepoPath,
+            worktreeBase,
+            worktreePath,
+          );
+          preparedWorktree = yield* prepareBuildWorktree();
+        }
+      } else {
+        preparedWorktree = yield* prepareBuildWorktree();
       }
 
       const finalizeResult = yield* Effect.either(

@@ -74,11 +74,7 @@ export const resolveFreshStartTargetWorkingDirectory = async ({
       .workingDirectory;
   }
 
-  if (ctx.role !== "build") {
-    return undefined;
-  }
-
-  return (await resolveTaskWorktree(ctx.repoPath, ctx.taskId))?.workingDirectory ?? null;
+  return undefined;
 };
 
 export const resolveFreshStartTargetWorkingDirectoryForStart = async ({

@@ -424,6 +424,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalBuildStart = host.buildStart;
 
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
@@ -461,6 +462,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       promptOverrides: {},
       agentDefaults: {},
     });
+    host.buildStart = async () => buildBootstrapFixture;
 
     OpencodeSdkAdapter.prototype.startSession = async () => {
       startCalls += 1;
@@ -529,6 +531,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.buildStart = originalBuildStart;
 
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
