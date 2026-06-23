@@ -357,6 +357,9 @@ const emitCompletedItem = (
 const requiresRuntimeLifecycleTimestamp = (method: string): boolean =>
   method === "item/started" || method === "item/completed";
 
+const isThreadScopedCodexNotificationMethod = (method: string): boolean =>
+  method.startsWith("thread/") || method.startsWith("turn/") || method.startsWith("item/");
+
 const timestampFromCompletedTurnNotification = (
   notification: CodexNotificationRecord,
 ): string | null => {
@@ -412,6 +415,9 @@ export const handleCodexPendingNotifications = async (
   for (const notification of notifications) {
     const notificationThreadId = extractThreadIdFromParams(notification.params);
     if (!notificationThreadId) {
+      if (!isThreadScopedCodexNotificationMethod(notification.method)) {
+        continue;
+      }
       throw new Error(
         `Codex notification '${notification.method}' is missing params.threadId and cannot be applied to session '${session.threadId}'.`,
       );

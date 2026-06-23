@@ -74,10 +74,12 @@ const markSessionHistoryLoading = ({
       return current;
     }
 
+    if (current.historyLoadState === "loading") {
+      return current;
+    }
+
     claimedLoad = true;
-    return current.historyLoadState === "loading"
-      ? current
-      : { ...current, historyLoadState: "loading" };
+    return { ...current, historyLoadState: "loading" };
   });
 
   return { session: loadingSession, claimedLoad: loadingSession !== null && claimedLoad };

@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
+import { getAgentSession } from "@/state/agent-session-collection";
+import { createSessionEventRouter } from "./session-event-router";
 import {
   type AgentSessionState,
   buildSession,
+  createSessionEventBatcher,
   createSessionsRef,
+  createSessionTurnMetadata,
   createSessionUpdater,
+  getSession,
   getSessionMessages,
   getSessionMessagesByIdentity,
   listenToAgentSessionEvents,
@@ -145,6 +150,55 @@ const createRoutingHarness = async ({
     sessionTwoRef,
     sessionsRef,
     unsubscribe,
+  };
+};
+
+const createDirectRouterContext = ({
+  sessionRef,
+  sessions,
+  onUpdateSession,
+}: {
+  sessionRef: AgentSessionRef;
+  sessions: AgentSessionState[];
+  onUpdateSession?: Parameters<typeof createSessionEventRouter>[0]["context"]["updateSession"];
+}) => {
+  const sessionsRef = createSessionsRef(sessions);
+  const updateSession = createSessionUpdater(sessionsRef);
+  const readSession = (identity: Parameters<typeof updateSession>[0]) =>
+    getAgentSession(sessionsRef.current, identity);
+  const ensureSession: Parameters<typeof createSessionEventRouter>[0]["context"]["ensureSession"] =
+    (identity, createSession) => {
+      const current = readSession(identity);
+      if (current) {
+        return current;
+      }
+      return createSession();
+    };
+
+  return {
+    context: {
+      adapter: {
+        subscribeEvents: async () => () => {},
+        replyApproval: async () => {},
+      },
+      sessionRef,
+      turnMetadata: createSessionTurnMetadata(),
+      readSession,
+      ensureSession,
+      updateSession: onUpdateSession ?? updateSession,
+      updateSessionTodos: () => {},
+      isSessionObserved: () => true,
+      recordTurnActivityTimestamp: () => {},
+      recordTurnUserMessageTimestamp: () => {},
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      buildReadOnlyApprovalRejectionMessage: async () => "",
+      readOnlyApprovalAutoRejectSafe: true,
+      refreshTaskData: async () => {},
+      workflowToolAliasesByCanonical: undefined,
+    },
+    sessionsRef,
+    updateSession,
   };
 };
 
@@ -351,5 +405,82 @@ describe("agent-orchestrator session event routing", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  test("delegates durable writes for sessions outside the queued batch", () => {
+    const rootRef = routeRef();
+    const sessionTwoRef = routeRef({
+      externalSessionId: "session-2",
+      workingDirectory: "/tmp/repo/worktrees/session-2",
+    });
+    const updateOptions: unknown[] = [];
+    const { context, sessionsRef, updateSession } = createDirectRouterContext({
+      sessionRef: rootRef,
+      sessions: [
+        buildSession({ externalSessionId: rootRef.externalSessionId }),
+        buildSession({
+          externalSessionId: sessionTwoRef.externalSessionId,
+          workingDirectory: sessionTwoRef.workingDirectory,
+        }),
+      ],
+      onUpdateSession: (identity, updater, options) => {
+        updateOptions.push(options);
+        return updateSession(identity, updater);
+      },
+    });
+    const router = createSessionEventRouter({
+      createBatcher: createSessionEventBatcher,
+      context,
+      handleEvent: (eventContext) => {
+        eventContext.store.updateSession(
+          sessionTwoRef,
+          (current) => ({ ...current, status: "idle" }),
+          { persist: true },
+        );
+      },
+    });
+
+    router.enqueue(assistantMessageEvent({ message: "Root batch", sessionRef: rootRef }));
+
+    expect(() => router.flushReady()).not.toThrow();
+    expect(getSession(sessionsRef, "session-2").status).toBe("idle");
+    expect(updateOptions).toContainEqual({ persist: true });
+  });
+
+  test("clears a routed session batcher after a forced flush", () => {
+    const rootRef = routeRef();
+    const { context } = createDirectRouterContext({
+      sessionRef: rootRef,
+      sessions: [buildSession({ externalSessionId: rootRef.externalSessionId })],
+    });
+    const prepareCalls: number[] = [];
+    let nextBatcherId = 0;
+    const router = createSessionEventRouter({
+      createBatcher: () => {
+        nextBatcherId += 1;
+        const batcherId = nextBatcherId;
+        return {
+          prepareQueuedSessionEvents: (events) => {
+            prepareCalls.push(batcherId);
+            return { readyEvents: events, deferredEvents: [], nextDelayMs: null };
+          },
+        };
+      },
+      context,
+      handleEvent: () => {},
+    });
+
+    router.enqueue(
+      assistantMessageEvent({ message: "First ready event", messageId: "assistant-1" }),
+    );
+    router.flushReady();
+    router.enqueue(assistantMessageEvent({ message: "Forced event", messageId: "assistant-2" }));
+    router.flushAll();
+    router.enqueue(
+      assistantMessageEvent({ message: "Second ready event", messageId: "assistant-3" }),
+    );
+    router.flushReady();
+
+    expect(prepareCalls).toEqual([1, 2]);
   });
 });

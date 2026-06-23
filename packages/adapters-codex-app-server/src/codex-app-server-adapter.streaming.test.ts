@@ -712,7 +712,48 @@ describe("CodexAppServerAdapter streaming", () => {
     );
   });
 
-  test("rejects drained notifications that cannot be scoped to a Codex thread", async () => {
+  test("ignores threadless global Codex notifications while draining a session", async () => {
+    let resolveTurnStart: (() => void) | null = null;
+    const drainNotifications = mock(async (_runtimeId: string) => {
+      resolveTurnStart?.();
+      return [
+        {
+          method: "fs/changed",
+          params: {
+            paths: ["/repo/src/file.ts"],
+          },
+        },
+      ] as unknown[];
+    });
+    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    resolveTurnStart = () => {
+      transports.get("runtime-live")?.turnStartDeferred.resolve({
+        turn: { id: "turn-1", status: "completed" },
+      });
+    };
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Hello Codex" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
+    ).resolves.toMatchObject({ type: "user_message", message: "Hello Codex" });
+  });
+
+  test("rejects thread-scoped drained notifications without a thread id", async () => {
     let resolveTurnStart: (() => void) | null = null;
     const drainNotifications = mock(async (_runtimeId: string) => {
       resolveTurnStart?.();

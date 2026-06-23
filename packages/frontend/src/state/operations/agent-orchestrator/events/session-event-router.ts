@@ -105,14 +105,14 @@ const applyQueuedSessionEvents = (
       },
       updateSession: (targetSessionIdentity, updater, options) => {
         const commit = commitsBySessionKey.get(agentSessionIdentityKey(targetSessionIdentity));
+        if (!commit) {
+          return context.updateSession(targetSessionIdentity, updater, options);
+        }
+
         if (options?.persist === true) {
           throw new Error(
             `Queued session event for '${targetSessionIdentity.externalSessionId}' requested durable persistence.`,
           );
-        }
-
-        if (!commit) {
-          return context.updateSession(targetSessionIdentity, updater, options);
         }
 
         commit.nextSession = updater(commit.nextSession);
@@ -235,8 +235,8 @@ export const createSessionEventRouter = ({
     }
 
     if (options.force === true) {
-      queuedEventsBySessionKey.delete(sessionKey);
       applyQueuedSessionEvents(context, queuedEvents, handleEvent);
+      clearSession(sessionKey);
       return null;
     }
 
@@ -244,11 +244,11 @@ export const createSessionEventRouter = ({
     const preparedEvents = batcher.prepareQueuedSessionEvents(queuedEvents);
     const readyEvents = preparedEvents.readyEvents;
     const deferredEvents = preparedEvents.deferredEvents;
-    storeDeferredEvents(sessionKey, deferredEvents);
-
     if (readyEvents.length > 0) {
       applyQueuedSessionEvents(context, readyEvents, handleEvent);
     }
+
+    storeDeferredEvents(sessionKey, deferredEvents);
 
     return deferredEvents.length > 0 ? preparedEvents.nextDelayMs : null;
   };

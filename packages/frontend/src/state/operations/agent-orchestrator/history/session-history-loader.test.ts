@@ -292,16 +292,8 @@ describe("session history loader", () => {
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
-  test("loads history for awaiting callers even when the session is already marked loading", async () => {
-    const loadSessionHistory = mock(async () => [
-      {
-        messageId: "history-while-loading",
-        role: "assistant" as const,
-        timestamp: "2026-06-12T08:00:01.000Z",
-        text: "Loaded while another caller had marked history loading",
-        parts: [],
-      },
-    ]);
+  test("does not start a duplicate history load when another caller already marked it loading", async () => {
+    const loadSessionHistory = mock(async () => []);
     const harness = createHistoryLoadHarness({
       ...createSession(),
       historyLoadState: "loading",
@@ -316,11 +308,9 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-    expect(loadedSession?.historyLoadState).toBe("loaded");
-    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
-      "Loaded while another caller had marked history loading",
-    ]);
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(loadedSession?.historyLoadState).toBe("loading");
+    expect(harness.session.historyLoadState).toBe("loading");
   });
 
   test("does not reset a loaded session when a stale caller asks for history again", async () => {
