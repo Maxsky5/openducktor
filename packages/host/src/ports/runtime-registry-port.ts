@@ -28,6 +28,7 @@ export type RuntimeEnsureWorkspaceInput = {
 };
 export type RuntimeWorkspaceHandle = {
   runtime: RuntimeInstanceSummary;
+  isAlive(): boolean;
   stop(): Effect.Effect<void, HostOperationError>;
 };
 export type RuntimeWorkspaceStarterPort = {

@@ -4,7 +4,7 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
-import { refreshRepoTaskViewsFromQuery } from "./task-view-sync";
+import { refreshRepoTaskViewsAfterMutation, refreshRepoTaskViewsFromQuery } from "./task-view-sync";
 import {
   invalidateRepoTaskQueries,
   loadRepoTaskDataFromQuery,
@@ -420,6 +420,44 @@ describe("tasks query cache helpers", () => {
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
     ).toBe("stale");
+  });
+
+  test("mutation repo task view refresh cancels older in-flight task reads before reloading", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    const staleTaskRead = createDeferred<TaskCard[]>();
+    let listCallCount = 0;
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      listCallCount += 1;
+      if (listCallCount === 1) {
+        return staleTaskRead.promise;
+      }
+
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const olderRead = queryClient
+      .fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS))
+      .catch((error) => error);
+    await waitForMockCall(() => tasksList.mock.calls.length === 1);
+
+    const refresh = refreshRepoTaskViewsAfterMutation(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      taskDocumentStrategy: "none",
+    });
+    await waitForMockCall(() => tasksList.mock.calls.length === 2);
+    staleTaskRead.resolve([{ ...taskFixture, id: "stale" }]);
+
+    await expect(refresh).resolves.toBeUndefined();
+    await olderRead;
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("fresh");
   });
 
   test("non-forced repo task view refresh joins an older in-flight task read", async () => {

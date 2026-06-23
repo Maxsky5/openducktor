@@ -145,6 +145,35 @@ describe("createCodexAppServerTransport", () => {
     await Effect.runPromise(transport.close());
   });
 
+  test("accepts permissions approval requests without an optional reason", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const request = {
+      id: 1,
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        startedAtMs: 1,
+        cwd: "/repo",
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+      },
+    };
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+
+    expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
+
+    await Effect.runPromise(transport.close());
+  });
+
   test("bounds captured stderr bytes used in process-close diagnostics", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000);

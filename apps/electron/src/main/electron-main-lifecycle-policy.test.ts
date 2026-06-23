@@ -36,7 +36,12 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('app.on("window-all-closed"');
     expect(source).toContain('void shutdownHostAndQuit({ reason: "window-all-closed" });');
     expect(source).toContain("if (hostShutdownStarted)");
-    expect(source).not.toContain('process.platform !== "darwin"');
+  });
+
+  test("Windows and Linux keep the menu hidden until the native reveal shortcut", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain('autoHideMenuBar: process.platform !== "darwin"');
   });
 
   test("Cmd+Q waits for the host shutdown boundary before quitting", () => {

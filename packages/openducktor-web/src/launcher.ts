@@ -243,7 +243,9 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     if (stopPromise) {
       await stop();
     } else {
+      logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
       await closeFrontendServer(frontendServer);
+      logSuccess("OpenDucktor web stopped.");
     }
     return exitCode;
   } catch (error) {

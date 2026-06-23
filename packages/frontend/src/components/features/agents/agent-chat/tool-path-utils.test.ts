@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { relativizeDisplayPathsInValue } from "./tool-path-utils";
+import { relativizeDisplayPath, relativizeDisplayPathsInValue } from "./tool-path-utils";
 
 describe("tool-path-utils", () => {
   test("relativizes string arrays for plural path keys", () => {
@@ -28,5 +28,23 @@ describe("tool-path-utils", () => {
     ).toEqual({
       labels: ["/repo/src/a.ts", "/repo/src/b.ts"],
     });
+  });
+
+  test("relativizes Windows paths inside the working directory", () => {
+    expect(
+      relativizeDisplayPath(
+        String.raw`C:\Users\dev\.openducktor\worktrees\repo\task-1\apps\web\src\App.tsx`,
+        String.raw`C:\Users\dev\.openducktor\worktrees\repo\task-1`,
+      ),
+    ).toBe("apps/web/src/App.tsx");
+  });
+
+  test("matches Windows drive paths case-insensitively", () => {
+    expect(
+      relativizeDisplayPath(
+        String.raw`c:\Users\dev\repo\src\App.tsx`,
+        String.raw`C:\Users\dev\repo`,
+      ),
+    ).toBe("src/App.tsx");
   });
 });

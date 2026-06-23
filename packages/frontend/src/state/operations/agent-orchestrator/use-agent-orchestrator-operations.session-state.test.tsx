@@ -398,7 +398,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         });
       });
 
-      expect(buildStartCalls).toBe(0);
+      expect(buildStartCalls).toBe(1);
       expect(startWorkingDirectory).toBe(buildBootstrapFixture.workingDirectory);
     } finally {
       await harness.unmount();

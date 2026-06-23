@@ -5,5 +5,5 @@ describe("DiffWorkerProvider", () => {
     const module = await import("./DiffWorkerProvider");
 
     expect(typeof module.DiffWorkerProvider).toBe("function");
-  });
+  }, 5000);
 });

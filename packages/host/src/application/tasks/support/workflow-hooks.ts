@@ -2,6 +2,8 @@ import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 
+const WORKFLOW_HOOK_TIMEOUT_MS = 300_000;
+
 const parseHookCommand = (hook: string): string[] => {
   const tokens: string[] = [];
   let current = "";
@@ -85,7 +87,10 @@ export const runHookCommandsAllowFailure = (
         return { hook, stderr: "Hook command is empty. Provide an executable name." };
       }
       const commandResult = yield* Effect.either(
-        systemCommands.runCommandAllowFailure(command, args, { cwd }),
+        systemCommands.runCommandAllowFailure(command, args, {
+          cwd,
+          timeoutMs: WORKFLOW_HOOK_TIMEOUT_MS,
+        }),
       );
       if (commandResult._tag === "Right") {
         const result = commandResult.right;

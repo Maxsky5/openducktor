@@ -82,7 +82,7 @@ describe("resolveProcessCommandPath", () => {
     });
   });
 
-  test("requires executable bits for POSIX command discovery", async () => {
+  testIfUnixModeIsAvailable("requires executable bits for POSIX command discovery", async () => {
     await withTempDir(async (root) => {
       const candidate = join(root, "not-executable");
       await writeFile(candidate, "#!/bin/sh\nexit 0\n");

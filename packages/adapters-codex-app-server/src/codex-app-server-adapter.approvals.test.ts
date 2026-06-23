@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -435,6 +436,79 @@ describe("CodexAppServerAdapter approvals", () => {
     });
   });
 
+  test("resolves Codex MCP tool approvals with session persistence metadata", async () => {
+    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+    drainServerRequests.mockImplementationOnce(async () => [
+      {
+        id: 37,
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-mcp-approval",
+          serverName: "semble",
+          mode: "form",
+          message: 'Allow the semble MCP server to run tool "search"?',
+          requestedSchema: { type: "object", properties: {} },
+          _meta: {
+            codex_approval_kind: "mcp_tool_call",
+            tool_name: "search",
+            persist: ["session", "always"],
+          },
+        },
+      },
+    ]);
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const events: unknown[] = [];
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
+      events.push(event),
+    );
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Search the repo" }],
+      }),
+    );
+
+    await expect(
+      waitForEvent(
+        events,
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+          (event as { requestId?: unknown }).requestId === "37",
+      ),
+    ).resolves.toMatchObject({
+      requestType: "runtime_tool",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "approve_always", "reject"],
+    });
+
+    await adapter.replyApproval({
+      externalSessionId: "thread/start-runtime-live",
+      requestId: "37",
+      outcome: "approve_session",
+    });
+
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      37,
+      { action: "accept", content: null, _meta: { persist: "session" } },
+      undefined,
+    );
+  });
+
   test("clears pending Codex input state when local stop cleanup runs", async () => {
     const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
     drainServerRequests.mockImplementationOnce(async () => [
@@ -715,10 +789,10 @@ describe("CodexAppServerAdapter approvals", () => {
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
     );
-    const execRequest = {
+    const fileChangeRequest = {
       id: 23,
-      method: "command/exec",
-      params: { threadId: "thread/start-runtime-live", command: "rm -rf tmp" },
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL,
+      params: { threadId: "thread/start-runtime-live", path: "src/main.ts" },
     };
     const toolRequest = {
       id: 24,
@@ -735,7 +809,7 @@ describe("CodexAppServerAdapter approvals", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "server_request",
-      message: execRequest,
+      message: fileChangeRequest,
     });
     streamListeners[0]?.({
       runtimeId: "runtime-live",
@@ -748,7 +822,7 @@ describe("CodexAppServerAdapter approvals", () => {
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
       23,
-      expect.objectContaining({ approved: false, outcome: "reject" }),
+      { decision: "decline" },
       undefined,
     );
     expect(respondServerRequest).toHaveBeenCalledWith(

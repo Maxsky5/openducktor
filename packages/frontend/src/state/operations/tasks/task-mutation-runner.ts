@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
+import { refreshRepoTaskViewsAfterMutation } from "@/state/queries/task-view-sync";
 import { requireActiveRepo } from "./task-operations-model";
 import type { TaskMutationRefreshStrategy } from "./task-operations-types";
 
@@ -34,7 +34,7 @@ export function useTaskMutationRunner({
   const refreshTaskMutationViews = useCallback(
     async (repoPath: string, strategy: TaskMutationRefreshStrategy): Promise<void> => {
       if (strategy.kind === "task") {
-        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
           forceFreshTaskList: true,
           taskDocumentStrategy: "refresh",
           taskIds: [strategy.taskId],
@@ -43,7 +43,7 @@ export function useTaskMutationRunner({
       }
 
       if (strategy.kind === "remove-task") {
-        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
           forceFreshTaskList: true,
           taskDocumentStrategy: "remove",
           taskIds: strategy.taskIds,
@@ -51,7 +51,9 @@ export function useTaskMutationRunner({
         return;
       }
 
-      await refreshRepoTaskViewsFromQuery(queryClient, repoPath, { forceFreshTaskList: true });
+      await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
+        forceFreshTaskList: true,
+      });
     },
     [queryClient],
   );

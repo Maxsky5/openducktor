@@ -1,19 +1,52 @@
-import type { AgentEvent } from "@openducktor/core";
 import {
+  AGENT_ROLE_TOOL_POLICY,
+  type AgentEvent,
+  normalizeOdtWorkflowToolName,
+} from "@openducktor/core";
+import {
+  classifyCodexRequestMutation,
+  codexApprovalResponseForRequest,
   extractTurnId,
-  isMutatingCodexRequest,
   parseQuestionRequest,
-  READ_ONLY_ROLES,
   toApprovalRequest,
+  toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import { READ_ONLY_ROLES } from "./codex-session-policy";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
   CodexServerRequestResponder,
   CodexSessionState,
 } from "./types";
+
+const odtWorkflowToolRoleRejection = (
+  session: CodexSessionState,
+  serverName: unknown,
+  toolName: string | undefined,
+): string | null => {
+  if (serverName !== "openducktor") {
+    return null;
+  }
+
+  if (!toolName) {
+    return null;
+  }
+
+  const workflowTool = normalizeOdtWorkflowToolName(toolName);
+  if (!workflowTool) {
+    return null;
+  }
+
+  if (!session.role) {
+    return `the session role is unknown`;
+  }
+
+  return AGENT_ROLE_TOOL_POLICY[session.role].includes(workflowTool)
+    ? null
+    : `role '${session.role}' is not allowed to use ${workflowTool}`;
+};
 
 export type CodexServerRequestHandlerContext = {
   respondServerRequest: CodexServerRequestResponder;
@@ -48,6 +81,51 @@ export const handleCodexServerRequest = async (
   const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (requestTurnId && activeTurn && context.bindActiveTurnId(activeTurn, requestTurnId)) {
     context.flushQueuedUserMessagesLater(activeTurn);
+  }
+
+  const mcpElicitationApproval = toMcpElicitationApprovalRequest(rawRequest);
+  if (mcpElicitationApproval) {
+    if (requestId === undefined) {
+      throw new Error("Codex MCP elicitation request is missing an id.");
+    }
+
+    const roleRejection = odtWorkflowToolRoleRejection(
+      session,
+      mcpElicitationApproval.metadata?.serverName,
+      mcpElicitationApproval.tool?.name,
+    );
+    if (roleRejection) {
+      await context.respondServerRequest(
+        session.runtimeId,
+        requestId,
+        codexApprovalResponseForRequest({
+          outcome: "reject",
+          request: rawRequest,
+          message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${roleRejection}.`,
+        }),
+        undefined,
+      );
+      context.emitSessionEvent(session.threadId, {
+        type: "session_error",
+        externalSessionId: session.threadId,
+        timestamp: new Date().toISOString(),
+        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${roleRejection}.`,
+      });
+      return false;
+    }
+
+    context.pendingInput.addApproval({
+      runtimeId: session.runtimeId,
+      threadId: session.threadId,
+      request: mcpElicitationApproval,
+    });
+    context.emitSessionEvent(session.threadId, {
+      ...mcpElicitationApproval,
+      type: "approval_required",
+      externalSessionId: session.threadId,
+      timestamp: new Date().toISOString(),
+    });
+    return true;
   }
 
   if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
@@ -105,7 +183,18 @@ export const handleCodexServerRequest = async (
     if (requestId === undefined) {
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
-    const isMutatingRequest = isMutatingCodexRequest(rawRequest);
+    const requestMutation = classifyCodexRequestMutation(rawRequest);
+    if (session.role && READ_ONLY_ROLES.has(session.role) && requestMutation === "read_only") {
+      await context.respondServerRequest(
+        session.runtimeId,
+        requestId,
+        codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
+        undefined,
+      );
+      return false;
+    }
+
+    const isMutatingRequest = requestMutation === "mutating";
     const shouldRejectForRole =
       !session.role || (isMutatingRequest && READ_ONLY_ROLES.has(session.role));
     if (shouldRejectForRole) {
@@ -115,11 +204,11 @@ export const handleCodexServerRequest = async (
       await context.respondServerRequest(
         session.runtimeId,
         requestId,
-        {
-          approved: false,
+        codexApprovalResponseForRequest({
           outcome: "reject",
+          request: rawRequest,
           message: `Codex request '${rawRequest.method}' was rejected because ${roleReason}.`,
-        },
+        }),
         undefined,
       );
       context.emitSessionEvent(session.threadId, {

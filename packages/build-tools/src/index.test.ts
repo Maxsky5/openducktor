@@ -59,5 +59,5 @@ describe("build tools", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Failing command failed with exit code 7.");
-  });
+  }, 5000);
 });

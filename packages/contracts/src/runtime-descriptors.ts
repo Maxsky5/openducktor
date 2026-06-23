@@ -130,7 +130,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
   },
   approvals: {
     supportedRequestTypes: ["command_execution", "file_change", "permission_grant", "runtime_tool"],
-    supportedReplyOutcomes: ["approve_once", "reject"],
+    supportedReplyOutcomes: ["approve_once", "approve_session", "approve_always", "reject"],
     omittedPermissionBehavior: "deny",
     pendingVisibility: ["live_snapshot"],
     canClassifyMutatingRequests: true,

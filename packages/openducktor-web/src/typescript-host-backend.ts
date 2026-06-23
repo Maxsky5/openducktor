@@ -44,6 +44,7 @@ const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
+const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 const jsonResponseBody = (payload: unknown): string => {
@@ -576,6 +577,7 @@ const startTypescriptHostBackendEffect = ({
 
     const server = Bun.serve({
       hostname: LOCALHOST,
+      idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
       port,
       fetch(request, server) {
         return Effect.runPromise(

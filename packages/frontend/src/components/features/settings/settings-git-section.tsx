@@ -9,6 +9,28 @@ type SettingsGitSectionProps = {
   onUpdateGit: (updater: (current: GlobalGitConfig) => GlobalGitConfig) => void;
 };
 
+const githubAuthDescription = ({
+  ghAuthReady,
+  ghCliReady,
+  ghLogin,
+  ghAuthError,
+}: {
+  ghAuthReady: boolean;
+  ghCliReady: boolean;
+  ghLogin: string | null | undefined;
+  ghAuthError: string | null | undefined;
+}): string => {
+  if (ghAuthReady) {
+    return ghLogin ? `Authenticated as ${ghLogin}.` : "Authenticated with GitHub.";
+  }
+
+  if (ghCliReady) {
+    return ghAuthError ?? "Run `gh auth login` to connect GitHub.";
+  }
+
+  return "Install GitHub CLI to enable GitHub integration.";
+};
+
 export function SettingsGitSection({
   git,
   runtimeCheck,
@@ -20,6 +42,12 @@ export function SettingsGitSection({
   const ghVersion = runtimeCheck?.ghVersion;
   const ghLogin = runtimeCheck?.ghAuthLogin;
   const ghAuthError = runtimeCheck?.ghAuthError;
+  const ghAuthDescriptionText = githubAuthDescription({
+    ghAuthReady,
+    ghCliReady,
+    ghLogin,
+    ghAuthError,
+  });
 
   return (
     <div className="grid gap-4 p-4">
@@ -60,7 +88,7 @@ export function SettingsGitSection({
             <div>
               <p className="text-sm font-medium text-foreground">GitHub CLI</p>
               <p className="text-xs text-muted-foreground">
-                Pull requests require the `gh` command-line client.
+                GitHub pull requests require the `gh` command-line client.
               </p>
             </div>
             <span
@@ -96,13 +124,7 @@ export function SettingsGitSection({
               {ghAuthReady ? "Authenticated" : "Action required"}
             </span>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            {ghAuthReady
-              ? ghLogin
-                ? `Authenticated as ${ghLogin}.`
-                : "Authenticated with GitHub."
-              : (ghAuthError ?? "Run `gh auth login` to connect GitHub.")}
-          </p>
+          <p className="mt-3 text-xs text-muted-foreground">{ghAuthDescriptionText}</p>
         </div>
       </div>
     </div>

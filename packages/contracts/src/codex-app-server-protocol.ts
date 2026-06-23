@@ -432,7 +432,7 @@ export type CodexAppServerExecCommandApprovalParams = {
   command: string[];
   conversationId: string;
   cwd: string;
-  parsedCmd: CodexAppServerJsonValue[];
+  parsedCmd: CodexAppServerLegacyParsedCommand[];
   reason: string | null;
 };
 export type CodexAppServerExecCommandApprovalResponse = {
@@ -444,22 +444,179 @@ export type CodexAppServerExecCommandApprovalResponse = {
     | "timed_out"
     | CodexAppServerJsonValue;
 };
+export type CodexAppServerCommandAction =
+  | { command: string; name: string; path: CodexAppServerAbsolutePath; type: "read" }
+  | { command: string; path: string | null; type: "listFiles" }
+  | { command: string; path: string | null; query: string | null; type: "search" }
+  | { command: string; type: "unknown" };
+export type CodexAppServerLegacyParsedCommand =
+  | { cmd: string; name: string; path: string; type: "read" }
+  | { cmd: string; path: string | null; type: "list_files" }
+  | { cmd: string; path: string | null; query: string | null; type: "search" }
+  | { cmd: string; type: "unknown" };
+export type CodexAppServerCommandExecutionRequestApprovalParams = {
+  additionalPermissions?: CodexAppServerRequestPermissionProfile | null;
+  approvalId?: string | null;
+  command?: string | null;
+  commandActions?: CodexAppServerCommandAction[] | null;
+  cwd?: CodexAppServerAbsolutePath | null;
+  itemId: string;
+  networkApprovalContext?: CodexAppServerJsonValue | null;
+  reason?: string | null;
+  startedAtMs: number;
+  threadId: string;
+  turnId: string;
+  proposedExecpolicyAmendment?: CodexAppServerJsonValue | null;
+  proposedNetworkPolicyAmendments?: CodexAppServerJsonValue[] | null;
+};
+export type CodexAppServerCommandExecutionApprovalResponse = {
+  decision: "accept" | "acceptForSession" | "decline" | "cancel" | CodexAppServerJsonValue;
+};
+export type CodexAppServerAdditionalNetworkPermissions = {
+  enabled: boolean | null;
+};
+export type CodexAppServerFileSystemSpecialPath =
+  | { kind: "root" }
+  | { kind: "minimal" }
+  | { kind: "project_roots"; subpath: string | null }
+  | { kind: "tmpdir" }
+  | { kind: "slash_tmp" }
+  | { kind: "unknown"; path: string; subpath: string | null };
+export type CodexAppServerFileSystemPath =
+  | { type: "path"; path: CodexAppServerAbsolutePath }
+  | { type: "glob_pattern"; pattern: string }
+  | { type: "special"; value: CodexAppServerFileSystemSpecialPath };
+export type CodexAppServerFileSystemSandboxEntry = {
+  path: CodexAppServerFileSystemPath;
+  access: "read" | "write" | "deny";
+};
+export type CodexAppServerAdditionalFileSystemPermissions = {
+  read: CodexAppServerAbsolutePath[] | null;
+  write: CodexAppServerAbsolutePath[] | null;
+  globScanMaxDepth?: number;
+  entries?: CodexAppServerFileSystemSandboxEntry[];
+};
+export type CodexAppServerRequestPermissionProfile = {
+  network: CodexAppServerAdditionalNetworkPermissions | null;
+  fileSystem: CodexAppServerAdditionalFileSystemPermissions | null;
+};
+export type CodexAppServerGrantedPermissionProfile = {
+  network?: CodexAppServerAdditionalNetworkPermissions;
+  fileSystem?: CodexAppServerAdditionalFileSystemPermissions;
+};
+export type CodexAppServerPermissionsRequestApprovalParams = {
+  threadId: string;
+  turnId: string;
+  itemId: string;
+  startedAtMs: number;
+  cwd: CodexAppServerAbsolutePath;
+  reason: string | null;
+  permissions: CodexAppServerRequestPermissionProfile;
+};
+export type CodexAppServerPermissionsApprovalResponse = {
+  permissions: CodexAppServerGrantedPermissionProfile;
+  scope: "turn" | "session";
+  strictAutoReview?: boolean;
+};
+export type CodexAppServerMcpServerElicitationAction = "accept" | "decline" | "cancel";
+export type CodexAppServerMcpServerElicitationRequestParams = {
+  threadId: string;
+  turnId: string | null;
+  serverName: string;
+} & (
+  | {
+      mode: "form";
+      _meta: CodexAppServerJsonValue | null;
+      message: string;
+      requestedSchema: CodexAppServerJsonValue;
+    }
+  | {
+      mode: "url";
+      _meta: CodexAppServerJsonValue | null;
+      message: string;
+      url: string;
+      elicitationId: string;
+    }
+);
+export type CodexAppServerMcpServerElicitationRequestResponse = {
+  action: CodexAppServerMcpServerElicitationAction;
+  content: CodexAppServerJsonValue | null;
+  _meta: CodexAppServerJsonValue | null;
+};
 
-export const CODEX_APP_SERVER_SERVER_REQUEST_METHODS = [
-  "account/chatgptAuthTokens/refresh",
-  "applyPatchApproval",
-  "attestation/generate",
-  "execCommandApproval",
-  "item/commandExecution/requestApproval",
-  "item/fileChange/requestApproval",
-  "item/permissions/requestApproval",
-  "item/tool/call",
-  "item/tool/requestUserInput",
-  "mcpServer/elicitation/request",
-] as const;
+export {
+  isCodexAppServerCommandAction,
+  isCodexAppServerLegacyParsedCommand,
+  isCodexAppServerMcpServerElicitationRequestParams,
+  isCodexAppServerRequestPermissionProfile,
+} from "./codex-app-server-protocol-guards";
+
+export const CODEX_APP_SERVER_SERVER_REQUEST_METHOD = {
+  ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH: "account/chatgptAuthTokens/refresh",
+  APPLY_PATCH_APPROVAL: "applyPatchApproval",
+  ATTESTATION_GENERATE: "attestation/generate",
+  EXEC_COMMAND_APPROVAL: "execCommandApproval",
+  ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL: "item/commandExecution/requestApproval",
+  ITEM_FILE_CHANGE_REQUEST_APPROVAL: "item/fileChange/requestApproval",
+  ITEM_PERMISSIONS_REQUEST_APPROVAL: "item/permissions/requestApproval",
+  ITEM_TOOL_CALL: "item/tool/call",
+  ITEM_TOOL_REQUEST_USER_INPUT: "item/tool/requestUserInput",
+  MCP_SERVER_ELICITATION_REQUEST: "mcpServer/elicitation/request",
+} as const;
 
 export type CodexAppServerServerRequestMethod =
-  (typeof CODEX_APP_SERVER_SERVER_REQUEST_METHODS)[number];
+  (typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD)[keyof typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD];
+
+export const CODEX_APP_SERVER_SERVER_REQUEST_METHODS = [
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ATTESTATION_GENERATE,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_CALL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+] as const satisfies readonly CodexAppServerServerRequestMethod[];
+
+export const CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS = [
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL,
+] as const satisfies readonly CodexAppServerServerRequestMethod[];
+
+export type CodexAppServerFileMutationRequestMethod =
+  (typeof CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS)[number];
+
+export const isCodexAppServerFileMutationRequestMethod = (
+  method: string,
+): method is CodexAppServerFileMutationRequestMethod =>
+  CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS.some((candidate) => candidate === method);
+
+export const CODEX_APP_SERVER_COMMAND_REQUEST_METHODS = [
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+] as const satisfies readonly CodexAppServerServerRequestMethod[];
+
+export type CodexAppServerCommandRequestMethod =
+  (typeof CODEX_APP_SERVER_COMMAND_REQUEST_METHODS)[number];
+
+export const isCodexAppServerCommandRequestMethod = (
+  method: string,
+): method is CodexAppServerCommandRequestMethod =>
+  CODEX_APP_SERVER_COMMAND_REQUEST_METHODS.some((candidate) => candidate === method);
+
+export const CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS = [
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
+] as const satisfies readonly CodexAppServerServerRequestMethod[];
+
+export type CodexAppServerPermissionRequestMethod =
+  (typeof CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS)[number];
+
+export const isCodexAppServerPermissionRequestMethod = (
+  method: string,
+): method is CodexAppServerPermissionRequestMethod =>
+  CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS.some((candidate) => candidate === method);
 
 export type CodexAppServerServerRequest =
   | {
@@ -469,7 +626,28 @@ export type CodexAppServerServerRequest =
     }
   | {
       id: CodexAppServerRequestId;
-      method: Exclude<CodexAppServerServerRequestMethod, "execCommandApproval">;
+      method: "item/commandExecution/requestApproval";
+      params: CodexAppServerCommandExecutionRequestApprovalParams;
+    }
+  | {
+      id: CodexAppServerRequestId;
+      method: "item/permissions/requestApproval";
+      params: CodexAppServerPermissionsRequestApprovalParams;
+    }
+  | {
+      id: CodexAppServerRequestId;
+      method: "mcpServer/elicitation/request";
+      params: CodexAppServerMcpServerElicitationRequestParams;
+    }
+  | {
+      id: CodexAppServerRequestId;
+      method: Exclude<
+        CodexAppServerServerRequestMethod,
+        | "execCommandApproval"
+        | "item/commandExecution/requestApproval"
+        | "item/permissions/requestApproval"
+        | "mcpServer/elicitation/request"
+      >;
       params: CodexAppServerJsonValue;
     };
 export type CodexAppServerProtocolMessage =
@@ -583,7 +761,10 @@ export const parseCodexAppServerRequestResult = (
 };
 
 export type CodexAppServerRespondResult =
+  | CodexAppServerCommandExecutionApprovalResponse
   | CodexAppServerExecCommandApprovalResponse
+  | CodexAppServerMcpServerElicitationRequestResponse
+  | CodexAppServerPermissionsApprovalResponse
   | { action: string; content?: CodexAppServerJsonValue }
   | { answers: { [key in string]?: CodexAppServerJsonValue } }
   | { content: CodexAppServerJsonValue[]; _meta?: CodexAppServerJsonValue; isError?: boolean }

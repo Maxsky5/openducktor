@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
+import { copySqliteTaskStoreMigrations, resolveSqliteTaskStoreMigrationCopyPlan } from "./build";
 
 type ManagedElectronProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
 type ForceCloseableHttpServer = {
@@ -50,20 +51,6 @@ const ELECTRON_RESTART_EXTENSIONS = new Set([
 
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
-
-const waitForProcessExit = async (
-  subprocess: Pick<ManagedElectronProcess, "exited">,
-  timeoutMs: number,
-): Promise<boolean> => {
-  let exited = false;
-  await Promise.race([
-    subprocess.exited.then(() => {
-      exited = true;
-    }),
-    sleep(timeoutMs),
-  ]);
-  return exited;
-};
 
 const runStep = async (label: string, command: string[]): Promise<void> => {
   const process = Bun.spawn(command, {
@@ -285,6 +272,12 @@ const resolveElectronDevExecutablePath = async (): Promise<string> => {
 const buildElectronBundles = async (): Promise<void> => {
   await runStep("Electron main build", ["bun", "run", "build:main"]);
   await runStep("Electron preload build", ["bun", "run", "build:preload"]);
+  await copySqliteTaskStoreMigrations(
+    resolveSqliteTaskStoreMigrationCopyPlan({
+      electronPackageRoot: packageRoot,
+      workspaceRoot,
+    }),
+  );
 };
 
 const createRendererDevServer = async (port: number): Promise<ViteDevServer> => {
@@ -321,6 +314,9 @@ export const electronRuntimeEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
   return runtimeEnv;
 };
 
+export const electronGracefulShutdownSignal = (platform: NodeJS.Platform): NodeJS.Signals =>
+  platform === "win32" ? "SIGINT" : "SIGTERM";
+
 const startElectron = (
   rendererDevUrl: string,
   electronExecutablePath: string,
@@ -347,13 +343,27 @@ const stopElectron = async (electron: ManagedElectronProcess | null): Promise<vo
     return;
   }
 
-  electron.kill();
-  if (await waitForProcessExit(electron, ELECTRON_STOP_TIMEOUT_MS)) {
-    return;
-  }
+  let exited = false;
+  const exitedPromise = electron.exited.then(() => {
+    exited = true;
+  });
 
-  electron.kill(9);
-  await waitForProcessExit(electron, ELECTRON_STOP_TIMEOUT_MS);
+  const gracefulSignal = electronGracefulShutdownSignal(process.platform);
+  console.log(`[electron:dev] Requesting Electron shutdown with ${gracefulSignal}...`);
+  electron.kill(gracefulSignal);
+  await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
+  if (!exited) {
+    console.error(
+      `[electron:dev] Electron did not exit within ${ELECTRON_STOP_TIMEOUT_MS}ms; forcing shutdown...`,
+    );
+    electron.kill(9);
+    await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
+    if (!exited) {
+      throw new Error(
+        `[electron:dev] Electron did not exit after forced shutdown within ${ELECTRON_STOP_TIMEOUT_MS}ms.`,
+      );
+    }
+  }
 };
 
 export const closeRendererServer = async (
@@ -467,9 +477,11 @@ const main = async (): Promise<number> => {
     rendererServer.watcher.on("unlink", handleWatchedFileChange);
 
     process.once("SIGINT", () => {
+      console.log("[electron:dev] Received SIGINT, shutting down...");
       void shutdown(130);
     });
     process.once("SIGTERM", () => {
+      console.log("[electron:dev] Received SIGTERM, shutting down...");
       void shutdown(143);
     });
     process.once("exit", () => {

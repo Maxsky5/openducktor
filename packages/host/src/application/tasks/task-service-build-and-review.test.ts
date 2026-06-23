@@ -626,7 +626,11 @@ describe("createTaskService build and review", () => {
         worktreePath: "/worktrees/repo/task-1",
         relativePaths: [".env"],
       },
-      { command: "bun", args: ["test"], options: { cwd: "/worktrees/repo/task-1" } },
+      {
+        command: "bun",
+        args: ["test"],
+        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
+      },
       {
         type: "ensureRuntime",
         input: expect.objectContaining({
@@ -794,6 +798,11 @@ describe("createTaskService build and review", () => {
     expect(calls).toEqual(
       expect.arrayContaining([
         {
+          command: "bun",
+          args: ["test"],
+          options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
+        },
+        {
           type: "deleteReference",
           repoPath: "/repo",
           reference: "refs/remotes/origin/odt/task-1-task-1",
@@ -921,7 +930,7 @@ describe("createTaskService build and review", () => {
       {
         command: "sh",
         args: ["-lc", "printf cleanup"],
-        options: { cwd: "/worktrees/repo/task-1" },
+        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
       },
       {
         type: "transition",
@@ -1150,7 +1159,7 @@ describe("createTaskService build and review", () => {
       {
         command: "sh",
         args: ["-lc", "echo cleanup failed >&2; exit 1"],
-        options: { cwd: "/worktrees/repo/task-1" },
+        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
       },
       {
         type: "transition",

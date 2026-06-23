@@ -8,6 +8,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
 };
+const OPENCODE_VERSION_TIMEOUT_MS = 10_000;
 
 const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): RuntimeHealth => ({
   kind,
@@ -29,7 +30,7 @@ export const createRuntimeHealthProbe = (
             const binary = yield* toolDiscovery.resolveToolPath("opencode");
             const version = yield* systemCommands.versionCommand(binary, ["--version"], {
               env: OPENCODE_VERSION_ENV,
-              timeoutMs: 2_000,
+              timeoutMs: OPENCODE_VERSION_TIMEOUT_MS,
             });
             return {
               kind,

@@ -95,6 +95,7 @@ const runSpawnedGit = (
       child = spawn(launch.command, launch.args, {
         cwd: workingDirectory,
         env: launch.env,
+        windowsHide: launch.windowsHide,
         windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch (cause) {
@@ -215,6 +216,7 @@ export const createDefaultGitRunner = (
               cwd: workingDirectory,
               env: launch.env,
               maxBuffer: 16 * 1024 * 1024,
+              windowsHide: launch.windowsHide,
               windowsVerbatimArguments: launch.windowsVerbatimArguments,
             }),
           catch: (cause) => cause,

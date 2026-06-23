@@ -74,6 +74,7 @@ export const runtimeApprovalReplyOutcomeValues = [
   "approve_once",
   "approve_turn",
   "approve_session",
+  "approve_always",
   "reject",
 ] as const;
 export const runtimeApprovalReplyOutcomeSchema = z.enum(runtimeApprovalReplyOutcomeValues);

@@ -649,6 +649,7 @@ describe("createElectronHostCommandRouter", () => {
           };
           return {
             runtime,
+            isAlive: () => true,
             stop: () => Effect.succeed(undefined),
           };
         }),

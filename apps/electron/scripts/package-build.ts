@@ -63,6 +63,10 @@ export const resolveElectronBuilderArgs = ({
     args.push("-c.mac.notarize=false");
   }
 
+  if (!signed && platform === "windows") {
+    args.push("-c.win.signExecutable=false");
+  }
+
   if (!stageReleaseArtifacts && platform === "macos") {
     args.push("-c.dmg.writeUpdateInfo=false");
   }

@@ -9,6 +9,7 @@ const APPROVAL_OUTCOME_LABELS: Partial<Record<RuntimeApprovalReplyOutcome, strin
   approve_once: "Approve once",
   approve_turn: "Approve for turn",
   approve_session: "Approve for session",
+  approve_always: "Always allow",
   reject: "Reject",
 };
 

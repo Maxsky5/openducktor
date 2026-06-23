@@ -234,7 +234,8 @@ describe("DiagnosticsPanelSections", () => {
 
     const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
 
-    expect(html).toContain("gh not found in PATH");
+    expect(html).toContain("GitHub optional");
+    expect(html).not.toContain("gh not found in PATH");
     expect(html).toContain("runtime failed");
     expect(html).not.toContain("server unavailable");
     expect(html).toContain("task store failed");

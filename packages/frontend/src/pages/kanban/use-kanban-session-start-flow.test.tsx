@@ -435,6 +435,12 @@ describe("useKanbanSessionStartFlow", () => {
     expect(modal?.description).toBe(
       "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
     );
+    const latestBuilderDescription = `${new Date(
+      "2026-03-20T12:00:00.000Z",
+    ).toLocaleString()} · idle · builder-`;
+    const olderBuilderDescription = `${new Date(
+      "2026-03-19T12:00:00.000Z",
+    ).toLocaleString()} · idle · builder-`;
     expect(modal?.existingSessionOptions).toEqual([
       expect.objectContaining({
         sourceSession: {
@@ -443,7 +449,7 @@ describe("useKanbanSessionStartFlow", () => {
           workingDirectory: "/repo/worktrees/builder-session-2",
         },
         label: "Builder #2",
-        description: "3/20/2026, 12:00:00 PM · idle · builder-",
+        description: latestBuilderDescription,
         secondaryLabel: "Latest",
         selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
@@ -454,7 +460,7 @@ describe("useKanbanSessionStartFlow", () => {
           workingDirectory: "/repo/worktrees/builder-session-1",
         },
         label: "Builder #1",
-        description: "3/19/2026, 12:00:00 PM · idle · builder-",
+        description: olderBuilderDescription,
         selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
     ]);

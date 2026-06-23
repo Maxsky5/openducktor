@@ -13,6 +13,10 @@ import {
   codexThreadList,
   threadSnapshotFromReadResponse,
 } from "./codex-app-server-threads";
+import {
+  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+  OPENDUCKTOR_CODEX_SANDBOX_MODE,
+} from "./codex-session-policy";
 import type { CodexAppServerClient } from "./types";
 
 type PendingInventoryRead = {
@@ -159,8 +163,10 @@ export class CodexThreadInventoryReader {
       }
     }
     await client.threadResume({
+      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
+      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
     });
     this.clearInventory(runtimeId);
     await client.threadRead({

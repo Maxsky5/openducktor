@@ -198,7 +198,7 @@ describe("check-diagnostics helpers", () => {
     );
   });
 
-  test("treats GitHub CLI and auth failures as CLI toast-level issues", () => {
+  test("keeps GitHub CLI and auth failures out of CLI toast-level issues", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -211,7 +211,7 @@ describe("check-diagnostics helpers", () => {
         ghAuthLogin: null,
         ghAuthError: "gh auth missing",
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
-        errors: ["gh auth missing"],
+        errors: [],
       },
       runtimeCheckError: null,
       runtimeCheckFailureKind: null,
@@ -221,14 +221,6 @@ describe("check-diagnostics helpers", () => {
       runtimeHealthByRuntime: {},
     });
 
-    expect(issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "diagnostics:cli-tools",
-          severity: "error",
-          description: "gh auth missing",
-        }),
-      ]),
-    );
+    expect(issues).toEqual([]);
   });
 });

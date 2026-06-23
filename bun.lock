@@ -18,13 +18,11 @@
     "apps/electron": {
       "name": "@openducktor/electron",
       "version": "0.3.1",
-      "dependencies": {
+      "devDependencies": {
+        "@openducktor/build-tools": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
-      },
-      "devDependencies": {
-        "@openducktor/build-tools": "workspace:*",
         "@tailwindcss/vite": "^4.3.1",
         "@types/node": "^25.9.2",
         "@vitejs/plugin-react": "^6.0.2",
