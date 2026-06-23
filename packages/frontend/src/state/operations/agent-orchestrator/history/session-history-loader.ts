@@ -195,8 +195,13 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     const systemPromptContext = await loadSystemPromptContext?.(loadingSession);
 
     if (!isStaleRepoOperation()) {
+      const sessionForHistory = readSessionSnapshot(identity);
+      if (!sessionForHistory) {
+        return finishStaleHistoryLoad();
+      }
+
       const history = await adapter.loadSessionHistory({
-        ...toRuntimeSessionRef(repoPath, loadingSession),
+        ...toRuntimeSessionRef(repoPath, sessionForHistory),
         ...(systemPromptContext ? { systemPromptContext } : {}),
         limit: SESSION_HISTORY_LOAD_LIMIT,
       });

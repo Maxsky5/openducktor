@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   codexTurnItemsFromThreadRead,
   timestampFromCodexParams,
+  timestampFromCodexTurn,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
@@ -18,6 +19,21 @@ describe("Codex App Server transcript parsing", () => {
 
   test("does not invent timestamps when notification params omit runtime timestamps", () => {
     expect(timestampFromCodexParams({})).toBeNull();
+  });
+
+  test("ignores malformed turn timestamps instead of throwing", () => {
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.NaN }, ["completedAt", "completed_at"]),
+    ).toBeNull();
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.POSITIVE_INFINITY }, [
+        "completedAt",
+        "completed_at",
+      ]),
+    ).toBeNull();
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE }, ["completedAt", "completed_at"]),
+    ).toBeNull();
   });
 
   test("maps skill message parts to structured Codex skill input", () => {

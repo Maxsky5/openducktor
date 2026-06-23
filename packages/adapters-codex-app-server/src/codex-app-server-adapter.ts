@@ -373,6 +373,17 @@ export class CodexAppServerAdapter
   }
 
   async releaseSession(input: AgentSessionRef): Promise<void> {
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) {
+      return;
+    }
+    const sessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot release Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+
     this.localSessions.release(input.externalSessionId);
   }
 
@@ -490,29 +501,24 @@ export class CodexAppServerAdapter
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
-    const unsubscribe = this.sessionEvents.subscribe(input, listener);
-    try {
-      if (!this.localSessions.has(externalSessionId)) {
-        await this.ensureSessionState(input);
-      }
-    } catch (error) {
-      unsubscribe();
-      throw error;
+    if (!this.localSessions.has(externalSessionId)) {
+      await this.ensureSessionState(input);
     }
+
     const session = this.localSessions.get(externalSessionId);
     if (!session) {
-      unsubscribe();
       throw new Error(
         `Cannot subscribe Codex session events for missing session '${externalSessionId}'.`,
       );
     }
     const registeredSessionRef = codexSessionRef(session);
     if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      unsubscribe();
       throw new Error(
         `Cannot subscribe Codex session events for '${externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );
     }
+
+    const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
     for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
@@ -542,6 +548,13 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    const sessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot stop Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+
     this.localSessions.release(input.externalSessionId);
   }
 
@@ -561,9 +574,10 @@ export class CodexAppServerAdapter
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
     const session = this.localSessions.get(externalSessionId);
     if (!session) {
-      throw new Error(
-        `Cannot emit Codex session event for missing session '${externalSessionId}'.`,
-      );
+      if (event.sessionRef) {
+        this.sessionEvents.emit(event.sessionRef, event);
+      }
+      return;
     }
     const sessionRef = codexSessionRef(session);
     this.sessionEvents.emit(sessionRef, withAgentSessionRef(sessionRef, event));

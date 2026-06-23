@@ -157,8 +157,11 @@ export const listenToAgentSessionEvents = async (
   });
   return () => {
     cancelQueuedFlush();
-    router.flushAll();
-    unsubscribe();
+    try {
+      router.flushAll();
+    } finally {
+      unsubscribe();
+    }
   };
 };
 

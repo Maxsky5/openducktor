@@ -412,6 +412,52 @@ describe("CodexAppServerAdapter lifecycle", () => {
     unsubscribe();
   });
 
+  test("rejects release for an existing Codex session in another working directory", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.releaseSession({
+        ...codexSessionRef("thread/start-runtime-live"),
+        workingDirectory: "/repo/worktrees/thread-start-runtime-live",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
+  });
+
+  test("rejects stop for an existing Codex session in another working directory", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.stopSession({
+        ...codexSessionRef("thread/start-runtime-live"),
+        workingDirectory: "/repo/worktrees/thread-start-runtime-live",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
+  });
+
   test("ignores release for unknown Codex sessions", async () => {
     const { adapter } = createHarness();
 

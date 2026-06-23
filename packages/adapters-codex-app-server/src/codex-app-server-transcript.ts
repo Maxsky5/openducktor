@@ -103,7 +103,12 @@ export const timestampFromCodexParams = (params: unknown): string | null => {
 };
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
-  return seconds === null ? undefined : new Date(seconds * 1000).toISOString();
+  if (seconds === null || !Number.isFinite(seconds)) {
+    return undefined;
+  }
+
+  const timestamp = new Date(seconds * 1000);
+  return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined;
 };
 
 const codexTurnTimestampSeconds = (

@@ -17,7 +17,7 @@ const validateEventSessionRef = (
 ): AgentSessionRef => {
   if (eventSessionRef.externalSessionId !== event.externalSessionId) {
     throw new Error(
-      `Session event '${event.type}' routes '${event.externalSessionId}' but carries session ref '${eventSessionRef.externalSessionId}'.`,
+      `Session event '${event.type}' has externalSessionId '${event.externalSessionId}' but carries a sessionRef with externalSessionId '${eventSessionRef.externalSessionId}'.`,
     );
   }
 

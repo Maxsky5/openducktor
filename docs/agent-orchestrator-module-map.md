@@ -201,8 +201,9 @@ Owns:
 Invariant: history loading is session-scoped and policy-driven. The
 selected-session baseline effect or a session action asks to load one concrete
 session route; the history loader marks, applies, fails, or resets that concrete
-load and returns the loaded session to awaited callers. The repo projection
-never bulk-loads transcripts.
+load. The caller that claims and completes a load receives the loaded session;
+duplicate callers receive the current session snapshot without starting another
+request. The repo projection never bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they

@@ -15,6 +15,7 @@ import {
   listenToAgentSessionEvents,
   type SessionEvent,
   type SessionEventAdapter,
+  type SessionUpdateFn,
 } from "./session-events-test-harness";
 
 const routeRef = (overrides: Partial<AgentSessionRef> = {}): AgentSessionRef => ({
@@ -229,17 +230,21 @@ describe("agent-orchestrator session event routing", () => {
       eventBatchWindowMs: 500,
     });
 
-    handleEvent(assistantPartEvent({ text: "Session 1 draft" }));
-    handleEvent(assistantPartEvent({ text: "Session 2 draft", sessionRef: sessionTwoRef }));
+    try {
+      handleEvent(assistantPartEvent({ text: "Session 1 draft" }));
+      handleEvent(assistantPartEvent({ text: "Session 2 draft", sessionRef: sessionTwoRef }));
 
-    unsubscribe();
+      unsubscribe();
 
-    expect(getSessionMessages(sessionsRef, "session-1").map((message) => message.content)).toEqual([
-      "Session 1 draft",
-    ]);
-    expect(getSessionMessages(sessionsRef, "session-2").map((message) => message.content)).toEqual([
-      "Session 2 draft",
-    ]);
+      expect(
+        getSessionMessages(sessionsRef, "session-1").map((message) => message.content),
+      ).toEqual(["Session 1 draft"]);
+      expect(
+        getSessionMessages(sessionsRef, "session-2").map((message) => message.content),
+      ).toEqual(["Session 2 draft"]);
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("does not flush another session queue before an immediate stream event", async () => {
@@ -247,26 +252,30 @@ describe("agent-orchestrator session event routing", () => {
       eventBatchWindowMs: 500,
     });
 
-    handleEvent(assistantPartEvent({ text: "Session 1 draft" }));
+    try {
+      handleEvent(assistantPartEvent({ text: "Session 1 draft" }));
 
-    handleEvent(
-      userMessageEvent({
-        message: "Session 2 immediate message",
-        messageId: "user-session-2",
-        sessionRef: sessionTwoRef,
-      }),
-    );
+      handleEvent(
+        userMessageEvent({
+          message: "Session 2 immediate message",
+          messageId: "user-session-2",
+          sessionRef: sessionTwoRef,
+        }),
+      );
 
-    expect(getSessionMessages(sessionsRef, "session-1")).toEqual([]);
-    expect(getSessionMessages(sessionsRef, "session-2").map((message) => message.content)).toEqual([
-      "Session 2 immediate message",
-    ]);
+      expect(getSessionMessages(sessionsRef, "session-1")).toEqual([]);
+      expect(
+        getSessionMessages(sessionsRef, "session-2").map((message) => message.content),
+      ).toEqual(["Session 2 immediate message"]);
 
-    unsubscribe();
+      unsubscribe();
 
-    expect(getSessionMessages(sessionsRef, "session-1").map((message) => message.content)).toEqual([
-      "Session 1 draft",
-    ]);
+      expect(
+        getSessionMessages(sessionsRef, "session-1").map((message) => message.content),
+      ).toEqual(["Session 1 draft"]);
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("routes session todo updates to the stream event session", async () => {
@@ -339,21 +348,64 @@ describe("agent-orchestrator session event routing", () => {
       ],
     });
 
-    handleEvent(
-      assistantPartEvent({
-        text: "Worktree draft",
-        messageId: "assistant-worktree",
-        partId: "text-worktree",
-        sessionRef: worktreeRef,
-      }),
-    );
+    try {
+      handleEvent(
+        assistantPartEvent({
+          text: "Worktree draft",
+          messageId: "assistant-worktree",
+          partId: "text-worktree",
+          sessionRef: worktreeRef,
+        }),
+      );
 
-    unsubscribe();
+      unsubscribe();
 
-    expect(getSessionMessagesByIdentity(sessionsRef, rootRef)).toEqual([]);
-    expect(
-      getSessionMessagesByIdentity(sessionsRef, worktreeRef).map((message) => message.content),
-    ).toEqual(["Worktree draft"]);
+      expect(getSessionMessagesByIdentity(sessionsRef, rootRef)).toEqual([]);
+      expect(
+        getSessionMessagesByIdentity(sessionsRef, worktreeRef).map((message) => message.content),
+      ).toEqual(["Worktree draft"]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("unsubscribes even when teardown flush throws", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    let unsubscribed = false;
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_sessionRef, handler) => {
+        handlers.push(handler);
+        return () => {
+          unsubscribed = true;
+        };
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const updateSession: SessionUpdateFn = () => {
+      throw new Error("flush failed");
+    };
+
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      eventBatchWindowMs: 500,
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent(assistantMessageEvent({ message: "Queued answer" }));
+
+    expect(() => unsubscribe()).toThrow("flush failed");
+    expect(unsubscribed).toBe(true);
   });
 
   test("does not throttle queued events across worktrees that share an external id", async () => {

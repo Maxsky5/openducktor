@@ -3,6 +3,7 @@ import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
+  parseNotificationRecord,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
@@ -150,5 +151,33 @@ describe("Codex MCP approval requests", () => {
         "spec",
       ),
     ).toThrow("Codex app-server approval request is missing a numeric id.");
+  });
+});
+
+describe("Codex App Server notification parsing", () => {
+  test("preserves receivedAt when reparsing materialized notification records", () => {
+    expect(
+      parseNotificationRecord({
+        method: "thread/tokenUsage/updated",
+        params: { threadId: "thread-1" },
+        receivedAt: "2026-06-23T10:00:00.000Z",
+      }),
+    ).toEqual({
+      method: "thread/tokenUsage/updated",
+      params: { threadId: "thread-1" },
+      receivedAt: "2026-06-23T10:00:00.000Z",
+    });
+  });
+
+  test("uses an explicit receivedAt argument when provided", () => {
+    expect(
+      parseNotificationRecord(
+        {
+          method: "thread/tokenUsage/updated",
+          receivedAt: "2026-06-23T10:00:00.000Z",
+        },
+        "2026-06-23T10:00:01.000Z",
+      ).receivedAt,
+    ).toBe("2026-06-23T10:00:01.000Z");
   });
 });

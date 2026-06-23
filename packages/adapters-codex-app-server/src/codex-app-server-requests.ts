@@ -303,7 +303,7 @@ export const parseQuestionRequest = (
 
 export const parseNotificationRecord = (
   value: unknown,
-  receivedAt = new Date().toISOString(),
+  receivedAt?: string,
 ): CodexNotificationRecord => {
   if (!isPlainObject(value)) {
     throw new Error("Codex app-server notification must be an object.");
@@ -312,5 +312,12 @@ export const parseNotificationRecord = (
   if (typeof method !== "string" || method.trim().length === 0) {
     throw new Error("Codex app-server notification is missing method.");
   }
-  return { method: method.trim(), ...(params !== undefined ? { params } : {}), receivedAt };
+  const parsedReceivedAt =
+    receivedAt ??
+    (typeof value.receivedAt === "string" ? value.receivedAt : new Date().toISOString());
+  return {
+    method: method.trim(),
+    ...(params !== undefined ? { params } : {}),
+    receivedAt: parsedReceivedAt,
+  };
 };

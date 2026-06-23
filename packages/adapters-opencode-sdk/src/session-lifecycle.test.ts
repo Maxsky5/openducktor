@@ -188,6 +188,43 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
+  test("releaseSession rejects a ref for another working directory", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+    await startDefaultSession(adapter);
+
+    await expect(
+      adapter.releaseSession({
+        ...sessionRef("session-opencode-1"),
+        workingDirectory: "/repo/worktrees/session-opencode-1",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(localSessions(adapter).has("session-opencode-1")).toBe(true);
+  });
+
+  test("stopSession rejects a ref for another working directory before aborting", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+    await startDefaultSession(adapter);
+
+    await expect(
+      adapter.stopSession({
+        ...sessionRef("session-opencode-1"),
+        workingDirectory: "/repo/worktrees/session-opencode-1",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(mock.session.abortCalls).toHaveLength(0);
+    expect(localSessions(adapter).has("session-opencode-1")).toBe(true);
+  });
+
   test("stopSession keeps the local session when runtime abort fails", async () => {
     const mock = makeMockClient({});
     const abortError = new Error("abort failed");

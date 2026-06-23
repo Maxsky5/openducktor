@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, AgentSessionRef } from "@openducktor/core";
 import {
+  clearSessionListeners,
   emitSessionEvent,
   type SessionEventListeners,
   subscribeSessionEvents,
@@ -34,5 +35,30 @@ describe("OpenCode session event emitter", () => {
     emitSessionEvent(listeners, sessionRef, sessionErrorEvent);
 
     expect(received).toEqual([]);
+  });
+
+  test("clears listeners by full session ref", () => {
+    const listeners: SessionEventListeners = new Map();
+    const received: AgentEvent[] = [];
+    const otherWorkingDirectorySessionRef: AgentSessionRef = {
+      ...sessionRef,
+      workingDirectory: "/repo/worktrees/session-1",
+    };
+
+    subscribeSessionEvents(listeners, sessionRef, (event) => received.push(event));
+    subscribeSessionEvents(listeners, otherWorkingDirectorySessionRef, (event) =>
+      received.push(event),
+    );
+
+    clearSessionListeners(listeners, sessionRef);
+    emitSessionEvent(listeners, sessionRef, sessionErrorEvent);
+    emitSessionEvent(listeners, otherWorkingDirectorySessionRef, {
+      ...sessionErrorEvent,
+      sessionRef: otherWorkingDirectorySessionRef,
+    });
+
+    expect(received).toEqual([
+      { ...sessionErrorEvent, sessionRef: otherWorkingDirectorySessionRef },
+    ]);
   });
 });

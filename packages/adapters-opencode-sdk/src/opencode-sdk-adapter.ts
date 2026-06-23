@@ -342,6 +342,11 @@ export class OpencodeSdkAdapter
       return;
     }
     const sessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot release OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
 
     await releaseSessionRuntime(session, this.sessions, this.runtimeEventTransports);
     clearSessionListeners(this.listeners, sessionRef);
@@ -643,29 +648,29 @@ export class OpencodeSdkAdapter
     input: AgentSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
-    const unsubscribe = subscribeSessionEvents(this.listeners, input, listener);
-    try {
-      if (!this.sessions.has(input.externalSessionId)) {
-        await this.ensureSessionState(input);
-      }
-    } catch (error) {
-      unsubscribe();
-      throw error;
+    if (!this.sessions.has(input.externalSessionId)) {
+      await this.ensureSessionState(input);
     }
+
     const session = requireSession(this.sessions, input.externalSessionId);
     const registeredSessionRef = opencodeSessionRef(session);
     if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      unsubscribe();
       throw new Error(
         `Cannot subscribe OpenCode session events for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );
     }
-    return unsubscribe;
+    return subscribeSessionEvents(this.listeners, registeredSessionRef, listener);
   }
 
   async stopSession(input: AgentSessionRef): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     const sessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot stop OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+
     await stopSessionRuntime(session, this.sessions, this.runtimeEventTransports);
 
     emitSessionEvent(
