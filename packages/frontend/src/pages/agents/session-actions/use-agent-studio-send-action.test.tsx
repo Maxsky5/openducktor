@@ -222,7 +222,7 @@ describe("useAgentStudioSendAction", () => {
     });
     await harness.waitFor((state) => !state.isSending);
 
-    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "hello" },
     ]);
@@ -255,7 +255,7 @@ describe("useAgentStudioSendAction", () => {
     });
     await harness.waitFor((state) => !state.isSending);
 
-    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "first" },

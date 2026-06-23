@@ -36,6 +36,7 @@ export type SessionStartWorkflowIntent = {
   targetBranch?: GitTargetBranch;
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
+  holdForPostStartMessage?: boolean;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
@@ -288,7 +289,7 @@ export const startSessionWorkflow = async ({
     intent,
     selection,
     startAgentSession,
-    holdForPostStartMessage: postStartMessage !== null,
+    holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
   });
 
   if (intent.postStartAction === "none") {

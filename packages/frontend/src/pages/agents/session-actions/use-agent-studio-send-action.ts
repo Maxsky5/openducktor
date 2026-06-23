@@ -2,7 +2,6 @@ import type { ReusablePrompt } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import type { SessionStartWorkflowResult } from "@/features/session-start";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
@@ -13,6 +12,7 @@ import { resolveAgentStudioSendDraftParts } from "./agent-studio-send-draft";
 import {
   canResolveAgentStudioSendTargetSession,
   resolveAgentStudioSendTargetSession,
+  type StartSessionForMessage,
 } from "./agent-studio-send-target";
 import type { AgentStudioSessionActionState } from "./agent-studio-session-action-state";
 
@@ -36,7 +36,7 @@ type UseAgentStudioSendActionArgs = {
   isStarting: boolean;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
-  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
+  startSession: StartSessionForMessage;
 };
 
 export function useAgentStudioSendAction({

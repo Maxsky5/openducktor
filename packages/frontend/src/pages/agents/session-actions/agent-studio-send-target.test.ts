@@ -66,7 +66,7 @@ describe("agent studio send target", () => {
         startSession,
       }),
     ).resolves.toEqual(sessionIdentity("session-new"));
-    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
   });
 
   test("returns null when no session can be resolved", async () => {
@@ -88,6 +88,6 @@ describe("agent studio send target", () => {
         startSession,
       }),
     ).resolves.toBeNull();
-    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
   });
 });

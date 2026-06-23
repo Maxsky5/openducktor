@@ -647,7 +647,7 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
-      holdForPostStartMessage: false,
+      holdForPostStartMessage: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "  hello world  " },

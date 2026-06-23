@@ -21,6 +21,7 @@ import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coo
 export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
+  holdForPostStartMessage?: boolean;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
@@ -188,6 +189,7 @@ export const executeSessionStartFromDecision = async ({
       ...(request.targetWorkingDirectory !== undefined
         ? { targetWorkingDirectory: request.targetWorkingDirectory }
         : {}),
+      ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : {}),
       ...(request.message ? { message: request.message } : {}),
       ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : {}),
       ...(decision.startMode === "reuse" || decision.startMode === "fork"
