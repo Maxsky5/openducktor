@@ -56,34 +56,6 @@ export const validateExistingGitBuildWorktree = (
     }
   });
 
-export const validateExistingBuildWorktree = (
-  dependencies: BuildStartDependencies,
-  canonicalRepoPath: string,
-  worktreePath: string,
-  taskId: string,
-  branch: string,
-) =>
-  Effect.gen(function* () {
-    const worktreeIsGitRepository = yield* dependencies.gitPort.isGitRepository(worktreePath);
-    if (!worktreeIsGitRepository) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Existing worktree path is not a git repository for task ${taskId}: ${worktreePath}`,
-          details: { taskId, worktreePath },
-        }),
-      );
-    }
-
-    yield* validateExistingGitBuildWorktree(
-      dependencies,
-      canonicalRepoPath,
-      worktreePath,
-      taskId,
-      branch,
-    );
-  });
-
 export const removeInvalidExistingBuildWorktree = (
   dependencies: BuildStartDependencies,
   canonicalRepoPath: string,
