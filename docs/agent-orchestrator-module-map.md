@@ -198,15 +198,15 @@ Owns:
 - resolving subagent row identity when runtime history and live events expose
   separate part-scoped and session-scoped correlation keys
 
-Invariant: history loading is explicit and singular. The selected-session
-history-load owner or a session action asks to load one concrete session route;
-this command owner marks, applies, fails, or resets that concrete load and
-returns the loaded session to awaited callers. The repo projection never
-bulk-loads transcripts.
+Invariant: history loading is session-scoped and policy-driven. The
+selected-session baseline effect or a session action asks to load one concrete
+session route; the history loader marks, applies, fails, or resets that concrete
+load and returns the loaded session to awaited callers. The repo projection
+never bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they
-must run through the orchestrator async side-effect owner with session identity
+must run through the orchestrator async side-effect runner with session identity
 tags. Do not discard history-load promises with raw `void` calls.
 They may request runtime history only when the selected session has no renderable
 transcript messages; live or freshly-started sessions that already display
@@ -256,6 +256,7 @@ case; do not silently drop the host write or query update.
 Files:
 
 - `events/session-events.ts`
+- `events/session-event-router.ts`
 - `events/session-event-types.ts`
 - `events/session-lifecycle.ts`
 - `events/session-parts.ts`
@@ -268,9 +269,10 @@ Files:
 Owns:
 
 - applying runtime events to loaded sessions
+- routing every stream event by its own session identity
+- batching and flushing transcript stream events per session
 - routing runtime todo events into the selected-session todos query owner
 - pending permission and question updates after startup
-- transcript streaming and batching
 - terminal status transitions such as idle, finished, and error
 - active-turn model/context anchors and duration timing
 

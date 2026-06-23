@@ -50,6 +50,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
+            completedAtMs: 1_777_766_400_500,
             item: {
               type: "userMessage",
               id: "user-1",
@@ -63,6 +64,7 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
             itemId: "agent-1",
+            occurred_at_ms: 1_777_766_401_500,
             delta: "Hi",
           },
         },
@@ -106,6 +108,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
+            startedAtMs: 1_777_766_401_750,
             item: {
               type: "contextCompaction",
               id: "compact-live",
@@ -117,6 +120,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
+            completedAtMs: 1_777_766_401_800,
             item: {
               type: "contextCompaction",
               id: "compact-live",
@@ -158,6 +162,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
+            completedAtMs: 1_777_766_402_500,
             item: {
               type: "commandExecution",
               id: "cmd-failed-1",
@@ -175,6 +180,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-1",
+            completedAtMs: 1_777_766_403_000,
             item: { type: "agentMessage", id: "agent-1", text: "Hi there" },
           },
         },
@@ -182,7 +188,7 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread/start-runtime-live",
-            turn: { id: "turn-1", status: "completed" },
+            turn: { id: "turn-1", status: "completed", completedAt: 1_777_766_403 },
           },
         },
       ];
@@ -209,6 +215,7 @@ describe("CodexAppServerAdapter streaming", () => {
         channel: "text",
         messageId: "agent-1",
         delta: "Hi",
+        timestamp: new Date(1_777_766_401_500).toISOString(),
       }),
     );
     expect(events).toContainEqual(
@@ -220,20 +227,24 @@ describe("CodexAppServerAdapter streaming", () => {
         contextWindow: 200_000,
       }),
     );
-    expect(events).toContainEqual({
-      type: "session_compaction_started",
-      externalSessionId: "thread/start-runtime-live",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compaction started.",
-    });
-    expect(events).toContainEqual({
-      type: "session_compacted",
-      externalSessionId: "thread/start-runtime-live",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compacted.",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compaction_started",
+        externalSessionId: "thread/start-runtime-live",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compaction started.",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compacted",
+        externalSessionId: "thread/start-runtime-live",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compacted.",
+      }),
+    );
     expect(
       events.filter((event) => (event as { type?: string }).type === "session_compacted"),
     ).toHaveLength(1);
@@ -374,6 +385,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-tools",
+            completedAtMs: 1_777_766_410_000,
             item: {
               type: "dynamicToolCall",
               id: "call-search",
@@ -390,6 +402,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-tools",
+            completedAtMs: 1_777_766_411_000,
             item: {
               type: "dynamicToolCall",
               id: "call-patch",
@@ -406,6 +419,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-tools",
+            completedAtMs: 1_777_766_412_000,
             item: {
               type: "webSearch",
               id: "call-web",
@@ -419,6 +433,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-tools",
+            completedAtMs: 1_777_766_413_000,
             item: {
               type: "dynamicToolCall",
               id: "call-image",
@@ -435,6 +450,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-tools",
+            completedAtMs: 1_777_766_414_000,
             item: {
               type: "dynamicToolCall",
               id: "call-parallel",
@@ -448,7 +464,10 @@ describe("CodexAppServerAdapter streaming", () => {
         },
         {
           method: "turn/completed",
-          params: { threadId: "thread/start-runtime-live", turn: { id: "turn-tools" } },
+          params: {
+            threadId: "thread/start-runtime-live",
+            turn: { id: "turn-tools", completedAt: 1_777_766_415 },
+          },
         },
       ];
     });
@@ -529,6 +548,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-notification-first",
+            completedAtMs: 1_777_766_420_000,
             item: {
               type: "agentMessage",
               id: "agent-notification-first",
@@ -548,7 +568,11 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread/start-runtime-live",
-            turn: { id: "turn-notification-first", status: "completed" },
+            turn: {
+              id: "turn-notification-first",
+              status: "completed",
+              completedAt: 1_777_766_421,
+            },
           },
         },
       ];
@@ -609,6 +633,7 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "item/completed",
           params: {
             threadId: "thread/start-runtime-live",
+            completedAtMs: 1_777_766_430_000,
             item: {
               type: "userMessage",
               id: "user-without-turn-id",
@@ -685,6 +710,91 @@ describe("CodexAppServerAdapter streaming", () => {
     expect(events).not.toContainEqual(
       expect.objectContaining({ messageId: "agent-foreign", message: "Wrong session" }),
     );
+  });
+
+  test("rejects drained notifications that cannot be scoped to a Codex thread", async () => {
+    let resolveTurnStart: (() => void) | null = null;
+    const drainNotifications = mock(async (_runtimeId: string) => {
+      resolveTurnStart?.();
+      return [
+        {
+          method: "item/completed",
+          params: {
+            turnId: "turn-1",
+            item: { type: "agentMessage", id: "agent-unscoped", text: "Wrong session" },
+          },
+        },
+      ] as unknown[];
+    });
+    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    resolveTurnStart = () => {
+      transports.get("runtime-live")?.turnStartDeferred.resolve({
+        turn: { id: "turn-1", status: "completed" },
+      });
+    };
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Hello Codex" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
+    ).rejects.toThrow("missing params.threadId");
+  });
+
+  test("rejects timestamped Codex lifecycle notifications without runtime timestamps", async () => {
+    let resolveTurnStart: (() => void) | null = null;
+    const drainNotifications = mock(async (_runtimeId: string) => {
+      resolveTurnStart?.();
+      return [
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turnId: "turn-1",
+            item: { type: "agentMessage", id: "agent-missing-time", text: "Wrong time" },
+          },
+        },
+      ] as unknown[];
+    });
+    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    resolveTurnStart = () => {
+      transports.get("runtime-live")?.turnStartDeferred.resolve({
+        turn: { id: "turn-1", status: "completed" },
+      });
+    };
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Hello Codex" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
+    ).rejects.toThrow("missing its runtime lifecycle timestamp");
   });
 
   test("settles a Codex turn from a terminal turn/start response", async () => {
@@ -1203,6 +1313,7 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
+          startedAtMs: 1_777_766_440_000,
           item: {
             type: "contextCompaction",
             id: "compact-live",
@@ -1218,6 +1329,7 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
+          completedAtMs: 1_777_766_441_000,
           item: {
             type: "contextCompaction",
             id: "compact-live",
@@ -1240,20 +1352,24 @@ describe("CodexAppServerAdapter streaming", () => {
         delta: "buffered text",
       }),
     );
-    expect(events).toContainEqual({
-      type: "session_compaction_started",
-      externalSessionId: "thread-saved",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compaction started.",
-    });
-    expect(events).toContainEqual({
-      type: "session_compacted",
-      externalSessionId: "thread-saved",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compacted.",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compaction_started",
+        externalSessionId: "thread-saved",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compaction started.",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compacted",
+        externalSessionId: "thread-saved",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compacted.",
+      }),
+    );
     unsubscribe();
   });
 
@@ -1282,6 +1398,7 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
+          startedAtMs: 1_777_766_450_000,
           item: {
             type: "contextCompaction",
             id: "compact-live",
@@ -1297,6 +1414,7 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
+          completedAtMs: 1_777_766_451_000,
           item: {
             type: "contextCompaction",
             id: "compact-live",
@@ -1306,20 +1424,24 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await Promise.resolve();
 
-    expect(events).toContainEqual({
-      type: "session_compaction_started",
-      externalSessionId: "thread-saved",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compaction started.",
-    });
-    expect(events).toContainEqual({
-      type: "session_compacted",
-      externalSessionId: "thread-saved",
-      timestamp: expect.any(String),
-      messageId: "compact-live",
-      message: "Session compacted.",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compaction_started",
+        externalSessionId: "thread-saved",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compaction started.",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_compacted",
+        externalSessionId: "thread-saved",
+        timestamp: expect.any(String),
+        messageId: "compact-live",
+        message: "Session compacted.",
+      }),
+    );
     unsubscribe();
   });
 
@@ -1353,6 +1475,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             turnId: "turn-todos",
+            completedAtMs: 1_777_766_460_000,
             item: {
               type: "dynamicToolCall",
               id: "todo-call-1",

@@ -21,9 +21,11 @@ type ImmediateSessionEvent = Extract<
 
 export type QueuedSessionEvent = Exclude<SessionEvent, ImmediateSessionEvent>;
 
-type QueuedSessionEventEntry = {
+type QueuedSessionEventEntry<
+  Item extends QueuedSessionEventBatchItem = QueuedSessionEventBatchItem,
+> = {
   key: string;
-  event: QueuedSessionEvent;
+  item: Item;
 };
 
 const IMMEDIATE_SESSION_EVENT_TYPES = new Set<SessionEvent["type"]>(
@@ -96,19 +98,30 @@ const mergeQueuedSessionEvent = (
 };
 
 const shouldDropQueuedCandidate = (
-  event: QueuedSessionEvent,
-  candidate: QueuedSessionEvent,
+  item: QueuedSessionEventBatchItem,
+  candidate: QueuedSessionEventBatchItem,
 ): boolean => {
+  const { event } = item;
+  if (candidate.routeKey !== item.routeKey) {
+    return false;
+  }
+
+  if (candidate.event.externalSessionId !== event.externalSessionId) {
+    return false;
+  }
+
   if (event.type !== "assistant_message") {
     return false;
   }
 
-  if (candidate.type === "assistant_delta") {
-    return candidate.messageId === event.messageId;
+  if (candidate.event.type === "assistant_delta") {
+    return candidate.event.messageId === event.messageId;
   }
 
-  if (candidate.type === "assistant_part") {
-    return candidate.part.messageId === event.messageId && candidate.part.kind === "text";
+  if (candidate.event.type === "assistant_part") {
+    return (
+      candidate.event.part.messageId === event.messageId && candidate.event.part.kind === "text"
+    );
   }
 
   return false;
@@ -123,47 +136,61 @@ export const closesQueuedSessionEvents = (event: ImmediateSessionEvent): boolean
   event.type === "session_finished" ||
   event.type === "session_idle";
 
-const mergeQueuedSessionEvents = (events: QueuedSessionEvent[]): QueuedSessionEventEntry[] => {
-  const entries: QueuedSessionEventEntry[] = [];
+const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
+  events: Item[],
+): QueuedSessionEventEntry<Item>[] => {
+  const entries: QueuedSessionEventEntry<Item>[] = [];
 
-  for (const event of events) {
+  for (const item of events) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const candidate = entries[index]?.event;
-      if (candidate && shouldDropQueuedCandidate(event, candidate)) {
+      const candidate = entries[index]?.item;
+      if (candidate && shouldDropQueuedCandidate(item, candidate)) {
         entries.splice(index, 1);
       }
     }
 
-    const key = queuedSessionEventKey(event);
+    const key = `${item.routeKey}:${queuedSessionEventKey(item.event)}`;
     const existingIndex = entries.findIndex((entry) => entry.key === key);
     if (existingIndex === -1) {
-      entries.push({ key, event });
+      entries.push({ key, item });
       continue;
     }
 
-    const previous = entries[existingIndex]?.event;
+    const previous = entries[existingIndex]?.item;
     if (!previous) {
-      entries[existingIndex] = { key, event };
+      entries[existingIndex] = { key, item };
       continue;
     }
 
     entries[existingIndex] = {
       key,
-      event: mergeQueuedSessionEvent(previous, event),
+      item: {
+        ...item,
+        event: mergeQueuedSessionEvent(previous.event, item.event),
+      } as Item,
     };
   }
 
   return entries;
 };
 
-export type PreparedQueuedSessionEvents = {
-  readyEvents: QueuedSessionEvent[];
-  deferredEvents: QueuedSessionEvent[];
+export type QueuedSessionEventBatchItem<Event extends QueuedSessionEvent = QueuedSessionEvent> = {
+  event: Event;
+  routeKey: string;
+};
+
+export type PreparedQueuedSessionEvents<
+  Item extends QueuedSessionEventBatchItem = QueuedSessionEventBatchItem,
+> = {
+  readyEvents: Item[];
+  deferredEvents: Item[];
   nextDelayMs: number | null;
 };
 
 export type SessionEventBatcher = {
-  prepareQueuedSessionEvents: (events: QueuedSessionEvent[]) => PreparedQueuedSessionEvents;
+  prepareQueuedSessionEvents: <Item extends QueuedSessionEventBatchItem>(
+    events: Item[],
+  ) => PreparedQueuedSessionEvents<Item>;
 };
 
 type CreateSessionEventBatcherOptions = {
@@ -179,35 +206,34 @@ export const createSessionEventBatcher = (
   return {
     prepareQueuedSessionEvents: (events) => {
       const mergedEntries = mergeQueuedSessionEvents(events);
-      const readyEvents: QueuedSessionEvent[] = [];
-      const deferredEvents: QueuedSessionEvent[] = [];
+      const readyEvents: typeof events = [];
+      const deferredEvents: typeof events = [];
       let nextDelayMs: number | null = null;
       const emittedAtMs = nowMs();
 
       for (const entry of mergedEntries) {
-        const minEmitIntervalMs = queuedSessionEventMinEmitIntervalMs(entry.event);
-
+        const minEmitIntervalMs = queuedSessionEventMinEmitIntervalMs(entry.item.event);
         if (!minEmitIntervalMs) {
           lastEmittedAtByKey.set(entry.key, emittedAtMs);
-          readyEvents.push(entry.event);
+          readyEvents.push(entry.item);
           continue;
         }
 
         const lastEmittedAt = lastEmittedAtByKey.get(entry.key);
         if (lastEmittedAt === undefined) {
           lastEmittedAtByKey.set(entry.key, emittedAtMs);
-          readyEvents.push(entry.event);
+          readyEvents.push(entry.item);
           continue;
         }
 
         const elapsedMs = emittedAtMs - lastEmittedAt;
         if (elapsedMs >= minEmitIntervalMs) {
           lastEmittedAtByKey.set(entry.key, emittedAtMs);
-          readyEvents.push(entry.event);
+          readyEvents.push(entry.item);
           continue;
         }
 
-        deferredEvents.push(entry.event);
+        deferredEvents.push(entry.item);
         const remainingMs = minEmitIntervalMs - elapsedMs;
         nextDelayMs = nextDelayMs === null ? remainingMs : Math.min(nextDelayMs, remainingMs);
       }

@@ -371,6 +371,29 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(typeof unsubscribe).toBe("function");
   });
 
+  test("rejects event subscription for an existing session in another working directory", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.subscribeEvents(
+        codexSessionRuntimeRef("thread/start-runtime-live", {
+          workingDirectory: "/repo/worktrees/thread-start-runtime-live",
+        }),
+        () => {},
+      ),
+    ).rejects.toThrow("registered session belongs");
+  });
+
   test("releases a Codex session by clearing only local adapter state", async () => {
     const { adapter, transports } = createHarness();
 

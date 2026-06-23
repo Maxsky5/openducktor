@@ -1,10 +1,11 @@
 import type {
   AcceptedAgentUserMessage,
+  AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
@@ -38,8 +39,10 @@ import {
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
+import { codexSessionRef } from "./codex-session-ref";
 import type {
   CodexAppServerAdapterOptions,
+  CodexNotificationRecord,
   CodexServerRequestRecord,
   CodexSessionState,
 } from "./types";
@@ -224,7 +227,7 @@ export class CodexRuntimeSessionEvents {
       if (session.runtimeId !== runtimeId) {
         continue;
       }
-      this.deps.sessionEvents.emit(session.threadId, {
+      this.emitSessionEventForSession(session, {
         type: "session_error",
         externalSessionId: session.threadId,
         timestamp: new Date().toISOString(),
@@ -238,7 +241,7 @@ export class CodexRuntimeSessionEvents {
     event: { kind: "notification" | "server_request"; message: unknown },
   ): Promise<void> {
     if (event.kind === "notification") {
-      await this.handlePendingNotifications(session, [event.message]);
+      await this.handlePendingNotifications(session, [parseNotificationRecord(event.message)]);
       return;
     }
     await this.processServerRequestsForSession(session, [parseServerRequestRecord(event.message)]);
@@ -277,7 +280,7 @@ export class CodexRuntimeSessionEvents {
 
   private async handlePendingNotifications(
     session: CodexSessionState,
-    notificationsFromBatch?: unknown[],
+    notificationsFromBatch?: CodexNotificationRecord[],
   ): Promise<void> {
     await handleCodexPendingNotifications(this.streamingContext(), session, notificationsFromBatch);
   }
@@ -295,7 +298,7 @@ export class CodexRuntimeSessionEvents {
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
       emitSessionEvent: (externalSessionId, event) =>
-        this.deps.sessionEvents.emit(externalSessionId, event),
+        this.emitSessionEvent(externalSessionId, event),
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
@@ -327,7 +330,7 @@ export class CodexRuntimeSessionEvents {
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
-        this.deps.sessionEvents.emit(externalSessionId, event),
+        this.emitSessionEvent(externalSessionId, event),
     };
   }
 
@@ -338,7 +341,9 @@ export class CodexRuntimeSessionEvents {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
     const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
     const drainedNotifications = this.deps.drainNotifications
-      ? (await this.deps.drainNotifications(runtimeId)).map(parseNotificationRecord)
+      ? (await this.deps.drainNotifications(runtimeId)).map((notification) =>
+          parseNotificationRecord(notification),
+        )
       : [];
     const notifications = [...bufferedNotifications, ...drainedNotifications];
     for (const notification of notifications) {
@@ -364,12 +369,31 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionError(externalSessionId: string, error: unknown): void {
-    this.deps.sessionEvents.emit(externalSessionId, {
+    const session = this.deps.sessions.get(externalSessionId);
+    if (!session) {
+      return;
+    }
+    this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId,
       timestamp: new Date().toISOString(),
       message: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
+    const session = this.deps.sessions.get(externalSessionId);
+    if (!session) {
+      throw new Error(
+        `Cannot emit Codex session event for missing session '${externalSessionId}'.`,
+      );
+    }
+    this.emitSessionEventForSession(session, event);
+  }
+
+  private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
+    const sessionRef = codexSessionRef(session);
+    this.deps.sessionEvents.emit(sessionRef, withAgentSessionRef(sessionRef, event));
   }
 
   private clearTurnScopedMap<T>(map: Map<string, T>, externalSessionId: string): void {

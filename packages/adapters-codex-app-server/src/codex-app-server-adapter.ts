@@ -33,7 +33,11 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import {
+  agentSessionRefsEqual,
+  formatWorkflowAgentSessionTitle,
+  withAgentSessionRef,
+} from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import {
@@ -63,6 +67,7 @@ import {
   OPENDUCKTOR_CODEX_APPROVAL_POLICY,
   OPENDUCKTOR_CODEX_SANDBOX_MODE,
 } from "./codex-session-policy";
+import { codexSessionRef } from "./codex-session-ref";
 import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
@@ -117,11 +122,13 @@ export class CodexAppServerAdapter
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
     });
     this.localSessions = new CodexLocalSessionState({
-      sessionEvents: this.sessionEvents,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
       threadStatusOverrides: {
         clear: (runtimeId, threadId) => this.threadInventory.clearThreadStatus(runtimeId, threadId),
+      },
+      sessionEvents: {
+        clear: (session) => this.sessionEvents.clear(codexSessionRef(session)),
       },
       runtimeEvents: this.runtimeEvents,
     });
@@ -483,7 +490,7 @@ export class CodexAppServerAdapter
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
-    const unsubscribe = this.sessionEvents.subscribe(externalSessionId, listener);
+    const unsubscribe = this.sessionEvents.subscribe(input, listener);
     try {
       if (!this.localSessions.has(externalSessionId)) {
         await this.ensureSessionState(input);
@@ -492,21 +499,39 @@ export class CodexAppServerAdapter
       unsubscribe();
       throw error;
     }
+    const session = this.localSessions.get(externalSessionId);
+    if (!session) {
+      unsubscribe();
+      throw new Error(
+        `Cannot subscribe Codex session events for missing session '${externalSessionId}'.`,
+      );
+    }
+    const registeredSessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      unsubscribe();
+      throw new Error(
+        `Cannot subscribe Codex session events for '${externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
-      listener({
-        ...approval,
-        type: "approval_required",
-        externalSessionId,
-        timestamp: new Date().toISOString(),
-      });
+      listener(
+        withAgentSessionRef(registeredSessionRef, {
+          ...approval,
+          type: "approval_required",
+          externalSessionId,
+          timestamp: new Date().toISOString(),
+        }),
+      );
     }
     for (const question of this.pendingInput.pendingQuestionsForSession(externalSessionId)) {
-      listener({
-        ...question,
-        type: "question_required",
-        externalSessionId,
-        timestamp: new Date().toISOString(),
-      });
+      listener(
+        withAgentSessionRef(registeredSessionRef, {
+          ...question,
+          type: "question_required",
+          externalSessionId,
+          timestamp: new Date().toISOString(),
+        }),
+      );
     }
     void this.runtimeEvents.drainBufferedStreamEvents(externalSessionId);
     return unsubscribe;
@@ -534,7 +559,14 @@ export class CodexAppServerAdapter
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
-    this.sessionEvents.emit(externalSessionId, event);
+    const session = this.localSessions.get(externalSessionId);
+    if (!session) {
+      throw new Error(
+        `Cannot emit Codex session event for missing session '${externalSessionId}'.`,
+      );
+    }
+    const sessionRef = codexSessionRef(session);
+    this.sessionEvents.emit(sessionRef, withAgentSessionRef(sessionRef, event));
   }
 
   private turnLifecycleContext(): CodexTurnLifecycleContext {

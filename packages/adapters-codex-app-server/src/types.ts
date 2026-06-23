@@ -45,6 +45,7 @@ export type CodexServerRequestRecord = {
 export type CodexNotificationRecord = {
   method: string;
   params?: unknown;
+  receivedAt: string;
 };
 
 export type CodexServerRequestResponder = (

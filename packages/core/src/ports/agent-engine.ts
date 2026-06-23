@@ -13,6 +13,7 @@ import type {
   AgentPendingQuestionRequest,
   AgentRole,
   AgentSessionContext,
+  AgentSessionRef,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -25,15 +26,8 @@ import type {
   RuntimeHistoryAnchor,
   RuntimeKind,
   RuntimePendingInputRequestId,
+  RuntimeWorkingDirectoryRef,
 } from "../types/agent-orchestrator";
-
-export type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
-  workingDirectory: string;
-};
-
-export type AgentSessionRef = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
-};
 
 export type AgentSessionRuntimeRef = AgentSessionRef & {
   taskId: string;

@@ -48,7 +48,8 @@ export const createRecordingSessionTodosUpdater = () => {
   let todos: AgentSessionTodoItem[] = [];
   return {
     updateSessionTodos: (
-      updater: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0],
+      _session: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0],
+      updater: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[1],
     ) => {
       todos = updater(todos);
     },
@@ -118,6 +119,17 @@ export const getSessionMessages = (
   sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
+
+export const getSessionMessagesByIdentity = (
+  sessionsRef: { current: AgentSessionCollection },
+  identity: AgentSessionIdentity,
+) => {
+  const session = getAgentSession(sessionsRef.current, identity);
+  if (!session) {
+    return [];
+  }
+  return sessionMessagesToArray(session);
+};
 
 type ObserveAgentSessionEventsTestParams = Omit<
   ObserveAgentSessionParams,

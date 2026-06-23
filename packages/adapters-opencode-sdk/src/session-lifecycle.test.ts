@@ -74,6 +74,27 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     expect(localSessions(adapter).has("session-opencode-1")).toBe(false);
   });
 
+  test("subscribeEvents rejects an existing session ref for another working directory", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const unsubscribe = await adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {});
+
+    await expect(
+      adapter.subscribeEvents(
+        {
+          ...sessionRef("session-opencode-1"),
+          workingDirectory: "/repo/worktrees/session-opencode-1",
+        },
+        () => {},
+      ),
+    ).rejects.toThrow("registered session belongs");
+    unsubscribe();
+  });
+
   test("prepared existing session state does not keep session-bound running subagents in pending correlation queues", async () => {
     const mock = makeMockClient({
       messagesResponse: [

@@ -1,31 +1,38 @@
-import type { AgentEvent, EventUnsubscribe } from "@openducktor/core";
+import {
+  type AgentEvent,
+  type AgentSessionRef,
+  agentSessionRefKey,
+  type EventUnsubscribe,
+} from "@openducktor/core";
 import { MAX_CODEX_EVENT_BACKLOG_PER_SESSION } from "./codex-app-server-shared";
 
 type AgentEventListener = (event: AgentEvent) => void;
 
 export class CodexSessionEventBus {
-  private readonly listenersBySessionId = new Map<string, Set<AgentEventListener>>();
-  private readonly eventBacklogBySessionId = new Map<string, AgentEvent[]>();
+  private readonly listenersBySessionKey = new Map<string, Set<AgentEventListener>>();
+  private readonly eventBacklogBySessionKey = new Map<string, AgentEvent[]>();
 
-  subscribe(externalSessionId: string, listener: AgentEventListener): EventUnsubscribe {
-    const listeners = this.listenersBySessionId.get(externalSessionId) ?? new Set();
+  subscribe(sessionRef: AgentSessionRef, listener: AgentEventListener): EventUnsubscribe {
+    const sessionKey = agentSessionRefKey(sessionRef);
+    const listeners = this.listenersBySessionKey.get(sessionKey) ?? new Set();
     listeners.add(listener);
-    this.listenersBySessionId.set(externalSessionId, listeners);
-    this.replayBacklog(externalSessionId, listener);
+    this.listenersBySessionKey.set(sessionKey, listeners);
+    this.replayBacklog(sessionKey, listener);
 
     return () => {
-      const current = this.listenersBySessionId.get(externalSessionId);
+      const current = this.listenersBySessionKey.get(sessionKey);
       current?.delete(listener);
       if (current?.size === 0) {
-        this.listenersBySessionId.delete(externalSessionId);
+        this.listenersBySessionKey.delete(sessionKey);
       }
     };
   }
 
-  emit(externalSessionId: string, event: AgentEvent): void {
-    const listeners = this.listenersBySessionId.get(externalSessionId);
+  emit(sessionRef: AgentSessionRef, event: AgentEvent): void {
+    const sessionKey = agentSessionRefKey(sessionRef);
+    const listeners = this.listenersBySessionKey.get(sessionKey);
     if (!listeners) {
-      this.buffer(externalSessionId, event);
+      this.buffer(sessionKey, event);
       return;
     }
 
@@ -34,31 +41,32 @@ export class CodexSessionEventBus {
     }
   }
 
-  clear(externalSessionId: string): void {
-    this.listenersBySessionId.delete(externalSessionId);
-    this.eventBacklogBySessionId.delete(externalSessionId);
+  clear(sessionRef: AgentSessionRef): void {
+    const sessionKey = agentSessionRefKey(sessionRef);
+    this.listenersBySessionKey.delete(sessionKey);
+    this.eventBacklogBySessionKey.delete(sessionKey);
   }
 
-  private buffer(externalSessionId: string, event: AgentEvent): void {
+  private buffer(sessionKey: string, event: AgentEvent): void {
     if (event.type === "approval_required" || event.type === "question_required") {
       return;
     }
 
-    const backlog = this.eventBacklogBySessionId.get(externalSessionId) ?? [];
+    const backlog = this.eventBacklogBySessionKey.get(sessionKey) ?? [];
     backlog.push(event);
     if (backlog.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
       backlog.splice(0, backlog.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
     }
-    this.eventBacklogBySessionId.set(externalSessionId, backlog);
+    this.eventBacklogBySessionKey.set(sessionKey, backlog);
   }
 
-  private replayBacklog(externalSessionId: string, listener: AgentEventListener): void {
-    const backlog = this.eventBacklogBySessionId.get(externalSessionId);
+  private replayBacklog(sessionKey: string, listener: AgentEventListener): void {
+    const backlog = this.eventBacklogBySessionKey.get(sessionKey);
     if (!backlog) {
       return;
     }
 
-    this.eventBacklogBySessionId.delete(externalSessionId);
+    this.eventBacklogBySessionKey.delete(sessionKey);
     for (const event of backlog) {
       listener(event);
     }

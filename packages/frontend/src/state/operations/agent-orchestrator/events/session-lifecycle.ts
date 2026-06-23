@@ -210,7 +210,10 @@ export const handleSessionTodosUpdated = (
     messages: settleDanglingTodoToolMessages(current, event.timestamp),
   }));
 
-  context.todos.updateSessionTodos((todos) => mergeTodoListPreservingOrder(todos, event.todos));
+  context.todos.updateSessionTodos(
+    { ...context.session.identity, repoPath: context.session.repoPath },
+    (todos) => mergeTodoListPreservingOrder(todos, event.todos),
+  );
 };
 
 export const handleSessionCompacted = (

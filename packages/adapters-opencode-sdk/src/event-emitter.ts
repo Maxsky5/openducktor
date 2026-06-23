@@ -1,35 +1,41 @@
-import type { AgentEvent, EventUnsubscribe } from "@openducktor/core";
+import {
+  type AgentEvent,
+  type AgentSessionRef,
+  agentSessionRefKey,
+  type EventUnsubscribe,
+} from "@openducktor/core";
 
 export type SessionEventListener = (event: AgentEvent) => void;
 export type SessionEventListeners = Map<string, Set<SessionEventListener>>;
 
 export const subscribeSessionEvents = (
   listenersBySession: SessionEventListeners,
-  externalSessionId: string,
+  sessionRef: AgentSessionRef,
   listener: SessionEventListener,
 ): EventUnsubscribe => {
-  const listeners = listenersBySession.get(externalSessionId) ?? new Set<SessionEventListener>();
+  const sessionKey = agentSessionRefKey(sessionRef);
+  const listeners = listenersBySession.get(sessionKey) ?? new Set<SessionEventListener>();
   listeners.add(listener);
-  listenersBySession.set(externalSessionId, listeners);
+  listenersBySession.set(sessionKey, listeners);
 
   return () => {
-    const active = listenersBySession.get(externalSessionId);
+    const active = listenersBySession.get(sessionKey);
     if (!active) {
       return;
     }
     active.delete(listener);
     if (active.size === 0) {
-      listenersBySession.delete(externalSessionId);
+      listenersBySession.delete(sessionKey);
     }
   };
 };
 
 export const emitSessionEvent = (
   listenersBySession: SessionEventListeners,
-  externalSessionId: string,
+  sessionRef: AgentSessionRef,
   event: AgentEvent,
 ): void => {
-  const listeners = listenersBySession.get(externalSessionId);
+  const listeners = listenersBySession.get(agentSessionRefKey(sessionRef));
   if (!listeners || listeners.size === 0) {
     return;
   }
@@ -41,7 +47,7 @@ export const emitSessionEvent = (
 
 export const clearSessionListeners = (
   listenersBySession: SessionEventListeners,
-  externalSessionId: string,
+  sessionRef: AgentSessionRef,
 ): void => {
-  listenersBySession.delete(externalSessionId);
+  listenersBySession.delete(agentSessionRefKey(sessionRef));
 };

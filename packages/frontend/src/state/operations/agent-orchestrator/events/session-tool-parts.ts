@@ -221,8 +221,9 @@ export const handleToolPart = (
   const workflowToolAliasesByCanonical = context.refresh.workflowToolAliasesByCanonical;
 
   if (todoUpdateFromTool && activeSession) {
-    context.todos.updateSessionTodos((todos) =>
-      mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
+    context.todos.updateSessionTodos(
+      { ...context.session.identity, repoPath: context.session.repoPath },
+      (todos) => mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
     );
   }
 

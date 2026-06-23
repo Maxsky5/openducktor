@@ -74,11 +74,11 @@ export type AgentSubagentStatus = "pending" | "running" | "completed" | "cancell
 export type ExternalSessionId = string;
 export type RuntimeHistoryAnchor = string;
 export type RuntimePendingInputRequestId = string;
-export type RuntimeSessionRef = {
-  externalSessionId: ExternalSessionId;
-  repoPath: string;
-  runtimeKind: RuntimeKind;
+export type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
   workingDirectory: string;
+};
+export type AgentSessionRef = RuntimeWorkingDirectoryRef & {
+  externalSessionId: ExternalSessionId;
 };
 
 export type AgentFileSearchResultKind =
@@ -341,7 +341,7 @@ export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
   qa: ["odt_read_task", "odt_read_task_documents", "odt_qa_approved", "odt_qa_rejected"],
 };
 
-export type AgentEvent =
+export type AgentEvent = (
   | {
       type: "session_started";
       externalSessionId: ExternalSessionId;
@@ -475,4 +475,7 @@ export type AgentEvent =
       externalSessionId: ExternalSessionId;
       timestamp: string;
       message: string;
-    };
+    }
+) & {
+  sessionRef?: AgentSessionRef;
+};

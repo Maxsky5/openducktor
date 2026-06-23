@@ -172,6 +172,12 @@ export type AgentSessionReadModelStateContextValue = {
   reloadSessionReadModel: () => void;
 };
 
+export type AgentSessionHistoryLoadContextValue = {
+  loadSelectedSessionBaselineHistory: (
+    session: AgentSessionIdentity,
+  ) => Promise<AgentSessionState | null>;
+};
+
 export type AgentOperationsContextValue = {
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (

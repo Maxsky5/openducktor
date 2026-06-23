@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
-import { AgentOperationsContext } from "@/state/app-state-contexts";
+import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue } from "@/types/state-slices";
+import type { AgentSessionHistoryLoadContextValue } from "@/types/state-slices";
 import { createSessionMessagesState } from "../support/messages";
 import { useSelectedSessionHistoryLoad } from "./use-selected-session-history-load";
 
@@ -47,36 +47,23 @@ const createProps = ({
 });
 
 const createHistoryLoadWrapper = (
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>,
+  loadSelectedSessionBaselineHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
 ) => {
-  const operations: AgentOperationsContextValue = {
-    readSessionTodos: async () => [],
-    readSessionHistory: async () => [],
-    subscribeSessionEvents: async () => () => undefined,
-    loadAgentSessionHistory,
-    startAgentSession: async () => ({
-      externalSessionId: "session-started",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktree",
-    }),
-    sendAgentMessage: async () => undefined,
-    stopAgentSession: async () => undefined,
-    updateAgentSessionModel: () => undefined,
-    replyAgentApproval: async () => undefined,
-    answerAgentQuestion: async () => undefined,
+  const historyLoadActions: AgentSessionHistoryLoadContextValue = {
+    loadSelectedSessionBaselineHistory,
   };
   return function HistoryLoadWrapper({ children }: PropsWithChildren): ReactElement {
     return (
-      <AgentOperationsContext.Provider value={operations}>
+      <AgentSessionHistoryLoadContext.Provider value={historyLoadActions}>
         {children}
-      </AgentOperationsContext.Provider>
+      </AgentSessionHistoryLoadContext.Provider>
     );
   };
 };
 
 const createHistoryLoadHarness = (
   props: ReturnType<typeof createProps>,
-  loadSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>,
+  loadSessionHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
 ) =>
   createHookHarness(useSelectedSessionHistoryLoad, props, {
     wrapper: createHistoryLoadWrapper(loadSessionHistory),
@@ -184,7 +171,7 @@ describe("useSelectedSessionHistoryLoad", () => {
     }
   });
 
-  test("loads baseline history when a live Codex message arrives before hydration", async () => {
+  test("does not load baseline history after a live Codex message is visible", async () => {
     const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
@@ -206,17 +193,13 @@ describe("useSelectedSessionHistoryLoad", () => {
     try {
       await harness.mount();
 
-      expect(loadSessionHistory).toHaveBeenCalledWith({
-        externalSessionId: selectedSessionIdentity.externalSessionId,
-        runtimeKind: "codex",
-        workingDirectory: selectedSessionIdentity.workingDirectory,
-      });
+      expect(loadSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("reports selected-session history load failures through the orchestrator side-effect owner", async () => {
+  test("reports selected-session history load failures through the orchestrator side-effect runner", async () => {
     const originalError = console.error;
     const errorCalls: unknown[][] = [];
     console.error = (...args: unknown[]) => {

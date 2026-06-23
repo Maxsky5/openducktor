@@ -3,7 +3,7 @@ import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import { hasLoadedSessionHistory } from "./support/session-transcript-content";
+import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,

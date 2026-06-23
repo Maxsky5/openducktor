@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import {
+  codexTurnItemsFromThreadRead,
+  timestampFromCodexParams,
+  toHistoryMessage,
+} from "./codex-app-server-transcript";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import {
   codexUserInputsFromItem,
@@ -8,6 +12,14 @@ import {
 } from "./codex-user-inputs";
 
 describe("Codex App Server transcript parsing", () => {
+  test("preserves zero millisecond notification timestamps", () => {
+    expect(timestampFromCodexParams({ timestampMs: 0 })).toBe("1970-01-01T00:00:00.000Z");
+  });
+
+  test("does not invent timestamps when notification params omit runtime timestamps", () => {
+    expect(timestampFromCodexParams({})).toBeNull();
+  });
+
   test("maps skill message parts to structured Codex skill input", () => {
     const skill = {
       id: "/skills/review/SKILL.md",

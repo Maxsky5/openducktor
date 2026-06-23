@@ -2,7 +2,7 @@ import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
-import { hasLoadedSessionHistory } from "../support/session-transcript-content";
+import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,

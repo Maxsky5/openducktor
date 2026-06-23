@@ -1,7 +1,7 @@
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import { hasRenderableSessionTranscript } from "../support/session-transcript-content";
+import { hasRenderableSessionTranscript } from "./session-transcript-content";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
 export type AgentSessionTranscriptLoadingReason = "preparing" | "history";

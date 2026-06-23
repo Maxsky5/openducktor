@@ -9,6 +9,7 @@ const session = (threadId: string, runtimeId = "runtime-1"): CodexSessionState =
     status: "running",
     role: "build",
     startedAt: "2026-06-13T00:00:00.000Z",
+    runtimeKind: "codex",
   },
   systemPrompt: "",
   role: "build",
@@ -29,7 +30,7 @@ const createStore = () => {
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
     sessionEvents: {
-      clear: (externalSessionId) => clearedSessionEvents.push(externalSessionId),
+      clear: (session) => clearedSessionEvents.push(session.threadId),
     },
     activeTurnsBySessionId,
     pendingInput: {

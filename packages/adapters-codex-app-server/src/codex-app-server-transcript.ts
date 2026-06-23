@@ -88,14 +88,42 @@ export type CodexHistoryTokenUsageFields = {
 export type { AgentToolStatus } from "./codex-tool-normalizer";
 export { type CodexTodoUpdate, codexTodosFromThreadRead };
 
-export const timestampFromCodexParams = (params: unknown): string => {
-  const millis = extractNumberField(params, ["completedAtMs", "startedAtMs"]);
-  return millis ? new Date(millis).toISOString() : new Date().toISOString();
+export const timestampFromCodexParams = (params: unknown): string | null => {
+  const millis = extractNumberField(params, [
+    "occurredAtMs",
+    "occurred_at_ms",
+    "timestampMs",
+    "timestamp_ms",
+    "completedAtMs",
+    "completed_at_ms",
+    "startedAtMs",
+    "started_at_ms",
+  ]);
+  return millis !== null ? new Date(millis).toISOString() : null;
 };
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
   return seconds === null ? undefined : new Date(seconds * 1000).toISOString();
 };
+
+const codexTurnTimestampSeconds = (
+  turn: Record<string, unknown>,
+  keys: [string, string],
+): number | null => {
+  const [camelKey, snakeKey] = keys;
+  const camelValue = turn[camelKey];
+  if (typeof camelValue === "number") {
+    return camelValue;
+  }
+
+  const snakeValue = turn[snakeKey];
+  return typeof snakeValue === "number" ? snakeValue : null;
+};
+
+export const timestampFromCodexTurn = (turn: unknown, keys: [string, string]): string | null =>
+  isPlainObject(turn)
+    ? (codexTimestampFromSeconds(codexTurnTimestampSeconds(turn, keys)) ?? null)
+    : null;
 
 export const codexItemId = (item: Record<string, unknown>, fallbackId: string): string => {
   return extractStringField(item, ["id", "itemId", "item_id"]) ?? fallbackId;
@@ -168,18 +196,6 @@ export const shouldReplaceCodexBufferedFinalAgentMessage = (
   next: Record<string, unknown>,
 ): boolean => {
   return selectCodexFinalAgentMessage([current, next]) === next;
-};
-
-const codexTurnTimestampSeconds = (
-  turn: Record<string, unknown>,
-  keys: [string, string],
-): number | null => {
-  const [camelKey, snakeKey] = keys;
-  return typeof turn[camelKey] === "number"
-    ? turn[camelKey]
-    : typeof turn[snakeKey] === "number"
-      ? turn[snakeKey]
-      : null;
 };
 
 export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadItem[] => {
