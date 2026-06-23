@@ -209,9 +209,10 @@ inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they
 must run through the orchestrator async side-effect runner with session identity
 tags. Do not discard history-load promises with raw `void` calls.
-They may request runtime history only when the selected session has no renderable
-transcript messages; live or freshly-started sessions that already display
-messages stay stream-owned until a cold reload creates an empty session shell.
+They must request runtime history for any selected session whose history is still
+`not_requested`, even when live stream messages are already visible. A live tail
+does not prove the historical transcript has hydrated after app reload; loaded
+history merges with any current messages through the history merge module.
 
 `support/session-history-chat-messages.ts` owns history-message projection only.
 It must not read or write durable session records.

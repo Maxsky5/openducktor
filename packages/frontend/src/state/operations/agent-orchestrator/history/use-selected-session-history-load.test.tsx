@@ -171,7 +171,7 @@ describe("useSelectedSessionHistoryLoad", () => {
     }
   });
 
-  test("does not load baseline history after a live Codex message is visible", async () => {
+  test("loads baseline history after reload even when a live Codex message is visible", async () => {
     const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
       createProps({
@@ -193,7 +193,11 @@ describe("useSelectedSessionHistoryLoad", () => {
     try {
       await harness.mount();
 
-      expect(loadSessionHistory).not.toHaveBeenCalled();
+      expect(loadSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: selectedSessionIdentity.externalSessionId,
+        runtimeKind: "codex",
+        workingDirectory: selectedSessionIdentity.workingDirectory,
+      });
     } finally {
       await harness.unmount();
     }

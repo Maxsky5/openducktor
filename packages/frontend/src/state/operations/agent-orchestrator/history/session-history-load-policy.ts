@@ -1,10 +1,7 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
-import {
-  hasLoadedSessionHistory,
-  hasRenderableSessionTranscript,
-} from "../transcript/session-transcript-content";
+import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 
 type SessionHistoryLoadPolicySession = Pick<
   AgentSessionState,
@@ -21,16 +18,7 @@ export type SessionHistoryLoadPolicy = {
 
 export const shouldRequestSelectedSessionBaselineHistory = (
   session: SessionHistoryLoadPolicySession,
-): boolean =>
-  session.historyLoadState === "not_requested" && !hasRenderableSessionTranscript(session);
-
-const resetSelectedSessionBaselineClaim = (session: AgentSessionState): AgentSessionState =>
-  session.historyLoadState === "loading"
-    ? {
-        ...session,
-        historyLoadState: "not_requested",
-      }
-    : session;
+): boolean => session.historyLoadState === "not_requested";
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   canClaimLoad: (session) => !hasLoadedSessionHistory(session),
@@ -39,11 +27,5 @@ export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
 
 export const selectedSessionBaselineHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   canClaimLoad: shouldRequestSelectedSessionBaselineHistory,
-  applyLoadedHistory: (session, history) => {
-    if (hasRenderableSessionTranscript(session)) {
-      return resetSelectedSessionBaselineClaim(session);
-    }
-
-    return applyLoadedSessionHistory(session, history);
-  },
+  applyLoadedHistory: applyLoadedSessionHistory,
 };

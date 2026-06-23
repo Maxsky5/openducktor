@@ -8,7 +8,7 @@ import {
 } from "./session-history-load-policy";
 
 describe("agent-orchestrator/history/session-history-load-policy", () => {
-  test("requests selected-session baseline history only for cold unrequested sessions", () => {
+  test("requests selected-session baseline history for unrequested sessions", () => {
     expect(
       shouldRequestSelectedSessionBaselineHistory(
         createAgentSessionFixture({ historyLoadState: "not_requested", messages: [] }),
@@ -35,10 +35,10 @@ describe("agent-orchestrator/history/session-history-load-policy", () => {
           ],
         }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  test("does not merge a baseline history result into a transcript that gained live messages", () => {
+  test("merges selected-session baseline history into a transcript that gained live messages", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "session-live",
       historyLoadState: "loading",
@@ -62,8 +62,9 @@ describe("agent-orchestrator/history/session-history-load-policy", () => {
       },
     ]);
 
-    expect(nextSession.historyLoadState).toBe("not_requested");
+    expect(nextSession.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(nextSession).map((message) => message.content)).toEqual([
+      "Older history",
       "Already visible",
     ]);
   });

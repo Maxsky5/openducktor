@@ -415,7 +415,7 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("does not merge a baseline history response after live messages arrive", async () => {
+  test("merges selected baseline history before live messages that arrive during reload hydration", async () => {
     let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
     const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
       resolveHistory = resolve;
@@ -464,13 +464,14 @@ describe("session history loader", () => {
 
     const loadedSession = await loadPromise;
 
-    expect(loadedSession?.historyLoadState).toBe("not_requested");
+    expect(loadedSession?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
       "Resume after QA rejection",
     ]);
   });
 
-  test("does not request selected baseline history when live messages arrive during claim", async () => {
+  test("loads selected baseline history when live messages arrive during the hydration claim", async () => {
     const loadSessionHistory = mock(async () => [
       {
         messageId: "history-1",
@@ -516,9 +517,10 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(loadSessionHistory).not.toHaveBeenCalled();
-    expect(loadedSession?.historyLoadState).toBe("not_requested");
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(loadedSession?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
       "Resume after QA rejection",
     ]);
   });
