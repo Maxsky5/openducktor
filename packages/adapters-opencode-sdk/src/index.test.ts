@@ -73,7 +73,7 @@ describe("OpencodeSdkAdapter index", () => {
       },
     ]);
 
-    await adapter.stopSession(sessionRef("session-2"));
+    await adapter.stopSession({ ...sessionRef("session-2"), workingDirectory: "/other" });
     expect(abortSignals[0]?.aborted).toBe(false);
 
     await adapter.stopSession(sessionRef("session-opencode-1"));
