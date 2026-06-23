@@ -30,6 +30,7 @@ type UseRepoSessionReadModelArgs = {
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
+  loadLiveSessionHistory: (session: AgentSessionRef) => Promise<unknown>;
   queryClient: QueryClient;
 };
 
@@ -48,6 +49,7 @@ export const useRepoSessionReadModel = ({
   agentEngine,
   observeAgentSession,
   clearSessionObservationState,
+  loadLiveSessionHistory,
   queryClient,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
@@ -141,6 +143,7 @@ export const useRepoSessionReadModel = ({
           commitSessionCollection,
           observeAgentSession,
           clearSessionObservationState,
+          loadLiveSessionHistory,
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -169,6 +172,7 @@ export const useRepoSessionReadModel = ({
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
+    loadLiveSessionHistory,
     commitSessionCollection,
     snapshotRuntimeKinds,
     reloadGeneration,

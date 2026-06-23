@@ -54,12 +54,16 @@ export const deriveLoadedAgentSessionTranscriptState = ({
   session: AgentSessionState;
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionTranscriptState => {
-  if (hasRenderableSessionTranscript(session)) {
-    return { kind: "visible" };
+  if (session.historyLoadState === "failed") {
+    if (hasRenderableSessionTranscript(session)) {
+      return { kind: "visible" };
+    }
+
+    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
   }
 
-  if (session.historyLoadState === "failed") {
-    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
+  if (session.historyLoadState === "loaded") {
+    return { kind: "visible" };
   }
 
   return deriveRuntimeBoundTranscriptLoadingState({

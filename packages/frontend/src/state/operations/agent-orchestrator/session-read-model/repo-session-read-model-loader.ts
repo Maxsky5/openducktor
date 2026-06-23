@@ -98,6 +98,7 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection,
   observeAgentSession,
   clearSessionObservationState,
+  loadLiveSessionHistory,
   isStaleRepoOperation,
 }: {
   repoPath: string;
@@ -107,6 +108,7 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
+  loadLiveSessionHistory: (session: AgentSessionRef) => Promise<unknown>;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {
   if (isStaleRepoOperation()) {
@@ -153,5 +155,22 @@ export const loadRepoSessionReadModel = async ({
     failures: observerFailures,
     commitSessionCollection,
   });
+  if (isStaleRepoOperation()) {
+    return false;
+  }
+
+  await Promise.all(
+    readModel.liveSessionRefs.map(async (session) => {
+      if (isStaleRepoOperation()) {
+        return;
+      }
+
+      await loadLiveSessionHistory(session);
+    }),
+  );
+  if (isStaleRepoOperation()) {
+    return false;
+  }
+
   return true;
 };

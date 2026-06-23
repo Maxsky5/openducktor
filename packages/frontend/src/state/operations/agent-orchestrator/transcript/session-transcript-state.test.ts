@@ -58,7 +58,7 @@ const deriveLoadedTranscriptStateForSession = ({
   });
 
 describe("deriveLoadedAgentSessionTranscriptState", () => {
-  test("keeps a partial transcript visible while history has not loaded", () => {
+  test("shows the history loader instead of a partial live tail before history is requested", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
         historyLoadState: "not_requested",
@@ -74,7 +74,10 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "visible" });
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
   });
 
   test("keeps a transcript visible after a prior history failure", () => {
@@ -191,7 +194,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
     });
   });
 
-  test("keeps a renderable transcript stable while history is refreshing", () => {
+  test("shows the history loader instead of a partial live tail while history is loading", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
         status: "running",
@@ -210,7 +213,10 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "visible" });
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
   });
 
   test("keeps a local outbound send visible while pending", () => {

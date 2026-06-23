@@ -37,7 +37,7 @@ describe("projectAgentChatThreadState", () => {
     expect(projection.displayedSessionKey).toBe(sessionKey);
   });
 
-  test("keeps an existing session renderable while transcript state is loading", () => {
+  test("hides existing transcript rows while transcript state is loading", () => {
     const session = buildSession();
     const sessionKey = agentSessionIdentityKey(session);
     const projection = projectAgentChatThreadState({
@@ -47,9 +47,9 @@ describe("projectAgentChatThreadState", () => {
       runtimeReadiness: readyRuntimeReadiness,
     });
 
-    expect(projection.threadSession).toEqual(session);
+    expect(projection.threadSession).toBeNull();
     expect(projection.displayedSessionKey).toBe(sessionKey);
-    expect(projection.shouldResetTranscriptWindow).toBe(false);
+    expect(projection.shouldResetTranscriptWindow).toBe(true);
   });
 
   test("resets the transcript window only when a selected session is loading before session state exists", () => {
