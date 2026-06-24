@@ -53,11 +53,17 @@ jobs:
       - name: Resolve release metadata
         id: release_meta
         env:
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           TAG="$INPUT_TAG"
+          if [[ -z "${RELEASE_AUTOMATION_TOKEN:-}" ]]; then
+            echo "Missing RELEASE_AUTOMATION_TOKEN. Electron release needs it to access the draft GitHub release." >&2
+            exit 1
+          fi
+          export GH_TOKEN="$RELEASE_AUTOMATION_TOKEN"
+
           if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Release tag must look like v0.1.0 or v0.1.0-rc.1." >&2
             exit 1
@@ -253,12 +259,17 @@ jobs:
 
       - name: Publish Electron assets to draft release
         env:
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           TAG: ${{ needs.preflight.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
+          if [[ -z "${RELEASE_AUTOMATION_TOKEN:-}" ]]; then
+            echo "Missing RELEASE_AUTOMATION_TOKEN. Electron release needs it to upload assets to the draft GitHub release." >&2
+            exit 1
+          fi
+          export GH_TOKEN="$RELEASE_AUTOMATION_TOKEN"
 
           artifacts=(electron-release-assets/*)
           if [[ ${#artifacts[@]} -eq 0 ]]; then

@@ -142,7 +142,7 @@ Notes:
 
 - `RELEASE_AUTOMATION_TOKEN`
 
-`Prepare Release` requires this token and refuses to push with the default GitHub Actions token. That keeps release automation aligned with normal repository protection and review expectations.
+`Prepare Release` requires this token and refuses to push with the default GitHub Actions token. `Release Desktop Electron` uses the same token to read the draft GitHub release and upload desktop assets to it. That keeps release automation aligned with normal repository protection and review expectations.
 
 ## How Versioning Works
 
@@ -172,7 +172,7 @@ The GitHub release tag remains the full release tag, for example `v0.4.0-beta.1`
 6. Wait for `Release Desktop Electron` to finish uploading Electron assets.
 7. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
 8. Wait for `Publish Web Package` to finish publishing `@openducktor/web`.
-9. Open the draft GitHub release and smoke-test the desktop assets. Treat Windows and Linux assets as experimental and collect feedback before calling them stable.
+9. Open the draft GitHub release and review the desktop assets and notes. Treat Windows and Linux assets as experimental and collect feedback before calling them stable.
 10. Publish the draft release when the assets and notes look correct.
 11. For stable releases, wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository. Beta releases are prereleases and are intentionally rejected by the Homebrew tap workflow.
 
