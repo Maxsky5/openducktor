@@ -220,8 +220,6 @@ jobs:
 
           sidecars=(
             "$app_bundle/Contents/Resources/bin/openducktor-mcp"
-            "$app_bundle/Contents/Resources/bin/bd"
-            "$app_bundle/Contents/Resources/bin/dolt"
           )
 
           codesign --verify --deep --strict --verbose=4 "$app_bundle"
@@ -293,15 +291,27 @@ jobs:
           set -euo pipefail
           RELEASE_LABEL="${TAG:-${{ inputs.tag }}}"
           RELEASE_LINK="${RELEASE_URL:-unavailable because release validation did not complete}"
+          RELEASE_READY=false
+          if [[ "$RELEASE_VALIDATION_RESULT" == "success" && "$ELECTRON_BUILD_RESULT" == "success" && "$ELECTRON_PUBLISH_RESULT" == "success" ]]; then
+            RELEASE_READY=true
+          fi
           {
-            echo "## Electron desktop release draft ready"
+            if [[ "$RELEASE_READY" == "true" ]]; then
+              echo "## Electron desktop release draft ready"
+            else
+              echo "## Electron desktop release not ready"
+            fi
             echo
             echo "- Tag: $RELEASE_LABEL"
             echo "- Release validation result: $RELEASE_VALIDATION_RESULT"
             echo "- Electron build job result: $ELECTRON_BUILD_RESULT"
             echo "- Electron publish job result: $ELECTRON_PUBLISH_RESULT"
             echo "- Draft release: $RELEASE_LINK"
-            echo "- Electron assets built for Linux x64, macOS arm64, macOS Intel, and Windows x64"
-            echo "- macOS signing/notarization: required for Electron assets"
-            echo "- Next step: smoke-test the Electron draft assets before publishing them as stable"
+            if [[ "$RELEASE_READY" == "true" ]]; then
+              echo "- Electron assets built for Linux x64, macOS arm64, macOS Intel, and Windows x64"
+              echo "- macOS signing/notarization: required for Electron assets"
+              echo "- Next step: review the draft release and publish it when ready"
+            else
+              echo "- Next step: fix the failed Electron release job and rerun this workflow"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
