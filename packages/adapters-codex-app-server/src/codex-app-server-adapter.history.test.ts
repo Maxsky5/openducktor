@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createAdapterWithTransport,
+  createDeferred,
   createHarness,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
@@ -539,6 +540,7 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("does not block unloaded idle history on restored context replay", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const resume = createDeferred<unknown>();
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -586,7 +588,7 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/resume") {
-          return new Promise(() => undefined);
+          return resume.promise as Promise<Response>;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -598,17 +600,12 @@ describe("CodexAppServerAdapter history loading", () => {
           : [],
     });
 
-    const history = await Promise.race([
-      adapter.loadSessionHistory({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-unloaded-idle",
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("history load waited for restored context")), 50),
-      ),
-    ]);
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-unloaded-idle",
+    });
 
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
@@ -618,6 +615,17 @@ describe("CodexAppServerAdapter history loading", () => {
     await flushCodexAdapterWork();
     const methods = calls.map((call) => call.method);
     expect(methods.indexOf("thread/read")).toBeLessThan(methods.indexOf("thread/resume"));
+    resume.resolve({
+      thread: {
+        id: "thread-unloaded-idle",
+        cwd: "/repo",
+        createdAt: 1_778_112_000,
+        status: { type: "idle" },
+        turns: [],
+      },
+      startedAt: "2026-05-07T00:00:00.000Z",
+    });
+    await flushCodexAdapterWork();
   });
 
   test("loads paginated stored history when the thread is absent from inventory", async () => {

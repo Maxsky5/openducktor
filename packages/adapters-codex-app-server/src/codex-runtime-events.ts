@@ -110,12 +110,20 @@ export class CodexRuntimeEventSubscriptions {
       ready: Promise.resolve(),
     };
     this.pumpsByRuntimeId.set(runtimeId, pump);
-    const unsubscribe = this.subscribeEvents(runtimeId, (event) => {
-      if (event.runtimeId !== runtimeId) {
-        return;
+    let unsubscribe: (() => void) | Promise<() => void>;
+    try {
+      unsubscribe = this.subscribeEvents(runtimeId, (event) => {
+        if (event.runtimeId !== runtimeId) {
+          return;
+        }
+        onEvent(event);
+      });
+    } catch (error) {
+      if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
+        this.pumpsByRuntimeId.delete(runtimeId);
       }
-      onEvent(event);
-    });
+      throw error;
+    }
 
     if (typeof (unsubscribe as Promise<() => void>).then === "function") {
       pump.ready = (async () => {

@@ -435,14 +435,13 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       externalSessionId: "thread-idle",
     });
     await flushCodexAdapterWork();
-    expect(transport.calls).toContainEqual(
-      expect.objectContaining({
-        method: "thread/resume",
-        params: expect.objectContaining({
-          threadId: "thread-idle",
-          excludeTurns: false,
-        }),
-      }),
+    await waitForTransportCall(
+      transport,
+      (call) =>
+        call.method === "thread/resume" &&
+        (call.params as { threadId?: unknown; excludeTurns?: unknown }).threadId ===
+          "thread-idle" &&
+        (call.params as { threadId?: unknown; excludeTurns?: unknown }).excludeTurns === false,
     );
     transport.loaded = true;
     transport.threadStatus = { type: "active", activeFlags: ["waitingOnUserInput"] };

@@ -608,7 +608,7 @@ export class CodexAppServerAdapter
       "subscribe session events",
     );
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
-    const inventory = await this.threadInventory.read(client, runtimeId);
+    const inventory = await this.threadInventory.refresh(client, runtimeId);
     const thread = inventory.threadsById.get(input.externalSessionId);
     if (!thread) {
       return;

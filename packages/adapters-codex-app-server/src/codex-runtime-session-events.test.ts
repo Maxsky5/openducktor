@@ -5,6 +5,7 @@ import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
+import type { CodexSessionState } from "./types";
 
 const createRuntimeEvents = () =>
   new CodexRuntimeSessionEvents({

@@ -66,6 +66,7 @@ describe("agent studio send target", () => {
         startSession,
       }),
     ).resolves.toEqual(sessionIdentity("session-new"));
+    expect(startSession).toHaveBeenCalledTimes(1);
     expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
   });
 
@@ -88,6 +89,7 @@ describe("agent studio send target", () => {
         startSession,
       }),
     ).resolves.toBeNull();
+    expect(startSession).toHaveBeenCalledTimes(1);
     expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
   });
 });
