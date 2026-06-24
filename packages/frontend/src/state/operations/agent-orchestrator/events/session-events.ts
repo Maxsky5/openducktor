@@ -14,6 +14,7 @@ import {
   handleAssistantMessage,
   handleSessionCompacted,
   handleSessionCompactionStarted,
+  handleSessionContextUpdated,
   handleSessionError,
   handleSessionFinished,
   handleSessionIdle,
@@ -54,6 +55,9 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
       return;
     case "assistant_message":
       handleAssistantMessage(context, event);
+      return;
+    case "session_context_updated":
+      handleSessionContextUpdated(context, event);
       return;
     case "user_message":
       handleUserMessage(context, event);

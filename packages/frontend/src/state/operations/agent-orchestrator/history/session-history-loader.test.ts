@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -471,6 +471,44 @@ describe("session history loader", () => {
     ]);
   });
 
+  test("does not wait for selected session observation before loading baseline history", async () => {
+    const observedSessions: AgentSessionRef[] = [];
+    const harness = createHistoryLoadHarness();
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+
+    await loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      observeAgentSession: (session) => {
+        observedSessions.push(session);
+        return new Promise(() => {});
+      },
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(observedSessions).toEqual([
+      {
+        externalSessionId: sessionTarget.externalSessionId,
+        repoPath: "/repo",
+        runtimeKind: sessionTarget.runtimeKind,
+        workingDirectory: sessionTarget.workingDirectory,
+      },
+    ]);
+  }, 500);
+
   test("loads selected baseline history when live messages arrive during the hydration claim", async () => {
     const loadSessionHistory = mock(async () => [
       {
@@ -568,6 +606,47 @@ describe("session history loader", () => {
 
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(harness.session.contextUsage).toEqual(liveContextUsage);
+  });
+
+  test("applies context stats from loaded idle history", async () => {
+    const harness = createHistoryLoadHarness();
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Previous transcript",
+            totalTokens: 123,
+            contextWindow: 1_000,
+            parts: [
+              {
+                kind: "step",
+                messageId: "history-1",
+                partId: "finish-1",
+                phase: "finish",
+                reason: "stop",
+                totalTokens: 123,
+                contextWindow: 1_000,
+              },
+            ],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.contextUsage).toEqual({
+      totalTokens: 123,
+      contextWindow: 1_000,
+    });
   });
 
   test("passes transient prompt context to the history adapter without rendering it locally", async () => {

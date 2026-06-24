@@ -167,6 +167,7 @@ export class CodexThreadInventoryReader {
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
+      excludeTurns: true,
     });
     this.clearInventory(runtimeId);
     await client.threadRead({

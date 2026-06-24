@@ -179,6 +179,7 @@ export function useAgentOrchestratorOperations({
       updateSession,
       taskRef,
       loadRepoPromptOverrides: queryBackedPromptOverrides,
+      observeAgentSession,
     };
 
     return {
@@ -188,6 +189,7 @@ export function useAgentOrchestratorOperations({
   }, [
     agentEngine,
     currentWorkspaceRepoPathRef,
+    observeAgentSession,
     queryBackedPromptOverrides,
     repoEpochRef,
     sessionStore,

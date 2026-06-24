@@ -174,6 +174,7 @@ export type CodexThreadResumeParams = {
   sandbox: CodexAppServerSandboxMode;
   model?: string;
   effort?: string;
+  excludeTurns?: boolean;
 };
 
 export type CodexThreadForkParams = {

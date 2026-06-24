@@ -87,7 +87,7 @@ import {
   toTransportModelSelection,
 } from "./model-catalog";
 import { toCodexSkillCatalog } from "./skill-catalog";
-import type { CodexAppServerAdapterOptions } from "./types";
+import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
 
@@ -154,7 +154,7 @@ export class CodexAppServerAdapter
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
-    this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
     const transportModel = toTransportModelSelection(model);
 
@@ -182,7 +182,7 @@ export class CodexAppServerAdapter
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
-    this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadResume({
@@ -205,7 +205,7 @@ export class CodexAppServerAdapter
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
-    this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadFork({
@@ -289,7 +289,7 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    return loadCodexSessionHistory({
+    const history = await loadCodexSessionHistory({
       input,
       session,
       runtime,
@@ -298,6 +298,67 @@ export class CodexAppServerAdapter
         this.runtimeEvents.rememberTodos(externalSessionId, todos),
       ...this.runtimeEvents.historyLoadContext(),
     });
+    this.restoreIdleContextUsageInBackground(input, runtime, history);
+    return history;
+  }
+
+  private restoreIdleContextUsageInBackground(
+    input: LoadAgentSessionHistoryInput,
+    runtime: { client: CodexAppServerClient; runtimeId: string },
+    history: AgentSessionHistoryMessage[],
+  ): void {
+    if (history.length === 0) {
+      return;
+    }
+
+    const hasContextUsage = history.some(
+      (message) =>
+        "totalTokens" in message &&
+        typeof message.totalTokens === "number" &&
+        message.totalTokens > 0,
+    );
+    if (hasContextUsage) {
+      return;
+    }
+
+    void this.restoreIdleContextUsage(input, runtime).catch((error) => {
+      this.emitSessionEvent(input.externalSessionId, {
+        sessionRef: input,
+        type: "session_error",
+        externalSessionId: input.externalSessionId,
+        timestamp: new Date().toISOString(),
+        message: `Failed to restore Codex context usage: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    });
+  }
+
+  private async restoreIdleContextUsage(
+    input: LoadAgentSessionHistoryInput,
+    runtime: { client: CodexAppServerClient; runtimeId: string },
+  ): Promise<void> {
+    const inventory = await this.threadInventory.read(runtime.client, runtime.runtimeId);
+    const thread = inventory.threadsById.get(input.externalSessionId);
+    if (
+      !thread ||
+      thread.cwd !== input.workingDirectory ||
+      thread.status.classification !== "idle"
+    ) {
+      return;
+    }
+
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtime.runtimeId);
+    await this.runtimeEvents.captureRestoredContextUsage(input, runtime.runtimeId, async () => {
+      await runtime.client.threadResume({
+        approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+        threadId: input.externalSessionId,
+        cwd: input.workingDirectory,
+        sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
+        excludeTurns: false,
+      });
+    });
+    this.clearThreadInventory(runtime.runtimeId);
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
@@ -345,7 +406,7 @@ export class CodexAppServerAdapter
     input: AgentSessionRef | AgentSessionRuntimeRef,
   ): Promise<AgentSessionSummary> {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
-    this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? (input.model ?? undefined) : undefined;
     if (model) {
       await this.models.validate(client, runtimeId, model);
@@ -502,14 +563,12 @@ export class CodexAppServerAdapter
   ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
     if (!this.localSessions.has(externalSessionId)) {
-      await this.ensureSessionState(input);
+      await this.prepareLiveSessionSubscription(input);
     }
 
     const session = this.localSessions.get(externalSessionId);
     if (!session) {
-      throw new Error(
-        `Cannot subscribe Codex session events for missing session '${externalSessionId}'.`,
-      );
+      return this.sessionEvents.subscribe(input, listener);
     }
     const registeredSessionRef = codexSessionRef(session);
     if (!agentSessionRefsEqual(registeredSessionRef, input)) {
@@ -541,6 +600,25 @@ export class CodexAppServerAdapter
     }
     void this.runtimeEvents.drainBufferedStreamEvents(externalSessionId);
     return unsubscribe;
+  }
+
+  private async prepareLiveSessionSubscription(input: AgentSessionRef): Promise<void> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(
+      input,
+      "subscribe session events",
+    );
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    const inventory = await this.threadInventory.read(client, runtimeId);
+    const thread = inventory.threadsById.get(input.externalSessionId);
+    if (!thread) {
+      return;
+    }
+    if (thread.cwd !== input.workingDirectory || thread.status.classification === "idle") {
+      return;
+    }
+
+    await this.ensureSessionState(input);
+    this.clearThreadInventory(runtimeId);
   }
 
   async stopSession(input: AgentSessionRef): Promise<void> {

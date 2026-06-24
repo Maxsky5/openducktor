@@ -24,6 +24,7 @@ export type ActiveCodexTurn = {
 
 export type CodexLiveEventPump = {
   unsubscribe: (() => void) | null;
+  ready: Promise<void>;
 };
 
 export const MAX_CODEX_EVENT_BACKLOG_PER_SESSION = 500;

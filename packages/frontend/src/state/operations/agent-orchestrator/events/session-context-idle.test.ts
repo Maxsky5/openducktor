@@ -91,6 +91,57 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
+  test("updates restored session context usage without changing idle status", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+      }),
+    ]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      turnMetadata: createSessionTurnMetadata(),
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      totalTokens: 35_022,
+      contextWindow: 200_000,
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
+      totalTokens: 35_022,
+      contextWindow: 200_000,
+    });
+  });
+
   test("does not mark a step message as tokenized when the step update is ignored", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

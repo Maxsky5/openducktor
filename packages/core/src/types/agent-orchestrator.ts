@@ -367,6 +367,13 @@ export type AgentEvent = (
       model?: AgentModelSelection;
     }
   | {
+      type: "session_context_updated";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      totalTokens: number;
+      contextWindow?: number;
+    }
+  | {
       type: "user_message";
       externalSessionId: ExternalSessionId;
       timestamp: string;

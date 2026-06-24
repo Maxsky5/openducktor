@@ -96,13 +96,18 @@ export class CodexRuntimeEventSubscriptions {
 
   constructor(private readonly subscribeEvents: CodexAppServerAdapterOptions["subscribeEvents"]) {}
 
-  ensure(runtimeId: string, onEvent: (event: CodexRuntimeStreamEvent) => void): void {
-    if (!this.subscribeEvents || this.pumpsByRuntimeId.has(runtimeId)) {
-      return;
+  ensure(runtimeId: string, onEvent: (event: CodexRuntimeStreamEvent) => void): Promise<void> {
+    if (!this.subscribeEvents) {
+      return Promise.resolve();
+    }
+    const existing = this.pumpsByRuntimeId.get(runtimeId);
+    if (existing) {
+      return existing.ready;
     }
 
     const pump: CodexLiveEventPump = {
       unsubscribe: null,
+      ready: Promise.resolve(),
     };
     this.pumpsByRuntimeId.set(runtimeId, pump);
     const unsubscribe = this.subscribeEvents(runtimeId, (event) => {
@@ -113,17 +118,26 @@ export class CodexRuntimeEventSubscriptions {
     });
 
     if (typeof (unsubscribe as Promise<() => void>).then === "function") {
-      void (unsubscribe as Promise<() => void>).then((resolved) => {
-        if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
-          resolved();
-          return;
+      pump.ready = (async () => {
+        try {
+          const resolved = await (unsubscribe as Promise<() => void>);
+          if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
+            resolved();
+            return;
+          }
+          pump.unsubscribe = resolved;
+        } catch (error) {
+          if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
+            this.pumpsByRuntimeId.delete(runtimeId);
+          }
+          throw error;
         }
-        pump.unsubscribe = resolved;
-      });
-      return;
+      })();
+      return pump.ready;
     }
 
     pump.unsubscribe = unsubscribe as () => void;
+    return pump.ready;
   }
 
   stop(runtimeId: string): void {

@@ -139,6 +139,19 @@ export const handleAssistantMessage = (
   clearTurnTracking(context);
 };
 
+export const handleSessionContextUpdated = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "session_context_updated" }>,
+): void => {
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    contextUsage: {
+      totalTokens: event.totalTokens,
+      ...(typeof event.contextWindow === "number" ? { contextWindow: event.contextWindow } : {}),
+    },
+  }));
+};
+
 export const handleUserMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,

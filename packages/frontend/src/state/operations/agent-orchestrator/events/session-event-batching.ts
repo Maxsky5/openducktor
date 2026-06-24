@@ -9,6 +9,7 @@ const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
   "question_resolved",
   "session_compaction_started",
   "session_compacted",
+  "session_context_updated",
   "session_error",
   "session_idle",
   "session_finished",
