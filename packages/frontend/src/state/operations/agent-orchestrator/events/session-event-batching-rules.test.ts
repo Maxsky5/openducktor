@@ -1,10 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { createSessionEventBatcher, type SessionEvent } from "./session-events-test-harness";
+import type { QueuedSessionEvent, SessionEventBatcher } from "./session-event-batching";
+import { createSessionEventBatcher } from "./session-events-test-harness";
+
+const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSessionEvent[]) => {
+  const prepared = batcher.prepareQueuedSessionEvents(
+    events.map((event) => ({
+      event,
+      routeKey: event.externalSessionId,
+    })),
+  );
+  return {
+    readyEvents: prepared.readyEvents.map((item) => item.event),
+    deferredEvents: prepared.deferredEvents.map((item) => item.event),
+    nextDelayMs: prepared.nextDelayMs,
+  };
+};
 
 describe("agent-orchestrator session event batching rules", () => {
   test("centralizes assistant batch coalescing rules in one reducer", async () => {
     const batcher = createSessionEventBatcher();
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_delta",
         externalSessionId: "session-1",
@@ -58,7 +73,7 @@ describe("agent-orchestrator session event batching rules", () => {
         timestamp: "2026-02-22T08:00:05.000Z",
         message: "Final answer",
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
       {
@@ -91,7 +106,7 @@ describe("agent-orchestrator session event batching rules", () => {
 
   test("keeps per-type replacement behavior configurable inside the central reducer", async () => {
     const batcher = createSessionEventBatcher();
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -135,7 +150,7 @@ describe("agent-orchestrator session event batching rules", () => {
         timestamp: "2026-02-22T08:00:04.000Z",
         todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
       {
@@ -168,7 +183,7 @@ describe("agent-orchestrator session event batching rules", () => {
     const batcher = createSessionEventBatcher({
       nowMs: () => now,
     });
-    const first = batcher.prepareQueuedSessionEvents([
+    const first = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
         externalSessionId: "session-1",
@@ -176,10 +191,10 @@ describe("agent-orchestrator session event batching rules", () => {
         timestamp: "2026-02-22T08:00:01.000Z",
         message: "Final answer 1",
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     now += 100;
-    const second = batcher.prepareQueuedSessionEvents([
+    const second = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
         externalSessionId: "session-1",
@@ -187,7 +202,7 @@ describe("agent-orchestrator session event batching rules", () => {
         timestamp: "2026-02-22T08:00:01.100Z",
         message: "Final answer 2",
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(first.readyEvents).toHaveLength(1);
     expect(second.readyEvents).toHaveLength(0);
@@ -200,7 +215,7 @@ describe("agent-orchestrator session event batching rules", () => {
       nowMs: () => now,
     });
 
-    const first = batcher.prepareQueuedSessionEvents([
+    const first = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -213,10 +228,10 @@ describe("agent-orchestrator session event batching rules", () => {
           completed: false,
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     now += 100;
-    const second = batcher.prepareQueuedSessionEvents([
+    const second = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -229,7 +244,7 @@ describe("agent-orchestrator session event batching rules", () => {
           completed: false,
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(first.readyEvents).toHaveLength(1);
     expect(second.readyEvents).toHaveLength(0);
@@ -239,7 +254,7 @@ describe("agent-orchestrator session event batching rules", () => {
 
   test("dedupes tool part updates in the central reducer", async () => {
     const batcher = createSessionEventBatcher();
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -270,7 +285,7 @@ describe("agent-orchestrator session event batching rules", () => {
           input: { taskId: "task-1", markdown: "# Spec" },
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toHaveLength(1);
     expect(prepared.readyEvents[0]?.type).toBe("assistant_part");

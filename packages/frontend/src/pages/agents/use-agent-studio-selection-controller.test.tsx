@@ -11,6 +11,7 @@ import {
 } from "@/state/agent-sessions-store";
 import {
   AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
 } from "@/state/app-state-contexts";
@@ -24,7 +25,11 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
-import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  AgentOperationsContextValue,
+  AgentSessionHistoryLoadContextValue,
+  RepoSettingsInput,
+} from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
@@ -51,8 +56,8 @@ type UseAgentStudioSelectionControllerHook =
 const sessionReadModelLoadStateRef: { current: AgentSessionReadModelLoadState } = {
   current: unavailableAgentSessionReadModelLoadState,
 };
-const loadSessionHistoryRef: {
-  current: AgentOperationsContextValue["loadAgentSessionHistory"];
+const loadSelectedSessionBaselineHistoryRef: {
+  current: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
 } = {
   current: async () => null,
 };
@@ -67,7 +72,7 @@ let sessionStore = createAgentSessionsStore(null);
 type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
-  loadSessionHistory?: AgentOperationsContextValue["loadAgentSessionHistory"];
+  loadSelectedSessionBaselineHistory?: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
   checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
@@ -142,7 +147,8 @@ const applyTestContextOverrides = (
   sessionReadModelLoadStateRef.current =
     contextOverrides.sessionReadModelLoadState ??
     defaultSessionReadModelLoadState(hookArgs.workspaceRepoPath);
-  loadSessionHistoryRef.current = contextOverrides.loadSessionHistory ?? (async () => null);
+  loadSelectedSessionBaselineHistoryRef.current =
+    contextOverrides.loadSelectedSessionBaselineHistory ?? (async () => null);
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
 };
 
@@ -162,7 +168,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
     subscribeSessionEvents: async () => () => undefined,
-    loadAgentSessionHistory: loadSessionHistoryRef.current,
+    loadAgentSessionHistory: async () => null,
     startAgentSession: async () => ({
       externalSessionId: "session-started",
       runtimeKind: "opencode",
@@ -174,18 +180,23 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,
   });
+  const agentSessionHistoryLoadValue = (): AgentSessionHistoryLoadContextValue => ({
+    loadSelectedSessionBaselineHistory: loadSelectedSessionBaselineHistoryRef.current,
+  });
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <AgentOperationsContext.Provider value={agentOperationsValue()}>
-      <AgentSessionsContext.Provider value={sessionStore}>
-        <AgentSessionReadModelStateContext.Provider
-          value={{
-            sessionReadModelLoadState: sessionReadModelLoadStateRef.current,
-            reloadSessionReadModel: () => undefined,
-          }}
-        >
-          {children}
-        </AgentSessionReadModelStateContext.Provider>
-      </AgentSessionsContext.Provider>
+      <AgentSessionHistoryLoadContext.Provider value={agentSessionHistoryLoadValue()}>
+        <AgentSessionsContext.Provider value={sessionStore}>
+          <AgentSessionReadModelStateContext.Provider
+            value={{
+              sessionReadModelLoadState: sessionReadModelLoadStateRef.current,
+              reloadSessionReadModel: () => undefined,
+            }}
+          >
+            {children}
+          </AgentSessionReadModelStateContext.Provider>
+        </AgentSessionsContext.Provider>
+      </AgentSessionHistoryLoadContext.Provider>
     </AgentOperationsContext.Provider>
   );
   const harness = createSharedHookHarness(useAgentStudioSelectionController, initialProps, {
@@ -751,7 +762,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("loads selected session history through the session history state owner", async () => {
+  test("loads selected session history through the baseline history loader", async () => {
     const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
@@ -764,7 +775,7 @@ describe("useAgentStudioSelectionController", () => {
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(session),
       }),
-      { loadSessionHistory },
+      { loadSelectedSessionBaselineHistory: loadSessionHistory },
     );
 
     try {
@@ -780,7 +791,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("loads selected session history even when live messages are already visible", async () => {
+  test("loads selected session history after reload without rendering the partial live tail", async () => {
     const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
@@ -801,13 +812,16 @@ describe("useAgentStudioSelectionController", () => {
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(session),
       }),
-      { loadSessionHistory },
+      { loadSelectedSessionBaselineHistory: loadSessionHistory },
     );
 
     try {
       await harness.mount();
 
-      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({ kind: "visible" });
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
+        kind: "session_loading",
+        reason: "history",
+      });
       expect(loadSessionHistory).toHaveBeenCalledWith({
         externalSessionId: session.externalSessionId,
         runtimeKind: session.runtimeKind,
@@ -838,7 +852,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionKeyParam: sessionKeyParam(session),
       }),
       {
-        loadSessionHistory,
+        loadSelectedSessionBaselineHistory: loadSessionHistory,
         repoRuntimeHealthContext: {
           runtimeHealthByRuntime: {
             opencode: createRepoRuntimeHealthFixture({

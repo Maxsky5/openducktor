@@ -11,6 +11,7 @@
     "lint": "biome check src"
   },
   "dependencies": {
-    "@openducktor/contracts": "workspace:*"
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/path-support": "workspace:*"
   }
 }

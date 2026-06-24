@@ -37,6 +37,7 @@ export type WorkflowToolAliasesByCanonical = {
   [ToolName in AgentToolName]?: string[] | undefined;
 };
 export type UpdateSessionTodos = (
+  session: AgentSessionRef,
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
 ) => void;
 

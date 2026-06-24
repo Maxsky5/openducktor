@@ -267,12 +267,14 @@ describe("OpencodeSdkAdapter user message", () => {
       ],
     });
 
-    expect(events).toContainEqual({
-      type: "session_status",
-      externalSessionId: "session-opencode-1",
-      timestamp: "2026-02-17T12:00:00Z",
-      status: { type: "busy" },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_status",
+        externalSessionId: "session-opencode-1",
+        timestamp: "2026-02-17T12:00:00Z",
+        status: { type: "busy" },
+      }),
+    );
   });
 
   test("sendUserMessage rejects slash commands that are not the first meaningful segment", async () => {
@@ -342,17 +344,21 @@ describe("OpencodeSdkAdapter user message", () => {
       }),
     ).rejects.toThrow("OpenCode request failed: run slash command (400 Bad Request)");
 
-    expect(events).toContainEqual({
-      type: "session_status",
-      externalSessionId: "session-opencode-1",
-      timestamp: "2026-02-17T12:00:00Z",
-      status: { type: "busy" },
-    });
-    expect(events).toContainEqual({
-      type: "session_idle",
-      externalSessionId: "session-opencode-1",
-      timestamp: "2026-02-17T12:00:00Z",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_status",
+        externalSessionId: "session-opencode-1",
+        timestamp: "2026-02-17T12:00:00Z",
+        status: { type: "busy" },
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: "session-opencode-1",
+        timestamp: "2026-02-17T12:00:00Z",
+      }),
+    );
   });
 
   test("sendUserMessage keeps stream activity owned by runtime events", async () => {

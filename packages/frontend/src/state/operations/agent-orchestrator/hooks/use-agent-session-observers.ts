@@ -84,8 +84,8 @@ export const useAgentSessionObservers = ({
           readSession,
           ensureSession,
           updateSession,
-          updateSessionTodos: (updater) =>
-            updateSessionTodosQueryData(queryClient, target, updater),
+          updateSessionTodos: (session, updater) =>
+            updateSessionTodosQueryData(queryClient, session, updater),
           isSessionObserved: (candidateSession) =>
             sessionObserversRef.current.has(candidateSession),
           recordTurnActivityTimestamp: sessionTurnState.timing.recordTurnActivityTimestamp,

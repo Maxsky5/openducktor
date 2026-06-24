@@ -17,6 +17,7 @@ const createRuntimeEvents = () =>
     activeTurnsBySessionId: new Map(),
     sessionEvents: new CodexSessionEventBus(),
     pendingInput: new CodexPendingInputState(),
+    updateThreadStatus: () => undefined,
     flushQueuedUserMessagesLater: () => undefined,
   });
 

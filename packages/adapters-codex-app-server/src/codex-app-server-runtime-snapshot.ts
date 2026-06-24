@@ -90,7 +90,7 @@ export const toRuntimeSnapshotFromThread = (
   pendingQuestions: [],
 });
 
-const codexSessionRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({
+const codexRuntimeSnapshotRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({
   externalSessionId: session.threadId,
   repoPath: session.repoPath,
   runtimeKind: "codex",
@@ -114,7 +114,7 @@ export const toRefreshedRuntimeSnapshot = ({
 }): AgentSessionRuntimeSnapshot => {
   const thread = inventory.threadsById.get(session.threadId) ?? null;
   const hasPendingInput = pendingApprovals.length > 0 || pendingQuestions.length > 0;
-  const ref = input ?? codexSessionRef(session);
+  const ref = input ?? codexRuntimeSnapshotRef(session);
   const runtimeSnapshotSource = resolveCodexRuntimeSnapshotSource({
     session,
     thread,

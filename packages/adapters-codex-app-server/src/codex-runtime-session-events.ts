@@ -1,10 +1,12 @@
 import type {
   AcceptedAgentUserMessage,
+  AgentEvent,
   AgentModelSelection,
+  AgentSessionRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
@@ -38,8 +40,10 @@ import {
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
+import { codexSessionRef } from "./codex-session-ref";
 import type {
   CodexAppServerAdapterOptions,
+  CodexNotificationRecord,
   CodexServerRequestRecord,
   CodexSessionState,
 } from "./types";
@@ -67,6 +71,19 @@ type CodexRuntimeSessionHistoryContext = {
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
 };
 
+type RestoredContextCapture = {
+  sessionRef: AgentSessionRef;
+  tokenUsageByTurnId: Map<string, CodexTokenUsageTotals>;
+};
+
+const RESTORED_USAGE_DRAIN_ATTEMPTS = 3;
+
+const waitForRestoredUsageReplayTick = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+
+const restoredContextCaptureKey = (runtimeId: string, threadId: string): string =>
+  `${runtimeId}:${threadId}`;
+
 export class CodexRuntimeSessionEvents {
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
   private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
@@ -75,6 +92,7 @@ export class CodexRuntimeSessionEvents {
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
+  private readonly restoredContextCapturesByKey = new Map<string, RestoredContextCapture>();
   private readonly eventMapperPipeline = createCodexEventMapperPipeline();
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
 
@@ -82,8 +100,8 @@ export class CodexRuntimeSessionEvents {
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
   }
 
-  ensureRuntimeEventSubscription(runtimeId: string): void {
-    this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
+  ensureRuntimeEventSubscription(runtimeId: string): Promise<void> {
+    return this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
       void (async () => {
         try {
           await this.handleRuntimeStreamEvent(event);
@@ -110,6 +128,30 @@ export class CodexRuntimeSessionEvents {
       drainThreadReadTokenUsage: (runtimeId: string, threadId: string) =>
         this.drainThreadReadTokenUsage(runtimeId, threadId),
     };
+  }
+
+  async captureRestoredContextUsage(
+    sessionRef: AgentSessionRef,
+    runtimeId: string,
+    restore: () => Promise<void>,
+  ): Promise<void> {
+    const threadId = sessionRef.externalSessionId;
+    const captureKey = restoredContextCaptureKey(runtimeId, threadId);
+    const capture: RestoredContextCapture = {
+      sessionRef,
+      tokenUsageByTurnId: new Map(),
+    };
+    this.restoredContextCapturesByKey.set(captureKey, capture);
+    try {
+      await restore();
+      const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(runtimeId, threadId, {
+        suppressTargetStatusEvents: true,
+        waitForTokenUsage: true,
+      });
+      this.recordRestoredContextUsage(capture, threadId, tokenUsageByTurnId);
+    } finally {
+      this.restoredContextCapturesByKey.delete(captureKey);
+    }
   }
 
   latestTodos(externalSessionId: string): AgentSessionTodoItem[] | undefined {
@@ -204,6 +246,15 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
+    if (
+      event.kind === "notification" &&
+      this.captureRestoredContextNotification(
+        event.runtimeId,
+        parseNotificationRecord(event.message),
+      )
+    ) {
+      return;
+    }
     const session = this.deps.sessions.get(threadId);
     if (!session) {
       this.bufferRuntimeStreamEvent(threadId, event);
@@ -224,7 +275,7 @@ export class CodexRuntimeSessionEvents {
       if (session.runtimeId !== runtimeId) {
         continue;
       }
-      this.deps.sessionEvents.emit(session.threadId, {
+      this.emitSessionEventForSession(session, {
         type: "session_error",
         externalSessionId: session.threadId,
         timestamp: new Date().toISOString(),
@@ -238,7 +289,7 @@ export class CodexRuntimeSessionEvents {
     event: { kind: "notification" | "server_request"; message: unknown },
   ): Promise<void> {
     if (event.kind === "notification") {
-      await this.handlePendingNotifications(session, [event.message]);
+      await this.handlePendingNotifications(session, [parseNotificationRecord(event.message)]);
       return;
     }
     await this.processServerRequestsForSession(session, [parseServerRequestRecord(event.message)]);
@@ -277,9 +328,62 @@ export class CodexRuntimeSessionEvents {
 
   private async handlePendingNotifications(
     session: CodexSessionState,
-    notificationsFromBatch?: unknown[],
+    notificationsFromBatch?: CodexNotificationRecord[],
   ): Promise<void> {
-    await handleCodexPendingNotifications(this.streamingContext(), session, notificationsFromBatch);
+    const notifications = notificationsFromBatch
+      ? this.captureRestoredContextNotifications(session, notificationsFromBatch)
+      : notificationsFromBatch;
+    await handleCodexPendingNotifications(this.streamingContext(), session, notifications);
+  }
+
+  private captureRestoredContextNotifications(
+    session: CodexSessionState,
+    notifications: CodexNotificationRecord[],
+  ): CodexNotificationRecord[] {
+    if (
+      !this.restoredContextCapturesByKey.has(
+        restoredContextCaptureKey(session.runtimeId, session.threadId),
+      )
+    ) {
+      return notifications;
+    }
+
+    const remaining: CodexNotificationRecord[] = [];
+    for (const notification of notifications) {
+      if (this.captureRestoredContextNotification(session.runtimeId, notification)) {
+        continue;
+      }
+      remaining.push(notification);
+    }
+    return remaining;
+  }
+
+  private captureRestoredContextNotification(
+    runtimeId: string,
+    notification: CodexNotificationRecord,
+  ): boolean {
+    const threadId = extractThreadIdFromParams(notification.params);
+    if (!threadId) {
+      return false;
+    }
+    const capture = this.restoredContextCapturesByKey.get(
+      restoredContextCaptureKey(runtimeId, threadId),
+    );
+    if (!capture) {
+      return false;
+    }
+    if (notification.method === "thread/status/changed") {
+      return true;
+    }
+    if (notification.method !== "thread/tokenUsage/updated") {
+      return false;
+    }
+    const turnId = extractTurnId(notification.params);
+    const tokenUsage = extractCodexTokenUsageTotals(notification.params);
+    if (turnId && tokenUsage) {
+      this.recordRestoredContextUsage(capture, threadId, new Map([[turnId, tokenUsage]]));
+    }
+    return true;
   }
 
   private streamingContext(): CodexStreamingContext {
@@ -295,7 +399,7 @@ export class CodexRuntimeSessionEvents {
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
       emitSessionEvent: (externalSessionId, event) =>
-        this.deps.sessionEvents.emit(externalSessionId, event),
+        this.emitSessionEvent(externalSessionId, event),
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
@@ -327,49 +431,131 @@ export class CodexRuntimeSessionEvents {
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
-        this.deps.sessionEvents.emit(externalSessionId, event),
+        this.emitSessionEvent(externalSessionId, event),
     };
   }
 
   private async drainThreadReadTokenUsage(
     runtimeId: string,
     threadId: string,
+    options: { suppressTargetStatusEvents?: boolean; waitForTokenUsage?: boolean } = {},
   ): Promise<Map<string, CodexTokenUsageTotals>> {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
-    const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
-    const drainedNotifications = this.deps.drainNotifications
-      ? (await this.deps.drainNotifications(runtimeId)).map(parseNotificationRecord)
-      : [];
-    const notifications = [...bufferedNotifications, ...drainedNotifications];
-    for (const notification of notifications) {
-      const notificationThreadId = extractThreadIdFromParams(notification.params);
-      const notificationTurnId = extractTurnId(notification.params);
-      if (
-        notification.method === "thread/tokenUsage/updated" &&
-        notificationThreadId === threadId &&
-        notificationTurnId
-      ) {
-        const tokenUsage = extractCodexTokenUsageTotals(notification.params);
-        if (tokenUsage) {
-          tokenUsageByTurnId.set(notificationTurnId, tokenUsage);
+
+    const drainOnce = async (): Promise<void> => {
+      const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
+      const drainedNotifications = this.deps.drainNotifications
+        ? (await this.deps.drainNotifications(runtimeId)).map((notification) =>
+            parseNotificationRecord(notification),
+          )
+        : [];
+      const notifications = [...bufferedNotifications, ...drainedNotifications];
+      for (const notification of notifications) {
+        const notificationThreadId = extractThreadIdFromParams(notification.params);
+        const notificationTurnId = extractTurnId(notification.params);
+        if (
+          notification.method === "thread/tokenUsage/updated" &&
+          notificationThreadId === threadId &&
+          notificationTurnId
+        ) {
+          const tokenUsage = extractCodexTokenUsageTotals(notification.params);
+          if (tokenUsage) {
+            tokenUsageByTurnId.set(notificationTurnId, tokenUsage);
+            this.tokenUsageByTurnKey.set(codexTurnKey(threadId, notificationTurnId), tokenUsage);
+          }
+          continue;
         }
-        continue;
+        if (
+          options.suppressTargetStatusEvents &&
+          notification.method === "thread/status/changed" &&
+          notificationThreadId === threadId
+        ) {
+          continue;
+        }
+        if (!this.deps.subscribeEvents) {
+          this.runtimeEventBuffer.bufferNotification(notification);
+        }
       }
-      if (!this.deps.subscribeEvents) {
-        this.runtimeEventBuffer.bufferNotification(notification);
-      }
+    };
+
+    await drainOnce();
+    for (
+      let attempt = 1;
+      options.waitForTokenUsage &&
+      tokenUsageByTurnId.size === 0 &&
+      attempt < RESTORED_USAGE_DRAIN_ATTEMPTS;
+      attempt += 1
+    ) {
+      await waitForRestoredUsageReplayTick();
+      await drainOnce();
     }
 
     return tokenUsageByTurnId;
   }
 
+  private recordRestoredContextUsage(
+    capture: RestoredContextCapture,
+    threadId: string,
+    tokenUsageByTurnId: ReadonlyMap<string, CodexTokenUsageTotals>,
+  ): void {
+    for (const [turnId, tokenUsage] of tokenUsageByTurnId) {
+      capture.tokenUsageByTurnId.set(turnId, tokenUsage);
+      this.tokenUsageByTurnKey.set(codexTurnKey(threadId, turnId), tokenUsage);
+    }
+    this.emitLatestContextUsage(capture.sessionRef, capture.tokenUsageByTurnId);
+  }
+
+  private emitLatestContextUsage(
+    sessionRef: AgentSessionRef,
+    tokenUsageByTurnId: ReadonlyMap<string, CodexTokenUsageTotals>,
+  ): void {
+    let latestTokenUsage: CodexTokenUsageTotals | null = null;
+    for (const tokenUsage of tokenUsageByTurnId.values()) {
+      latestTokenUsage = tokenUsage;
+    }
+    if (!latestTokenUsage) {
+      return;
+    }
+    this.deps.sessionEvents.emit(
+      sessionRef,
+      withAgentSessionRef(sessionRef, {
+        type: "session_context_updated",
+        externalSessionId: sessionRef.externalSessionId,
+        timestamp: new Date().toISOString(),
+        totalTokens: latestTokenUsage.totalTokens,
+        ...(typeof latestTokenUsage.contextWindow === "number"
+          ? { contextWindow: latestTokenUsage.contextWindow }
+          : {}),
+      }),
+    );
+  }
+
   private emitSessionError(externalSessionId: string, error: unknown): void {
-    this.deps.sessionEvents.emit(externalSessionId, {
+    const session = this.deps.sessions.get(externalSessionId);
+    if (!session) {
+      return;
+    }
+    this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId,
       timestamp: new Date().toISOString(),
       message: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
+    const session = this.deps.sessions.get(externalSessionId);
+    if (!session) {
+      throw new Error(
+        `Cannot emit Codex session event for missing session '${externalSessionId}'.`,
+      );
+    }
+    this.emitSessionEventForSession(session, event);
+  }
+
+  private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
+    const sessionRef = codexSessionRef(session);
+    this.deps.sessionEvents.emit(sessionRef, withAgentSessionRef(sessionRef, event));
   }
 
   private clearTurnScopedMap<T>(map: Map<string, T>, externalSessionId: string): void {

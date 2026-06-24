@@ -45,14 +45,25 @@ import {
 import { handleAssistantPart } from "./session-parts";
 
 export const createRecordingSessionTodosUpdater = () => {
-  let todos: AgentSessionTodoItem[] = [];
+  const todosBySessionKey = new Map<string, AgentSessionTodoItem[]>();
   return {
     updateSessionTodos: (
-      updater: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0],
+      session: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0],
+      updater: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[1],
     ) => {
-      todos = updater(todos);
+      const sessionKey = agentSessionIdentityKey(session);
+      const currentTodos = todosBySessionKey.get(sessionKey) ?? [];
+      todosBySessionKey.set(sessionKey, updater(currentTodos));
     },
-    getTodos: () => todos,
+    getTodos: (session?: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0]) => {
+      if (session) {
+        return todosBySessionKey.get(agentSessionIdentityKey(session)) ?? [];
+      }
+      if (todosBySessionKey.size === 1) {
+        return [...todosBySessionKey.values()][0] ?? [];
+      }
+      return [];
+    },
   };
 };
 
@@ -118,6 +129,17 @@ export const getSessionMessages = (
   sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
+
+export const getSessionMessagesByIdentity = (
+  sessionsRef: { current: AgentSessionCollection },
+  identity: AgentSessionIdentity,
+) => {
+  const session = getAgentSession(sessionsRef.current, identity);
+  if (!session) {
+    return [];
+  }
+  return sessionMessagesToArray(session);
+};
 
 type ObserveAgentSessionEventsTestParams = Omit<
   ObserveAgentSessionParams,

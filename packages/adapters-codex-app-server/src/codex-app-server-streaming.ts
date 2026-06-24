@@ -29,6 +29,7 @@ import {
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
   timestampFromCodexParams,
+  timestampFromCodexTurn,
   toStreamPart,
 } from "./codex-app-server-transcript";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
@@ -353,26 +354,79 @@ const emitCompletedItem = (
   }
 };
 
+const requiresRuntimeLifecycleTimestamp = (method: string): boolean =>
+  method === "item/started" || method === "item/completed";
+
+const isThreadScopedCodexNotificationMethod = (method: string): boolean =>
+  method.startsWith("thread/") || method.startsWith("turn/") || method.startsWith("item/");
+
+const timestampFromCompletedTurnNotification = (
+  notification: CodexNotificationRecord,
+): string | null => {
+  if (notification.method !== "turn/completed" || !isPlainObject(notification.params)) {
+    return null;
+  }
+
+  return timestampFromCodexTurn(notification.params.turn, ["completedAt", "completed_at"]);
+};
+
+const timestampFromCodexNotification = (notification: CodexNotificationRecord): string => {
+  const paramsTimestamp = timestampFromCodexParams(notification.params);
+  if (paramsTimestamp) {
+    return paramsTimestamp;
+  }
+
+  const completedTurnTimestamp = timestampFromCompletedTurnNotification(notification);
+  if (completedTurnTimestamp) {
+    return completedTurnTimestamp;
+  }
+
+  if (requiresRuntimeLifecycleTimestamp(notification.method)) {
+    throw new Error(
+      `Codex notification '${notification.method}' is missing its runtime lifecycle timestamp.`,
+    );
+  }
+
+  return notification.receivedAt;
+};
+
+const drainCodexNotifications = async (
+  context: CodexStreamingContext,
+  runtimeId: string,
+): Promise<CodexNotificationRecord[]> => {
+  if (!context.drainNotifications) {
+    return [];
+  }
+
+  const notifications = await context.drainNotifications(runtimeId);
+  return notifications.map((notification) => parseNotificationRecord(notification));
+};
+
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  notificationsFromBatch?: unknown[],
+  notificationsFromBatch?: CodexNotificationRecord[],
 ): Promise<void> => {
   const bufferedNotifications = context.bufferedNotificationsByThreadId.get(session.threadId) ?? [];
   context.bufferedNotificationsByThreadId.delete(session.threadId);
-  const drainedNotifications = notificationsFromBatch
-    ? notificationsFromBatch.map(parseNotificationRecord)
-    : context.drainNotifications
-      ? (await context.drainNotifications(session.runtimeId)).map(parseNotificationRecord)
-      : [];
+  const drainedNotifications =
+    notificationsFromBatch ?? (await drainCodexNotifications(context, session.runtimeId));
   const notifications = [...bufferedNotifications, ...drainedNotifications];
   for (const notification of notifications) {
     const notificationThreadId = extractThreadIdFromParams(notification.params);
-    if (notificationThreadId && notificationThreadId !== session.threadId) {
+    if (!notificationThreadId) {
+      if (!isThreadScopedCodexNotificationMethod(notification.method)) {
+        continue;
+      }
+      throw new Error(
+        `Codex notification '${notification.method}' is missing params.threadId and cannot be applied to session '${session.threadId}'.`,
+      );
+    }
+    if (notificationThreadId !== session.threadId) {
       context.bufferNotification(notification);
       continue;
     }
-    const timestamp = timestampFromCodexParams(notification.params);
+    const timestamp = timestampFromCodexNotification(notification);
     const notificationTurnId = extractTurnId(notification.params);
     const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
     if (

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -16,6 +17,7 @@ import type { UpdateSession } from "../events/session-event-types";
 import { createSessionMessagesState } from "../support/messages";
 import {
   createLoadAgentSessionHistory,
+  loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
 } from "./session-history-loader";
 
@@ -149,7 +151,7 @@ describe("session history loader", () => {
     expect(harness.session.historyLoadState).toBe("failed");
   });
 
-  test("allows explicit history loads to retry failed sessions", async () => {
+  test("allows caller-requested history loads to retry failed sessions", async () => {
     const loadSessionHistory = mock(async () => [
       {
         messageId: "history-1",
@@ -290,16 +292,8 @@ describe("session history loader", () => {
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
-  test("loads history for awaiting callers even when the session is already marked loading", async () => {
-    const loadSessionHistory = mock(async () => [
-      {
-        messageId: "history-while-loading",
-        role: "assistant" as const,
-        timestamp: "2026-06-12T08:00:01.000Z",
-        text: "Loaded while another caller had marked history loading",
-        parts: [],
-      },
-    ]);
+  test("does not start a duplicate history load when another caller already marked it loading", async () => {
+    const loadSessionHistory = mock(async () => []);
     const harness = createHistoryLoadHarness({
       ...createSession(),
       historyLoadState: "loading",
@@ -314,11 +308,9 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-    expect(loadedSession?.historyLoadState).toBe("loaded");
-    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
-      "Loaded while another caller had marked history loading",
-    ]);
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(loadedSession?.historyLoadState).toBe("loading");
+    expect(harness.session.historyLoadState).toBe("loading");
   });
 
   test("does not reset a loaded session when a stale caller asks for history again", async () => {
@@ -423,6 +415,154 @@ describe("session history loader", () => {
     ]);
   });
 
+  test("merges selected baseline history before live messages that arrive during reload hydration", async () => {
+    let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
+    const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
+      resolveHistory = resolve;
+    });
+    const harness = createHistoryLoadHarness();
+
+    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => historyPromise,
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loading");
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [{ kind: "text", text: "Resume after QA rejection" }],
+          },
+        },
+      ]),
+    }));
+
+    resolveHistory([
+      {
+        messageId: "history-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+
+    const loadedSession = await loadPromise;
+
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("does not wait for selected session observation before loading baseline history", async () => {
+    const observedSessions: AgentSessionRef[] = [];
+    const harness = createHistoryLoadHarness();
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+
+    await loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      observeAgentSession: (session) => {
+        observedSessions.push(session);
+        return new Promise(() => {});
+      },
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(observedSessions).toEqual([
+      {
+        externalSessionId: sessionTarget.externalSessionId,
+        repoPath: "/repo",
+        runtimeKind: sessionTarget.runtimeKind,
+        workingDirectory: sessionTarget.workingDirectory,
+      },
+    ]);
+  }, 500);
+
+  test("loads selected baseline history when live messages arrive during the hydration claim", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness();
+    let injectedLiveMessage = false;
+    const updateSession: UpdateSession = (identity, updater) =>
+      harness.updateSession(identity, (current) => {
+        if (injectedLiveMessage) {
+          return updater(current);
+        }
+
+        injectedLiveMessage = true;
+        return updater({
+          ...current,
+          messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+            {
+              id: "runtime-user-new",
+              role: "user",
+              content: "Resume after QA rejection",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              meta: {
+                kind: "user",
+                state: "queued",
+                parts: [{ kind: "text", text: "Resume after QA rejection" }],
+              },
+            },
+          ]),
+        });
+      });
+
+    const loadedSession = await loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
   test("does not replace live context stats with an older history baseline", async () => {
     const liveContextUsage = {
       totalTokens: 777,
@@ -466,6 +606,47 @@ describe("session history loader", () => {
 
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(harness.session.contextUsage).toEqual(liveContextUsage);
+  });
+
+  test("applies context stats from loaded idle history", async () => {
+    const harness = createHistoryLoadHarness();
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Previous transcript",
+            totalTokens: 123,
+            contextWindow: 1_000,
+            parts: [
+              {
+                kind: "step",
+                messageId: "history-1",
+                partId: "finish-1",
+                phase: "finish",
+                reason: "stop",
+                totalTokens: 123,
+                contextWindow: 1_000,
+              },
+            ],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.contextUsage).toEqual({
+      totalTokens: 123,
+      contextWindow: 1_000,
+    });
   });
 
   test("passes transient prompt context to the history adapter without rendering it locally", async () => {

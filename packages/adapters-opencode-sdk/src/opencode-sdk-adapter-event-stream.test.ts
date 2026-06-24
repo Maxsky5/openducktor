@@ -582,19 +582,21 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
     await flushAsync();
 
-    expect(events).toContainEqual({
-      type: "assistant_part",
-      externalSessionId: "session-opencode-1",
-      timestamp: "2026-02-17T12:00:00Z",
-      part: {
-        kind: "step",
-        messageId: "assistant-1",
-        partId: "step-1",
-        phase: "finish",
-        reason: "tool-calls",
-        totalTokens: 35_022,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "session-opencode-1",
+        timestamp: "2026-02-17T12:00:00Z",
+        part: expect.objectContaining({
+          kind: "step",
+          messageId: "assistant-1",
+          partId: "step-1",
+          phase: "finish",
+          reason: "tool-calls",
+          totalTokens: 35_022,
+        }),
+      }),
+    );
   });
 
   test("maps completed MCP tool part with isError=true as error status", async () => {

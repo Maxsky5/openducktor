@@ -7,8 +7,12 @@ type AgentStudioSendTargetInput = {
   canStartNewSession: boolean;
 };
 
+export type StartSessionForMessage = (options: {
+  holdForPostStartMessage: true;
+}) => Promise<SessionStartWorkflowResult | undefined>;
+
 type ResolveAgentStudioSendTargetInput = AgentStudioSendTargetInput & {
-  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
+  startSession: StartSessionForMessage;
 };
 
 export const canResolveAgentStudioSendTargetSession = ({
@@ -29,6 +33,6 @@ export const resolveAgentStudioSendTargetSession = async ({
     return null;
   }
 
-  const startedSession = await startSession();
+  const startedSession = await startSession({ holdForPostStartMessage: true });
   return startedSession ? toAgentSessionIdentity(startedSession) : null;
 };

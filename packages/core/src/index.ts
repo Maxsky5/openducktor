@@ -1,6 +1,7 @@
 export * from "./guards";
 export * from "./ports/agent-engine";
 export * from "./services/agent-file-references";
+export * from "./services/agent-session-ref-key";
 export * from "./services/agent-session-runtime-snapshot";
 export * from "./services/agent-session-title";
 export * from "./services/agent-session-todos";

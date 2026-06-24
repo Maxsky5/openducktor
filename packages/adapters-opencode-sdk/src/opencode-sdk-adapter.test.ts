@@ -623,7 +623,11 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Expected test session to be registered.");
     }
     const events: AgentEvent[] = [];
-    await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
+    const subscribedSessionRef = {
+      ...sessionRef("external-session-1"),
+      workingDirectory: "/repo/.openducktor/worktrees/task-1",
+    };
+    await adapter.subscribeEvents(subscribedSessionRef, (event) => {
       events.push(event);
     });
 
@@ -643,7 +647,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
     expect(toolIdCalls).toEqual([{ directory: "/repo/.openducktor/worktrees/task-1" }]);
     expect(events).toEqual([
-      {
+      expect.objectContaining({
         type: "mcp_reconnect_started",
         externalSessionId: "external-session-1",
         timestamp: "2026-02-22T12:00:00.000Z",
@@ -651,7 +655,8 @@ describe("opencode-sdk-adapter", () => {
         workingDirectory: "/repo/.openducktor/worktrees/task-1",
         status: "failed",
         errorDetails: "MCP error -32000: Connection closed",
-      },
+        sessionRef: subscribedSessionRef,
+      }),
     ]);
   });
 

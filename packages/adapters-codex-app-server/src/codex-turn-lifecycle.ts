@@ -30,7 +30,7 @@ export type CodexTurnLifecycleContext = {
     runtimeId: string,
     model: AgentModelSelection,
   ): Promise<void>;
-  ensureRuntimeEventSubscription(runtimeId: string): void;
+  ensureRuntimeEventSubscription(runtimeId: string): Promise<void>;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
@@ -141,7 +141,7 @@ export const startCodexTurnForSession = async (
   if (!session) {
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
   }
-  context.ensureRuntimeEventSubscription(session.runtimeId);
+  await context.ensureRuntimeEventSubscription(session.runtimeId);
   const input = toCodexTurnInputList(parts);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);

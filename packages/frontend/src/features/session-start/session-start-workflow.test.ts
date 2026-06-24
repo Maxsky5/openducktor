@@ -230,6 +230,39 @@ describe("session-start-workflow", () => {
     );
   });
 
+  test("holds message-first fresh starts until the composer send owns status", async () => {
+    const startAgentSession = mock(async () => sessionIdentity("session-message-first"));
+
+    await startSessionWorkflow({
+      workspaceId: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "none",
+        holdForPostStartMessage: true,
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-4",
+        title: "Start implementation",
+        description: "desc",
+        status: "ready_for_dev",
+        priority: 1,
+      }),
+      startAgentSession,
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "fresh",
+        holdForPostStartMessage: true,
+      }),
+    );
+  });
+
   test("does not complete a kickoff start before the kickoff message send settles", async () => {
     let resolveSendStarted: () => void = () => {};
     let resolveSend: () => void = () => {};

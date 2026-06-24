@@ -83,7 +83,9 @@ const deriveAgentChatTranscriptNotice = ({
 };
 
 const hidesExistingSessionTranscript = (transcriptState: AgentSessionTranscriptState): boolean =>
-  transcriptState.kind === "empty" || transcriptState.kind === "failed";
+  transcriptState.kind === "empty" ||
+  transcriptState.kind === "failed" ||
+  transcriptState.kind === "session_loading";
 
 export const projectAgentChatThreadState = ({
   sessionKey,

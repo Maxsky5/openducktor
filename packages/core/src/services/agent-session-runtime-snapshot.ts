@@ -1,11 +1,8 @@
-import type {
-  AgentSessionActivity,
-  AgentSessionRef,
-  AgentSessionRuntimeSnapshot,
-} from "../ports/agent-engine";
+import type { AgentSessionActivity, AgentSessionRuntimeSnapshot } from "../ports/agent-engine";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
+  AgentSessionRef,
   ExternalSessionId,
 } from "../types/agent-orchestrator";
 

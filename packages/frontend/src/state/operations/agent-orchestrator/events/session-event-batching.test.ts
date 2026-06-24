@@ -3,13 +3,28 @@ import {
   closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
+  type QueuedSessionEvent,
+  type SessionEventBatcher,
 } from "./session-event-batching";
-import type { SessionEvent } from "./session-event-types";
+
+const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSessionEvent[]) => {
+  const prepared = batcher.prepareQueuedSessionEvents(
+    events.map((event) => ({
+      event,
+      routeKey: event.externalSessionId,
+    })),
+  );
+  return {
+    readyEvents: prepared.readyEvents.map((item) => item.event),
+    deferredEvents: prepared.deferredEvents.map((item) => item.event),
+    nextDelayMs: prepared.nextDelayMs,
+  };
+};
 
 describe("session-event-batching", () => {
   test("concatenates assistant deltas with the same message key before emitting", async () => {
     const batcher = createSessionEventBatcher();
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_delta",
         externalSessionId: "session-1",
@@ -26,7 +41,7 @@ describe("session-event-batching", () => {
         delta: " world",
         timestamp: "2026-02-22T08:00:02.000Z",
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
       {
@@ -42,7 +57,7 @@ describe("session-event-batching", () => {
 
   test("drops streamed text events that are superseded by a final assistant message", async () => {
     const batcher = createSessionEventBatcher();
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_delta",
         externalSessionId: "session-1",
@@ -82,7 +97,7 @@ describe("session-event-batching", () => {
         timestamp: "2026-02-22T08:00:03.000Z",
         message: "Final answer",
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
       {
@@ -111,7 +126,7 @@ describe("session-event-batching", () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
-    const first = batcher.prepareQueuedSessionEvents([
+    const first = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -127,10 +142,10 @@ describe("session-event-batching", () => {
           input: { command: "pwd" },
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     now += 50;
-    const second = batcher.prepareQueuedSessionEvents([
+    const second = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
         externalSessionId: "session-1",
@@ -147,7 +162,7 @@ describe("session-event-batching", () => {
           output: "/tmp/repo",
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(first.readyEvents).toHaveLength(1);
     expect(second.readyEvents).toHaveLength(1);
@@ -159,7 +174,7 @@ describe("session-event-batching", () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
-    const firstPrepared = batcher.prepareQueuedSessionEvents([
+    const firstPrepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
         externalSessionId: "session-1",
@@ -182,12 +197,12 @@ describe("session-event-batching", () => {
           input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(firstPrepared.readyEvents).toHaveLength(2);
 
     now += 150;
-    const prepared = batcher.prepareQueuedSessionEvents([
+    const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
         externalSessionId: "session-1",
@@ -210,7 +225,7 @@ describe("session-event-batching", () => {
           input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
-    ] satisfies SessionEvent[]);
+    ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toHaveLength(0);
     expect(prepared.deferredEvents).toHaveLength(2);

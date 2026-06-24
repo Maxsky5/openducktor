@@ -1,21 +1,20 @@
 import { toast } from "sonner";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
-  type QueuedSessionEvent,
 } from "./session-event-batching";
+import { createSessionEventRouter } from "./session-event-router";
 import type {
   ObserveAgentSessionParams,
   SessionEvent,
   SessionEventContext,
 } from "./session-event-types";
-import { createSessionEventContext } from "./session-event-types";
 import {
   handleAssistantMessage,
   handleSessionCompacted,
   handleSessionCompactionStarted,
+  handleSessionContextUpdated,
   handleSessionError,
   handleSessionFinished,
   handleSessionIdle,
@@ -56,6 +55,9 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
       return;
     case "assistant_message":
       handleAssistantMessage(context, event);
+      return;
+    case "session_context_updated":
+      handleSessionContextUpdated(context, event);
       return;
     case "user_message":
       handleUserMessage(context, event);
@@ -99,78 +101,18 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
   }
 };
 
-const isObservedSessionMounted = ({
-  sessionRef,
-  readSession,
-}: Pick<ObserveAgentSessionParams, "sessionRef" | "readSession">): boolean =>
-  readSession(sessionRef) !== null;
-
-const applyQueuedSessionEvents = (
-  context: ObserveAgentSessionParams,
-  readyEvents: readonly QueuedSessionEvent[],
-): void => {
-  let nextSession = context.readSession(context.sessionRef);
-  if (!nextSession) {
-    return;
-  }
-  const queuedContext = createSessionEventContext({
-    ...context,
-    readSession: (identity) => {
-      if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
-        return nextSession;
-      }
-      return context.readSession(identity);
-    },
-    ensureSession: (identity, createSession) => {
-      if (!matchesAgentSessionIdentity(identity, context.sessionRef)) {
-        return context.ensureSession(identity, createSession);
-      }
-      if (!nextSession) {
-        nextSession = createSession();
-      }
-      return nextSession;
-    },
-    updateSession: (targetSessionIdentity, updater, options) => {
-      if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
-        return context.updateSession(targetSessionIdentity, updater, options);
-      }
-      if (options?.persist === true) {
-        throw new Error(
-          `Queued session event for '${context.sessionRef.externalSessionId}' requested durable persistence.`,
-        );
-      }
-      if (!nextSession) {
-        return null;
-      }
-
-      nextSession = updater(nextSession);
-      return nextSession;
-    },
-  });
-
-  for (const queuedEvent of readyEvents) {
-    handleSessionEvent(queuedContext, queuedEvent);
-  }
-
-  const committedSession = nextSession;
-  if (!committedSession) {
-    return;
-  }
-
-  context.updateSession(context.sessionRef, () => committedSession);
-};
-
 export const listenToAgentSessionEvents = async (
   context: ObserveAgentSessionParams,
 ): Promise<() => void> => {
-  const handlerContext = createSessionEventContext(context);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
-  const batcher = createSessionEventBatcher();
-  let queuedEvents: QueuedSessionEvent[] = [];
+  const router = createSessionEventRouter({
+    createBatcher: createSessionEventBatcher,
+    context,
+    handleEvent: handleSessionEvent,
+  });
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  const clearQueuedEvents = (): void => {
-    queuedEvents = [];
+  const cancelQueuedFlush = (): void => {
     if (batchTimeoutId !== null) {
       clearTimeout(batchTimeoutId);
       batchTimeoutId = null;
@@ -178,34 +120,15 @@ export const listenToAgentSessionEvents = async (
   };
 
   const flushQueuedEvents = (): void => {
-    if (batchTimeoutId !== null) {
-      clearTimeout(batchTimeoutId);
-      batchTimeoutId = null;
-    }
+    cancelQueuedFlush();
 
-    if (queuedEvents.length === 0) {
+    if (!router.hasQueuedEvents()) {
       return;
     }
 
-    if (!isObservedSessionMounted(context)) {
-      clearQueuedEvents();
-      return;
-    }
+    const nextDelayMs = router.flushReady();
 
-    const { readyEvents, deferredEvents, nextDelayMs } =
-      batcher.prepareQueuedSessionEvents(queuedEvents);
-    queuedEvents = deferredEvents;
-
-    if (readyEvents.length === 0) {
-      if (queuedEvents.length > 0) {
-        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-      }
-      return;
-    }
-
-    applyQueuedSessionEvents(context, readyEvents);
-
-    if (queuedEvents.length > 0) {
+    if (router.hasQueuedEvents()) {
       scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
     }
   };
@@ -225,26 +148,24 @@ export const listenToAgentSessionEvents = async (
   };
 
   const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
-    if (!isObservedSessionMounted(context)) {
-      clearQueuedEvents();
-      return;
-    }
-
     if (isImmediateSessionEvent(event)) {
-      flushQueuedEvents();
-      handleSessionEvent(handlerContext, event);
-      if (closesQueuedSessionEvents(event)) {
-        clearQueuedEvents();
-      }
+      router.handleImmediate(event, {
+        clearQueuedSession: closesQueuedSessionEvents(event),
+      });
       return;
     }
 
-    queuedEvents.push(event);
-    scheduleQueuedFlush();
+    if (router.enqueue(event)) {
+      scheduleQueuedFlush();
+    }
   });
   return () => {
-    flushQueuedEvents();
-    unsubscribe();
+    cancelQueuedFlush();
+    try {
+      router.flushAll();
+    } finally {
+      unsubscribe();
+    }
   };
 };
 

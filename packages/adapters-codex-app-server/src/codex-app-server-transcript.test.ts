@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import {
+  codexTurnItemsFromThreadRead,
+  timestampFromCodexParams,
+  timestampFromCodexTurn,
+  toHistoryMessage,
+} from "./codex-app-server-transcript";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import {
   codexUserInputsFromItem,
@@ -8,6 +13,29 @@ import {
 } from "./codex-user-inputs";
 
 describe("Codex App Server transcript parsing", () => {
+  test("preserves zero millisecond notification timestamps", () => {
+    expect(timestampFromCodexParams({ timestampMs: 0 })).toBe("1970-01-01T00:00:00.000Z");
+  });
+
+  test("does not invent timestamps when notification params omit runtime timestamps", () => {
+    expect(timestampFromCodexParams({})).toBeNull();
+  });
+
+  test("ignores malformed turn timestamps instead of throwing", () => {
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.NaN }, ["completedAt", "completed_at"]),
+    ).toBeNull();
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.POSITIVE_INFINITY }, [
+        "completedAt",
+        "completed_at",
+      ]),
+    ).toBeNull();
+    expect(
+      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE }, ["completedAt", "completed_at"]),
+    ).toBeNull();
+  });
+
   test("maps skill message parts to structured Codex skill input", () => {
     const skill = {
       id: "/skills/review/SKILL.md",

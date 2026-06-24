@@ -61,6 +61,7 @@ const loadReadModel = async ({
   listSessionRuntimeSnapshots,
   observeAgentSession = async () => undefined,
   clearSessionObservationState = () => undefined,
+  loadLiveSessionHistory = async () => undefined,
   records = taskSessionRecords,
 }: {
   initialSessionCollection?: AgentSessionCollection;
@@ -69,6 +70,7 @@ const loadReadModel = async ({
   >;
   observeAgentSession?: (session: AgentSessionRef) => Promise<void>;
   clearSessionObservationState?: (sessions: readonly AgentSessionRef[]) => void;
+  loadLiveSessionHistory?: (session: AgentSessionRef) => Promise<unknown>;
   records?: TaskSessionRecords;
 }) => {
   const collection = createCommitSessionCollection(initialSessionCollection);
@@ -81,6 +83,7 @@ const loadReadModel = async ({
     commitSessionCollection: collection.commitSessionCollection,
     observeAgentSession,
     clearSessionObservationState,
+    loadLiveSessionHistory,
     isStaleRepoOperation: () => false,
   });
 
@@ -128,6 +131,48 @@ describe("repo session read model loader", () => {
       }),
     );
     expect(observedSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      },
+    ]);
+  });
+
+  test("preloads detected live session histories after observation", async () => {
+    const events: string[] = [];
+    const loadedSessionHistories: AgentSessionRef[] = [];
+    const harness = await loadReadModel({
+      listSessionRuntimeSnapshots: async () => [
+        toAgentSessionRuntimeSnapshot({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "external-1",
+          },
+          snapshot: {
+            title: "Builder",
+            startedAt: "2026-06-12T08:00:00.000Z",
+            runtimeActivity: "running",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+      ],
+      observeAgentSession: async (session) => {
+        events.push(`observe:${session.externalSessionId}`);
+      },
+      loadLiveSessionHistory: async (session) => {
+        events.push(`history:${session.externalSessionId}`);
+        loadedSessionHistories.push(session);
+      },
+    });
+
+    expect(harness.result).toBe(true);
+    expect(events).toEqual(["observe:external-1", "history:external-1"]);
+    expect(loadedSessionHistories).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: "external-1",

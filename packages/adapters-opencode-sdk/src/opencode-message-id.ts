@@ -2,7 +2,7 @@ const OPENCODE_ID_RANDOM_LENGTH = 14;
 const OPENCODE_ID_COUNTER_LIMIT = 0x1000;
 const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-let lastTimestampSecond = 0;
+let lastTimestamp = 0;
 let counter = 0;
 
 const getCrypto = (): Crypto => {
@@ -33,10 +33,8 @@ const toSixByteHex = (value: bigint): string => {
 };
 
 export const createOpenCodeMessageId = (timestamp = Date.now()): string => {
-  const timestampSecond = Math.floor(timestamp / 1000);
-
-  if (timestampSecond !== lastTimestampSecond) {
-    lastTimestampSecond = timestampSecond;
+  if (timestamp !== lastTimestamp) {
+    lastTimestamp = timestamp;
     counter = 0;
   }
 
@@ -45,7 +43,7 @@ export const createOpenCodeMessageId = (timestamp = Date.now()): string => {
     throw new Error("OpenCode message ID counter exhausted for this second.");
   }
 
-  const encodedTime = BigInt(timestampSecond) * BigInt(OPENCODE_ID_COUNTER_LIMIT) + BigInt(counter);
+  const encodedTime = BigInt(timestamp) * BigInt(OPENCODE_ID_COUNTER_LIMIT) + BigInt(counter);
 
   return `msg_${toSixByteHex(encodedTime)}${randomBase62(OPENCODE_ID_RANDOM_LENGTH)}`;
 };

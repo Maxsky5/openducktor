@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { useAgentOperationsContext } from "@/state/app-state-contexts";
+import { useAgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { needsInitialSessionHistoryLoad } from "../support/session-transcript-content";
+import { shouldRequestSelectedSessionBaselineHistory } from "./session-history-load-policy";
 
 const resolveSelectedSessionHistoryLoadTarget = ({
   session,
@@ -16,7 +16,7 @@ const resolveSelectedSessionHistoryLoadTarget = ({
 }): AgentSessionIdentity | null => {
   if (
     session === null ||
-    !needsInitialSessionHistoryLoad(session) ||
+    !shouldRequestSelectedSessionBaselineHistory(session) ||
     repoReadinessState !== "ready"
   ) {
     return null;
@@ -32,7 +32,7 @@ export const useSelectedSessionHistoryLoad = ({
   session: AgentSessionState | null;
   repoReadinessState: RepoRuntimeReadinessState;
 }): void => {
-  const { loadAgentSessionHistory } = useAgentOperationsContext();
+  const { loadSelectedSessionBaselineHistory } = useAgentSessionHistoryLoadContext();
   const target = resolveSelectedSessionHistoryLoadTarget({
     session,
     repoReadinessState,
@@ -46,10 +46,10 @@ export const useSelectedSessionHistoryLoad = ({
 
     runOrchestratorSideEffect(
       "selected-session-history-load",
-      loadAgentSessionHistory(stableTarget),
+      loadSelectedSessionBaselineHistory(stableTarget),
       {
         tags: stableTarget,
       },
     );
-  }, [loadAgentSessionHistory, stableTarget]);
+  }, [loadSelectedSessionBaselineHistory, stableTarget]);
 };

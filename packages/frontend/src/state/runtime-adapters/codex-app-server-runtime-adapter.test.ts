@@ -173,6 +173,26 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       if (method === "model/list") {
         return codexModelListResponse;
       }
+      if (method === "thread/loaded/list") {
+        return {
+          data: ["thread-live"],
+          nextCursor: null,
+        };
+      }
+      if (method === "thread/list") {
+        return {
+          data: [
+            {
+              id: "thread-live",
+              cwd: "/repo",
+              createdAt: 1_778_112_000,
+              status: { type: "active", activeFlags: [] },
+            },
+          ],
+          nextCursor: null,
+          backwardsCursor: null,
+        };
+      }
       if (method === "thread/resume") {
         return {
           thread: {

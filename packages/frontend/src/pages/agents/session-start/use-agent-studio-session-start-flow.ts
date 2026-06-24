@@ -66,8 +66,12 @@ const buildSessionStartKey = (params: {
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
+  holdForPostStartMessage?: boolean;
 }): string => {
-  return `${params.taskId}:${params.role}:${params.launchActionId}`;
+  const messagePolicy = params.holdForPostStartMessage
+    ? "post-start-message"
+    : "no-post-start-message";
+  return `${params.taskId}:${params.role}:${params.launchActionId}:${messagePolicy}`;
 };
 
 const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
@@ -102,7 +106,9 @@ export function useAgentStudioSessionStartFlow({
   startSessionRequest: (
     request: AgentStudioSessionStartRequest,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
+  startSession: (options?: {
+    holdForPostStartMessage?: boolean;
+  }) => Promise<SessionStartWorkflowResult | undefined>;
   startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
@@ -232,6 +238,7 @@ export function useAgentStudioSessionStartFlow({
         taskId: request.taskId,
         role: request.role,
         launchActionId: request.launchActionId,
+        ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : {}),
       });
       return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
     },
@@ -241,6 +248,7 @@ export function useAgentStudioSessionStartFlow({
   const runSessionStart = useCallback(
     async (params: {
       postStartAction: SessionStartPostAction;
+      holdForPostStartMessage?: boolean;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       if (!canStartRole(role)) {
         return undefined;
@@ -251,6 +259,7 @@ export function useAgentStudioSessionStartFlow({
         role,
         launchActionId,
         postStartAction: params.postStartAction,
+        ...(params.holdForPostStartMessage ? { holdForPostStartMessage: true } : {}),
         initialTargetBranch: selectedTask?.targetBranch ?? null,
         initialTargetBranchError: selectedTask?.targetBranchError ?? null,
       });
@@ -266,11 +275,17 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
-  const startSession = useCallback(async (): Promise<SessionStartWorkflowResult | undefined> => {
-    return runSessionStart({
-      postStartAction: "none",
-    });
-  }, [runSessionStart]);
+  const startSession = useCallback(
+    async (options?: {
+      holdForPostStartMessage?: boolean;
+    }): Promise<SessionStartWorkflowResult | undefined> => {
+      return runSessionStart({
+        postStartAction: "none",
+        ...(options?.holdForPostStartMessage ? { holdForPostStartMessage: true } : {}),
+      });
+    },
+    [runSessionStart],
+  );
 
   const startSessionRequest = useCallback(
     async (

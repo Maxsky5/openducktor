@@ -125,6 +125,9 @@ export const createStartAgentSession = ({
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
+    const messagePolicyKey = startCtx.holdForPostStartMessage
+      ? "post-start-message"
+      : "no-post-start-message";
     const inFlightKeyParts = [
       repoPath,
       taskId,
@@ -133,6 +136,7 @@ export const createStartAgentSession = ({
       sourceSessionKey,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
+      messagePolicyKey,
     ];
     const inFlightKey = inFlightKeyParts.join("::");
 

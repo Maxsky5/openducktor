@@ -122,6 +122,26 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           method === "thread/resume"
             ? (params as { threadId: string }).threadId
             : `${method}-${this.runtimeId}`;
+        const turns =
+          method === "thread/resume" &&
+          (threadId === "thread-idle" || threadId === "thread/start-runtime-live")
+            ? [
+                {
+                  id: "turn-1",
+                  startedAt: 1_778_112_001,
+                  completedAt: 1_778_112_031,
+                  status: "completed",
+                  items: [
+                    {
+                      id: "msg-1",
+                      type: "agentMessage",
+                      phase: "final_answer",
+                      text: "Hello from history",
+                    },
+                  ],
+                },
+              ]
+            : [];
         return {
           thread: {
             id: threadId,
@@ -130,6 +150,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
             preview: "Live Codex session",
             status:
               threadId === "thread-idle" ? { type: "idle" } : { type: "active", activeFlags: [] },
+            turns,
           },
           startedAt: "2026-05-07T00:00:00.000Z",
         } as Response;

@@ -45,6 +45,7 @@ export type CodexServerRequestRecord = {
 export type CodexNotificationRecord = {
   method: string;
   params?: unknown;
+  receivedAt: string;
 };
 
 export type CodexServerRequestResponder = (
@@ -173,6 +174,7 @@ export type CodexThreadResumeParams = {
   sandbox: CodexAppServerSandboxMode;
   model?: string;
   effort?: string;
+  excludeTurns?: boolean;
 };
 
 export type CodexThreadForkParams = {

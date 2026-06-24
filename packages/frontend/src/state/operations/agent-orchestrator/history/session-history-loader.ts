@@ -1,13 +1,22 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentSessionHistorySystemPromptContext,
+  AgentSessionRef,
+} from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
+import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
-import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import {
+  requestedSessionHistoryLoadPolicy,
+  type SessionHistoryLoadPolicy,
+  selectedSessionBaselineHistoryLoadPolicy,
+} from "./session-history-load-policy";
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
@@ -30,31 +39,56 @@ type CreateLoadAgentSessionHistoryArgs = {
   updateSession: UpdateSession;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  observeAgentSession?: ObserveAgentSession;
 };
 
-const INITIAL_SESSION_HISTORY_LIMIT = 600;
+type SessionHistoryLoadClaim = {
+  session: AgentSessionState | null;
+  claimedLoad: boolean;
+};
+
+const SESSION_HISTORY_LOAD_LIMIT = 600;
 
 const markSessionHistoryLoading = ({
   identity,
+  policy,
   readSessionSnapshot,
   updateSession,
 }: {
   identity: AgentSessionIdentity;
+  policy: SessionHistoryLoadPolicy;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-}): AgentSessionState | null => {
+}): SessionHistoryLoadClaim => {
   const currentSession = readSessionSnapshot(identity);
   if (!currentSession) {
-    return null;
+    return { session: null, claimedLoad: false };
   }
 
   if (currentSession.historyLoadState === "loaded") {
-    return currentSession;
+    return { session: currentSession, claimedLoad: false };
   }
 
-  return updateSession(identity, (current) =>
-    current.historyLoadState === "loaded" ? current : { ...current, historyLoadState: "loading" },
-  );
+  if (!policy.canClaimLoad(currentSession)) {
+    return { session: currentSession, claimedLoad: false };
+  }
+
+  let claimedLoad = false;
+  const loadingSession = updateSession(identity, (current) => {
+    if (current.historyLoadState === "loaded" || !policy.canClaimLoad(current)) {
+      claimedLoad = false;
+      return current;
+    }
+
+    if (current.historyLoadState === "loading") {
+      return current;
+    }
+
+    claimedLoad = true;
+    return { ...current, historyLoadState: "loading" };
+  });
+
+  return { session: loadingSession, claimedLoad: loadingSession !== null && claimedLoad };
 };
 
 const resetLoadingSessionHistory = (
@@ -113,63 +147,101 @@ const buildSessionHistorySystemPromptContext = async ({
   };
 };
 
-export const loadSessionHistoryIntoStore = async ({
-  repoPath,
-  adapter,
-  readSessionSnapshot,
-  updateSession,
-  identity,
-  loadSystemPromptContext,
-  isStaleRepoOperation,
-}: {
+type LoadSessionHistoryIntoStoreArgs = {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   identity: AgentSessionIdentity;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
+  observeAgentSession?: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
+};
+
+const observeSelectedSessionWithoutBlockingHistory = (
+  observeAgentSession: ObserveAgentSession | undefined,
+  sessionRef: AgentSessionRef,
+): void => {
+  if (!observeAgentSession) {
+    return;
+  }
+
+  runOrchestratorSideEffect("selected-session-observe", observeAgentSession(sessionRef), {
+    tags: {
+      externalSessionId: sessionRef.externalSessionId,
+      runtimeKind: sessionRef.runtimeKind,
+      workingDirectory: sessionRef.workingDirectory,
+    },
+  });
+};
+
+const loadSessionHistoryIntoStoreWithPolicy = async ({
+  repoPath,
+  adapter,
+  readSessionSnapshot,
+  updateSession,
+  identity,
+  policy,
+  loadSystemPromptContext,
+  observeAgentSession,
+  isStaleRepoOperation,
+}: LoadSessionHistoryIntoStoreArgs & {
+  policy: SessionHistoryLoadPolicy;
 }): Promise<AgentSessionState | null> => {
   if (isStaleRepoOperation()) {
     return null;
   }
 
-  const loadingSession = markSessionHistoryLoading({
+  const loadClaim = markSessionHistoryLoading({
     identity,
+    policy,
     readSessionSnapshot,
     updateSession,
   });
-  if (!loadingSession) {
+  if (!loadClaim.session) {
     return null;
   }
 
-  if (loadingSession.historyLoadState === "loaded") {
-    return loadingSession;
+  if (!loadClaim.claimedLoad) {
+    return loadClaim.session;
   }
 
+  const loadingSession = loadClaim.session;
   const finishStaleHistoryLoad = (): null => {
     resetLoadingSessionHistory(identity, updateSession);
     return null;
   };
 
   try {
+    if (isStaleRepoOperation()) {
+      return finishStaleHistoryLoad();
+    }
+
     const systemPromptContext = await loadSystemPromptContext?.(loadingSession);
 
-    if (isStaleRepoOperation()) {
-      return finishStaleHistoryLoad();
+    if (!isStaleRepoOperation()) {
+      const sessionForHistory = readSessionSnapshot(identity);
+      if (!sessionForHistory) {
+        return finishStaleHistoryLoad();
+      }
+      const sessionRef = toRuntimeSessionRef(repoPath, sessionForHistory);
+      observeSelectedSessionWithoutBlockingHistory(observeAgentSession, sessionRef);
+      if (isStaleRepoOperation()) {
+        return finishStaleHistoryLoad();
+      }
+
+      const history = await adapter.loadSessionHistory({
+        ...sessionRef,
+        ...(systemPromptContext ? { systemPromptContext } : {}),
+        limit: SESSION_HISTORY_LOAD_LIMIT,
+      });
+
+      if (!isStaleRepoOperation()) {
+        return updateSession(identity, (current) => policy.applyLoadedHistory(current, history));
+      }
     }
 
-    const history = await adapter.loadSessionHistory({
-      ...toRuntimeSessionRef(repoPath, loadingSession),
-      ...(systemPromptContext ? { systemPromptContext } : {}),
-      limit: INITIAL_SESSION_HISTORY_LIMIT,
-    });
-
-    if (isStaleRepoOperation()) {
-      return finishStaleHistoryLoad();
-    }
-
-    return updateSession(identity, (current) => applyLoadedSessionHistory(current, history));
+    return finishStaleHistoryLoad();
   } catch {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -179,7 +251,23 @@ export const loadSessionHistoryIntoStore = async ({
   }
 };
 
-export const createLoadAgentSessionHistory = ({
+export const loadSessionHistoryIntoStore = async (
+  args: LoadSessionHistoryIntoStoreArgs,
+): Promise<AgentSessionState | null> =>
+  loadSessionHistoryIntoStoreWithPolicy({
+    ...args,
+    policy: requestedSessionHistoryLoadPolicy,
+  });
+
+export const loadSelectedSessionBaselineHistoryIntoStore = async (
+  args: LoadSessionHistoryIntoStoreArgs,
+): Promise<AgentSessionState | null> =>
+  loadSessionHistoryIntoStoreWithPolicy({
+    ...args,
+    policy: selectedSessionBaselineHistoryLoadPolicy,
+  });
+
+const createLoadSessionHistoryWithPolicy = ({
   workspaceRepoPath,
   workspaceId,
   adapter,
@@ -189,9 +277,11 @@ export const createLoadAgentSessionHistory = ({
   updateSession,
   taskRef,
   loadRepoPromptOverrides,
-}: CreateLoadAgentSessionHistoryArgs): ((
-  sessionIdentity: AgentSessionIdentity,
-) => Promise<AgentSessionState | null>) => {
+  observeAgentSession,
+  policy,
+}: CreateLoadAgentSessionHistoryArgs & {
+  policy: SessionHistoryLoadPolicy;
+}): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
     if (!workspaceRepoPath || !workspaceId) {
       throw new Error("Cannot load agent session history without an active workspace.");
@@ -213,12 +303,13 @@ export const createLoadAgentSessionHistory = ({
       );
     }
 
-    return loadSessionHistoryIntoStore({
+    return loadSessionHistoryIntoStoreWithPolicy({
       repoPath,
       adapter,
       readSessionSnapshot,
       updateSession,
       identity: sessionIdentity,
+      policy,
       loadSystemPromptContext: (session) =>
         buildSessionHistorySystemPromptContext({
           workspaceId,
@@ -226,7 +317,26 @@ export const createLoadAgentSessionHistory = ({
           session,
           loadRepoPromptOverrides,
         }),
+      ...(observeAgentSession ? { observeAgentSession } : {}),
       isStaleRepoOperation,
     });
   };
 };
+
+export const createLoadAgentSessionHistory = (
+  args: CreateLoadAgentSessionHistoryArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
+  const { observeAgentSession: _observeAgentSession, ...loaderArgs } = args;
+  return createLoadSessionHistoryWithPolicy({
+    ...loaderArgs,
+    policy: requestedSessionHistoryLoadPolicy,
+  });
+};
+
+export const createLoadSelectedSessionBaselineHistory = (
+  args: CreateLoadAgentSessionHistoryArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
+  createLoadSessionHistoryWithPolicy({
+    ...args,
+    policy: selectedSessionBaselineHistoryLoadPolicy,
+  });

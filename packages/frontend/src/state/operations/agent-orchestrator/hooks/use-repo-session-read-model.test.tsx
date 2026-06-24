@@ -48,8 +48,12 @@ const createHarnessState = () => {
 
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   const observedSessions: AgentSessionRef[] = [];
+  const loadedSessionHistories: AgentSessionRef[] = [];
   let observeAgentSessionImpl = async (session: AgentSessionRef): Promise<void> => {
     observedSessions.push(session);
+  };
+  let loadLiveSessionHistoryImpl = async (session: AgentSessionRef): Promise<void> => {
+    loadedSessionHistories.push(session);
   };
   const listSessionRuntimeSnapshots = mock(
     async (
@@ -65,6 +69,7 @@ const createHarnessState = () => {
     return result;
   };
   const observeAgentSession = (session: AgentSessionRef) => observeAgentSessionImpl(session);
+  const loadLiveSessionHistory = (session: AgentSessionRef) => loadLiveSessionHistoryImpl(session);
   const clearSessionObservationState = mock(() => undefined);
   const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
     opencode: createRepoRuntimeHealthFixture(),
@@ -80,6 +85,7 @@ const createHarnessState = () => {
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
+    loadLiveSessionHistory,
     queryClient,
   });
   const wrapper = ({ children }: PropsWithChildren) => (
@@ -139,6 +145,11 @@ const createHarnessState = () => {
   const setObserveAgentSession = (nextObserveAgentSession: typeof observeAgentSessionImpl) => {
     observeAgentSessionImpl = nextObserveAgentSession;
   };
+  const setLoadLiveSessionHistory = (
+    nextLoadLiveSessionHistory: typeof loadLiveSessionHistoryImpl,
+  ) => {
+    loadLiveSessionHistoryImpl = nextLoadLiveSessionHistory;
+  };
   const getSession = (externalSessionId: string) =>
     listAgentSessions(sessionCollection).find(
       (session) => session.externalSessionId === externalSessionId,
@@ -147,12 +158,14 @@ const createHarnessState = () => {
   return {
     setRuntimeHealth,
     setObserveAgentSession,
+    setLoadLiveSessionHistory,
     setTaskSessionRecords,
     getSession,
     createReadModelHarness,
     updateReadModelHarness,
     listSessionRuntimeSnapshots,
     observedSessions,
+    loadedSessionHistories,
     clearSessionObservationState,
   };
 };
@@ -384,6 +397,59 @@ describe("useRepoSessionReadModel", () => {
         }),
       );
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the repo session read model loading until detected live session history is loaded", async () => {
+    const state = createHarnessState();
+    let resolveHistoryLoad!: () => void;
+    const historyLoadCompleted = new Promise<void>((resolve) => {
+      resolveHistoryLoad = resolve;
+    });
+    state.listSessionRuntimeSnapshots.mockImplementation(async () => [
+      toAgentSessionRuntimeSnapshot({
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: record.workingDirectory,
+          externalSessionId: record.externalSessionId,
+        },
+        snapshot: {
+          title: "OpenCode Builder",
+          startedAt: record.startedAt,
+          runtimeActivity: "running",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      }),
+    ]);
+    state.setLoadLiveSessionHistory(async (session) => {
+      state.loadedSessionHistories.push(session);
+      await historyLoadCompleted;
+    });
+    const harness = state.createReadModelHarness(["task-1"]);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => state.loadedSessionHistories.length === 1);
+
+      expect(harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+      expect(state.loadedSessionHistories).toEqual([
+        {
+          repoPath: "/repo",
+          externalSessionId: record.externalSessionId,
+          runtimeKind: "opencode",
+          workingDirectory: record.workingDirectory,
+        },
+      ]);
+
+      resolveHistoryLoad();
+      await harness.waitFor(isReadModelReady);
+
+      expect(harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      resolveHistoryLoad();
       await harness.unmount();
     }
   });

@@ -14,6 +14,7 @@ import {
   emptyAgentSessionCollection,
   listAgentSessions,
 } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -81,6 +82,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         agentSessionIdentityKey(sessionIdentity("session-in-flight", "/tmp/repo/worktree")),
         "",
         "",
+        "no-post-start-message",
       ].join("::"),
       () => inFlight.promise,
     );
@@ -189,10 +191,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         current: {
           run: async (key, startSession) => {
             startKeys.push(key);
-            if (key.endsWith("::build")) {
+            if (key.endsWith("::build::no-post-start-message")) {
               return sessionIdentity("session-model");
             }
-            if (key.endsWith("::planner")) {
+            if (key.endsWith("::planner::no-post-start-message")) {
               return sessionIdentity("session-profile");
             }
             return startSession();
@@ -230,8 +232,57 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
     ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-profile" }));
     expect(startKeys).toEqual([
-      expect.stringMatching(/::build$/),
-      expect.stringMatching(/::planner$/),
+      expect.stringMatching(/::build::no-post-start-message$/),
+      expect.stringMatching(/::planner::no-post-start-message$/),
+    ]);
+  });
+
+  test("keys fresh starts by post-start message hold policy", async () => {
+    const startKeys: string[] = [];
+
+    const { start } = createStartSessionTestHarness({
+      sessionStartGateRef: {
+        current: {
+          run: async (key) => {
+            startKeys.push(key);
+            return sessionIdentity(
+              key.endsWith("::post-start-message") ? "session-held" : "session-plain",
+            );
+          },
+          clear: () => {},
+        },
+      },
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-plain" }));
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+        holdForPostStartMessage: true,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-held" }));
+
+    expect(startKeys).toEqual([
+      expect.stringMatching(/::build::no-post-start-message$/),
+      expect.stringMatching(/::build::post-start-message$/),
     ]);
   });
 
@@ -348,6 +399,66 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(lifecycleEvents).toContain("observer:started");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
+      adapter.startSession = originalStartSession;
+    }
+  });
+
+  test("publishes message-first starts to agent activity before persistence finishes", async () => {
+    const persistDeferred = createDeferred<void>();
+    const sessionStore = createAgentSessionsStore("/tmp/repo");
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "message-first-session",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "planner",
+      status: "idle",
+    });
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      replaceSession: sessionStore.replaceSession,
+      removeSession: sessionStore.removeSession,
+      readSessionSnapshot: sessionStore.getSessionSnapshot,
+      taskRef: { current: [taskFixture] },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
+      }),
+      persistSessionRecord: async () => {
+        await persistDeferred.promise;
+      },
+    });
+
+    try {
+      const startPromise = start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+        holdForPostStartMessage: true,
+      });
+
+      await waitForSessionCount(() => sessionStore.getActivitySnapshot().sessions.length, 1);
+
+      expect(sessionStore.getActivitySnapshot().sessions).toEqual([
+        expect.objectContaining({
+          externalSessionId: "message-first-session",
+          activityState: "starting",
+        }),
+      ]);
+      await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
+
+      persistDeferred.resolve();
+      await expect(startPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "message-first-session" }),
+      );
+    } finally {
+      persistDeferred.resolve();
       adapter.startSession = originalStartSession;
     }
   });

@@ -5,12 +5,16 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionHistoryLoadContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
 import type { EnsureSession, UpdateSession } from "./events/session-event-types";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { createLoadAgentSessionHistory } from "./history/session-history-loader";
+import {
+  createLoadAgentSessionHistory,
+  createLoadSelectedSessionBaselineHistory,
+} from "./history/session-history-loader";
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
@@ -44,6 +48,7 @@ type UseAgentOrchestratorOperationsArgs = {
 type UseAgentOrchestratorOperationsResult = {
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
+  historyLoadActions: AgentSessionHistoryLoadContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
 };
 
@@ -163,31 +168,36 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
-  const loadAgentSessionHistoryIntoStore = useMemo(
-    () =>
-      createLoadAgentSessionHistory({
-        workspaceRepoPath,
-        workspaceId,
-        adapter: agentEngine,
-        repoEpochRef,
-        currentWorkspaceRepoPathRef,
-        readSessionSnapshot: sessionStore.getSessionSnapshot,
-        updateSession,
-        taskRef,
-        loadRepoPromptOverrides: queryBackedPromptOverrides,
-      }),
-    [
-      agentEngine,
-      currentWorkspaceRepoPathRef,
-      queryBackedPromptOverrides,
-      repoEpochRef,
-      sessionStore,
-      taskRef,
-      updateSession,
-      workspaceId,
+  const sessionHistoryLoaders = useMemo(() => {
+    const loaderArgs = {
       workspaceRepoPath,
-    ],
-  );
+      workspaceId,
+      adapter: agentEngine,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      readSessionSnapshot: sessionStore.getSessionSnapshot,
+      updateSession,
+      taskRef,
+      loadRepoPromptOverrides: queryBackedPromptOverrides,
+      observeAgentSession,
+    };
+
+    return {
+      loadAgentSessionHistory: createLoadAgentSessionHistory(loaderArgs),
+      loadSelectedSessionBaselineHistory: createLoadSelectedSessionBaselineHistory(loaderArgs),
+    };
+  }, [
+    agentEngine,
+    currentWorkspaceRepoPathRef,
+    observeAgentSession,
+    queryBackedPromptOverrides,
+    repoEpochRef,
+    sessionStore,
+    taskRef,
+    updateSession,
+    workspaceId,
+    workspaceRepoPath,
+  ]);
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     taskIds,
@@ -198,6 +208,7 @@ export function useAgentOrchestratorOperations({
     agentEngine,
     observeAgentSession,
     clearSessionObservationState,
+    loadLiveSessionHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
     queryClient,
   });
   const ensureRuntime = useMemo(
@@ -233,7 +244,7 @@ export function useAgentOrchestratorOperations({
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadSourceSession,
-        loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
+        loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         refreshTaskData,
         persistSessionRecord,
         stopAuthoritativeSession: hostPort.agentSessionStop,
@@ -245,7 +256,6 @@ export function useAgentOrchestratorOperations({
       ensureRuntime,
       hostPort,
       invalidateSessionStopQueries,
-      loadAgentSessionHistoryIntoStore,
       loadSourceSession,
       observeAgentSession,
       persistSessionRecord,
@@ -254,6 +264,7 @@ export function useAgentOrchestratorOperations({
       refreshTaskData,
       sessionObserversRef,
       sessionStore,
+      sessionHistoryLoaders,
       sessionStartGateRef,
       sessionTurnState,
       taskRef,
@@ -274,17 +285,24 @@ export function useAgentOrchestratorOperations({
       createOrchestratorPublicOperations({
         agentEngine,
         sessionActions,
-        loadAgentSessionHistory: loadAgentSessionHistoryIntoStore,
+        loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
       }),
-    [agentEngine, loadAgentSessionHistoryIntoStore, sessionActions],
+    [agentEngine, sessionHistoryLoaders, sessionActions],
+  );
+  const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(
+    () => ({
+      loadSelectedSessionBaselineHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
+    }),
+    [sessionHistoryLoaders],
   );
 
   return useMemo<UseAgentOrchestratorOperationsResult>(
     () => ({
       sessionStore,
       operations,
+      historyLoadActions,
       readModelState,
     }),
-    [operations, readModelState, sessionStore],
+    [historyLoadActions, operations, readModelState, sessionStore],
   );
 }

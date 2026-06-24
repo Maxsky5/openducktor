@@ -1,5 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { getSessionMessageCount } from "./messages";
+import { getSessionMessageCount } from "../support/messages";
 
 type SessionTranscriptContent = Pick<
   AgentSessionState,
@@ -12,6 +12,3 @@ export const hasLoadedSessionHistory = (
 
 export const hasRenderableSessionTranscript = (session: SessionTranscriptContent): boolean =>
   getSessionMessageCount(session) > 0 || hasLoadedSessionHistory(session);
-
-export const needsInitialSessionHistoryLoad = (session: SessionTranscriptContent): boolean =>
-  session.historyLoadState === "not_requested";

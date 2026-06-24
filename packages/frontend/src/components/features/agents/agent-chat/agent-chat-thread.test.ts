@@ -1069,12 +1069,15 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Preparing the selected session view.");
   });
 
-  test("keeps transcript rows visible while same-session history is loading", () => {
+  test("hides transcript rows while same-session history is loading", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({ kind: "visible" }),
+          transcriptState: buildThreadTranscriptState({
+            kind: "session_loading",
+            reason: "history",
+          }),
           session: buildSession({
             externalSessionId: "session-history-loading",
             messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
@@ -1083,9 +1086,9 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).not.toContain("Loading session");
-    expect(html).not.toContain("Loading the selected conversation.");
-    expect(html).toContain("Old cached message");
+    expect(html).toContain("Loading session");
+    expect(html).toContain("Loading the selected conversation.");
+    expect(html).not.toContain("Old cached message");
   });
 
   test("preserves expanded tool details while same-session history load appends messages", async () => {

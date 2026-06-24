@@ -198,19 +198,21 @@ Owns:
 - resolving subagent row identity when runtime history and live events expose
   separate part-scoped and session-scoped correlation keys
 
-Invariant: history loading is explicit and singular. The selected-session
-history-load owner or a session action asks to load one concrete session route;
-this command owner marks, applies, fails, or resets that concrete load and
-returns the loaded session to awaited callers. The repo projection never
-bulk-loads transcripts.
+Invariant: history loading is session-scoped and policy-driven. The
+selected-session baseline effect or a session action asks to load one concrete
+session route; the history loader marks, applies, fails, or resets that concrete
+load. The caller that claims and completes a load receives the loaded session;
+duplicate callers receive the current session snapshot without starting another
+request. The repo projection never bulk-loads transcripts.
 The loader receives a store-backed `readSessionSnapshot` dependency and must not
 inspect or request full collection snapshots.
 Selected-session history load effects are fire-and-forget UI effects, but they
-must run through the orchestrator async side-effect owner with session identity
+must run through the orchestrator async side-effect runner with session identity
 tags. Do not discard history-load promises with raw `void` calls.
-They may request runtime history only when the selected session has no renderable
-transcript messages; live or freshly-started sessions that already display
-messages stay stream-owned until a cold reload creates an empty session shell.
+They must request runtime history for any selected session whose history is still
+`not_requested`, even when live stream messages are already visible. A live tail
+does not prove the historical transcript has hydrated after app reload; loaded
+history merges with any current messages through the history merge module.
 
 `support/session-history-chat-messages.ts` owns history-message projection only.
 It must not read or write durable session records.
@@ -256,6 +258,7 @@ case; do not silently drop the host write or query update.
 Files:
 
 - `events/session-events.ts`
+- `events/session-event-router.ts`
 - `events/session-event-types.ts`
 - `events/session-lifecycle.ts`
 - `events/session-parts.ts`
@@ -268,9 +271,10 @@ Files:
 Owns:
 
 - applying runtime events to loaded sessions
+- routing every stream event by its own session identity
+- batching and flushing transcript stream events per session
 - routing runtime todo events into the selected-session todos query owner
 - pending permission and question updates after startup
-- transcript streaming and batching
 - terminal status transitions such as idle, finished, and error
 - active-turn model/context anchors and duration timing
 
@@ -437,7 +441,10 @@ ready. Callers pass the loaded session plus runtime-readiness state; they must
 not build a separate history-load target or duplicate the `historyLoadState`
 policy. The selected-session view is passive: it returns selected session facts,
 runtime readiness, runtime data, and transcript state, but it must not call
-runtime/session operations. Transcript state is display-only: it renders runtime
+runtime/session operations. A live tail is not a complete transcript baseline:
+transcript state must not render session messages until the session history state
+is `loaded`, except that an already-renderable transcript remains visible after a
+history-load failure. Transcript state is display-only: it renders runtime
 waiting, session loading, visible, or failed from the current owner facts, but it
 must not drive the data load. Shell, right-panel, and build-tool modules may
 derive edge booleans from `viewTranscriptState`, but central selection must not
@@ -895,10 +902,13 @@ unlisted session ref whose observer state can be cleared.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter requires an already-live repo runtime route
    and may prepare only session-local adapter state before events can flow.
-7. Initial history is loaded from materialized session state for requested
-   sessions and live sessions whose history has not been requested. Each history
-   load receives transient runtime prompt context through the shared history
-   context builder; prompt text is never copied into session state.
+7. Before the repo read model becomes ready, every detected live session is
+   preloaded through the same selected-session baseline history loader used when
+   the user selects a session. The stream subscription is attached first so live
+   events are not missed, then baseline history merges with any current live
+   messages. Each history load receives transient runtime prompt context through
+   the shared history context builder; prompt text is never copied into session
+   state.
 8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
 ## Regression Anchors
@@ -913,13 +923,13 @@ Use these compact tests as the first-line safety net:
 | Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
 | Child pending input survives reload on a materialized parent | `pending-input-projection.test.ts` and `session-read-model/repo-session-read-model.test.ts` |
-| Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
+| Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `hooks/use-repo-session-read-model.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
 | User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Transient repo read-model startup failure can recover without polling | `hooks/use-repo-session-read-model.test.tsx` |
 | Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
-| Selected-session runtime/history/read-model loading surface | `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
+| Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread.test.ts`, `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `pages/agents/use-agent-studio-page-models.test.tsx` |
 | Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |
 | Composer summary runtime cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Existing idle session send preparation | `handlers/prepare-session-send.test.ts` and `handlers/session-actions-send.test.ts` |
