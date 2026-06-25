@@ -96,6 +96,7 @@ export class CodexRuntimeSessionEvents {
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly restoredContextCapturesByKey = new Map<string, RestoredContextCapture>();
+  private readonly bufferedResolvedServerRequestIdsByThreadId = new Map<string, Set<string>>();
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
 
@@ -179,6 +180,7 @@ export class CodexRuntimeSessionEvents {
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.tokenUsageByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.modelByTurnKey, externalSessionId);
+    this.bufferedResolvedServerRequestIdsByThreadId.delete(externalSessionId);
   }
 
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
@@ -372,11 +374,19 @@ export class CodexRuntimeSessionEvents {
         "Codex serverRequest/resolved notification is missing threadId or requestId.",
       );
     }
+    if (!this.resolvePendingServerRequest(threadId, requestId)) {
+      if (this.runtimeEventBuffer.hasServerRequests(threadId)) {
+        this.bufferResolvedServerRequest(threadId, requestId);
+      }
+    }
+  }
+
+  private resolvePendingServerRequest(threadId: string, requestId: string): boolean {
     const approval = this.deps.pendingInput.approval(requestId);
     const question = this.deps.pendingInput.question(requestId);
     const entry = approval ?? question;
     if (!entry) {
-      return;
+      return false;
     }
     if (entry.threadId !== threadId) {
       throw new Error(
@@ -415,6 +425,36 @@ export class CodexRuntimeSessionEvents {
     }
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.continueTurnAfterPendingInput(activeTurn);
+    }
+    this.deleteBufferedResolvedServerRequest(threadId, requestId);
+    return true;
+  }
+
+  private bufferResolvedServerRequest(threadId: string, requestId: string): void {
+    const requestIds = this.bufferedResolvedServerRequestIdsByThreadId.get(threadId) ?? new Set();
+    requestIds.add(requestId);
+    this.bufferedResolvedServerRequestIdsByThreadId.set(threadId, requestIds);
+  }
+
+  private resolveBufferedServerRequests(threadId: string): void {
+    const requestIds = this.bufferedResolvedServerRequestIdsByThreadId.get(threadId);
+    if (!requestIds) {
+      return;
+    }
+    this.bufferedResolvedServerRequestIdsByThreadId.delete(threadId);
+    for (const requestId of requestIds) {
+      this.resolvePendingServerRequest(threadId, requestId);
+    }
+  }
+
+  private deleteBufferedResolvedServerRequest(threadId: string, requestId: string): void {
+    const requestIds = this.bufferedResolvedServerRequestIdsByThreadId.get(threadId);
+    if (!requestIds) {
+      return;
+    }
+    requestIds.delete(requestId);
+    if (requestIds.size === 0) {
+      this.bufferedResolvedServerRequestIdsByThreadId.delete(threadId);
     }
   }
 
@@ -466,11 +506,17 @@ export class CodexRuntimeSessionEvents {
     session: CodexSessionState,
     requests: CodexServerRequestRecord[],
   ): Promise<void> {
+    const ownerThreadIds = new Set(
+      requests.map((request) => extractThreadIdFromParams(request.params) ?? session.threadId),
+    );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
     const handledRequestKeys =
       this.handledStreamRequestKeysByThreadId.get(session.threadId) ?? new Set();
     this.handledStreamRequestKeysByThreadId.set(session.threadId, handledRequestKeys);
     const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
+    for (const ownerThreadId of ownerThreadIds) {
+      this.resolveBufferedServerRequests(ownerThreadId);
+    }
     if (hasPendingInput && activeTurn && !activeTurn.isTurnSettled()) {
       this.bindPendingInputToActiveTurn(session.threadId, activeTurn);
     }

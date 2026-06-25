@@ -188,6 +188,29 @@ describe("handleCodexServerRequest", () => {
     expect(pendingInput.approval("33")?.request.tool?.name).toBe("odt_set_plan");
   });
 
+  test("rejects request owners that are neither the current session nor a known child route", async () => {
+    const parentSession = createSession("build", "parent-thread");
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput }),
+        parentSession,
+        mcpToolApprovalRequest({
+          id: 34,
+          serverName: "semble",
+          toolName: "search",
+          threadId: "unknown-child-thread",
+        }),
+        new Set(),
+      ),
+    ).rejects.toThrow("no known session or subagent route");
+
+    expect(pendingInput.approval("34")).toBeUndefined();
+    expect(events).toEqual([]);
+  });
+
   test("rejects disallowed OpenDucktor workflow MCP approvals by role", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();

@@ -240,6 +240,70 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(1);
   });
 
+  test("applies buffered child request resolutions after route-learned request replay", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const pendingInput = new CodexPendingInputState();
+    const subagents = new CodexSubagentLinkState();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      pendingInput,
+      subagents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: 53,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-1",
+              header: "Choose",
+              question: "Proceed?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "serverRequest/resolved",
+        params: {
+          threadId: "child-thread",
+          requestId: 53,
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("53")).toBeUndefined();
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
+  });
+
   test("drains buffered child approvals when an inventory route is known before parent load", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");

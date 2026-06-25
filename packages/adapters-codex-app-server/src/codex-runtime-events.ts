@@ -42,6 +42,10 @@ export class CodexRuntimeEventBuffer {
     return requests;
   }
 
+  hasServerRequests(threadId: string): boolean {
+    return (this.serverRequestsByThreadId.get(threadId)?.length ?? 0) > 0;
+  }
+
   clearSession(threadId: string): void {
     this.notificationsByThreadId.delete(threadId);
     this.serverRequestsByThreadId.delete(threadId);

@@ -458,6 +458,61 @@ describe("Codex subagent event mapper", () => {
     ]);
   });
 
+  test("lets later source-backed child errors override earlier completed state", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const ctx = {
+      source: "live" as const,
+      threadId: "parent-thread",
+      timestamp: "2026-05-09T00:00:00.000Z",
+    };
+    pipeline.runLive(
+      {
+        kind: "item_completed",
+        item: {
+          type: "collabAgentToolCall",
+          id: "spawn-1",
+          tool: "spawnAgent",
+          status: "completed",
+          senderThreadId: "parent-thread",
+          receiverThreadIds: ["child-thread"],
+          agentsStates: {
+            "child-thread": { status: "completed", message: "Spawned" },
+          },
+        },
+      },
+      ctx,
+    );
+
+    const erroredEvents = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "wait-1",
+            tool: "wait",
+            status: "failed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: ["child-thread"],
+            agentsStates: {
+              "child-thread": { status: "errored", message: "Tests failed" },
+            },
+          },
+        },
+        ctx,
+      ),
+    );
+
+    expect(projectedSubagents(erroredEvents)).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:spawn-1",
+        status: "error",
+        error: "Tests failed",
+        externalSessionId: "child-thread",
+      }),
+    ]);
+  });
+
   test("fails fast when one Codex child is linked to two parents", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({

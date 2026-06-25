@@ -49,8 +49,8 @@ const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
   pending: 0,
   running: 1,
   cancelled: 2,
-  error: 3,
-  completed: 4,
+  completed: 3,
+  error: 4,
 };
 
 const resolveStatus = (

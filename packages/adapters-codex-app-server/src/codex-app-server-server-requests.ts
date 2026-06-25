@@ -147,6 +147,11 @@ export const handleCodexServerRequest = async (
   }
 
   const routeContext = resolveRequestRouteContext(context, session, rawRequest);
+  if (!routeContext.ownerSession && !routeContext.route) {
+    throw new Error(
+      `Cannot handle Codex server request '${rawRequest.method}' for thread '${routeContext.ownerThreadId}' from session '${session.threadId}' because there is no known session or subagent route for the request owner.`,
+    );
+  }
   const requestTurnId = extractTurnId(rawRequest.params);
   const activeTurn =
     context.activeTurnsBySessionId.get(routeContext.policySession.threadId) ??
