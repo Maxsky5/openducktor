@@ -112,14 +112,13 @@ Desktop release notes use **GitHub-generated release notes**.
 
 - `APPLE_CERTIFICATE`
 - `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
 
 Notes:
 
-- `APPLE_CERTIFICATE` must be a base64-encoded `.p12` signing certificate.
+- `APPLE_CERTIFICATE` must be a base64-encoded Developer ID Application `.p12` signing certificate.
 - Desktop releases are signed-only; the workflow fails fast if any Apple release secret is missing.
 
 ### MCP Publish Secrets

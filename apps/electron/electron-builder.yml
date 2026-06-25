@@ -47,6 +47,7 @@ win:
 
 linux:
   category: Development
+  executableName: openducktor
   artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
   icon: resources/icon.png
   target:
