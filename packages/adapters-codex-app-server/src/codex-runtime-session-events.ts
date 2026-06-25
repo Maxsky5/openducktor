@@ -41,7 +41,7 @@ import {
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
-import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
 import type {
   CodexAppServerAdapterOptions,
@@ -104,6 +104,9 @@ export class CodexRuntimeSessionEvents {
       createCodexEventMappers(deps.subagents),
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
+    deps.subagents.onRouteLearned((route) => {
+      this.scheduleBufferedSubagentServerRequestDrain(route);
+    });
   }
 
   ensureRuntimeEventSubscription(runtimeId: string): Promise<void> {
@@ -242,6 +245,50 @@ export class CodexRuntimeSessionEvents {
     await this.handlePendingNotifications(session, []);
     const bufferedRequests = this.runtimeEventBuffer.takeServerRequests(session.threadId);
     await this.processServerRequestsForSession(session, bufferedRequests);
+    await this.drainBufferedSubagentServerRequestsForParent(session);
+  }
+
+  private scheduleBufferedSubagentServerRequestDrain(route: CodexSubagentRoute): void {
+    void Promise.resolve()
+      .then(() => this.drainBufferedSubagentServerRequests(route))
+      .catch((error) => this.emitBufferedSubagentServerRequestError(route, error));
+  }
+
+  private async drainBufferedSubagentServerRequestsForParent(
+    parentSession: CodexSessionState,
+  ): Promise<void> {
+    for (const route of this.deps.subagents.routesForParent(parentSession.threadId)) {
+      await this.drainBufferedSubagentServerRequests(route);
+    }
+  }
+
+  private async drainBufferedSubagentServerRequests(route: CodexSubagentRoute): Promise<void> {
+    const parentSession = this.deps.sessions.get(route.parentExternalSessionId);
+    const childSession = this.deps.sessions.get(route.childExternalSessionId);
+    const session = parentSession ?? childSession;
+    if (!session) {
+      return;
+    }
+
+    const bufferedRequests = this.runtimeEventBuffer.takeServerRequests(
+      route.childExternalSessionId,
+    );
+    if (bufferedRequests.length === 0) {
+      return;
+    }
+    await this.processServerRequestsForSession(session, bufferedRequests);
+  }
+
+  private emitBufferedSubagentServerRequestError(route: CodexSubagentRoute, error: unknown): void {
+    const externalSessionId = this.deps.sessions.get(route.parentExternalSessionId)
+      ? route.parentExternalSessionId
+      : this.deps.sessions.get(route.childExternalSessionId)
+        ? route.childExternalSessionId
+        : null;
+    if (!externalSessionId) {
+      return;
+    }
+    this.emitSessionError(externalSessionId, error);
   }
 
   private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {

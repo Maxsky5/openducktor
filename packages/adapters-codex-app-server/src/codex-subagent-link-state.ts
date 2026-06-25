@@ -33,6 +33,8 @@ type CodexStoredSubagentLink = {
   executionMode?: "background";
 };
 
+type CodexSubagentRouteListener = (route: CodexSubagentRoute) => void;
+
 const subagentKey = (parentThreadId: string, childThreadId: string): string =>
   `${parentThreadId}\u0000${childThreadId}`;
 
@@ -77,11 +79,33 @@ const mergeDefined = <T extends Record<string, unknown>>(
   return incoming ?? existing;
 };
 
+const routeFromLink = (link: CodexStoredSubagentLink): CodexSubagentRoute | null =>
+  link.childThreadId
+    ? {
+        parentExternalSessionId: link.parentThreadId,
+        childExternalSessionId: link.childThreadId,
+        subagentCorrelationKey: link.correlationKey,
+      }
+    : null;
+
+const sameRoute = (previous: CodexSubagentRoute | null, next: CodexSubagentRoute | null): boolean =>
+  previous?.parentExternalSessionId === next?.parentExternalSessionId &&
+  previous?.childExternalSessionId === next?.childExternalSessionId &&
+  previous?.subagentCorrelationKey === next?.subagentCorrelationKey;
+
 export class CodexSubagentLinkState {
   private readonly linksByParentChildKey = new Map<string, CodexStoredSubagentLink>();
   private readonly linksByChildThreadId = new Map<string, CodexStoredSubagentLink>();
   private readonly linksByCorrelationKey = new Map<string, CodexStoredSubagentLink>();
   private readonly provisionalByParentItemKey = new Map<string, CodexStoredSubagentLink>();
+  private readonly routeListeners = new Set<CodexSubagentRouteListener>();
+
+  onRouteLearned(listener: CodexSubagentRouteListener): () => void {
+    this.routeListeners.add(listener);
+    return () => {
+      this.routeListeners.delete(listener);
+    };
+  }
 
   recordThread(thread: CodexThreadSnapshot): void {
     const parentThreadId = thread.parentThreadId ?? thread.subAgentSource?.parentThreadId;
@@ -114,6 +138,7 @@ export class CodexSubagentLinkState {
   }
 
   upsertLink(input: CodexSubagentLinkInput): AgentStreamPart {
+    const previousRoute = input.childThreadId ? this.routeForChild(input.childThreadId) : null;
     const parentItemKey = subagentKey(input.parentThreadId, input.itemId);
     const existingProvisional = this.provisionalByParentItemKey.get(parentItemKey);
     const parentChildKey = input.childThreadId
@@ -153,6 +178,10 @@ export class CodexSubagentLinkState {
       ...(executionMode ? { executionMode } : {}),
     };
     this.storeLink(link, parentItemKey);
+    const route = routeFromLink(link);
+    if (route && !sameRoute(previousRoute, route)) {
+      this.emitRouteLearned(route);
+    }
     return this.toPart(link);
   }
 
@@ -161,11 +190,27 @@ export class CodexSubagentLinkState {
     if (!link?.childThreadId) {
       return null;
     }
-    return {
-      parentExternalSessionId: link.parentThreadId,
-      childExternalSessionId: link.childThreadId,
-      subagentCorrelationKey: link.correlationKey,
-    };
+    return routeFromLink(link);
+  }
+
+  routesForParent(parentThreadId: string): CodexSubagentRoute[] {
+    const routes: CodexSubagentRoute[] = [];
+    for (const link of this.linksByChildThreadId.values()) {
+      if (link.parentThreadId !== parentThreadId) {
+        continue;
+      }
+      const route = routeFromLink(link);
+      if (route) {
+        routes.push(route);
+      }
+    }
+    return routes;
+  }
+
+  private emitRouteLearned(route: CodexSubagentRoute): void {
+    for (const listener of this.routeListeners) {
+      listener(route);
+    }
   }
 
   private storeLink(link: CodexStoredSubagentLink, parentItemKey: string): void {
