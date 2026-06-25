@@ -154,7 +154,7 @@ export const createTaskImplementationResetUseCase = ({
         Effect.catchAll((error) =>
           Effect.fail(
             appendTaskCleanupProgress(error, {
-              operation: "task_reset",
+              operation: "task_reset_implementation",
               removedWorktrees: cleanupProgress.removedWorktrees,
               deletedBranches: cleanupProgress.deletedBranches,
               completedSteps: cleanupProgress.completedSteps,

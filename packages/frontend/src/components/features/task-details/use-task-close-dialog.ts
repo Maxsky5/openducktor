@@ -32,6 +32,7 @@ export function useTaskCloseDialog({
   }, [onCloseTask, task]);
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
+    scopeKey: task?.id ?? null,
     onOpenChange,
     run: canClose ? runClose : undefined,
   });

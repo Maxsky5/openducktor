@@ -194,6 +194,22 @@ describe("resolveTaskCardActions", () => {
     expect(result.secondaryActions).toEqual(["reset_implementation", "reset_task", "close_task"]);
   });
 
+  test("excludes close_task from default kanban card actions", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["open_builder", "close_task"],
+    });
+
+    const defaultResult = resolveTaskCardActions(task);
+    const kanbanResult = resolveTaskCardActions(task, {
+      surface: "kanban",
+    });
+
+    expect(defaultResult.allActions).toEqual(["open_builder"]);
+    expect(kanbanResult.allActions).toEqual(["open_builder"]);
+  });
+
   test("ignores close_task for Agent Studio quick actions", () => {
     const task = createTaskCardFixture({
       status: "in_progress",

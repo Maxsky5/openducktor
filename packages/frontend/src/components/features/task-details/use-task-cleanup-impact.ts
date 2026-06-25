@@ -12,6 +12,13 @@ type TaskCleanupImpact = {
   isLoadingImpact: boolean;
 };
 
+type TaskCleanupImpactQuerySnapshot = {
+  data: AgentSessionRecord[] | undefined;
+  error: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+};
+
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
@@ -57,6 +64,38 @@ export const getManagedTaskCleanupImpactFromTasks = (
 
 export const TASK_CLEANUP_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree cleanup impact.";
 
+export const getTaskCleanupImpactFromSessionQueries = (
+  repoPath: string | null,
+  taskIds: string[],
+  taskSessionQueries: readonly TaskCleanupImpactQuerySnapshot[],
+): TaskCleanupImpact => {
+  if (taskIds.length === 0 || !repoPath) {
+    return EMPTY_CLEANUP_IMPACT;
+  }
+
+  const failedQuery = taskSessionQueries.find((query) => query.error != null);
+  if (failedQuery) {
+    return {
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      impactError: TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
+      isLoadingImpact: false,
+    };
+  }
+
+  if (taskSessionQueries.some((query) => query.isLoading || query.isFetching)) {
+    return {
+      ...EMPTY_CLEANUP_IMPACT,
+      isLoadingImpact: true,
+    };
+  }
+
+  return getManagedTaskCleanupImpactFromTasks(
+    repoPath,
+    taskSessionQueries.map((query) => query.data ?? []),
+  );
+};
+
 export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskCleanupImpact {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -70,30 +109,10 @@ export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskClea
   });
 
   return useMemo((): TaskCleanupImpact => {
-    if (taskIds.length === 0 || !open || !workspaceRepoPath) {
-      return EMPTY_CLEANUP_IMPACT;
-    }
-
-    const failedQuery = taskSessionQueries.find((query) => query.error != null);
-    if (failedQuery) {
-      return {
-        hasManagedSessionCleanup: false,
-        managedWorktreeCount: 0,
-        impactError: TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
-        isLoadingImpact: false,
-      };
-    }
-
-    if (taskSessionQueries.some((query) => query.isLoading)) {
-      return {
-        ...EMPTY_CLEANUP_IMPACT,
-        isLoadingImpact: true,
-      };
-    }
-
-    return getManagedTaskCleanupImpactFromTasks(
-      workspaceRepoPath,
-      taskSessionQueries.map((query) => query.data ?? []),
+    return getTaskCleanupImpactFromSessionQueries(
+      open ? workspaceRepoPath : null,
+      taskIds,
+      taskSessionQueries,
     );
   }, [workspaceRepoPath, open, taskIds, taskSessionQueries]);
 }

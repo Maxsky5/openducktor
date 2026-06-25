@@ -32,6 +32,7 @@ export function useTaskResetDialog({
   }, [onResetTask, task]);
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
+    scopeKey: task?.id ?? null,
     onOpenChange,
     run: canReset ? runReset : undefined,
   });

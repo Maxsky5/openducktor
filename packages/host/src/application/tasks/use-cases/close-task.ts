@@ -82,6 +82,9 @@ export const createTaskCloseUseCase = ({
           workspaceSettingsService,
         ),
       );
+      // The task worktree service is the source of truth for whether a
+      // task-managed worktree exists, so resolve cleanup dependencies before
+      // deciding there is no local worktree cleanup to run.
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;

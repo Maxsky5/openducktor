@@ -154,6 +154,7 @@ export class HostTaskClient {
       repoPath,
       taskId,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 

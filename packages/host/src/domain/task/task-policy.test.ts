@@ -173,6 +173,19 @@ describe("task domain policy", () => {
     expect(deriveAvailableActions(closedTask, [closedTask])).not.toContain("close_task");
   });
 
+  test("rejects manual close for closed tasks with a stable policy code", () => {
+    const closedTask = task({ status: "closed" });
+
+    try {
+      validateManualCloseTask(closedTask, [closedTask]);
+      throw new Error("Expected manual close validation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskPolicyError);
+      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      expect((error as Error).message).toContain("is already closed");
+    }
+  });
+
   test("keeps human approval review-only while manual close supports early states", () => {
     const openTask = task({ status: "open" });
 
@@ -194,9 +207,14 @@ describe("task domain policy", () => {
     });
 
     expect(deriveAvailableActions(epic, [epic, activeSubtask])).not.toContain("close_task");
-    expect(() => validateManualCloseTask(epic, [epic, activeSubtask])).toThrow(
-      "Epic cannot be completed",
-    );
+    try {
+      validateManualCloseTask(epic, [epic, activeSubtask]);
+      throw new Error("Expected manual close validation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskPolicyError);
+      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      expect((error as Error).message).toContain("Epic cannot be completed");
+    }
   });
 
   test("allows manual close for epics with closed direct subtasks", () => {

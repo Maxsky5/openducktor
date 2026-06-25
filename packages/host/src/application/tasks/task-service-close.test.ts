@@ -126,7 +126,7 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
   ({
     resolveWorktreePath: (_repoPath: string, worktreePath: string) => worktreePath,
     pathIsWithinRoot: (root: string, candidate: string) =>
-      Effect.succeed(candidate.startsWith(root)),
+      Effect.succeed(candidate === root || candidate.startsWith(`${root}/`)),
     removePathIfPresent: (path: string) => {
       calls.push(`remove-path:${path}`);
       return Effect.succeed(undefined);
@@ -306,6 +306,37 @@ describe("TaskService.closeTask", () => {
     expect(calls).toEqual([]);
   });
 
+  test("skips repo-root implementation session directories while closing", async () => {
+    const calls: string[] = [];
+    const buildSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "build",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    };
+    const activityGuard: TaskActivityGuardPort = {
+      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
+      ensureNoActiveTaskResetActivity: () => Effect.succeed(undefined),
+    };
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
+      taskActivityGuard: activityGuard,
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(new Set(["/repo"])),
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    const closed = await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(closed.status).toBe("closed");
+    expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
+  });
+
   test("rejects detached or unnamed task worktrees before cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({
@@ -438,7 +469,7 @@ describe("TaskService.closeTask", () => {
     expect(calls[0]).toBe("close task:spec,planner,build,qa");
   });
 
-  test("guards spec and planner sessions without deleting their working directories", async () => {
+  test("guards non-implementation sessions without collecting their working directories", async () => {
     const calls: string[] = [];
     const specSession: AgentSessionRecord = {
       externalSessionId: "session-1",

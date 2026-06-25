@@ -903,6 +903,29 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("taskClose invalidates cached task metadata", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
+      }
+      if (command === "task_close") {
+        return { ...makeTaskCardPayload(), status: "closed" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    await client.taskClose("/repo", "task-1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "task_metadata_get",
+      "task_close",
+      "task_metadata_get",
+    ]);
+  });
+
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "git_get_branches") {

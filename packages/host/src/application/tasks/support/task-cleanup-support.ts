@@ -179,6 +179,10 @@ const taskCleanupProgressCopy = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },
   task_reset: { label: "Reset", retryVerb: "reset" },
+  task_reset_implementation: {
+    label: "Reset implementation",
+    retryVerb: "reset implementation",
+  },
 } as const;
 
 type TaskCleanupProgressInput = {
@@ -190,7 +194,7 @@ type TaskCleanupProgressInput = {
 
 type TaskCleanupOperation = keyof typeof taskCleanupProgressCopy;
 
-type TaskWorktreeCleanupOperation = TaskCleanupOperation | "task_reset_implementation";
+type TaskWorktreeCleanupOperation = TaskCleanupOperation;
 
 export type TaskCleanupProgressState = {
   removedWorktrees: string[];

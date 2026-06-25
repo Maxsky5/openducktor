@@ -290,6 +290,7 @@ export function useTaskDetailsSheetViewModel({
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
+    // Reset and close both use the selected task's own build/QA session cleanup impact.
     isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,

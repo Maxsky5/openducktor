@@ -3,6 +3,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   getManagedTaskCleanupImpact,
   getManagedTaskCleanupImpactFromTasks,
+  getTaskCleanupImpactFromSessionQueries,
   TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
 } from "./use-task-cleanup-impact";
 
@@ -115,5 +116,32 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(TASK_CLEANUP_IMPACT_ERROR_MESSAGE).toBe(
       "Unable to load linked worktree cleanup impact.",
     );
+  });
+
+  test("keeps impact loading while cached session queries refetch", () => {
+    const impact = getTaskCleanupImpactFromSessionQueries(
+      "/repo",
+      ["task-1"],
+      [
+        {
+          data: [
+            makeSession({
+              externalSessionId: "build-1",
+              workingDirectory: "/repo/worktrees/task-1",
+            }),
+          ],
+          error: null,
+          isLoading: false,
+          isFetching: true,
+        },
+      ],
+    );
+
+    expect(impact).toEqual({
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      impactError: null,
+      isLoadingImpact: true,
+    });
   });
 });

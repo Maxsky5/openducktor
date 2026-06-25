@@ -5,11 +5,26 @@ import { HostValidationError } from "../../../effect/host-errors";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
 import { implementationSessionRoles, isRelatedTaskBranch } from "./task-cleanup-support";
 
-const collectCloseManagedSessionWorktreePaths = (sessions: AgentSessionRecord[]): string[] =>
-  sessions
-    .filter((session) => implementationSessionRoles.has(session.role.trim()))
-    .map((session) => session.workingDirectory.trim())
-    .filter((workingDirectory) => workingDirectory.length > 0);
+type CloseWorktreeCandidate = {
+  path: string;
+  source: "task_worktree" | "session";
+};
+
+const collectCloseManagedSessionWorktreePaths = (
+  sessions: AgentSessionRecord[],
+): CloseWorktreeCandidate[] =>
+  sessions.reduce<CloseWorktreeCandidate[]>((candidates, session) => {
+    if (!implementationSessionRoles.has(session.role.trim())) {
+      return candidates;
+    }
+
+    const workingDirectory = session.workingDirectory.trim();
+    if (workingDirectory.length > 0) {
+      candidates.push({ path: workingDirectory, source: "session" });
+    }
+
+    return candidates;
+  }, []);
 
 export const collectCloseWorktreePaths = (
   dependencies: ReturnType<typeof requireTaskCloseDependencies>,
@@ -24,16 +39,23 @@ export const collectCloseWorktreePaths = (
       repoPath,
       taskId: task.id,
     });
-    const candidatePaths = [
-      ...(taskWorktree ? [taskWorktree.workingDirectory] : []),
+    const candidatePaths: CloseWorktreeCandidate[] = [
+      ...(taskWorktree
+        ? [{ path: taskWorktree.workingDirectory, source: "task_worktree" as const }]
+        : []),
       ...collectCloseManagedSessionWorktreePaths(sessions),
     ];
     const seen = new Set<string>();
     const paths: string[] = [];
 
-    for (const worktreePath of candidatePaths) {
+    for (const candidate of candidatePaths) {
+      const worktreePath = candidate.path;
       const normalizedWorktree = normalizePathForComparison(worktreePath);
       if (normalizedWorktree === normalizedRepo) {
+        if (candidate.source === "session") {
+          continue;
+        }
+
         return yield* Effect.fail(
           new HostValidationError({
             field: "taskId",
@@ -59,6 +81,8 @@ export const collectCloseWorktreePaths = (
           );
         }
         if (!isRelatedTaskBranch(branchName, branchPrefix, task.id)) {
+          // Manual close is an administrative completion path, so an existing
+          // cleanup candidate on an unrelated branch must be inspected explicitly.
           return yield* Effect.fail(
             new HostValidationError({
               field: "taskId",
@@ -68,6 +92,8 @@ export const collectCloseWorktreePaths = (
           );
         }
       }
+      // Missing candidates stay in the list so shared local cleanup can apply
+      // its explicit missing-path policy while preserving dependency checks.
       paths.push(worktreePath);
     }
 

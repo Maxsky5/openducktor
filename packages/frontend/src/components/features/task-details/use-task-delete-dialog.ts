@@ -34,6 +34,7 @@ export function useTaskDeleteDialog({
   }, [hasSubtasks, onDelete, task]);
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
+    scopeKey: task?.id ?? null,
     onOpenChange,
     run: canDelete ? runDelete : undefined,
   });
