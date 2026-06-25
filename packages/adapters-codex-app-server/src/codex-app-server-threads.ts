@@ -52,6 +52,18 @@ export type CodexThreadSnapshot = {
   startedAt: string;
   title: string;
   status: CodexThreadStatusSnapshot;
+  parentThreadId: string | null;
+  agentNickname: string | null;
+  agentRole: string | null;
+  subAgentSource: CodexSubAgentSourceMetadata | null;
+};
+
+export type CodexSubAgentSourceMetadata = {
+  parentThreadId: string;
+  depth: number;
+  agentPath: unknown;
+  agentNickname: string | null;
+  agentRole: string | null;
 };
 
 const codexTimestampFromUnknownSeconds = (value: unknown): string =>
@@ -91,12 +103,48 @@ const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
   if (!id || !cwd) {
     return null;
   }
+  const subAgentSource = codexSubAgentSourceMetadata(thread.source);
   return {
     id,
     cwd,
     startedAt: codexTimestampFromUnknownSeconds(thread.createdAt ?? thread.created_at),
     title: extractStringField(thread, ["name", "preview"]) ?? `Codex ${id}`,
     status: codexThreadStatusSnapshot(thread.status),
+    parentThreadId:
+      extractStringField(thread, ["parentThreadId", "parent_thread_id"]) ??
+      subAgentSource?.parentThreadId ??
+      null,
+    agentNickname: extractStringField(thread, ["agentNickname", "agent_nickname"]),
+    agentRole: extractStringField(thread, ["agentRole", "agent_role"]),
+    subAgentSource,
+  };
+};
+
+export const codexSubAgentSourceMetadata = (
+  source: unknown,
+): CodexSubAgentSourceMetadata | null => {
+  if (!isPlainObject(source)) {
+    return null;
+  }
+  const subAgent = source.subAgent ?? source.sub_agent;
+  if (!isPlainObject(subAgent)) {
+    return null;
+  }
+  const threadSpawn = subAgent.thread_spawn ?? subAgent.threadSpawn;
+  if (!isPlainObject(threadSpawn)) {
+    return null;
+  }
+  const parentThreadId = extractStringField(threadSpawn, ["parent_thread_id", "parentThreadId"]);
+  const depth = typeof threadSpawn.depth === "number" ? threadSpawn.depth : null;
+  if (!parentThreadId || depth === null || !Number.isFinite(depth)) {
+    return null;
+  }
+  return {
+    parentThreadId,
+    depth,
+    agentPath: threadSpawn.agent_path ?? threadSpawn.agentPath ?? null,
+    agentNickname: extractStringField(threadSpawn, ["agent_nickname", "agentNickname"]),
+    agentRole: extractStringField(threadSpawn, ["agent_role", "agentRole"]),
   };
 };
 

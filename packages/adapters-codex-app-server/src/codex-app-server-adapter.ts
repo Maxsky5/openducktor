@@ -72,6 +72,7 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
+import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -102,6 +103,7 @@ export class CodexAppServerAdapter
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
@@ -117,6 +119,7 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
+      subagents: this.subagents,
       updateThreadStatus: (runtimeId, threadId, status) =>
         this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
@@ -578,23 +581,41 @@ export class CodexAppServerAdapter
     }
 
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
-    for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
+    for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
+      externalSessionId,
+    )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
           ...approval,
           type: "approval_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
+          ...(route
+            ? {
+                parentExternalSessionId: route.parentExternalSessionId,
+                childExternalSessionId: route.childExternalSessionId,
+                subagentCorrelationKey: route.subagentCorrelationKey,
+              }
+            : {}),
         }),
       );
     }
-    for (const question of this.pendingInput.pendingQuestionsForSession(externalSessionId)) {
+    for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
+      externalSessionId,
+    )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
           ...question,
           type: "question_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
+          ...(route
+            ? {
+                parentExternalSessionId: route.parentExternalSessionId,
+                childExternalSessionId: route.childExternalSessionId,
+                subagentCorrelationKey: route.subagentCorrelationKey,
+              }
+            : {}),
         }),
       );
     }
@@ -642,6 +663,7 @@ export class CodexAppServerAdapter
       threadInventory: this.threadInventory,
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
+      subagents: this.subagents,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
         return Boolean(activeTurn && !activeTurn.isTurnSettled());

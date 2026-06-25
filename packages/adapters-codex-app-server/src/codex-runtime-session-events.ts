@@ -18,7 +18,7 @@ import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
 } from "./codex-app-server-server-requests";
-import type { ActiveCodexTurn } from "./codex-app-server-shared";
+import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
   type CompletedAgentMessage,
@@ -41,6 +41,8 @@ import {
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
+import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { createCodexEventMappers } from "./event-mappers";
 import type {
   CodexAppServerAdapterOptions,
   CodexNotificationRecord,
@@ -57,6 +59,7 @@ type CodexRuntimeSessionEventsDeps = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   sessionEvents: CodexSessionEventBus;
   pendingInput: CodexPendingInputState;
+  subagents: CodexSubagentLinkState;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
 };
@@ -93,10 +96,13 @@ export class CodexRuntimeSessionEvents {
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly restoredContextCapturesByKey = new Map<string, RestoredContextCapture>();
-  private readonly eventMapperPipeline = createCodexEventMapperPipeline();
+  private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
+    this.eventMapperPipeline = createCodexEventMapperPipeline(
+      createCodexEventMappers(deps.subagents),
+    );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
   }
 
@@ -246,21 +252,98 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
-    if (
-      event.kind === "notification" &&
-      this.captureRestoredContextNotification(
-        event.runtimeId,
-        parseNotificationRecord(event.message),
-      )
-    ) {
-      return;
+    if (event.kind === "notification") {
+      const notification = parseNotificationRecord(event.message);
+      if (notification.method === "serverRequest/resolved") {
+        this.handleServerRequestResolvedNotification(notification);
+        return;
+      }
+      if (this.captureRestoredContextNotification(event.runtimeId, notification)) {
+        return;
+      }
     }
     const session = this.deps.sessions.get(threadId);
     if (!session) {
+      if (event.kind === "server_request") {
+        const route = this.deps.subagents.routeForChild(threadId);
+        const parentSession = route
+          ? this.deps.sessions.get(route.parentExternalSessionId)
+          : undefined;
+        if (parentSession) {
+          await this.processRuntimeStreamEventForSession(parentSession, event);
+          return;
+        }
+      }
       this.bufferRuntimeStreamEvent(threadId, event);
       return;
     }
     await this.processRuntimeStreamEventForSession(session, event);
+  }
+
+  private handleServerRequestResolvedNotification(notification: CodexNotificationRecord): void {
+    const threadId = extractThreadIdFromParams(notification.params);
+    const requestId = this.resolvedServerRequestId(notification);
+    if (!threadId || !requestId) {
+      throw new Error(
+        "Codex serverRequest/resolved notification is missing threadId or requestId.",
+      );
+    }
+    const approval = this.deps.pendingInput.approval(requestId);
+    const question = this.deps.pendingInput.question(requestId);
+    const entry = approval ?? question;
+    if (!entry) {
+      return;
+    }
+    if (entry.threadId !== threadId) {
+      throw new Error(
+        `Codex serverRequest/resolved request '${requestId}' belongs to session '${entry.threadId}', not '${threadId}'.`,
+      );
+    }
+    const route = entry.route ?? this.deps.subagents.routeForChild(threadId);
+    const eventBase = {
+      externalSessionId: threadId,
+      timestamp: new Date().toISOString(),
+      requestId,
+      ...(route
+        ? {
+            parentExternalSessionId: route.parentExternalSessionId,
+            childExternalSessionId: route.childExternalSessionId,
+            subagentCorrelationKey: route.subagentCorrelationKey,
+          }
+        : {}),
+    };
+    const activeTurn = approval
+      ? this.deps.pendingInput.resolveApproval(requestId)
+      : this.deps.pendingInput.resolveQuestion(requestId);
+    const type = approval ? "approval_resolved" : "question_resolved";
+    if (this.deps.sessions.get(threadId)) {
+      this.emitSessionEvent(threadId, {
+        ...eventBase,
+        type,
+      });
+    }
+    if (route && this.deps.sessions.get(route.parentExternalSessionId)) {
+      this.emitSessionEvent(route.parentExternalSessionId, {
+        ...eventBase,
+        type,
+        externalSessionId: route.parentExternalSessionId,
+      });
+    }
+    if (activeTurn && !activeTurn.isTurnSettled()) {
+      void this.continueTurnAfterPendingInput(activeTurn);
+    }
+  }
+
+  private resolvedServerRequestId(notification: CodexNotificationRecord): string | null {
+    if (!isPlainObject(notification.params)) {
+      return null;
+    }
+    const params = notification.params;
+    const requestId = params.requestId ?? params.request_id;
+    if (typeof requestId === "number" || typeof requestId === "string") {
+      return String(requestId);
+    }
+    return null;
   }
 
   private bufferRuntimeStreamEvent(
@@ -427,6 +510,8 @@ export class CodexRuntimeSessionEvents {
       respondServerRequest: this.deps.respondServerRequest,
       pendingInput: this.deps.pendingInput,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
+      subagents: this.deps.subagents,
+      sessionForThreadId: (threadId) => this.deps.sessions.get(threadId),
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),

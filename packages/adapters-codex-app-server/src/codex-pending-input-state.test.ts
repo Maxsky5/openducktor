@@ -90,6 +90,50 @@ describe("CodexPendingInputState", () => {
     );
   });
 
+  test("mirrors child pending input to the parent without changing reply ownership", () => {
+    const pendingInput = new CodexPendingInputState();
+    const route = {
+      parentExternalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
+    };
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: approvalRequest("approval-1"),
+      route,
+    });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+      route,
+    });
+
+    expect(pendingInput.pendingApprovalsForSession("parent-thread")).toEqual([]);
+    expect(pendingInput.pendingQuestionsForSession("parent-thread")).toEqual([]);
+    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([
+      { request: approvalRequest("approval-1"), route },
+    ]);
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([
+      { request: questionRequest("question-1"), route },
+    ]);
+    expect(() => pendingInput.requireApprovalForSession("approval-1", "parent-thread")).toThrow(
+      "belongs to session 'child-thread', not 'parent-thread'",
+    );
+    expect(pendingInput.requireApprovalForSession("approval-1", "child-thread")).toMatchObject({
+      threadId: "child-thread",
+    });
+
+    pendingInput.resolveApproval("approval-1");
+    pendingInput.resolveQuestion("question-1");
+
+    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([]);
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([]);
+  });
+
   test("clears all pending input for one session only", () => {
     const pendingInput = new CodexPendingInputState();
     pendingInput.addApproval({

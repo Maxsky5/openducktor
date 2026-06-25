@@ -31,6 +31,19 @@ export type CodexAppServerThreadStatus =
   | { type: "systemError" };
 export type CodexAppServerThreadSource = "memory_consolidation" | "subagent" | "user";
 export type CodexAppServerThreadStartSource = "clear" | "startup";
+export type CodexAppServerSubAgentThreadSpawnSource = {
+  parent_thread_id: string;
+  depth: number;
+  agent_path: CodexAppServerJsonValue | null;
+  agent_nickname: string | null;
+  agent_role: string | null;
+};
+export type CodexAppServerSubAgentSource =
+  | "review"
+  | "compact"
+  | "memory_consolidation"
+  | { other: string }
+  | { thread_spawn: CodexAppServerSubAgentThreadSpawnSource };
 export type CodexAppServerSessionSource =
   | "appServer"
   | "cli"
@@ -38,7 +51,49 @@ export type CodexAppServerSessionSource =
   | "unknown"
   | "vscode"
   | { custom: string }
-  | { subAgent: CodexAppServerJsonValue };
+  | { subAgent: CodexAppServerSubAgentSource };
+export type CodexAppServerCollabAgentTool =
+  | "spawnAgent"
+  | "sendInput"
+  | "resumeAgent"
+  | "wait"
+  | "closeAgent";
+export type CodexAppServerCollabAgentToolCallStatus = "inProgress" | "completed" | "failed";
+export type CodexAppServerCollabAgentStatus =
+  | "pendingInit"
+  | "running"
+  | "interrupted"
+  | "completed"
+  | "errored"
+  | "shutdown"
+  | "notFound";
+export type CodexAppServerCollabAgentState = {
+  status: CodexAppServerCollabAgentStatus;
+  message: string | null;
+};
+export type CodexAppServerCollabAgentToolCallThreadItem = {
+  type: "collabAgentToolCall";
+  id: string;
+  tool: CodexAppServerCollabAgentTool;
+  status: CodexAppServerCollabAgentToolCallStatus;
+  senderThreadId: string;
+  receiverThreadIds: string[];
+  prompt: string | null;
+  model: string | null;
+  reasoningEffort: CodexAppServerReasoningEffort | null;
+  agentsStates: { [key in string]?: CodexAppServerCollabAgentState };
+};
+export type CodexAppServerSubAgentActivityKind = "started" | "interacted" | "interrupted";
+export type CodexAppServerSubAgentActivityThreadItem = {
+  type: "subAgentActivity";
+  id: string;
+  kind: CodexAppServerSubAgentActivityKind;
+  agentThreadId: string;
+  agentPath: string;
+};
+export type CodexAppServerSubagentThreadItem =
+  | CodexAppServerCollabAgentToolCallThreadItem
+  | CodexAppServerSubAgentActivityThreadItem;
 export type CodexAppServerAskForApproval =
   | "never"
   | "on-failure"
@@ -101,6 +156,7 @@ export type CodexAppServerThread = {
   id: string;
   modelProvider: string;
   name: string | null;
+  parentThreadId: string | null;
   path: string | null;
   preview: string;
   sessionId: string;

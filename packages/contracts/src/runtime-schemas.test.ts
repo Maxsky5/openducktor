@@ -150,6 +150,13 @@ describe("runtime schemas", () => {
     });
   });
 
+  test("Codex descriptor advertises background subagent support", () => {
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces).toMatchObject({
+      supportsSubagents: true,
+      supportedSubagentExecutionModes: ["background"],
+    });
+  });
+
   test("Codex descriptor enables file search with structured file and folder references", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsFileSearch).toBe(true);
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toEqual(
