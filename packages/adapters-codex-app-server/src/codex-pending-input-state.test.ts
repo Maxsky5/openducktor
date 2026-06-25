@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 
 const approvalRequest = (requestId: string) => ({
@@ -132,6 +133,69 @@ describe("CodexPendingInputState", () => {
 
     expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([]);
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([]);
+  });
+
+  test("adds a learned child route to existing owner-scoped pending input", () => {
+    const pendingInput = new CodexPendingInputState();
+    const route = {
+      parentExternalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
+    };
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: approvalRequest("approval-1"),
+    });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+    });
+
+    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([]);
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([]);
+
+    expect(pendingInput.applyRouteToPendingInput(route)).toEqual({
+      approvals: [expect.objectContaining({ request: approvalRequest("approval-1"), route })],
+      questions: [expect.objectContaining({ request: questionRequest("question-1"), route })],
+    });
+
+    expect(pendingInput.approval("approval-1")).toMatchObject({ route });
+    expect(pendingInput.question("question-1")).toMatchObject({ route });
+    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([
+      { request: approvalRequest("approval-1"), route },
+    ]);
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([
+      { request: questionRequest("question-1"), route },
+    ]);
+  });
+
+  test("binds parent active turns to mirrored child pending input", () => {
+    const pendingInput = new CodexPendingInputState();
+    const route = {
+      parentExternalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
+    };
+    const activeTurn = {
+      session: { threadId: "parent-thread" },
+    } as unknown as ActiveCodexTurn;
+
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+      route,
+    });
+
+    pendingInput.bindActiveTurn("parent-thread", activeTurn);
+
+    expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
   });
 
   test("clears all pending input for one session only", () => {

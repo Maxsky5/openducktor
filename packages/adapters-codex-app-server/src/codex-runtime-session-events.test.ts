@@ -297,4 +297,49 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toHaveLength(1);
   });
+
+  test("mirrors already-processed child pending input when a route is learned later", async () => {
+    const parentSession = createSession("parent-thread");
+    const childSession = createSession("child-thread");
+    const sessions = new Map([
+      [parentSession.threadId, parentSession],
+      [childSession.threadId, childSession],
+    ]);
+    const pendingInput = new CodexPendingInputState();
+    const subagents = new CodexSubagentLinkState();
+    createRuntimeEvents({
+      sessions,
+      pendingInput,
+      subagents,
+    });
+
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: {
+        requestId: "question-1",
+        questions: [{ header: "Choose", question: "Proceed?", options: ["Yes", "No"] }],
+      },
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+    });
+
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
+
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("question-1")).toMatchObject({
+      route: {
+        parentExternalSessionId: "parent-thread",
+        childExternalSessionId: "child-thread",
+      },
+    });
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(1);
+  });
 });

@@ -249,6 +249,7 @@ const emitStartedItem = (
       continue;
     }
     if (event.part.kind !== "tool") {
+      emitCodexSessionEvent(context, session.threadId, event);
       continue;
     }
     emitCodexSessionEvent(context, session.threadId, {

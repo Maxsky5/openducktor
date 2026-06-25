@@ -1486,6 +1486,62 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
+  test("emits live subagent rows from started collab items", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ subscribeEvents });
+    const events: unknown[] = [];
+
+    await observeSessionState(adapter, "thread-saved");
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/started",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          startedAtMs: 1_777_766_452_000,
+          item: {
+            type: "collabAgentToolCall",
+            id: "spawn-live",
+            tool: "spawnAgent",
+            status: "inProgress",
+            senderThreadId: "thread-saved",
+            receiverThreadIds: [],
+            prompt: "Review this change",
+            agentsStates: {},
+          },
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "thread-saved",
+        part: expect.objectContaining({
+          kind: "subagent",
+          correlationKey: "codex-subagent:thread-saved:spawn-live",
+          status: "running",
+          prompt: "Review this change",
+        }),
+      }),
+    );
+    unsubscribe();
+  });
+
   test("maps completed update_plan dynamic tool calls into live session todos", async () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });

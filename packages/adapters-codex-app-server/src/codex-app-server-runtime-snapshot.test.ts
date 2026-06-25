@@ -214,6 +214,37 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
     });
   });
 
+  test("keeps proven parent linkage when pending input uses the local snapshot path", () => {
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session: {
+          ...createSession(),
+          threadId: "child-thread",
+          summary: {
+            ...createSession().summary,
+            externalSessionId: "child-thread",
+          },
+        },
+        inventory: createInventory({
+          thread: {
+            ...createThread("active"),
+            id: "child-thread",
+            parentThreadId: "parent-thread",
+          },
+        }),
+        pendingApprovals: [],
+        pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({
+      availability: "runtime",
+      parentExternalSessionId: "parent-thread",
+      ref: {
+        externalSessionId: "child-thread",
+      },
+    });
+  });
+
   test("returns missing only when neither inventory nor local runtime state can prove a runtime snapshot", () => {
     expect(
       toRefreshedRuntimeSnapshot({

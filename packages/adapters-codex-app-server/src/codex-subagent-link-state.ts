@@ -18,6 +18,7 @@ export type CodexSubagentLinkInput = {
   agent?: string;
   metadata?: Record<string, unknown>;
   executionMode?: "background";
+  preferItemCorrelationKey?: boolean;
 };
 
 type CodexStoredSubagentLink = {
@@ -69,6 +70,13 @@ const preferredAgentLabel = (thread: CodexThreadSnapshot): string | undefined =>
   thread.subAgentSource?.agentRole ??
   undefined;
 
+export class CodexSubagentLinkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CodexSubagentLinkError";
+  }
+}
+
 const mergeDefined = <T extends Record<string, unknown>>(
   existing: T | undefined,
   incoming: T | undefined,
@@ -108,7 +116,18 @@ export class CodexSubagentLinkState {
   }
 
   recordThread(thread: CodexThreadSnapshot): void {
-    const parentThreadId = thread.parentThreadId ?? thread.subAgentSource?.parentThreadId;
+    const parentThreadIds = [thread.parentThreadId, thread.subAgentSource?.parentThreadId].filter(
+      (parentThreadId): parentThreadId is string => Boolean(parentThreadId),
+    );
+    const uniqueParentThreadIds = new Set(parentThreadIds);
+    if (uniqueParentThreadIds.size > 1) {
+      throw new CodexSubagentLinkError(
+        `Codex child thread '${thread.id}' has conflicting parent metadata: ${parentThreadIds.join(
+          ", ",
+        )}.`,
+      );
+    }
+    const parentThreadId = parentThreadIds[0];
     if (!parentThreadId || parentThreadId === thread.id) {
       return;
     }
@@ -144,16 +163,29 @@ export class CodexSubagentLinkState {
     const parentChildKey = input.childThreadId
       ? subagentKey(input.parentThreadId, input.childThreadId)
       : null;
+    const existingByChildThreadId = input.childThreadId
+      ? this.linksByChildThreadId.get(input.childThreadId)
+      : undefined;
+    if (
+      input.childThreadId &&
+      existingByChildThreadId &&
+      existingByChildThreadId.parentThreadId !== input.parentThreadId
+    ) {
+      throw new CodexSubagentLinkError(
+        `Codex child thread '${input.childThreadId}' is already linked to parent '${existingByChildThreadId.parentThreadId}', not '${input.parentThreadId}'.`,
+      );
+    }
     const existingLinked =
       input.childThreadId && parentChildKey
-        ? (this.linksByParentChildKey.get(parentChildKey) ??
-          this.linksByChildThreadId.get(input.childThreadId))
+        ? (this.linksByParentChildKey.get(parentChildKey) ?? existingByChildThreadId)
         : undefined;
     const correlationKey =
       existingLinked?.correlationKey ??
       existingProvisional?.correlationKey ??
       (input.childThreadId
-        ? linkedCorrelationKey(input.parentThreadId, input.childThreadId)
+        ? input.preferItemCorrelationKey
+          ? provisionalCorrelationKey(input.parentThreadId, input.itemId)
+          : linkedCorrelationKey(input.parentThreadId, input.childThreadId)
         : provisionalCorrelationKey(input.parentThreadId, input.itemId));
     const existing =
       existingLinked ?? existingProvisional ?? this.linksByCorrelationKey.get(correlationKey);

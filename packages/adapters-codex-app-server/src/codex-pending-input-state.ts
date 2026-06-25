@@ -28,6 +28,16 @@ export type PendingQuestionEventEntry = {
   route?: CodexSubagentRoute;
 };
 
+export type PendingInputRouteApplication = {
+  approvals: PendingApprovalEventEntry[];
+  questions: PendingQuestionEventEntry[];
+};
+
+const sameRoute = (a: CodexSubagentRoute, b: CodexSubagentRoute): boolean =>
+  a.parentExternalSessionId === b.parentExternalSessionId &&
+  a.childExternalSessionId === b.childExternalSessionId &&
+  a.subagentCorrelationKey === b.subagentCorrelationKey;
+
 export class CodexPendingInputState {
   private readonly pendingApprovalsByRequestId = new Map<string, PendingApprovalEntry>();
   private readonly pendingApprovalIdsBySessionId = new Map<string, Set<string>>();
@@ -138,12 +148,49 @@ export class CodexPendingInputState {
       }));
   }
 
-  bindActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void {
-    for (const approval of this.pendingApprovalsForSession(externalSessionId)) {
-      this.activeTurnsByApprovalRequestId.set(approval.requestId, activeTurn);
+  applyRouteToPendingInput(route: CodexSubagentRoute): PendingInputRouteApplication {
+    const approvals: PendingApprovalEventEntry[] = [];
+    for (const entry of this.pendingApprovalEntriesForIndex(
+      this.pendingApprovalIdsBySessionId,
+      route.childExternalSessionId,
+    )) {
+      if (this.applyApprovalRoute(entry, route)) {
+        approvals.push({ request: entry.request, route });
+      }
     }
-    for (const question of this.pendingQuestionsForSession(externalSessionId)) {
-      this.activeTurnsByQuestionRequestId.set(question.requestId, activeTurn);
+
+    const questions: PendingQuestionEventEntry[] = [];
+    for (const entry of this.pendingQuestionEntriesForIndex(
+      this.pendingQuestionIdsBySessionId,
+      route.childExternalSessionId,
+    )) {
+      if (this.applyQuestionRoute(entry, route)) {
+        questions.push({ request: entry.request, route });
+      }
+    }
+
+    return { approvals, questions };
+  }
+
+  bindActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void {
+    const approvalEntries = this.pendingApprovalEntriesForIndex(
+      this.pendingApprovalIdsBySessionId,
+      externalSessionId,
+    ).concat(
+      this.pendingApprovalEntriesForIndex(this.mirroredApprovalIdsBySessionId, externalSessionId),
+    );
+    for (const approval of approvalEntries) {
+      this.activeTurnsByApprovalRequestId.set(approval.request.requestId, activeTurn);
+    }
+
+    const questionEntries = this.pendingQuestionEntriesForIndex(
+      this.pendingQuestionIdsBySessionId,
+      externalSessionId,
+    ).concat(
+      this.pendingQuestionEntriesForIndex(this.mirroredQuestionIdsBySessionId, externalSessionId),
+    );
+    for (const question of questionEntries) {
+      this.activeTurnsByQuestionRequestId.set(question.request.requestId, activeTurn);
     }
   }
 
@@ -228,6 +275,58 @@ export class CodexPendingInputState {
         index.delete(threadId);
       }
     }
+  }
+
+  private applyApprovalRoute(entry: PendingApprovalEntry, route: CodexSubagentRoute): boolean {
+    return this.applyRoute(
+      "approval",
+      entry.request.requestId,
+      entry.threadId,
+      entry.route,
+      route,
+      (nextRoute) => {
+        entry.route = nextRoute;
+      },
+      this.mirroredApprovalIdsBySessionId,
+    );
+  }
+
+  private applyQuestionRoute(entry: PendingQuestionEntry, route: CodexSubagentRoute): boolean {
+    return this.applyRoute(
+      "question",
+      entry.request.requestId,
+      entry.threadId,
+      entry.route,
+      route,
+      (nextRoute) => {
+        entry.route = nextRoute;
+      },
+      this.mirroredQuestionIdsBySessionId,
+    );
+  }
+
+  private applyRoute(
+    kind: "approval" | "question",
+    requestId: string,
+    ownerThreadId: string,
+    existingRoute: CodexSubagentRoute | undefined,
+    route: CodexSubagentRoute,
+    setRoute: (route: CodexSubagentRoute) => void,
+    mirrorIndex: Map<string, Set<string>>,
+  ): boolean {
+    if (ownerThreadId !== route.childExternalSessionId) {
+      return false;
+    }
+    if (existingRoute && !sameRoute(existingRoute, route)) {
+      throw new Error(
+        `Codex ${kind} request '${requestId}' already has route '${existingRoute.parentExternalSessionId}' -> '${existingRoute.childExternalSessionId}', not '${route.parentExternalSessionId}' -> '${route.childExternalSessionId}'.`,
+      );
+    }
+
+    const wasMirrored = mirrorIndex.get(route.parentExternalSessionId)?.has(requestId) ?? false;
+    setRoute(route);
+    this.addSessionRequestId(mirrorIndex, route.parentExternalSessionId, requestId);
+    return !wasMirrored;
   }
 
   private requireRequestSession(

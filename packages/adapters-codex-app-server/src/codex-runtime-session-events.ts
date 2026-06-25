@@ -250,8 +250,45 @@ export class CodexRuntimeSessionEvents {
 
   private scheduleBufferedSubagentServerRequestDrain(route: CodexSubagentRoute): void {
     void Promise.resolve()
+      .then(() => this.applyRouteToPendingInput(route))
       .then(() => this.drainBufferedSubagentServerRequests(route))
       .catch((error) => this.emitBufferedSubagentServerRequestError(route, error));
+  }
+
+  private applyRouteToPendingInput(route: CodexSubagentRoute): void {
+    const routed = this.deps.pendingInput.applyRouteToPendingInput(route);
+    const activeTurn = this.deps.activeTurnsBySessionId.get(route.parentExternalSessionId);
+    if (activeTurn && !activeTurn.isTurnSettled()) {
+      this.deps.pendingInput.bindActiveTurn(route.parentExternalSessionId, activeTurn);
+    }
+
+    if (!this.deps.sessions.get(route.parentExternalSessionId)) {
+      return;
+    }
+
+    for (const entry of routed.approvals) {
+      this.emitSessionEvent(route.parentExternalSessionId, {
+        ...entry.request,
+        type: "approval_required",
+        externalSessionId: route.parentExternalSessionId,
+        timestamp: new Date().toISOString(),
+        parentExternalSessionId: route.parentExternalSessionId,
+        childExternalSessionId: route.childExternalSessionId,
+        subagentCorrelationKey: route.subagentCorrelationKey,
+      });
+    }
+
+    for (const entry of routed.questions) {
+      this.emitSessionEvent(route.parentExternalSessionId, {
+        ...entry.request,
+        type: "question_required",
+        externalSessionId: route.parentExternalSessionId,
+        timestamp: new Date().toISOString(),
+        parentExternalSessionId: route.parentExternalSessionId,
+        childExternalSessionId: route.childExternalSessionId,
+        subagentCorrelationKey: route.subagentCorrelationKey,
+      });
+    }
   }
 
   private async drainBufferedSubagentServerRequestsForParent(

@@ -155,7 +155,10 @@ const statusForChild = (
 ): StatusMapping => {
   const state = agentsStates(item)[childThreadId];
   if (!isPlainObject(state)) {
-    return mapAggregateStatus(aggregateStatus, tool);
+    if (tool === "closeAgent" && aggregateStatus === "completed") {
+      return { status: "cancelled" };
+    }
+    return { status: "running" };
   }
   return mapAgentStatus(item, state.status, state.message, childThreadId);
 };
@@ -259,6 +262,7 @@ export const codexSubagentPartsFromItem = (
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: collabMetadata(item, parentThreadId, childThreadId),
         executionMode: "background",
+        preferItemCorrelationKey: tool === "spawnAgent",
       });
     });
   }
