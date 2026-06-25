@@ -275,7 +275,7 @@ jobs:
             exit 1
           fi
 
-          gh release upload "$TAG" "${artifacts[@]}" --clobber
+          gh release upload "$TAG" "${artifacts[@]}" --repo "$GITHUB_REPOSITORY" --clobber
 
   finalize-release:
     name: Summarize Electron release draft
