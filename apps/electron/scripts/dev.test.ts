@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { Effect } from "effect";
+import { Cause, Chunk, Effect, Exit } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   closeRendererServer,
   electronGracefulShutdownSignal,
   electronRuntimeEnv,
+  mainEffect,
   resolveMacosAppBundlePath,
   resolveMacosDevExecutablePath,
   resolveRendererDevPort,
@@ -55,6 +56,38 @@ describe("electron dev script", () => {
       operation: "electron.dev.resolve-renderer-dev-port",
       field: "ELECTRON_RENDERER_DEV_PORT",
     });
+  });
+
+  test("keeps invalid renderer dev port in the main Effect failure channel", async () => {
+    const originalPort = process.env.ELECTRON_RENDERER_DEV_PORT;
+    process.env.ELECTRON_RENDERER_DEV_PORT = "0";
+
+    try {
+      const exit = await Effect.runPromiseExit(mainEffect());
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (!Exit.isFailure(exit)) {
+        throw new Error("Expected mainEffect to fail for an invalid renderer dev port.");
+      }
+
+      const failureOption = Chunk.head(Cause.failures(exit.cause));
+      expect(failureOption._tag).toBe("Some");
+      if (failureOption._tag !== "Some") {
+        throw new Error("Expected mainEffect to fail through the typed error channel.");
+      }
+
+      expect(failureOption.value).toMatchObject({
+        _tag: "ElectronValidationError",
+        operation: "electron.dev.resolve-renderer-dev-port",
+        field: "ELECTRON_RENDERER_DEV_PORT",
+      });
+      expect(Chunk.isEmpty(Cause.defects(exit.cause))).toBe(true);
+    } finally {
+      if (originalPort === undefined) {
+        delete process.env.ELECTRON_RENDERER_DEV_PORT;
+      } else {
+        process.env.ELECTRON_RENDERER_DEV_PORT = originalPort;
+      }
+    }
   });
 
   test("does not launch Electron in Node compatibility mode", () => {

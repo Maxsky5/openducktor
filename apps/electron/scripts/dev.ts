@@ -5,10 +5,14 @@ import { fileURLToPath } from "node:url";
 import { Effect, Exit } from "effect";
 import { createServer, type ViteDevServer } from "vite";
 import { runElectronEffect } from "../src/effect/electron-boundary";
-import { resolveRendererDevPort as resolveRendererDevPortFromConfig } from "../src/effect/electron-config";
+import {
+  resolveRendererDevPortEffect,
+  resolveRendererDevPort as resolveRendererDevPortFromConfig,
+} from "../src/effect/electron-config";
 import {
   causeToElectronBoundaryError,
   ElectronOperationError,
+  type ElectronValidationError,
   errorMessage,
   toElectronOperationError,
 } from "../src/effect/electron-errors";
@@ -713,9 +717,15 @@ export const runElectronDevLifecycleEffect = ({
     );
   });
 
-export const mainEffect = (): Effect.Effect<number, ElectronOperationError> =>
+export const mainEffect = (): Effect.Effect<
+  number,
+  ElectronOperationError | ElectronValidationError
+> =>
   Effect.gen(function* () {
-    const rendererPort = resolveRendererDevPort(process.env.ELECTRON_RENDERER_DEV_PORT);
+    const rendererPort = yield* resolveRendererDevPortEffect(
+      process.env.ELECTRON_RENDERER_DEV_PORT,
+      "electron.dev.resolve-renderer-dev-port",
+    );
     const electronExecutablePath = yield* resolveElectronDevExecutablePathEffect();
     const rendererServer = yield* createRendererDevServerEffect(rendererPort);
     const lifecycleExit = yield* Effect.exit(
