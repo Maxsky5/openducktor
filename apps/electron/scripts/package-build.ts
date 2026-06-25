@@ -1,7 +1,15 @@
+import type { Dirent } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "@openducktor/build-tools";
+import { Effect } from "effect";
+import { runElectronEffect } from "../src/effect/electron-boundary";
+import {
+  ElectronOperationError,
+  ElectronValidationError,
+  errorMessage,
+} from "../src/effect/electron-errors";
 import {
   detectHostReleaseArch,
   detectHostReleasePlatform,
@@ -9,8 +17,8 @@ import {
   type ElectronReleasePlatform,
 } from "./electron-release-targets";
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
-import { prepareElectronSidecars } from "./prepare-electron-sidecars";
-import { verifyPackagedElectronSidecars } from "./verify-electron-sidecar-package";
+import { prepareElectronSidecarsEffect } from "./prepare-electron-sidecars";
+import { verifyPackagedElectronSidecarsEffect } from "./verify-electron-sidecar-package";
 
 export type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
@@ -98,18 +106,29 @@ export const resolveElectronBuilderEnv = (
 export const isReleaseArtifact = (platform: ElectronReleasePlatform, fileName: string): boolean =>
   artifactExtensions[platform].has(extname(fileName));
 
-const readReleaseDirectoryEntries = async (releaseDirectory: string) => {
-  try {
-    return await readdir(releaseDirectory, { withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Electron release directory is missing: ${releaseDirectory}`);
-    }
-    throw error;
-  }
-};
+const nodeErrorCode = (cause: unknown): string | null =>
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+    ? cause.code
+    : null;
 
-export const collectReleaseArtifacts = async ({
+const readReleaseDirectoryEntriesEffect = (
+  releaseDirectory: string,
+): Effect.Effect<Dirent<string>[], ElectronOperationError> =>
+  Effect.tryPromise({
+    try: () => readdir(releaseDirectory, { withFileTypes: true }),
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.package.read-release-directory",
+        message:
+          nodeErrorCode(cause) === "ENOENT"
+            ? `Electron release directory is missing: ${releaseDirectory}`
+            : errorMessage(cause),
+        path: releaseDirectory,
+        cause,
+      }),
+  });
+
+export const collectReleaseArtifactsEffect = ({
   outputDirectory,
   platform,
   releaseDirectory,
@@ -117,31 +136,94 @@ export const collectReleaseArtifacts = async ({
   outputDirectory: string;
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
-}): Promise<string[]> => {
-  const entries = await readReleaseDirectoryEntries(releaseDirectory);
-  await rm(outputDirectory, { force: true, recursive: true });
-  await mkdir(outputDirectory, { recursive: true });
+}): Effect.Effect<string[], ElectronOperationError> =>
+  Effect.gen(function* () {
+    const entries = yield* readReleaseDirectoryEntriesEffect(releaseDirectory);
+    yield* Effect.tryPromise({
+      try: () => rm(outputDirectory, { force: true, recursive: true }),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.package.clean-artifact-output",
+          message: errorMessage(cause),
+          path: outputDirectory,
+          cause,
+        }),
+    });
+    yield* Effect.tryPromise({
+      try: () => mkdir(outputDirectory, { recursive: true }),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.package.create-artifact-output",
+          message: errorMessage(cause),
+          path: outputDirectory,
+          cause,
+        }),
+    });
 
-  const artifactEntries = entries.filter(
-    (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name),
-  );
-  const copiedArtifacts = await Promise.all(
-    artifactEntries.map(async (entry) => {
-      const sourcePath = join(releaseDirectory, entry.name);
-      const targetPath = join(outputDirectory, entry.name);
-      await copyFile(sourcePath, targetPath);
-      return targetPath;
-    }),
-  );
+    const artifactEntries = entries.filter(
+      (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name),
+    );
+    const copiedArtifacts = yield* Effect.all(
+      artifactEntries.map((entry) => {
+        const sourcePath = join(releaseDirectory, entry.name);
+        const targetPath = join(outputDirectory, entry.name);
+        return Effect.tryPromise({
+          try: async () => {
+            await copyFile(sourcePath, targetPath);
+            return targetPath;
+          },
+          catch: (cause) =>
+            new ElectronOperationError({
+              operation: "electron.package.copy-release-artifact",
+              message: errorMessage(cause),
+              path: sourcePath,
+              cause,
+              details: { targetPath },
+            }),
+        });
+      }),
+      { concurrency: "unbounded" },
+    );
 
-  if (copiedArtifacts.length === 0) {
-    throw new Error(`No Electron release artifacts were produced for ${platform}.`);
-  }
+    if (copiedArtifacts.length === 0) {
+      return yield* new ElectronOperationError({
+        operation: "electron.package.collect-release-artifacts",
+        message: `No Electron release artifacts were produced for ${platform}.`,
+        path: releaseDirectory,
+        platform,
+      });
+    }
 
-  return copiedArtifacts;
-};
+    return copiedArtifacts;
+  });
 
-export const buildElectronPackage = async ({
+export const collectReleaseArtifacts = (input: {
+  outputDirectory: string;
+  platform: ElectronReleasePlatform;
+  releaseDirectory: string;
+}): Promise<string[]> => runElectronEffect(collectReleaseArtifactsEffect(input));
+
+const runPackageCommandEffect = ({
+  command,
+  cwd,
+  env,
+  label,
+}: Parameters<typeof runCommand>[0]): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: () => {
+      const input = env === undefined ? { command, cwd, label } : { command, cwd, env, label };
+      return runCommand(input);
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.package.run-command",
+        message: errorMessage(cause),
+        cause,
+        details: { command, cwd, label },
+      }),
+  });
+
+export const buildElectronPackageEffect = ({
   arch,
   electronPackageDirectory,
   outputDirectory,
@@ -149,62 +231,82 @@ export const buildElectronPackage = async ({
   signed,
   stageReleaseArtifacts,
   workspaceRoot,
-}: ElectronPackageBuildOptions): Promise<string[]> => {
-  const releaseDirectory = join(electronPackageDirectory, "release");
+}: ElectronPackageBuildOptions): Effect.Effect<
+  string[],
+  ElectronOperationError | ElectronValidationError
+> =>
+  Effect.gen(function* () {
+    const releaseDirectory = join(electronPackageDirectory, "release");
 
-  await rm(releaseDirectory, { force: true, recursive: true });
-  await prepareElectronSidecars({
-    arch,
-    electronPackageDirectory,
-    platform,
-    workspaceRoot,
+    yield* Effect.tryPromise({
+      try: () => rm(releaseDirectory, { force: true, recursive: true }),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.package.clean-release-directory",
+          message: errorMessage(cause),
+          path: releaseDirectory,
+          cause,
+        }),
+    });
+    yield* prepareElectronSidecarsEffect({
+      arch,
+      electronPackageDirectory,
+      platform,
+      workspaceRoot,
+    });
+
+    yield* runPackageCommandEffect({
+      command: ["bun", "run", "build"],
+      cwd: electronPackageDirectory,
+      label: "Electron app build",
+    });
+    yield* runPackageCommandEffect({
+      command: [
+        "bun",
+        "run",
+        "builder",
+        "--",
+        ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
+      ],
+      cwd: electronPackageDirectory,
+      env: resolveElectronBuilderEnv(signed, process.env),
+      label: "Electron Builder package",
+    });
+
+    const verifiedSidecars = yield* verifyPackagedElectronSidecarsEffect({
+      arch,
+      platform,
+      releaseDirectory,
+    });
+    for (const sidecar of verifiedSidecars) {
+      console.log(
+        `Verified packaged Electron ${electronSidecarDisplayName(sidecar.id)} sidecar payload: ${
+          sidecar.path
+        }`,
+      );
+    }
+
+    if (!stageReleaseArtifacts) {
+      return [];
+    }
+
+    if (!outputDirectory) {
+      return yield* new ElectronValidationError({
+        operation: "electron.package.require-output-directory",
+        message: "--output-dir is required when staging Electron release artifacts.",
+        field: "outputDirectory",
+      });
+    }
+
+    return yield* collectReleaseArtifactsEffect({
+      outputDirectory,
+      platform,
+      releaseDirectory,
+    });
   });
 
-  await runCommand({
-    command: ["bun", "run", "build"],
-    cwd: electronPackageDirectory,
-    label: "Electron app build",
-  });
-  await runCommand({
-    command: [
-      "bun",
-      "run",
-      "builder",
-      "--",
-      ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
-    ],
-    cwd: electronPackageDirectory,
-    env: resolveElectronBuilderEnv(signed, process.env),
-    label: "Electron Builder package",
-  });
-
-  const verifiedSidecars = await verifyPackagedElectronSidecars({
-    arch,
-    platform,
-    releaseDirectory,
-  });
-  for (const sidecar of verifiedSidecars) {
-    console.log(
-      `Verified packaged Electron ${electronSidecarDisplayName(sidecar.id)} sidecar payload: ${
-        sidecar.path
-      }`,
-    );
-  }
-
-  if (!stageReleaseArtifacts) {
-    return [];
-  }
-
-  if (!outputDirectory) {
-    throw new Error("--output-dir is required when staging Electron release artifacts.");
-  }
-
-  return collectReleaseArtifacts({
-    outputDirectory,
-    platform,
-    releaseDirectory,
-  });
-};
+export const buildElectronPackage = (input: ElectronPackageBuildOptions): Promise<string[]> =>
+  runElectronEffect(buildElectronPackageEffect(input));
 
 const readFlagValue = (args: string[], name: string): string | undefined => {
   const index = args.indexOf(name);
@@ -220,7 +322,12 @@ const parsePlatform = (value: string | undefined): ElectronReleasePlatform => {
     return platform;
   }
 
-  throw new Error("Expected --platform to be one of: linux, macos, windows.");
+  throw new ElectronValidationError({
+    operation: "electron.package.parse-platform",
+    message: "Expected --platform to be one of: linux, macos, windows.",
+    field: "platform",
+    platform: value,
+  });
 };
 
 const parseArch = (value: string | undefined): ElectronReleaseArch => {
@@ -229,7 +336,12 @@ const parseArch = (value: string | undefined): ElectronReleaseArch => {
     return arch;
   }
 
-  throw new Error("Expected --arch to be one of: arm64, x64.");
+  throw new ElectronValidationError({
+    operation: "electron.package.parse-arch",
+    message: "Expected --arch to be one of: arm64, x64.",
+    field: "arch",
+    arch: value,
+  });
 };
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -237,28 +349,33 @@ const electronPackageDirectory = dirname(scriptDirectory);
 const workspaceRoot = resolve(electronPackageDirectory, "../..");
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
-  const stageReleaseArtifacts = hasFlag(args, "--stage-release-artifacts");
-  const outputDirectoryValue = readFlagValue(args, "--output-dir");
-  const outputDirectory =
-    outputDirectoryValue || stageReleaseArtifacts
-      ? resolve(electronPackageDirectory, outputDirectoryValue ?? "release-publish")
-      : undefined;
+  try {
+    const args = process.argv.slice(2);
+    const stageReleaseArtifacts = hasFlag(args, "--stage-release-artifacts");
+    const outputDirectoryValue = readFlagValue(args, "--output-dir");
+    const outputDirectory =
+      outputDirectoryValue || stageReleaseArtifacts
+        ? resolve(electronPackageDirectory, outputDirectoryValue ?? "release-publish")
+        : undefined;
 
-  const artifacts = await buildElectronPackage({
-    arch: parseArch(readFlagValue(args, "--arch")),
-    electronPackageDirectory,
-    outputDirectory,
-    platform: parsePlatform(readFlagValue(args, "--platform")),
-    signed: hasFlag(args, "--signed"),
-    stageReleaseArtifacts,
-    workspaceRoot,
-  });
+    const artifacts = await buildElectronPackage({
+      arch: parseArch(readFlagValue(args, "--arch")),
+      electronPackageDirectory,
+      outputDirectory,
+      platform: parsePlatform(readFlagValue(args, "--platform")),
+      signed: hasFlag(args, "--signed"),
+      stageReleaseArtifacts,
+      workspaceRoot,
+    });
 
-  if (stageReleaseArtifacts) {
-    console.log("Staged Electron release artifacts:");
-    for (const artifact of artifacts) {
-      console.log(`- ${artifact}`);
+    if (stageReleaseArtifacts) {
+      console.log("Staged Electron release artifacts:");
+      for (const artifact of artifacts) {
+        console.log(`- ${artifact}`);
+      }
     }
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
   }
 }

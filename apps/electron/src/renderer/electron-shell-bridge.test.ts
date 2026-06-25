@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { ElectronValidationError } from "../effect/electron-errors";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import { createElectronShellBridge } from "./electron-shell-bridge";
 
@@ -29,7 +30,21 @@ describe("electron shell bridge", () => {
   test("fails fast when the preload bridge was not installed", () => {
     setElectronApi(undefined);
 
-    expect(() => createElectronShellBridge()).toThrow(
+    const error = (() => {
+      try {
+        createElectronShellBridge();
+      } catch (caught) {
+        return caught;
+      }
+      throw new Error("Expected createElectronShellBridge to fail.");
+    })();
+
+    expect(error).toBeInstanceOf(ElectronValidationError);
+    expect(error).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.renderer.get-preload-bridge",
+    });
+    expect((error as Error).message).toContain(
       "OpenDucktor Electron preload bridge is unavailable.",
     );
   });

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
+import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   closeRendererServer,
   electronGracefulShutdownSignal,
@@ -7,7 +8,9 @@ import {
   resolveMacosAppBundlePath,
   resolveMacosDevExecutablePath,
   resolveRendererDevPort,
+  resolveRequiredMacosAppBundlePath,
   shouldRestartElectronForChange,
+  stopElectronEffect,
 } from "./dev";
 
 describe("electron dev script", () => {
@@ -24,9 +27,32 @@ describe("electron dev script", () => {
     expect(() => resolveRendererDevPort("1430abc")).toThrow(
       "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 1430abc",
     );
+    expect(() => resolveRendererDevPort("0")).toThrow(
+      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 0",
+    );
+    expect(() => resolveRendererDevPort("-1")).toThrow(
+      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: -1",
+    );
     expect(() => resolveRendererDevPort("70000")).toThrow(
       "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 70000",
     );
+  });
+
+  test("uses typed errors for malformed renderer dev server ports", () => {
+    const error = (() => {
+      try {
+        resolveRendererDevPort("0");
+      } catch (caught) {
+        return caught;
+      }
+      throw new Error("Expected resolveRendererDevPort to fail.");
+    })();
+
+    expect(error).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.dev.resolve-renderer-dev-port",
+      field: "ELECTRON_RENDERER_DEV_PORT",
+    });
   });
 
   test("does not launch Electron in Node compatibility mode", () => {
@@ -45,6 +71,23 @@ describe("electron dev script", () => {
       ),
     ).toBe("/repo/node_modules/electron/dist/Electron.app");
     expect(resolveMacosAppBundlePath("/repo/node_modules/.bin/electron")).toBeNull();
+  });
+
+  test("fails with a typed error when the macOS Electron executable is outside an app bundle", () => {
+    const error = (() => {
+      try {
+        resolveRequiredMacosAppBundlePath("/repo/node_modules/.bin/electron");
+      } catch (caught) {
+        return caught;
+      }
+      throw new Error("Expected resolveRequiredMacosAppBundlePath to fail.");
+    })();
+
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.dev.resolve-macos-app-bundle",
+      path: "/repo/node_modules/.bin/electron",
+    });
   });
 
   test("resolves the OpenDucktor macOS dev executable inside the copied app bundle", () => {
@@ -183,5 +226,26 @@ describe("electron dev script", () => {
     });
 
     expect(timeoutMs).toBe(3_000);
+  });
+
+  test("fails when Electron does not exit after forced shutdown", async () => {
+    const signals: Array<NodeJS.Signals | number | undefined> = [];
+    const electron = {
+      exited: new Promise<number>(() => {}),
+      kill(signal?: NodeJS.Signals | number) {
+        signals.push(signal);
+      },
+    };
+
+    const error = await runElectronEffect(
+      stopElectronEffect(electron as never, async () => undefined),
+    ).catch((caught: unknown) => caught);
+
+    expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.dev.stop-electron",
+    });
+    expect((error as Error).message).toContain("Electron did not exit after forced shutdown");
   });
 });

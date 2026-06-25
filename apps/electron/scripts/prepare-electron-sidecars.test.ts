@@ -107,15 +107,20 @@ describe("prepareElectronSidecars", () => {
     await writeFile(staleOutput, "stale");
     await rm(mcpEntrypoint);
 
-    await expect(
-      prepareElectronSidecars({
-        arch: "x64",
-        electronPackageDirectory,
-        platform: "linux",
-        workspaceRoot,
-        ...makeSideEffectingHooks(sideEffects),
-      }),
-    ).rejects.toThrow("OpenDucktor MCP entrypoint is missing");
+    const error = await prepareElectronSidecars({
+      arch: "x64",
+      electronPackageDirectory,
+      platform: "linux",
+      workspaceRoot,
+      ...makeSideEffectingHooks(sideEffects),
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.sidecar.assert-file-exists",
+      path: mcpEntrypoint,
+    });
+    expect((error as Error).message).toContain("OpenDucktor MCP entrypoint is missing");
     expect(sideEffects).toEqual([]);
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });

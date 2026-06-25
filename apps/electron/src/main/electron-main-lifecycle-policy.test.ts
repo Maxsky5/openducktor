@@ -13,7 +13,8 @@ describe("Electron main lifecycle policy", () => {
 
     expect(source).toContain("resolveElectronWindowIcon()");
     expect(source).toContain("nativeImage.createFromPath(iconPath)");
-    expect(source).toContain("throw new Error(");
+    expect(source).toContain("throw new ElectronOperationError({");
+    expect(source).toContain('operation: "electron.main.load-icon"');
     expect(source).toContain("icon is missing or invalid:");
     expect(source).toContain("icon: resolveElectronWindowIcon()");
   });
@@ -50,7 +51,16 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('app.on("before-quit"');
     expect(source).toContain("event.preventDefault();");
     expect(source).toContain("hideWindowsForShutdown();");
-    expect(source).toContain("await hostCommandRouter.dispose();");
+    expect(source).toContain("Effect.runPromiseExit(disposeHostEffect(reason))");
+    expect(source).toContain('operation: "electron.main.dispose-host"');
+  });
+
+  test("main process uses the Effect-native host router internally", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("createElectronEffectHostCommandRouter");
+    expect(source).toContain("runElectronEffect(hostCommandRouter.invoke");
+    expect(source).toContain("runElectronEffect(initializeHostEffect())");
   });
 
   test("process signals wait for host shutdown before exiting", () => {

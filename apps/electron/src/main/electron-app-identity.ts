@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "@openducktor/host";
+import { ElectronOperationError, errorMessage } from "../effect/electron-errors";
 
 type ElectronAppIdentity = {
   setName(name: string): void;
@@ -15,13 +16,6 @@ type ConfigureElectronAppIdentityOptions = {
   createDirectory?: CreateProfileDirectory;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
-};
-
-const errorMessage = (cause: unknown): string => {
-  if (cause instanceof Error) {
-    return cause.message;
-  }
-  return String(cause);
 };
 
 const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
@@ -49,10 +43,13 @@ export const configureElectronAppIdentity = (
     createDirectory(profilePath);
   } catch (cause) {
     const pathContext = profilePath.length > 0 ? ` at ${profilePath}` : "";
-    throw new Error(
-      `Failed to prepare ${appName} Electron profile directory${pathContext}: ${errorMessage(cause)}`,
-      { cause },
-    );
+    throw new ElectronOperationError({
+      operation: "electron.app-identity.prepare-profile-directory",
+      message: `Failed to prepare ${appName} Electron profile directory${pathContext}: ${errorMessage(cause)}`,
+      path: profilePath.length > 0 ? profilePath : undefined,
+      cause,
+      details: { appName },
+    });
   }
   app.setPath("userData", profilePath);
   app.setPath("sessionData", profilePath);

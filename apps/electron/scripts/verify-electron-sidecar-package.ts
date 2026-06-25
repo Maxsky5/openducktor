@@ -1,6 +1,9 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
+import { runElectronEffect } from "../src/effect/electron-boundary";
+import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
 import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 import {
   ELECTRON_SIDECAR_IDS,
@@ -67,7 +70,7 @@ export const resolvePackagedElectronSidecarPath = ({
   );
 };
 
-const assertPackagedSidecarFile = async ({
+const assertPackagedSidecarFileEffect = ({
   path,
   platform,
   sidecarId,
@@ -75,52 +78,79 @@ const assertPackagedSidecarFile = async ({
   path: string;
   platform: ElectronReleasePlatform;
   sidecarId: ElectronSidecarId;
-}): Promise<Stats> => {
-  try {
-    const metadata = await stat(path);
-    if (!metadata.isFile()) {
-      throw new Error("expected a file but found a non-file entry");
-    }
-    if (metadata.size === 0) {
-      throw new Error("expected a non-empty file");
-    }
-    return metadata;
-  } catch (cause) {
-    if (cause instanceof Error) {
-      throw new Error(
-        `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: ${
-          cause.message
-        }. Expected path: ${path}`,
-        { cause },
-      );
-    }
-    throw cause;
-  }
-};
+}): Effect.Effect<Stats, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(path);
+      if (!metadata.isFile()) {
+        throw new Error("expected a file but found a non-file entry");
+      }
+      if (metadata.size === 0) {
+        throw new Error("expected a non-empty file");
+      }
+      return metadata;
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.sidecar.verify-packaged",
+        message: `Invalid packaged Electron ${electronSidecarDisplayName(
+          sidecarId,
+        )} sidecar payload for ${platform}: ${errorMessage(cause)}. Expected path: ${path}`,
+        path,
+        platform,
+        cause,
+        details: { sidecarId },
+      }),
+  });
 
-export const verifyPackagedElectronSidecars = async ({
+export const verifyPackagedElectronSidecarsEffect = ({
   arch,
   platform,
   releaseDirectory,
-}: VerifyPackagedElectronSidecarsInput): Promise<VerifiedPackagedElectronSidecar[]> => {
-  const verifiedSidecars: VerifiedPackagedElectronSidecar[] = [];
-  for (const sidecarId of ELECTRON_SIDECAR_IDS) {
-    const sidecarPath = resolvePackagedElectronSidecarPath({
+}: VerifyPackagedElectronSidecarsInput): Effect.Effect<
+  VerifiedPackagedElectronSidecar[],
+  ElectronOperationError
+> =>
+  Effect.gen(function* () {
+    const verifiedSidecars: VerifiedPackagedElectronSidecar[] = [];
+    for (const sidecarId of ELECTRON_SIDECAR_IDS) {
+      const sidecarPath = resolvePackagedElectronSidecarPath({
+        arch,
+        platform,
+        releaseDirectory,
+        sidecarId,
+      });
+      const metadata = yield* assertPackagedSidecarFileEffect({
+        path: sidecarPath,
+        platform,
+        sidecarId,
+      });
+
+      if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
+        return yield* new ElectronOperationError({
+          operation: "electron.sidecar.verify-packaged-executable",
+          message: `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: expected an executable file. Expected path: ${sidecarPath}`,
+          path: sidecarPath,
+          platform,
+          details: { sidecarId },
+        });
+      }
+
+      verifiedSidecars.push({ id: sidecarId, path: sidecarPath });
+    }
+
+    return verifiedSidecars;
+  });
+
+export const verifyPackagedElectronSidecars = ({
+  arch,
+  platform,
+  releaseDirectory,
+}: VerifyPackagedElectronSidecarsInput): Promise<VerifiedPackagedElectronSidecar[]> =>
+  runElectronEffect(
+    verifyPackagedElectronSidecarsEffect({
       arch,
       platform,
       releaseDirectory,
-      sidecarId,
-    });
-    const metadata = await assertPackagedSidecarFile({ path: sidecarPath, platform, sidecarId });
-
-    if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
-      throw new Error(
-        `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: expected an executable file. Expected path: ${sidecarPath}`,
-      );
-    }
-
-    verifiedSidecars.push({ id: sidecarId, path: sidecarPath });
-  }
-
-  return verifiedSidecars;
-};
+    }),
+  );

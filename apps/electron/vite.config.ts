@@ -1,52 +1,29 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
+import { runElectronSync } from "./src/effect/electron-boundary";
+import {
+  readPackageVersionEffect,
+  resolveRendererDevPortEffect,
+} from "./src/effect/electron-config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const workspaceRoot = path.resolve(__dirname, "../..");
 const packagesRoot = path.join(workspaceRoot, "packages");
-const DEFAULT_RENDERER_DEV_PORT = 1430;
 
-const readPackageVersion = (packageJsonPath = path.resolve(__dirname, "package.json")): string => {
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
-    version?: unknown;
-  };
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error(`Missing package version in ${packageJsonPath}`);
-  }
-  return packageJson.version;
-};
-
-export const resolveAppVersion = (env: NodeJS.ProcessEnv = process.env): string => {
+export const resolveAppVersion = (
+  env: NodeJS.ProcessEnv = process.env,
+  packageJsonPath = path.resolve(__dirname, "package.json"),
+): string => {
   const versionOverride = env.ODT_APP_VERSION?.trim();
-  return versionOverride || readPackageVersion();
+  return versionOverride || runElectronSync(readPackageVersionEffect(packageJsonPath));
 };
 
-const resolveRendererDevPort = (): number => {
-  const configuredPort = process.env.ELECTRON_RENDERER_DEV_PORT?.trim();
-  if (!configuredPort) {
-    return DEFAULT_RENDERER_DEV_PORT;
-  }
-
-  if (!/^\d+$/.test(configuredPort)) {
-    throw new Error(
-      `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${configuredPort}`,
-    );
-  }
-
-  const port = Number(configuredPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-    throw new Error(
-      `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${configuredPort}`,
-    );
-  }
-
-  return port;
-};
+const resolveRendererDevPort = (): number =>
+  runElectronSync(resolveRendererDevPortEffect(process.env.ELECTRON_RENDERER_DEV_PORT));
 
 export default defineConfig({
   base: "./",

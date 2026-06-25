@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ElectronValidationError } from "../effect/electron-errors";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -22,9 +23,21 @@ describe("electron local attachment previews", () => {
   });
 
   test("rejects missing or malformed preview paths", () => {
-    expect(() => readLocalAttachmentPreviewPath("  ")).toThrow(
-      "Local attachment preview path must be a non-empty string.",
-    );
+    const blankPathError = (() => {
+      try {
+        readLocalAttachmentPreviewPath("  ");
+      } catch (error) {
+        return error;
+      }
+      throw new Error("Expected readLocalAttachmentPreviewPath to fail.");
+    })();
+
+    expect(blankPathError).toBeInstanceOf(ElectronValidationError);
+    expect(blankPathError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.read-path",
+      message: "Local attachment preview path must be a non-empty string.",
+    });
     expect(() => readLocalAttachmentPreviewPath(null)).toThrow(
       "Local attachment preview path must be a non-empty string.",
     );
@@ -145,6 +158,41 @@ describe("electron local attachment previews", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toBe("Attachment path is not a staged local attachment.");
+  });
+
+  test("returns structured error responses for invalid host resolver return shapes", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run when resolution returns an invalid shape.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        return null as never;
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/staged.png"),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe("Local attachment preview path must be a non-empty string.");
   });
 
   test("returns structured error responses for preview file serving failures", async () => {

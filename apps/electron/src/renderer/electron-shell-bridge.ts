@@ -1,5 +1,6 @@
 import type { ShellBridge } from "@openducktor/frontend";
 import { createHostClient } from "@openducktor/host-client";
+import { ElectronValidationError } from "../effect/electron-errors";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -10,9 +11,11 @@ const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
 const getElectronApi = (): OpenDucktorElectronApi => {
   const electronApi = window.openducktorElectron;
   if (!electronApi) {
-    throw new Error(
-      "OpenDucktor Electron preload bridge is unavailable. Check that BrowserWindow webPreferences.preload points to the built preload.cjs file.",
-    );
+    throw new ElectronValidationError({
+      operation: "electron.renderer.get-preload-bridge",
+      message:
+        "OpenDucktor Electron preload bridge is unavailable. Check that BrowserWindow webPreferences.preload points to the built preload.cjs file.",
+    });
   }
 
   return electronApi;
