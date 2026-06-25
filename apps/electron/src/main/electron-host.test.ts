@@ -1110,11 +1110,18 @@ describe("createElectronHostCommandRouter", () => {
       taskStore: createTaskStore(),
     });
 
-    await expect(router.invoke("tasks_list", { repoPath: "/repo" })).resolves.toMatchObject([
-      {
+    await expect(router.invoke("tasks_list", { repoPath: "/repo" })).resolves.toEqual([
+      expect.objectContaining({
         id: "task-1",
-        availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
-      },
+        availableActions: [
+          "view_details",
+          "set_spec",
+          "set_plan",
+          "build_start",
+          "reset_task",
+          "close_task",
+        ],
+      }),
     ]);
     await expect(
       router.invoke("task_create", {
@@ -1123,7 +1130,14 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toMatchObject({
       id: "task-2",
-      availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
+      availableActions: [
+        "view_details",
+        "set_spec",
+        "set_plan",
+        "build_start",
+        "reset_task",
+        "close_task",
+      ],
     });
     await expect(
       router.invoke("agent_session_upsert", {
@@ -2128,7 +2142,14 @@ describe("createElectronHostCommandRouter", () => {
     ).resolves.toMatchObject({
       id: "task-1",
       title: "Updated task",
-      availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
+      availableActions: [
+        "view_details",
+        "set_spec",
+        "set_plan",
+        "build_start",
+        "reset_task",
+        "close_task",
+      ],
     });
   });
 
