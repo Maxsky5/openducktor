@@ -1,22 +1,20 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { requireDependencies } from "../support/required-task-dependencies";
+import { requireTaskCloseDependencies } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
   collectRelatedTaskBranches,
+  createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
+  runTaskLocalCleanup,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoleNames,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
-import {
-  requireTaskCloseDependencies,
-  requireTaskWorktreeCleanupFiles,
-} from "../support/task-reset-dependencies";
 import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -105,42 +103,22 @@ export const createTaskCloseUseCase = ({
         branchPrefix,
         [taskId],
       );
-      const cleanupFiles =
-        worktreePaths.length > 0
-          ? yield* requireDependencies(() =>
-              requireTaskWorktreeCleanupFiles(worktreeFiles, "task_close"),
-            )
-          : null;
-      const removedWorktrees: string[] = [];
-      const deletedBranches: string[] = [];
-      const completedSteps: string[] = [];
+      const cleanupProgress = createTaskCleanupProgressState();
 
       return yield* Effect.gen(function* () {
-        yield* dependencies.devServerService.stop({ repoPath: effectiveRepoPath, taskId });
-        completedSteps.push("stopped task dev servers");
-        if (cleanupFiles) {
-          for (const worktreePath of worktreePaths) {
-            yield* removeWorktreeAndFilesystemPath(
-              {
-                gitPort: dependencies.gitPort,
-                settingsConfig: dependencies.settingsConfig,
-                worktreeFiles: cleanupFiles,
-              },
-              {
-                repoPath: effectiveRepoPath,
-                worktreePath,
-                force: true,
-                managedWorktreeBasePath,
-                missingOutsideManagedRootPathPolicy: "skip",
-              },
-            );
-            removedWorktrees.push(worktreePath);
-          }
-        }
-        for (const branchName of branchNames) {
-          yield* dependencies.gitPort.deleteLocalBranch(effectiveRepoPath, branchName, true);
-          deletedBranches.push(branchName);
-        }
+        yield* runTaskLocalCleanup({
+          branchNames,
+          devServerService: dependencies.devServerService,
+          gitPort: dependencies.gitPort,
+          managedWorktreeBasePath,
+          progress: cleanupProgress,
+          repoPath: effectiveRepoPath,
+          settingsConfig: dependencies.settingsConfig,
+          taskIds: [taskId],
+          worktreeCleanupOperation: "task_close",
+          worktreeFiles,
+          worktreePaths,
+        });
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,
@@ -152,9 +130,9 @@ export const createTaskCloseUseCase = ({
           Effect.fail(
             appendTaskCleanupProgress(error, {
               operation: "task_close",
-              removedWorktrees,
-              deletedBranches,
-              completedSteps,
+              removedWorktrees: cleanupProgress.removedWorktrees,
+              deletedBranches: cleanupProgress.deletedBranches,
+              completedSteps: cleanupProgress.completedSteps,
             }),
           ),
         ),

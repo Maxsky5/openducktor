@@ -73,7 +73,7 @@ Native task actions:
 
 ## Invalid Transition Examples
 - `open -> closed` without human approval or `close_task`.
-- `ai_review -> closed` without an explicit `human_approve` action.
+- `ai_review -> closed` without an explicit `human_approve` or `close_task` action.
 - `blocked -> closed` directly without `close_task`.
 
 ## Board Semantics

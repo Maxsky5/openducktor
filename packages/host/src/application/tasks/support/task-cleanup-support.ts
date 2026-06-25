@@ -7,9 +7,17 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  HostOperationError,
+  HostValidationError,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import type { DevServerService } from "../../dev-servers/dev-server-service";
+import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
@@ -179,6 +187,100 @@ type TaskCleanupProgressInput = {
   deletedBranches: string[];
   completedSteps?: string[];
 };
+
+type TaskCleanupOperation = keyof typeof taskCleanupProgressCopy;
+
+type TaskWorktreeCleanupOperation = TaskCleanupOperation | "task_reset_implementation";
+
+export type TaskCleanupProgressState = {
+  removedWorktrees: string[];
+  deletedBranches: string[];
+  completedSteps: string[];
+};
+
+export const createTaskCleanupProgressState = (): TaskCleanupProgressState => ({
+  removedWorktrees: [],
+  deletedBranches: [],
+  completedSteps: [],
+});
+
+const requireTaskCleanupWorktreeFiles = (
+  worktreeFiles: WorktreeFilePort | undefined,
+  operation: TaskWorktreeCleanupOperation,
+): Effect.Effect<WorktreeFilePort, HostDependencyError> => {
+  if (!worktreeFiles) {
+    return Effect.fail(
+      new HostDependencyError({
+        dependency: "task dependency",
+        message: `Worktree file port is required for ${operation}.`,
+      }),
+    );
+  }
+
+  return Effect.succeed(worktreeFiles);
+};
+
+export const runTaskLocalCleanup = ({
+  branchNames,
+  devServerService,
+  gitPort,
+  managedWorktreeBasePath,
+  progress,
+  repoPath,
+  settingsConfig,
+  taskIds,
+  worktreeCleanupOperation,
+  worktreeFiles,
+  worktreePaths,
+}: {
+  branchNames: string[];
+  devServerService: DevServerService;
+  gitPort: GitPort;
+  managedWorktreeBasePath: string;
+  progress: TaskCleanupProgressState;
+  repoPath: string;
+  settingsConfig: SettingsConfigPort;
+  taskIds: string[];
+  worktreeCleanupOperation: TaskWorktreeCleanupOperation;
+  worktreeFiles: WorktreeFilePort | undefined;
+  worktreePaths: string[];
+}) =>
+  Effect.gen(function* () {
+    const cleanupFiles =
+      worktreePaths.length > 0
+        ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
+        : null;
+
+    for (const taskId of taskIds) {
+      yield* devServerService.stop({ repoPath, taskId });
+    }
+    progress.completedSteps.push("stopped task dev servers");
+
+    if (cleanupFiles) {
+      for (const worktreePath of worktreePaths) {
+        yield* removeWorktreeAndFilesystemPath(
+          {
+            gitPort,
+            settingsConfig,
+            worktreeFiles: cleanupFiles,
+          },
+          {
+            repoPath,
+            worktreePath,
+            force: true,
+            managedWorktreeBasePath,
+            missingOutsideManagedRootPathPolicy: "skip",
+          },
+        );
+        progress.removedWorktrees.push(worktreePath);
+      }
+    }
+
+    for (const branchName of branchNames) {
+      yield* gitPort.deleteLocalBranch(repoPath, branchName, true);
+      progress.deletedBranches.push(branchName);
+    }
+  });
 
 export const appendTaskCleanupProgress = <E>(
   error: E,

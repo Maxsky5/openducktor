@@ -14,7 +14,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog-model";
+} from "./task-cleanup-impact-model";
 
 type TaskCloseConfirmDialogProps = {
   open: boolean;
@@ -59,7 +59,7 @@ export function TaskCloseConfirmDialog({
             <p>No code is merged and no pull request is created, updated, or merged.</p>
             <p>Task-scoped dev servers will be stopped.</p>
             {isLoadingImpact ? (
-              <p>{formatManagedSessionCleanupLoadingMessage()}</p>
+              <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (
               <p>{formatUnknownManagedSessionCleanupMessage()}</p>
             ) : hasManagedSessionCleanup ? (

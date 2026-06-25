@@ -437,4 +437,55 @@ describe("TaskService.closeTask", () => {
 
     expect(calls[0]).toBe("close task:spec,planner,build,qa");
   });
+
+  test("guards spec and planner sessions without deleting their working directories", async () => {
+    const calls: string[] = [];
+    const specSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "spec",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    };
+    const plannerSession: AgentSessionRecord = {
+      externalSessionId: "session-2",
+      role: "planner",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/planner-session",
+      selectedModel: null,
+    };
+    const activityGuard: TaskActivityGuardPort = {
+      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
+      ensureNoActiveTaskResetActivity: (input) => {
+        calls.push(`${input.operationLabel}:${input.sessionRoles.join(",")}`);
+        return Effect.succeed(undefined);
+      },
+    };
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls, {
+        "task-1": [specSession, plannerSession],
+      }),
+      taskActivityGuard: activityGuard,
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({
+        calls,
+        currentBranch: "feature/planner-session",
+      }),
+      settingsConfig: createSettingsConfig(new Set(["/repo", "/worktrees/repo/planner-session"])),
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    const closed = await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(closed.status).toBe("closed");
+    expect(calls).toEqual([
+      "close task:spec,planner,build,qa",
+      "stop-dev:task-1",
+      "transition:task-1:closed",
+    ]);
+  });
 });

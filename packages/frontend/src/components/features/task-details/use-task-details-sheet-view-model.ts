@@ -12,9 +12,9 @@ import {
   toTaskLabels,
 } from "@/components/features/task-details/task-details-sheet-model";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
+import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { useTaskCloseDialog } from "@/components/features/task-details/use-task-close-dialog";
 import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
-import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
@@ -96,7 +96,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onCloseTask: TaskDetailsSheetProps["onCloseTask"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
   taskDocumentsHook?: typeof useTaskDocuments;
-  taskDeleteImpactHook?: typeof useTaskDeleteImpact;
+  taskCleanupImpactHook?: typeof useTaskCleanupImpact;
 };
 
 export function useTaskDetailsSheetViewModel({
@@ -119,7 +119,7 @@ export function useTaskDetailsSheetViewModel({
   onCloseTask,
   onDelete,
   taskDocumentsHook = useTaskDocuments,
-  taskDeleteImpactHook = useTaskDeleteImpact,
+  taskCleanupImpactHook = useTaskCleanupImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskId = task?.id ?? null;
@@ -143,13 +143,13 @@ export function useTaskDetailsSheetViewModel({
     managedWorktreeCount: deleteManagedWorktreeCount,
     impactError: deleteImpactError,
     isLoadingImpact: isLoadingDeleteImpact,
-  } = taskDeleteImpactHook(deleteImpactTaskIds, open);
+  } = taskCleanupImpactHook(deleteImpactTaskIds, open);
   const {
     hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
     managedWorktreeCount: singleTaskCleanupWorktreeCount,
     impactError: singleTaskCleanupImpactError,
     isLoadingImpact: isLoadingSingleTaskCleanupImpact,
-  } = taskDeleteImpactHook(singleTaskCleanupImpactTaskIds, open);
+  } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";

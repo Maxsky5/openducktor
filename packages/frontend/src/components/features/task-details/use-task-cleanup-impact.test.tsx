@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  getManagedTaskDeleteImpact,
-  getManagedTaskDeleteImpactFromTasks,
-  TASK_DELETE_IMPACT_ERROR_MESSAGE,
-} from "./use-task-delete-impact";
+  getManagedTaskCleanupImpact,
+  getManagedTaskCleanupImpactFromTasks,
+  TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
+} from "./use-task-cleanup-impact";
 
 const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   runtimeKind: "opencode",
@@ -16,9 +16,9 @@ const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
   ...overrides,
 });
 
-describe("getManagedTaskDeleteImpact", () => {
+describe("getManagedTaskCleanupImpact", () => {
   test("counts unique build and qa worktrees outside the repo root", () => {
-    const impact = getManagedTaskDeleteImpact("/repo", [
+    const impact = getManagedTaskCleanupImpact("/repo", [
       makeSession({
         runtimeKind: "opencode",
         externalSessionId: "build-1",
@@ -55,7 +55,7 @@ describe("getManagedTaskDeleteImpact", () => {
   });
 
   test("normalizes trailing separators when comparing against the repo root", () => {
-    const impact = getManagedTaskDeleteImpact("/repo/", [
+    const impact = getManagedTaskCleanupImpact("/repo/", [
       makeSession({ externalSessionId: "build-root", workingDirectory: "/repo" }),
       makeSession({
         runtimeKind: "opencode",
@@ -74,7 +74,7 @@ describe("getManagedTaskDeleteImpact", () => {
   });
 
   test("uses shared path comparison semantics when deduplicating managed worktrees", () => {
-    const impact = getManagedTaskDeleteImpact("/repo", [
+    const impact = getManagedTaskCleanupImpact("/repo", [
       makeSession({
         runtimeKind: "opencode",
         externalSessionId: "build-1",
@@ -98,7 +98,7 @@ describe("getManagedTaskDeleteImpact", () => {
   });
 
   test("aggregates managed worktrees across multiple task session lists", () => {
-    const impact = getManagedTaskDeleteImpactFromTasks("/repo", [
+    const impact = getManagedTaskCleanupImpactFromTasks("/repo", [
       [makeSession({ externalSessionId: "parent", workingDirectory: "/repo" })],
       [makeSession({ externalSessionId: "child", workingDirectory: "/repo/worktrees/task-2" })],
     ]);
@@ -112,6 +112,8 @@ describe("getManagedTaskDeleteImpact", () => {
   });
 
   test("includes a stable explicit error message for impact lookup failures", () => {
-    expect(TASK_DELETE_IMPACT_ERROR_MESSAGE).toBe("Unable to load linked worktree cleanup impact.");
+    expect(TASK_CLEANUP_IMPACT_ERROR_MESSAGE).toBe(
+      "Unable to load linked worktree cleanup impact.",
+    );
   });
 });

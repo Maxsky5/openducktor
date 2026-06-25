@@ -2,12 +2,12 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
-import { isRelatedTaskBranch, workflowCleanupSessionRoles } from "./task-cleanup-support";
-import type { requireTaskCloseDependencies } from "./task-reset-dependencies";
+import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
+import { implementationSessionRoles, isRelatedTaskBranch } from "./task-cleanup-support";
 
-const collectCloseSessionWorktreePaths = (sessions: AgentSessionRecord[]): string[] =>
+const collectCloseManagedSessionWorktreePaths = (sessions: AgentSessionRecord[]): string[] =>
   sessions
-    .filter((session) => workflowCleanupSessionRoles.has(session.role.trim()))
+    .filter((session) => implementationSessionRoles.has(session.role.trim()))
     .map((session) => session.workingDirectory.trim())
     .filter((workingDirectory) => workingDirectory.length > 0);
 
@@ -26,7 +26,7 @@ export const collectCloseWorktreePaths = (
     });
     const candidatePaths = [
       ...(taskWorktree ? [taskWorktree.workingDirectory] : []),
-      ...collectCloseSessionWorktreePaths(sessions),
+      ...collectCloseManagedSessionWorktreePaths(sessions),
     ];
     const seen = new Set<string>();
     const paths: string[] = [];

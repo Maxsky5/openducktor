@@ -2,7 +2,6 @@ import { HostDependencyError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
@@ -38,17 +37,6 @@ export const requireTaskDeleteDependencies = (
   }
 
   return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
-};
-
-export const requireTaskWorktreeCleanupFiles = (
-  worktreeFiles: WorktreeFilePort | undefined,
-  operation: "task_close" | "task_delete" | "task_reset" | "task_reset_implementation",
-): WorktreeFilePort => {
-  if (!worktreeFiles) {
-    throw missingTaskDependency(`Worktree file port is required for ${operation}.`);
-  }
-
-  return worktreeFiles;
 };
 
 export const requireTaskCloseDependencies = (

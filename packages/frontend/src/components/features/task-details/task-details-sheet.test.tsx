@@ -90,7 +90,7 @@ describe("TaskDetailsSheet", () => {
         applyDocumentUpdate: () => {},
       }),
     );
-    const taskDeleteImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock(() => ({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       impactError: null,
@@ -120,14 +120,14 @@ describe("TaskDetailsSheet", () => {
       onCloseTask: undefined,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
-      taskDeleteImpactHook: taskDeleteImpactHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
     });
 
     try {
       await harness.mount();
       expect(taskDocumentsHookMock).toHaveBeenCalledWith("TASK-1", true, "/repo-a");
-      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
-      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
     } finally {
       await harness.unmount();
     }
@@ -150,7 +150,7 @@ describe("TaskDetailsSheet", () => {
       reloadDocument: () => false,
       applyDocumentUpdate: () => {},
     }));
-    const taskDeleteImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock(() => ({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       impactError: null,
@@ -182,7 +182,7 @@ describe("TaskDetailsSheet", () => {
       onCloseTask,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
-      taskDeleteImpactHook: taskDeleteImpactHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
     });
 
     try {
@@ -215,7 +215,7 @@ describe("TaskDetailsSheet", () => {
       reloadDocument: () => false,
       applyDocumentUpdate: () => {},
     }));
-    const taskDeleteImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock(() => ({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       impactError: null,
@@ -247,7 +247,7 @@ describe("TaskDetailsSheet", () => {
       onCloseTask,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
-      taskDeleteImpactHook: taskDeleteImpactHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
     });
 
     try {
