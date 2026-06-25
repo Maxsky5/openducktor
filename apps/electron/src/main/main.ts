@@ -1,7 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
-import { Effect, Exit } from "effect";
+import {
+  createHostEventBus,
+  type EffectHostCommandRouter,
+  HOST_EVENT_CHANNELS,
+  type HostRuntimeDistribution,
+} from "@openducktor/host";
+import { Effect } from "effect";
 import type {
   BrowserWindow as ElectronBrowserWindow,
   NativeImage as ElectronNativeImage,
@@ -10,11 +15,11 @@ import type {
 import electron from "electron";
 import { runElectronEffect } from "../effect/electron-boundary";
 import {
-  causeToElectronBoundaryError,
   ElectronLifecycleError,
   ElectronOperationError,
   ElectronValidationError,
   errorMessage,
+  isElectronError,
 } from "../effect/electron-errors";
 import {
   ELECTRON_HOST_EVENT_CHANNEL,
@@ -37,6 +42,11 @@ import {
   configureElectronLoopbackCorsPolicy,
   resolveElectronLoopbackCorsOrigin,
 } from "./electron-loopback-cors-policy";
+import {
+  composeElectronMainStartupEffect,
+  createElectronMainShutdownController,
+  runElectronMainStartupBoundary,
+} from "./electron-main-lifecycle";
 import { electronMainLogger } from "./electron-main-logger";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
@@ -51,36 +61,126 @@ const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
-configureElectronAppIdentity(app, { appName: APPLICATION_NAME });
-disableElectronKeychainStorage(app.commandLine);
-const runtimeDistribution = resolveElectronRuntimeDistribution({
-  platform: process.platform,
-  isPackaged: app.isPackaged,
-  resourcesPath: process.resourcesPath,
-  workspaceRoot,
-});
-
 const hostEventBus = createHostEventBus();
-const hostCommandRouter = createElectronEffectHostCommandRouter({
-  clientVersion: app.getVersion(),
-  eventBus: hostEventBus,
-  lifecycleLogger: electronMainLogger,
-  runtimeDistribution,
-});
-let hostShutdownStarted = false;
-let hostShutdownComplete = false;
+let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
-    privileges: {
-      secure: true,
-      standard: true,
-      stream: true,
-      supportFetchAPI: true,
-    },
+const shutdownController = createElectronMainShutdownController({
+  disposeHost: (reason) => disposeActiveHostEffect(reason),
+  exitProcess: (exitCode) => {
+    process.exit(exitCode);
   },
-]);
+  logger: electronMainLogger,
+  quitApp: () => {
+    app.quit();
+  },
+});
+
+type ElectronPreReadyRuntime = {
+  hostCommandRouter: EffectHostCommandRouter;
+};
+
+type ElectronReadyRuntime = ElectronPreReadyRuntime & {
+  rendererSession: ElectronSession;
+};
+
+const mapStartupPreparationError = (
+  cause: unknown,
+  operation: string,
+  message: string,
+): ElectronLifecycleError | ElectronOperationError | ElectronValidationError =>
+  isElectronError(cause)
+    ? cause
+    : new ElectronLifecycleError({
+        operation,
+        message,
+        cause,
+      });
+
+const registerPrivilegedProtocolSchemes = (): void => {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
+      privileges: {
+        secure: true,
+        standard: true,
+        stream: true,
+        supportFetchAPI: true,
+      },
+    },
+  ]);
+};
+
+const createElectronHostCommandRouter = (
+  runtimeDistribution: HostRuntimeDistribution,
+): EffectHostCommandRouter =>
+  createElectronEffectHostCommandRouter({
+    clientVersion: app.getVersion(),
+    eventBus: hostEventBus,
+    lifecycleLogger: electronMainLogger,
+    runtimeDistribution,
+  });
+
+const resolveRuntimeDistributionEffect = (): Effect.Effect<
+  HostRuntimeDistribution,
+  ElectronLifecycleError
+> =>
+  Effect.try({
+    try: () =>
+      resolveElectronRuntimeDistribution({
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        workspaceRoot,
+      }),
+    catch: (cause) =>
+      new ElectronLifecycleError({
+        operation: "electron.main.resolve-runtime-distribution",
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
+
+const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
+  ElectronPreReadyRuntime,
+  ElectronLifecycleError | ElectronOperationError | ElectronValidationError
+> =>
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => configureElectronAppIdentity(app, { appName: APPLICATION_NAME }),
+      catch: (cause) =>
+        mapStartupPreparationError(
+          cause,
+          "electron.main.configure-app-identity",
+          errorMessage(cause),
+        ),
+    });
+    yield* Effect.try({
+      try: () => disableElectronKeychainStorage(app.commandLine),
+      catch: (cause) =>
+        mapStartupPreparationError(
+          cause,
+          "electron.main.disable-keychain-storage",
+          errorMessage(cause),
+        ),
+    });
+    yield* Effect.try({
+      try: registerPrivilegedProtocolSchemes,
+      catch: (cause) =>
+        mapStartupPreparationError(
+          cause,
+          "electron.main.register-privileged-protocols",
+          errorMessage(cause),
+        ),
+    });
+    const runtimeDistribution = yield* resolveRuntimeDistributionEffect();
+    const hostCommandRouter = yield* Effect.try({
+      try: () => createElectronHostCommandRouter(runtimeDistribution),
+      catch: (cause) =>
+        mapStartupPreparationError(cause, "electron.main.create-host-router", errorMessage(cause)),
+    });
+    activeHostCommandRouter = hostCommandRouter;
+    return { hostCommandRouter };
+  });
 
 const getPreloadPath = (): string => path.join(distDirectory, "preload.cjs");
 
@@ -206,15 +306,15 @@ const createMainWindowEffect = (
     });
     registerWindowContextMenu(window, { isDevelopment });
     window.on("close", (event) => {
-      if (hostShutdownComplete) {
+      if (shutdownController.isHostShutdownComplete()) {
         return;
       }
       event.preventDefault();
       hideWindowsForShutdown();
-      if (hostShutdownStarted) {
+      if (shutdownController.isHostShutdownStarted()) {
         return;
       }
-      void shutdownHostAndQuit({ reason: "window-close" });
+      void shutdownController.shutdownHostAndQuit({ reason: "window-close" });
     });
 
     if (rendererDevUrl) {
@@ -259,7 +359,10 @@ const registerHostEventForwarding = (): void => {
   }
 };
 
-const resolveLocalAttachmentPathForPreviewEffect = (filePath: string) =>
+const resolveLocalAttachmentPathForPreviewEffect = (
+  hostCommandRouter: EffectHostCommandRouter,
+  filePath: string,
+) =>
   Effect.gen(function* () {
     const resolved = yield* hostCommandRouter.invoke("workspace_resolve_local_attachment_path", {
       path: filePath,
@@ -287,10 +390,13 @@ const resolveLocalAttachmentPathForPreviewEffect = (filePath: string) =>
     );
   });
 
-const resolveLocalAttachmentPathForPreview = (filePath: string): Promise<string> =>
-  runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(filePath));
+const resolveLocalAttachmentPathForPreview = (
+  hostCommandRouter: EffectHostCommandRouter,
+  filePath: string,
+): Promise<string> =>
+  runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
-const registerIpcHandlers = (): void => {
+const registerIpcHandlers = (hostCommandRouter: EffectHostCommandRouter): void => {
   ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (_event, request: ElectronHostInvokeRequest) =>
     runElectronEffect(hostCommandRouter.invoke(request.command, request.args)),
   );
@@ -301,48 +407,14 @@ const registerIpcHandlers = (): void => {
 
   ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: unknown) => {
     const resolvedPath = await resolveLocalAttachmentPathForPreview(
+      hostCommandRouter,
       readLocalAttachmentPreviewPath(filePath),
     );
     return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
 };
 
-type HostShutdownOptions = {
-  exitAfterShutdown?: boolean;
-  reason: string;
-};
-
-const shutdownHostAndQuit = async ({
-  exitAfterShutdown = false,
-  reason,
-}: HostShutdownOptions): Promise<void> => {
-  if (hostShutdownStarted) {
-    return;
-  }
-
-  hostShutdownStarted = true;
-  let exitCode = 0;
-  electronMainLogger.info(`OpenDucktor host shutdown started (${reason})`);
-  const disposeExit = await Effect.runPromiseExit(disposeHostEffect(reason));
-  try {
-    if (Exit.isFailure(disposeExit)) {
-      throw causeToElectronBoundaryError(disposeExit.cause);
-    }
-    electronMainLogger.info("OpenDucktor host shutdown complete");
-  } catch (error) {
-    exitCode = 1;
-    electronMainLogger.error("OpenDucktor host shutdown failed", error);
-  } finally {
-    hostShutdownComplete = true;
-    if (exitAfterShutdown) {
-      process.exit(exitCode);
-    } else {
-      app.quit();
-    }
-  }
-};
-
-const disposeHostEffect = (reason: string) =>
+const disposeHostEffect = (hostCommandRouter: EffectHostCommandRouter, reason: string) =>
   hostCommandRouter.dispose().pipe(
     Effect.mapError(
       (cause) =>
@@ -355,7 +427,14 @@ const disposeHostEffect = (reason: string) =>
     ),
   );
 
-const initializeHostEffect = () =>
+const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLifecycleError> => {
+  if (!activeHostCommandRouter) {
+    return Effect.void;
+  }
+  return disposeHostEffect(activeHostCommandRouter, reason);
+};
+
+const initializeHostEffect = (hostCommandRouter: EffectHostCommandRouter) =>
   hostCommandRouter.initialize().pipe(
     Effect.mapError(
       (cause) =>
@@ -368,7 +447,7 @@ const initializeHostEffect = () =>
   );
 
 const shutdownHostForSignal = (signal: NodeJS.Signals): void => {
-  void shutdownHostAndQuit({ exitAfterShutdown: true, reason: signal });
+  void shutdownController.shutdownHostAndQuit({ exitAfterShutdown: true, reason: signal });
 };
 
 const hideWindowsForShutdown = (): void => {
@@ -377,62 +456,93 @@ const hideWindowsForShutdown = (): void => {
   }
 };
 
-app
-  .whenReady()
-  .then(async () => {
-    const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
-    configureElectronLoopbackCorsPolicy(
-      rendererSession,
-      resolveElectronLoopbackCorsOrigin(rendererDevUrl),
-    );
-    registerElectronLocalAttachmentPreviewProtocol({
-      net,
-      resolveLocalAttachmentPath: resolveLocalAttachmentPathForPreview,
-      session: rendererSession,
-    });
-    installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
-    registerIpcHandlers();
-    registerHostEventForwarding();
-    configureElectronDockIcon();
-    await runElectronEffect(initializeHostEffect());
-    await createMainWindow(rendererSession);
+const waitForElectronReadyEffect = (): Effect.Effect<void, ElectronLifecycleError> =>
+  Effect.tryPromise({
+    try: async () => {
+      await app.whenReady();
+    },
+    catch: (cause) =>
+      new ElectronLifecycleError({
+        operation: "electron.main.wait-ready",
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
 
+const configureElectronReadyRuntimeEffect = ({
+  hostCommandRouter,
+}: ElectronPreReadyRuntime): Effect.Effect<
+  ElectronReadyRuntime,
+  ElectronLifecycleError | ElectronOperationError | ElectronValidationError
+> =>
+  Effect.try({
+    try: () => {
+      const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
+      configureElectronLoopbackCorsPolicy(
+        rendererSession,
+        resolveElectronLoopbackCorsOrigin(rendererDevUrl),
+      );
+      registerElectronLocalAttachmentPreviewProtocol({
+        net,
+        resolveLocalAttachmentPath: (filePath) =>
+          resolveLocalAttachmentPathForPreview(hostCommandRouter, filePath),
+        session: rendererSession,
+      });
+      installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
+      registerIpcHandlers(hostCommandRouter);
+      registerHostEventForwarding();
+      configureElectronDockIcon();
+      return { hostCommandRouter, rendererSession };
+    },
+    catch: (cause) =>
+      mapStartupPreparationError(
+        cause,
+        "electron.main.configure-ready-runtime",
+        errorMessage(cause),
+      ),
+  });
+
+const startupEffect = composeElectronMainStartupEffect({
+  configureReady: configureElectronReadyRuntimeEffect,
+  createMainWindow: ({ rendererSession }) =>
+    createMainWindowEffect(rendererSession).pipe(Effect.asVoid),
+  initializeHost: ({ hostCommandRouter }) => initializeHostEffect(hostCommandRouter),
+  preparePreReady: prepareElectronPreReadyRuntimeEffect,
+  registerActivateHandler: ({ rendererSession }) => {
     app.on("activate", () => {
-      if (hostShutdownStarted) {
+      if (shutdownController.isHostShutdownStarted()) {
         return;
       }
       if (BrowserWindow.getAllWindows().length === 0) {
         void createMainWindow(rendererSession);
       }
     });
-  })
-  .catch((error: unknown) => {
-    electronMainLogger.error("OpenDucktor Electron startup failed", error);
-    hostShutdownStarted = true;
-    void (async () => {
-      const cleanupExit = await Effect.runPromiseExit(disposeHostEffect("startup-failure"));
-      if (Exit.isFailure(cleanupExit)) {
-        electronMainLogger.error(
-          "OpenDucktor host cleanup after startup failure failed",
-          causeToElectronBoundaryError(cleanupExit.cause),
-        );
-      }
-      hostShutdownComplete = true;
-      process.exit(1);
-    })();
-  });
+  },
+  waitUntilReady: waitForElectronReadyEffect,
+});
+
+void runElectronMainStartupBoundary({
+  cleanupAfterFailure: () => disposeActiveHostEffect("startup-failure"),
+  exitProcess: (exitCode) => {
+    process.exit(exitCode);
+  },
+  logger: electronMainLogger,
+  markShutdownComplete: shutdownController.markHostShutdownComplete,
+  markShutdownStarted: shutdownController.markHostShutdownStarted,
+  startupEffect,
+});
 
 app.on("window-all-closed", () => {
-  void shutdownHostAndQuit({ reason: "window-all-closed" });
+  void shutdownController.shutdownHostAndQuit({ reason: "window-all-closed" });
 });
 
 app.on("before-quit", (event) => {
-  if (hostShutdownComplete) {
+  if (shutdownController.isHostShutdownComplete()) {
     return;
   }
   event.preventDefault();
   hideWindowsForShutdown();
-  void shutdownHostAndQuit({ reason: "before-quit" });
+  void shutdownController.shutdownHostAndQuit({ reason: "before-quit" });
 });
 
 process.once("SIGINT", shutdownHostForSignal);

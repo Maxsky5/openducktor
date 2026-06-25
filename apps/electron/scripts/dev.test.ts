@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
+import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   closeRendererServer,
@@ -9,6 +10,7 @@ import {
   resolveMacosDevExecutablePath,
   resolveRendererDevPort,
   resolveRequiredMacosAppBundlePath,
+  runElectronDevLifecycleEffect,
   shouldRestartElectronForChange,
   stopElectronEffect,
 } from "./dev";
@@ -247,5 +249,59 @@ describe("electron dev script", () => {
       operation: "electron.dev.stop-electron",
     });
     expect((error as Error).message).toContain("Electron did not exit after forced shutdown");
+  });
+
+  test("runs the dev watcher and Electron process lifecycle as an Effect", async () => {
+    const watchedRoots: string[][] = [];
+    const watchedEvents: string[] = [];
+    const startCalls: Array<{ executablePath: string; rendererDevUrl: string }> = [];
+    let buildCalls = 0;
+    let closeCalls = 0;
+    const rendererServer = {
+      close: async () => {
+        closeCalls += 1;
+      },
+      config: { server: { port: 1430 } },
+      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
+      watcher: {
+        add(roots: string[]) {
+          watchedRoots.push(roots);
+        },
+        on(event: string) {
+          watchedEvents.push(event);
+        },
+      },
+    };
+
+    const exitCode = await runElectronEffect(
+      runElectronDevLifecycleEffect({
+        buildBundles: () =>
+          Effect.sync(() => {
+            buildCalls += 1;
+          }),
+        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        rendererDevUrl: "http://127.0.0.1:1430",
+        rendererServer: rendererServer as never,
+        startElectronProcess: (rendererDevUrl, electronExecutablePath) => {
+          startCalls.push({ executablePath: electronExecutablePath, rendererDevUrl });
+          return {
+            exited: Promise.resolve(0),
+            kill() {},
+          } as never;
+        },
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(buildCalls).toBe(1);
+    expect(startCalls).toEqual([
+      {
+        executablePath: "/repo/node_modules/electron/dist/Electron",
+        rendererDevUrl: "http://127.0.0.1:1430",
+      },
+    ]);
+    expect(watchedRoots).toHaveLength(1);
+    expect(watchedEvents).toEqual(["add", "change", "unlink"]);
+    expect(closeCalls).toBe(1);
   });
 });
