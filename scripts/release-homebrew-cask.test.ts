@@ -5,17 +5,17 @@ import {
   resolveHomebrewMacosRequirement,
 } from "./release-homebrew-cask";
 
-test("resolveAssetPattern creates an arch-aware Electron DMG pattern", () => {
+test("resolveAssetPattern creates an arch-aware desktop DMG pattern", () => {
   expect(
     resolveAssetPattern(
       "0.0.5",
-      "OpenDucktor-Electron-0.0.5-macos-arm64.dmg",
-      "OpenDucktor-Electron-0.0.5-macos-x64.dmg",
+      "OpenDucktor-0.0.5-macos-arm64.dmg",
+      "OpenDucktor-0.0.5-macos-x64.dmg",
     ),
   ).toEqual({
     armArchToken: "arm64",
     intelArchToken: "x64",
-    assetPattern: "OpenDucktor-Electron-#{version}-macos-#{arch}.dmg",
+    assetPattern: "OpenDucktor-#{version}-macos-#{arch}.dmg",
   });
 });
 
@@ -76,9 +76,9 @@ test("renderHomebrewCask renders the expected OpenDucktor cask", () => {
     productName: "OpenDucktor",
     bundleIdentifier: "com.openducktor.app",
     minimumSystemVersion: "12.0",
-    armAssetName: "OpenDucktor-Electron-0.0.5-macos-arm64.dmg",
+    armAssetName: "OpenDucktor-0.0.5-macos-arm64.dmg",
     armSha256: "a".repeat(64),
-    intelAssetName: "OpenDucktor-Electron-0.0.5-macos-x64.dmg",
+    intelAssetName: "OpenDucktor-0.0.5-macos-x64.dmg",
     intelSha256: "b".repeat(64),
   });
 
@@ -86,7 +86,7 @@ test("renderHomebrewCask renders the expected OpenDucktor cask", () => {
   expect(contents).toContain('arch arm: "arm64", intel: "x64"');
   expect(contents).toContain('version "0.0.5"');
   expect(contents).toContain(
-    'url "https://github.com/Maxsky5/openducktor/releases/download/v#{version}/OpenDucktor-Electron-#{version}-macos-#{arch}.dmg"',
+    'url "https://github.com/Maxsky5/openducktor/releases/download/v#{version}/OpenDucktor-#{version}-macos-#{arch}.dmg"',
   );
   expect(contents).toContain('depends_on macos: ">= :monterey"');
   expect(contents).toContain('app "OpenDucktor.app"');

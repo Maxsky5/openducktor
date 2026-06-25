@@ -93,20 +93,16 @@ describe("build Electron release artifact", () => {
   });
 
   it("keeps release artifact selection platform-specific", () => {
-    expect(isReleaseArtifact("linux", "OpenDucktor-Electron-0.3.1-linux-x64.AppImage")).toBe(true);
-    expect(isReleaseArtifact("linux", "OpenDucktor-Electron-0.3.1-linux-x64.deb")).toBe(true);
-    expect(isReleaseArtifact("linux", "OpenDucktor-Electron-0.3.1-linux-x64.dmg")).toBe(false);
-    expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.dmg")).toBe(true);
-    expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap")).toBe(
-      true,
-    );
-    expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.zip")).toBe(true);
+    expect(isReleaseArtifact("linux", "OpenDucktor-0.3.1-linux-x64.AppImage")).toBe(true);
+    expect(isReleaseArtifact("linux", "OpenDucktor-0.3.1-linux-x64.deb")).toBe(true);
+    expect(isReleaseArtifact("linux", "OpenDucktor-0.3.1-linux-x64.dmg")).toBe(false);
+    expect(isReleaseArtifact("macos", "OpenDucktor-0.3.1-mac-arm64.dmg")).toBe(true);
+    expect(isReleaseArtifact("macos", "OpenDucktor-0.3.1-mac-arm64.dmg.blockmap")).toBe(true);
+    expect(isReleaseArtifact("macos", "OpenDucktor-0.3.1-mac-arm64.zip")).toBe(true);
     expect(isReleaseArtifact("macos", "OpenDucktor.app")).toBe(false);
     expect(isReleaseArtifact("macos", "builder-debug.yml")).toBe(false);
-    expect(isReleaseArtifact("windows", "OpenDucktor-Electron-0.3.1-windows-x64.exe")).toBe(true);
-    expect(isReleaseArtifact("windows", "OpenDucktor-Electron-0.3.1-windows-x64.AppImage")).toBe(
-      false,
-    );
+    expect(isReleaseArtifact("windows", "OpenDucktor-0.3.1-windows-x64.exe")).toBe(true);
+    expect(isReleaseArtifact("windows", "OpenDucktor-0.3.1-windows-x64.AppImage")).toBe(false);
   });
 
   it("copies only platform release artifacts into the publish directory", async () => {
@@ -117,8 +113,8 @@ describe("build Electron release artifact", () => {
     try {
       await mkdir(releaseDirectory, { recursive: true });
       await Promise.all([
-        writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg"), "dmg"),
-        writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-linux-x64.AppImage"), "app"),
+        writeFile(join(releaseDirectory, "OpenDucktor-0.3.1-mac-arm64.dmg"), "dmg"),
+        writeFile(join(releaseDirectory, "OpenDucktor-0.3.1-linux-x64.AppImage"), "app"),
       ]);
 
       const artifacts = await collectReleaseArtifacts({
@@ -128,10 +124,10 @@ describe("build Electron release artifact", () => {
       });
 
       expect(artifacts.map((artifact) => basename(artifact)).sort()).toEqual([
-        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
+        "OpenDucktor-0.3.1-mac-arm64.dmg",
       ]);
       const outputEntries = await readdir(outputDirectory);
-      expect(outputEntries).toEqual(["OpenDucktor-Electron-0.3.1-mac-arm64.dmg"]);
+      expect(outputEntries).toEqual(["OpenDucktor-0.3.1-mac-arm64.dmg"]);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
