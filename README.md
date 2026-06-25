@@ -34,9 +34,10 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 ### Homebrew (macOS only)
 
 ```sh
-brew tap Maxsky5/openducktor
-brew install --cask openducktor
+brew install --cask Maxsky5/openducktor/openducktor
 ```
+
+Homebrew requires explicit trust for non-official taps. The fully-qualified command above trusts only the OpenDucktor cask. If you already tapped the repository and want to install by short name, run `brew trust --cask Maxsky5/openducktor/openducktor` once, then `brew install --cask openducktor`.
 
 ### Direct Download (macOS, Linux & Windows)
 

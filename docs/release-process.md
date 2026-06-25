@@ -197,9 +197,10 @@ Recommended defaults:
 Once the tap exists and the workflow is configured, users can install OpenDucktor with:
 
 ```sh
-brew tap Maxsky5/openducktor
-brew install --cask openducktor
+brew install --cask Maxsky5/openducktor/openducktor
 ```
+
+Homebrew requires explicit trust for non-official taps. The fully-qualified install trusts only the OpenDucktor cask. If the tap is already installed and users want the short cask name, they can run `brew trust --cask Maxsky5/openducktor/openducktor` once before `brew install --cask openducktor`.
 
 ## Asset Policy
 
