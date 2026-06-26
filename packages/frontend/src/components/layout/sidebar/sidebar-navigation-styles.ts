@@ -3,17 +3,17 @@ import { cn } from "@/lib/utils";
 type SidebarNavLinkClassNameArgs = {
   compact: boolean;
   isActive: boolean;
+  isActivated: boolean;
   isDisabled: boolean;
-  isPending: boolean;
 };
 
 export const sidebarNavLinkClassName = ({
   compact,
   isActive,
+  isActivated,
   isDisabled,
-  isPending,
 }: SidebarNavLinkClassNameArgs): string => {
-  const isSelected = !isDisabled && (isActive || isPending);
+  const isSelected = !isDisabled && (isActive || isActivated);
 
   return cn(
     compact
