@@ -333,6 +333,19 @@ const prepareMacosDevElectronBundleEffect = (
     const existingSignature = yield* readFileIfExistsEffect(markerPath);
     const devExecutableExists = yield* fileExistsEffect(devExecutablePath);
     const shouldCopyBundle = existingSignature !== signature || !devExecutableExists;
+    const resolveResourcePath = (fileName: string): string =>
+      path.join(devAppPath, "Contents", "Resources", fileName);
+    const copyIconResourceEffect = (
+      targetFileName: string,
+    ): Effect.Effect<void, ElectronOperationError> => {
+      const targetPath = resolveResourcePath(targetFileName);
+      return runDevFileOperationEffect(
+        "electron.dev.copy-macos-dev-icon",
+        iconPath,
+        () => copyFile(iconPath, targetPath),
+        { targetPath },
+      );
+    };
 
     yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, () =>
       mkdir(devRoot, { recursive: true }),
@@ -352,22 +365,9 @@ const prepareMacosDevElectronBundleEffect = (
       ]);
     }
 
-    yield* runDevFileOperationEffect(
-      "electron.dev.copy-macos-dev-icon",
-      iconPath,
-      () =>
-        copyFile(
-          iconPath,
-          path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME),
-        ),
-      { targetPath: path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME) },
-    );
-    yield* runDevFileOperationEffect("electron.dev.copy-macos-dev-icon", iconPath, () =>
-      copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "icon.icns")),
-    );
-    yield* runDevFileOperationEffect("electron.dev.copy-macos-dev-icon", iconPath, () =>
-      copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "electron.icns")),
-    );
+    yield* copyIconResourceEffect(MACOS_DEV_ICON_FILE_NAME);
+    yield* copyIconResourceEffect("icon.icns");
+    yield* copyIconResourceEffect("electron.icns");
     yield* replacePlistStringEffect(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
     yield* replacePlistStringEffect(infoPlistPath, "CFBundleName", APPLICATION_NAME);
     yield* replacePlistStringEffect(

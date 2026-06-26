@@ -309,7 +309,7 @@ describe("electron dev script", () => {
     const watchedRoots: string[][] = [];
     const watchedEvents: string[] = [];
     const startCalls: Array<{ executablePath: string; rendererDevUrl: string }> = [];
-    const processHandlerFake = createFakeProcessHandlers();
+    const fakeProcessHandlers = createFakeProcessHandlers();
     let buildCalls = 0;
     let closeCalls = 0;
     const rendererServer = {
@@ -335,7 +335,7 @@ describe("electron dev script", () => {
             buildCalls += 1;
           }),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
-        processHandlers: processHandlerFake.processHandlers,
+        processHandlers: fakeProcessHandlers.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
         rendererServer: rendererServer as never,
         startElectronProcess: (rendererDevUrl, electronExecutablePath) => {
@@ -359,12 +359,12 @@ describe("electron dev script", () => {
     expect(watchedRoots).toHaveLength(1);
     expect(watchedEvents).toEqual(["add", "change", "unlink"]);
     expect(closeCalls).toBe(1);
-    expect(processHandlerFake.registered.map(({ event }) => event)).toEqual([
+    expect(fakeProcessHandlers.registered.map(({ event }) => event)).toEqual([
       "SIGINT",
       "SIGTERM",
       "exit",
     ]);
-    expect(processHandlerFake.removed.map(({ event }) => event)).toEqual([
+    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
       "exit",
       "SIGTERM",
       "SIGINT",
@@ -372,7 +372,7 @@ describe("electron dev script", () => {
   });
 
   test("keeps initial lifecycle setup failures in the typed failure channel", async () => {
-    const processHandlerFake = createFakeProcessHandlers();
+    const fakeProcessHandlers = createFakeProcessHandlers();
     const setupError = new ElectronOperationError({
       operation: "electron.dev.test-build",
       message: "build failed before launch",
@@ -391,7 +391,7 @@ describe("electron dev script", () => {
       runElectronDevLifecycleEffect({
         buildBundles: () => Effect.fail(setupError),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
-        processHandlers: processHandlerFake.processHandlers,
+        processHandlers: fakeProcessHandlers.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
         rendererServer: rendererServer as never,
         startElectronProcess: () => {
@@ -412,7 +412,7 @@ describe("electron dev script", () => {
     }
 
     expect(failureOption.value).toBe(setupError);
-    expect(processHandlerFake.removed.map(({ event }) => event)).toEqual([
+    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
       "exit",
       "SIGTERM",
       "SIGINT",
