@@ -10,6 +10,7 @@ import type {
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
 import {
+  type CodexThreadSnapshot,
   codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
@@ -122,6 +123,22 @@ export const sessionStateFromExistingThread = (
   const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
   delete session.liveStatus;
   return session;
+};
+
+export const sessionStateFromThreadSnapshot = (
+  input: AgentSessionRef | AgentSessionRuntimeRef,
+  runtimeId: string,
+  threadSnapshot: CodexThreadSnapshot,
+): CodexSessionState => {
+  const summary = toSessionSummary({
+    externalSessionId: threadSnapshot.id,
+    workingDirectory: input.workingDirectory,
+    startedAt: threadSnapshot.startedAt,
+    title: threadSnapshot.title,
+    role: "role" in input ? input.role : null,
+    status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
+  });
+  return buildSessionState(input, summary, runtimeId, undefined);
 };
 
 export const preserveRuntimeContextForExistingThread = (

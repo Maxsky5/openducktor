@@ -61,6 +61,7 @@ import {
   sessionStateFromExistingThread,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
+  sessionStateFromThreadSnapshot,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
 import {
@@ -635,7 +636,17 @@ export class CodexAppServerAdapter
     if (!thread) {
       return;
     }
-    if (thread.cwd !== input.workingDirectory || thread.status.classification === "idle") {
+    if (thread.cwd !== input.workingDirectory) {
+      return;
+    }
+    if (thread.status.classification === "idle") {
+      const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);
+      this.localSessions.remember(
+        preserveRuntimeContextForExistingThread(
+          session,
+          this.localSessions.get(session.summary.externalSessionId),
+        ),
+      );
       return;
     }
 

@@ -251,6 +251,7 @@ describe("Codex subagent event mapper", () => {
       correlationKey: "codex-subagent:parent-thread:spawn-1",
       status: "running",
       prompt: "Review the adapter",
+      description: "Review the adapter",
     });
     expect(startedPart?.externalSessionId).toBeUndefined();
     expect(completedPart).toMatchObject({
@@ -258,8 +259,123 @@ describe("Codex subagent event mapper", () => {
       correlationKey: startedPart?.correlationKey,
       status: "running",
       externalSessionId: "child-thread",
+      description: "Review the adapter",
       executionMode: "background",
     });
+  });
+
+  test("keeps subagent description short and tied to the creation prompt", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const ctx = {
+      source: "live" as const,
+      threadId: "parent-thread",
+      timestamp: "2026-05-09T00:00:00.000Z",
+    };
+    const prompt =
+      "Read the file `~/maxsky5.omp.json` and report back the file contents or, if it is large, a concise summary of the key fields. This is read-only.";
+    const fullResponse =
+      "`/Users/maxsky5/maxsky5.omp.json` exists and is a Oh My Posh theme config.\n\nKey fields:\n- `$schema`: https://example.test/schema.json\n- `version`: 4";
+
+    pipeline.runLive(
+      {
+        kind: "item_started",
+        item: {
+          type: "collabAgentToolCall",
+          id: "spawn-1",
+          tool: "spawnAgent",
+          status: "inProgress",
+          senderThreadId: "parent-thread",
+          receiverThreadIds: [],
+          prompt,
+          agentsStates: {},
+        },
+      },
+      ctx,
+    );
+    const completed = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "spawn-1",
+            tool: "spawnAgent",
+            status: "completed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: ["child-thread"],
+            prompt,
+            agentsStates: {
+              "child-thread": { status: "completed", message: fullResponse },
+            },
+          },
+        },
+        ctx,
+      ),
+    );
+
+    const [completedPart] = projectedSubagents(completed);
+    expect(completedPart).toMatchObject({
+      status: "completed",
+      prompt,
+      externalSessionId: "child-thread",
+    });
+    expect(completedPart?.description).toBeDefined();
+    expect(completedPart?.description?.length ?? 0).toBeLessThanOrEqual(140);
+    expect(completedPart?.description?.startsWith("Read the file")).toBe(true);
+    expect(completedPart?.description).not.toContain("Key fields");
+  });
+
+  test("marks failed provisional spawn rows as error without losing creation description", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const ctx = {
+      source: "live" as const,
+      threadId: "parent-thread",
+      timestamp: "2026-05-09T00:00:00.000Z",
+    };
+    pipeline.runLive(
+      {
+        kind: "item_started",
+        item: {
+          type: "collabAgentToolCall",
+          id: "spawn-1",
+          tool: "spawnAgent",
+          status: "inProgress",
+          senderThreadId: "parent-thread",
+          receiverThreadIds: [],
+          prompt: "Inspect config safely",
+          agentsStates: {},
+        },
+      },
+      ctx,
+    );
+
+    const failed = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "spawn-1",
+            tool: "spawnAgent",
+            status: "failed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: [],
+            prompt: "Inspect config safely",
+            agentsStates: {},
+          },
+        },
+        ctx,
+      ),
+    );
+
+    expect(projectedSubagents(failed)).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:spawn-1",
+        status: "error",
+        description: "Inspect config safely",
+        error: "Codex spawnAgent subagent call failed.",
+      }),
+    ]);
   });
 
   test("maps per-child agent states before aggregate collab status", () => {
@@ -337,10 +453,10 @@ describe("Codex subagent event mapper", () => {
       expect.objectContaining({
         correlationKey: "codex-subagent:parent-thread:child-thread",
         status: "running",
-        description: "Paused for input",
         externalSessionId: "child-thread",
       }),
     ]);
+    expect(projectedSubagents(interruptedEvents)[0]?.description).toBeUndefined();
 
     const resumedEvents = projectCodexCanonicalEvents(
       pipeline.runLive(
@@ -406,7 +522,7 @@ describe("Codex subagent event mapper", () => {
         correlationKey: "codex-subagent:parent-thread:spawn-history",
         status: "completed",
         externalSessionId: "child-thread",
-        description: "Done",
+        description: "Summarize the failing tests",
       }),
     ]);
     expect(message?.parts).not.toEqual([

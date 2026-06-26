@@ -17,7 +17,6 @@ type CodexSubagentActivityKind = "started" | "interacted" | "interrupted";
 
 type StatusMapping = {
   status: AgentSubagentStatus;
-  description?: string;
   error?: string;
 };
 
@@ -114,15 +113,15 @@ const mapAgentStatus = (
   const text = typeof message === "string" && message.trim().length > 0 ? message : undefined;
   switch (status as CodexCollabAgentStatus) {
     case "pendingInit":
-      return text ? { status: "pending", description: text } : { status: "pending" };
+      return { status: "pending" };
     case "running":
-      return text ? { status: "running", description: text } : { status: "running" };
+      return { status: "running" };
     case "completed":
-      return text ? { status: "completed", description: text } : { status: "completed" };
+      return { status: "completed" };
     case "interrupted":
-      return text ? { status: "running", description: text } : { status: "running" };
+      return { status: "running" };
     case "shutdown":
-      return text ? { status: "cancelled", description: text } : { status: "cancelled" };
+      return { status: "cancelled" };
     case "errored":
     case "notFound":
       return {
@@ -182,14 +181,27 @@ const activityKind = (item: Record<string, unknown>): CodexSubagentActivityKind 
   return kind as CodexSubagentActivityKind;
 };
 
-const mapActivityStatus = (kind: CodexSubagentActivityKind): StatusMapping => {
-  if (kind === "interrupted") {
-    return { status: "running", description: "Subagent interrupted." };
+const mapActivityStatus = (_kind: CodexSubagentActivityKind): StatusMapping => {
+  return { status: "running" };
+};
+
+const SUBAGENT_DESCRIPTION_MAX_LENGTH = 140;
+
+const creationDescriptionForPrompt = (
+  tool: CodexCollabTool,
+  prompt: string | undefined,
+): string | undefined => {
+  if (tool !== "spawnAgent") {
+    return undefined;
   }
-  if (kind === "started") {
-    return { status: "running", description: "Subagent started." };
+  const text = prompt?.replace(/\s+/g, " ").trim();
+  if (!text) {
+    return undefined;
   }
-  return { status: "running", description: "Subagent activity updated." };
+  if (text.length <= SUBAGENT_DESCRIPTION_MAX_LENGTH) {
+    return text;
+  }
+  return `${text.slice(0, SUBAGENT_DESCRIPTION_MAX_LENGTH - 3).trimEnd()}...`;
 };
 
 const collabMetadata = (
@@ -239,6 +251,7 @@ export const codexSubagentPartsFromItem = (
       "senderThreadId",
     );
     const prompt = extractStringField(item, ["prompt"]) ?? undefined;
+    const creationDescription = creationDescriptionForPrompt(tool, prompt);
     const receivers = receiverThreadIds(item);
     if (receivers.length === 0) {
       if (tool !== "spawnAgent") {
@@ -255,7 +268,7 @@ export const codexSubagentPartsFromItem = (
           itemId,
           status: mapped.status,
           ...(prompt ? { prompt } : {}),
-          ...(mapped.description ? { description: mapped.description } : {}),
+          ...(creationDescription ? { description: creationDescription } : {}),
           ...(mapped.error ? { error: mapped.error } : {}),
           metadata: collabMetadata(item, parentThreadId),
           executionMode: "background",
@@ -271,7 +284,7 @@ export const codexSubagentPartsFromItem = (
         itemId,
         status: mapped.status,
         ...(prompt ? { prompt } : {}),
-        ...(mapped.description ? { description: mapped.description } : {}),
+        ...(creationDescription ? { description: creationDescription } : {}),
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: collabMetadata(item, parentThreadId, childThreadId),
         executionMode: "background",
@@ -302,7 +315,6 @@ export const codexSubagentPartsFromItem = (
         childThreadId,
         itemId,
         status: mapped.status,
-        ...(mapped.description ? { description: mapped.description } : {}),
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: activityMetadata(item, parentThreadId, childThreadId),
         executionMode: "background",

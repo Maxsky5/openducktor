@@ -63,6 +63,29 @@ class MutableThreadListTransport extends RecordingTransport {
   }
 }
 
+class ChildThreadListTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_020,
+            preview: "Child subagent",
+            status: { type: "idle" },
+            parentThreadId: "parent-thread",
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
@@ -848,6 +871,53 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ).resolves.toMatchObject({ classification: "idle" });
     expect(drainNotifications).not.toHaveBeenCalled();
     expect(drainServerRequests).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("streams child transcript events after read-only subscription materializes inventory thread", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const transport = new ChildThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications: mock(async () => [] as unknown[]),
+      drainServerRequests: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("child-thread"),
+      (event) => events.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-live",
+          itemId: "agent-live",
+          delta: "new child text",
+        },
+      },
+    });
+
+    await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; delta?: unknown }).type === "assistant_delta" &&
+        (event as { delta?: unknown }).delta === "new child text",
+    );
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
     unsubscribe();
   });
 
