@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { SidebarNavigation } from "./sidebar-navigation";
+import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 describe("SidebarNavigation", () => {
   test("renders text labels in default mode", () => {
@@ -45,5 +46,18 @@ describe("SidebarNavigation", () => {
 
     expect(html).toContain('href="/kanban"');
     expect(html).toContain('aria-disabled="true"');
+  });
+
+  test("uses selected styles while navigation is pending", () => {
+    const className = sidebarNavLinkClassName({
+      compact: false,
+      isActive: false,
+      isDisabled: false,
+      isPending: true,
+    });
+
+    expect(className).toContain("bg-sidebar-accent");
+    expect(className).toContain("text-sidebar-accent-foreground");
+    expect(className).not.toContain("hover:bg-accent");
   });
 });

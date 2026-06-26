@@ -1,12 +1,18 @@
 import { Bot, Columns3 } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { preloadAgentsPage, preloadKanbanPage } from "@/pages";
+import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 const NAV_ITEMS = [
   { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },
   { to: "/agents", icon: Bot, label: "Agents", requiresRepo: true },
 ] as const;
+
+const ROUTE_PRELOADERS: Record<(typeof NAV_ITEMS)[number]["to"], () => void> = {
+  "/agents": preloadAgentsPage,
+  "/kanban": preloadKanbanPage,
+};
 
 type SidebarNavigationProps = {
   hasActiveWorkspace: boolean;
@@ -22,22 +28,18 @@ export function SidebarNavigation({
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
         const isDisabled = item.requiresRepo && !hasActiveWorkspace;
+        const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS[item.to];
         return (
           <NavLink
             key={item.to}
             to={isDisabled ? "/kanban" : item.to}
             title={item.label}
             aria-label={item.label}
-            className={({ isActive }) =>
-              cn(
-                compact
-                  ? "flex items-center justify-center rounded-lg p-2.5 text-sm font-medium transition"
-                  : "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium",
-                isDisabled ? "cursor-not-allowed opacity-50" : "",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                  : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground",
-              )
+            prefetch={isDisabled ? "none" : "intent"}
+            onFocus={preloadRoute}
+            onPointerEnter={preloadRoute}
+            className={({ isActive, isPending }) =>
+              sidebarNavLinkClassName({ compact, isActive, isDisabled, isPending })
             }
             aria-disabled={isDisabled}
           >

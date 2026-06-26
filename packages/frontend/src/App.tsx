@@ -21,7 +21,7 @@ type AppProps = {
   routerMode?: AppRouterMode;
 };
 
-type RouterComponent = ComponentType<{ children?: ReactNode }>;
+type RouterComponent = ComponentType<{ children?: ReactNode; useTransitions?: boolean }>;
 
 const ROUTERS: Record<AppRouterMode, RouterComponent> = {
   browser: BrowserRouter,
@@ -60,7 +60,7 @@ export function App({ routerMode = "browser" }: AppProps): ReactElement {
   const Router = ROUTERS[routerMode];
 
   return (
-    <Router>
+    <Router useTransitions>
       <QueryProvider>
         <ThemeProvider>
           <AppStateProvider>
