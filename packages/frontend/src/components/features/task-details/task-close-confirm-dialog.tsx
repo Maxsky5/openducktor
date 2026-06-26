@@ -77,19 +77,12 @@ export function TaskCloseConfirmDialog({
         </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-[132px]"
-            disabled={isClosePending}
-            onClick={onCancel}
-          >
+          <Button type="button" variant="outline" disabled={isClosePending} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="warning"
-            className="w-[132px]"
             disabled={isClosePending || isLoadingImpact}
             aria-busy={isClosePending || isLoadingImpact}
             onClick={onConfirm}
