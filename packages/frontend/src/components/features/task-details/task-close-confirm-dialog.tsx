@@ -80,7 +80,7 @@ export function TaskCloseConfirmDialog({
           <Button
             type="button"
             variant="outline"
-            className="w-[132px] justify-center disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+            className="w-[132px]"
             disabled={isClosePending}
             onClick={onCancel}
           >
@@ -88,16 +88,16 @@ export function TaskCloseConfirmDialog({
           </Button>
           <Button
             type="button"
-            variant="outline"
-            className="w-[132px] justify-center border-warning-border bg-warning-surface text-warning-muted hover:bg-warning-surface/80 hover:text-warning-surface-foreground disabled:border-warning-border/70 disabled:bg-warning-surface/70 disabled:text-warning-muted disabled:opacity-100"
+            variant="warning"
+            className="w-[132px]"
             disabled={isClosePending || isLoadingImpact}
             aria-busy={isClosePending || isLoadingImpact}
             onClick={onConfirm}
           >
             {isClosePending || isLoadingImpact ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
-              <CircleCheckBig className="size-4" />
+              <CircleCheckBig data-icon="inline-start" />
             )}
             {isClosePending ? "Closing..." : isLoadingImpact ? "Checking..." : "Close task"}
           </Button>

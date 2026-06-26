@@ -6,6 +6,7 @@ import {
   taskActionIsDestructive,
   taskActionIsWarning,
   taskActionLabel,
+  taskMenuActionVariant,
   taskPrimaryActionVariant,
 } from "./task-action-ui";
 
@@ -88,13 +89,16 @@ describe("taskActionLabel", () => {
     expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
     expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
     expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
-    expect(taskPrimaryActionVariant("close_task")).toBe("outline");
+    expect(taskPrimaryActionVariant("close_task")).toBe("warning");
 
     expect(taskActionIsDestructive("human_request_changes")).toBe(false);
     expect(taskActionIsDestructive("reset_implementation")).toBe(true);
     expect(taskActionIsDestructive("reset_task")).toBe(true);
     expect(taskActionIsDestructive("close_task")).toBe(false);
     expect(taskActionIsWarning("close_task")).toBe(true);
+    expect(taskMenuActionVariant("close_task")).toBe("warningGhost");
+    expect(taskMenuActionVariant("reset_task")).toBe("destructiveGhost");
+    expect(taskMenuActionVariant("human_request_changes")).toBe("ghost");
   });
 
   test("uses the approval-style icon for manual close", () => {

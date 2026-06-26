@@ -86,12 +86,15 @@ export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
 
 export const taskPrimaryActionVariant = (
   action: TaskWorkflowAction,
-): "default" | "outline" | "destructive" => {
+): "default" | "outline" | "destructive" | "warning" => {
   if (action === "build_start" || action === "qa_start" || action === "human_approve") {
     return "default";
   }
   if (action === "reset_implementation" || action === "reset_task") {
     return "destructive";
+  }
+  if (action === "close_task") {
+    return "warning";
   }
   return "outline";
 };
@@ -100,3 +103,15 @@ export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
   action === "reset_implementation" || action === "reset_task";
 
 export const taskActionIsWarning = (action: TaskWorkflowAction): boolean => action === "close_task";
+
+export const taskMenuActionVariant = (
+  action: TaskWorkflowAction,
+): "ghost" | "destructiveGhost" | "warningGhost" => {
+  if (taskActionIsDestructive(action)) {
+    return "destructiveGhost";
+  }
+  if (taskActionIsWarning(action)) {
+    return "warningGhost";
+  }
+  return "ghost";
+};
