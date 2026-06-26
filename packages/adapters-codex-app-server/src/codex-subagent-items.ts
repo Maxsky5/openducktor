@@ -271,7 +271,6 @@ export const codexSubagentPartsFromItem = (
           ...(creationDescription ? { description: creationDescription } : {}),
           ...(mapped.error ? { error: mapped.error } : {}),
           metadata: collabMetadata(item, parentThreadId),
-          executionMode: "background",
         }),
       ];
     }
@@ -287,7 +286,6 @@ export const codexSubagentPartsFromItem = (
         ...(creationDescription ? { description: creationDescription } : {}),
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: collabMetadata(item, parentThreadId, childThreadId),
-        executionMode: "background",
         preferItemCorrelationKey: tool === "spawnAgent",
       });
     });
@@ -317,7 +315,6 @@ export const codexSubagentPartsFromItem = (
         status: mapped.status,
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: activityMetadata(item, parentThreadId, childThreadId),
-        executionMode: "background",
       }),
     ];
   }

@@ -176,7 +176,6 @@ export class CodexSubagentLinkState {
           ...(thread.subAgentSource ? { subAgentSource: thread.subAgentSource } : {}),
         },
       },
-      executionMode: "background",
     });
   }
 

@@ -260,8 +260,8 @@ describe("Codex subagent event mapper", () => {
       status: "running",
       externalSessionId: "child-thread",
       description: "Review the adapter",
-      executionMode: "background",
     });
+    expect(completedPart?.executionMode).toBeUndefined();
   });
 
   test("keeps subagent description short and tied to the creation prompt", () => {
