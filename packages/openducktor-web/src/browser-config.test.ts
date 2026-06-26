@@ -23,15 +23,16 @@ describe("browser web host config", () => {
   });
 
   test("requires the launcher-injected backend URL", () => {
-    expect(() => getBrowserBackendUrl({ VITE_ODT_BROWSER_AUTH_TOKEN: "token" })).toThrow(
-      "OpenDucktor web is missing the local web host URL",
-    );
+    const readBackendUrl = () => getBrowserBackendUrl({ VITE_ODT_BROWSER_AUTH_TOKEN: "token" });
+    expect(readBackendUrl).toThrow("OpenDucktor web is missing the local web host URL");
+    expect(readBackendUrl).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
   test("requires the launcher-injected auth token", () => {
-    expect(() =>
-      getBrowserAuthToken({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" }),
-    ).toThrow("OpenDucktor web is missing the local web host app token");
+    const readAuthToken = () =>
+      getBrowserAuthToken({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" });
+    expect(readAuthToken).toThrow("OpenDucktor web is missing the local web host app token");
+    expect(readAuthToken).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
   test("matches the shared loopback origin validation cases", async () => {
@@ -44,6 +45,9 @@ describe("browser web host config", () => {
         expect(validate(), testCase.name).toBe(testCase.expected);
       } else {
         expect(validate, testCase.name).toThrow(testCase.errorIncludes);
+        expect(validate, testCase.name).toThrow(
+          expect.objectContaining({ _tag: "WebValidationError" }),
+        );
       }
     }
   });

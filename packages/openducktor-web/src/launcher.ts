@@ -1,7 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
+import { Effect } from "effect";
 import type { ViteDevServer } from "vite";
+import {
+  causeToWebBoundaryError,
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+  type WebError,
+  WebOperationError,
+  WebResourceError,
+} from "./effect/web-errors";
 import {
   buildBackendUrl,
   buildBrowserRuntimeConfigJson,
@@ -12,14 +22,14 @@ import {
   keepProcessAliveDuring,
   LOCALHOST,
   resolveStaticAssetPath,
-  stopLauncherServices,
-  waitForBackend,
+  stopLauncherServicesEffect,
+  waitForBackendEffect,
 } from "./launcher-support";
 import { logError, logInfo, logSuccess } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
-import { startTypescriptHostBackend } from "./typescript-host-backend";
-import { resolveWebRuntimeDistribution } from "./web-runtime-distribution";
-import { resolveWebProvidedToolPaths } from "./web-tool-discovery";
+import { startTypescriptHostBackendEffect } from "./typescript-host-backend";
+import { resolveWebRuntimeDistributionEffect } from "./web-runtime-distribution";
+import { resolveWebProvidedToolPathsEffect } from "./web-tool-discovery";
 
 export type LauncherOptions = {
   packageRoot: string;
@@ -65,191 +75,295 @@ const contentTypeForPath = (filePath: string): string => {
   }
 };
 
-const startViteServer = async (
+const startViteServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
-): Promise<ViteDevServer> => {
-  const { createServer } = await import("vite");
-  const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
-  const server = await createServer({
-    root: options.packageRoot,
-    configFile: path.join(options.packageRoot, "vite.config.ts"),
-    plugins: [
-      {
-        name: "openducktor-runtime-config",
-        configureServer(devServer) {
-          devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
-            response.statusCode = 200;
-            response.setHeader("content-type", "application/json; charset=utf-8");
-            response.setHeader("cache-control", "no-store");
-            response.end(runtimeConfigJson);
-          });
-        },
-      },
-    ],
-    server: {
-      host: LOCALHOST,
-      port: options.frontendPort,
-      strictPort: true,
-    },
-  });
-
-  await server.listen(options.frontendPort);
-  return server;
-};
-
-const startStaticFrontendServer = async (
-  options: LauncherOptions,
-  backendUrl: string,
-  appToken: string,
-): Promise<FrontendServer> => {
-  const staticRoot = path.join(options.packageRoot, "dist/web-shell");
-  const indexPath = path.join(staticRoot, "index.html");
-  if (!existsSync(indexPath) || !statSync(indexPath).isFile()) {
-    throw new Error(
-      `OpenDucktor web shell assets were not found at ${staticRoot}. Reinstall @openducktor/web or run the package build before starting.`,
-    );
-  }
-
-  const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
-  const server = Bun.serve({
-    hostname: LOCALHOST,
-    port: options.frontendPort,
-    fetch(request) {
-      const requestUrl = new URL(request.url);
-      if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
-        return new Response(runtimeConfigJson, {
-          headers: {
-            "cache-control": "no-store",
-            "content-type": "application/json; charset=utf-8",
+): Effect.Effect<ViteDevServer, WebDependencyError> =>
+  Effect.gen(function* () {
+    const { createServer } = yield* Effect.tryPromise({
+      try: () => import("vite"),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "vite",
+          operation: "import",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
+    const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
+    const server = yield* Effect.tryPromise({
+      try: () =>
+        createServer({
+          root: options.packageRoot,
+          configFile: path.join(options.packageRoot, "vite.config.ts"),
+          plugins: [
+            {
+              name: "openducktor-runtime-config",
+              configureServer(devServer) {
+                devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
+                  response.statusCode = 200;
+                  response.setHeader("content-type", "application/json; charset=utf-8");
+                  response.setHeader("cache-control", "no-store");
+                  response.end(runtimeConfigJson);
+                });
+              },
+            },
+          ],
+          server: {
+            host: LOCALHOST,
+            port: options.frontendPort,
+            strictPort: true,
           },
-        });
-      }
+        }),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "vite",
+          operation: "create-server",
+          message: errorMessage(cause),
+          cause,
+          details: { frontendPort: options.frontendPort },
+        }),
+    });
 
-      const assetPath = resolveStaticAssetPath(staticRoot, requestUrl.pathname);
-      if (!assetPath) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      const assetExists = existsSync(assetPath) && statSync(assetPath).isFile();
-      if (!assetExists && path.extname(requestUrl.pathname)) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      const responsePath = assetExists ? assetPath : indexPath;
-      return new Response(Bun.file(responsePath), {
-        headers: {
-          "content-type": contentTypeForPath(responsePath),
-        },
-      });
-    },
+    yield* Effect.tryPromise({
+      try: () => server.listen(options.frontendPort),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "vite",
+          operation: "listen",
+          message: errorMessage(cause),
+          cause,
+          details: { frontendPort: options.frontendPort },
+        }),
+    });
+    return server;
   });
 
-  return {
-    async close() {
-      server.stop(true);
-    },
-  };
-};
-
-const startFrontendServer = async (
+const startStaticFrontendServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
-): Promise<FrontendServer> => {
-  if (options.workspaceMode) {
-    return startViteServer(options, backendUrl, appToken);
-  }
-
-  return startStaticFrontendServer(options, backendUrl, appToken);
-};
-
-export const runLauncher = async (options: LauncherOptions): Promise<number> => {
-  const readinessTimeoutMs = options.readinessTimeoutMs ?? 60_000;
-  const frontendUrl = buildFrontendUrl(options.frontendPort);
-  const backendUrl = buildBackendUrl(options.backendPort);
-  const controlToken = randomUUID();
-  const appToken = randomUUID();
-  const runtimeDistribution = resolveWebRuntimeDistribution({
-    packageRoot: options.packageRoot,
-    workspaceMode: options.workspaceMode,
-    ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
-  });
-  const providedToolPaths = resolveWebProvidedToolPaths();
-  const hostBackend = await startTypescriptHostBackend({
-    port: options.backendPort,
-    frontendOrigin: frontendUrl,
-    controlToken,
-    appToken,
-    providedToolPaths,
-    runtimeDistribution,
-  });
-  let frontendServer: FrontendServer | null = null;
-  let stopPromise: Promise<void> | null = null;
-  let terminationStarted = false;
-  let duplicateTerminationNoticeLogged = false;
-
-  const stop = async (): Promise<void> => {
-    if (stopPromise) {
-      return stopPromise;
+): Effect.Effect<FrontendServer, WebDependencyError | WebResourceError> =>
+  Effect.gen(function* () {
+    const staticRoot = path.join(options.packageRoot, "dist/web-shell");
+    const indexPath = path.join(staticRoot, "index.html");
+    const indexFileExists = yield* Effect.try({
+      try: () => existsSync(indexPath) && statSync(indexPath).isFile(),
+      catch: (cause) =>
+        new WebResourceError({
+          resource: "web-shell-assets",
+          operation: "stat",
+          message: errorMessage(cause),
+          cause,
+          details: { indexPath, staticRoot },
+        }),
+    });
+    if (!indexFileExists) {
+      return yield* new WebResourceError({
+        resource: "web-shell-assets",
+        operation: "resolve",
+        message: `OpenDucktor web shell assets were not found at ${staticRoot}. Reinstall @openducktor/web or run the package build before starting.`,
+        details: { indexPath, staticRoot },
+      });
     }
 
-    stopPromise = (async () => {
-      logInfo("Stopping OpenDucktor frontend server...");
-      logInfo("Stopping OpenDucktor TypeScript host services...");
+    const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
+    const server = yield* Effect.try({
+      try: () =>
+        Bun.serve({
+          hostname: LOCALHOST,
+          port: options.frontendPort,
+          fetch(request) {
+            const requestUrl = new URL(request.url);
+            if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
+              return new Response(runtimeConfigJson, {
+                headers: {
+                  "cache-control": "no-store",
+                  "content-type": "application/json; charset=utf-8",
+                },
+              });
+            }
 
-      await stopLauncherServices({ frontendServer, hostBackend });
-      logSuccess("OpenDucktor web stopped.");
-    })();
+            const assetPath = resolveStaticAssetPath(staticRoot, requestUrl.pathname);
+            if (!assetPath) {
+              return new Response("Not found", { status: 404 });
+            }
 
-    return stopPromise;
-  };
+            const assetExists = existsSync(assetPath) && statSync(assetPath).isFile();
+            if (!assetExists && path.extname(requestUrl.pathname)) {
+              return new Response("Not found", { status: 404 });
+            }
 
-  const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
-    if (terminationStarted) {
-      if (!duplicateTerminationNoticeLogged) {
-        duplicateTerminationNoticeLogged = true;
-        logInfo("OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.");
+            const responsePath = assetExists ? assetPath : indexPath;
+            return new Response(Bun.file(responsePath), {
+              headers: {
+                "content-type": contentTypeForPath(responsePath),
+              },
+            });
+          },
+        }),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "bun-server",
+          operation: "start-static-frontend",
+          message: errorMessage(cause),
+          cause,
+          details: { frontendPort: options.frontendPort },
+        }),
+    });
+
+    return {
+      async close() {
+        server.stop(true);
+      },
+    };
+  });
+
+const startFrontendServerEffect = (
+  options: LauncherOptions,
+  backendUrl: string,
+  appToken: string,
+): Effect.Effect<FrontendServer, WebError> =>
+  options.workspaceMode
+    ? startViteServerEffect(options, backendUrl, appToken)
+    : startStaticFrontendServerEffect(options, backendUrl, appToken);
+
+export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<number, WebError> =>
+  Effect.gen(function* () {
+    const readinessTimeoutMs = options.readinessTimeoutMs ?? 60_000;
+    const frontendUrl = buildFrontendUrl(options.frontendPort);
+    const backendUrl = buildBackendUrl(options.backendPort);
+    const controlToken = randomUUID();
+    const appToken = randomUUID();
+    const runtimeDistribution = yield* resolveWebRuntimeDistributionEffect({
+      packageRoot: options.packageRoot,
+      workspaceMode: options.workspaceMode,
+      ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
+    });
+    const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
+    const hostBackend = yield* startTypescriptHostBackendEffect({
+      port: options.backendPort,
+      frontendOrigin: frontendUrl,
+      controlToken,
+      appToken,
+      providedToolPaths,
+      runtimeDistribution,
+    });
+    let frontendServer: FrontendServer | null = null;
+    let stopPromise: Promise<void> | null = null;
+    let terminationStarted = false;
+    let duplicateTerminationNoticeLogged = false;
+
+    const stop = async (): Promise<void> => {
+      if (stopPromise) {
+        return stopPromise;
       }
-      return;
-    }
-    terminationStarted = true;
-    logInfo(`Stopping OpenDucktor web after ${signal}...`);
 
-    void keepProcessAliveDuring(stop()).then(
-      () => {
-        process.exit(exitCode);
-      },
-      (error: unknown) => {
-        logError(error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      },
+      stopPromise = (async () => {
+        logInfo("Stopping OpenDucktor frontend server...");
+        logInfo("Stopping OpenDucktor TypeScript host services...");
+
+        await runWebBoundary(stopLauncherServicesEffect({ frontendServer, hostBackend }));
+        logSuccess("OpenDucktor web stopped.");
+      })();
+
+      return stopPromise;
+    };
+
+    const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
+      if (terminationStarted) {
+        if (!duplicateTerminationNoticeLogged) {
+          duplicateTerminationNoticeLogged = true;
+          logInfo(
+            "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
+          );
+        }
+        return;
+      }
+      terminationStarted = true;
+      logInfo(`Stopping OpenDucktor web after ${signal}...`);
+
+      void keepProcessAliveDuring(stop()).then(
+        () => {
+          process.exit(exitCode);
+        },
+        (error: unknown) => {
+          logError(errorMessage(error));
+          process.exit(1);
+        },
+      );
+    };
+
+    process.on("SIGINT", () => handleTerminationSignal("SIGINT", 130));
+    process.on("SIGTERM", () => handleTerminationSignal("SIGTERM", 143));
+
+    const launcherExit = yield* Effect.exit(
+      Effect.gen(function* () {
+        logInfo("Starting OpenDucktor TypeScript host...");
+        logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+        yield* waitForBackendEffect(backendUrl, appToken, readinessTimeoutMs, hostBackend);
+        logInfo("Starting OpenDucktor frontend server...");
+        frontendServer = yield* startFrontendServerEffect(options, backendUrl, appToken);
+        logFrontendAvailability(options.frontendPort);
+
+        const exitCode = yield* Effect.tryPromise({
+          try: () => hostBackend.exited,
+          catch: (cause) =>
+            new WebDependencyError({
+              dependency: "typescript-host-backend",
+              operation: "await-exit",
+              message: errorMessage(cause),
+              cause,
+            }),
+        });
+        if (stopPromise) {
+          yield* Effect.tryPromise({
+            try: () => stop(),
+            catch: (cause) =>
+              new WebOperationError({
+                operation: "web.launcher.stop",
+                message: errorMessage(cause),
+                cause,
+              }),
+          });
+        } else {
+          logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
+          yield* Effect.tryPromise({
+            try: () => closeFrontendServer(frontendServer),
+            catch: (cause) =>
+              new WebOperationError({
+                operation: "web.launcher.close-frontend",
+                message: errorMessage(cause),
+                cause,
+              }),
+          });
+          logSuccess("OpenDucktor web stopped.");
+        }
+        return exitCode;
+      }),
     );
-  };
 
-  process.on("SIGINT", () => handleTerminationSignal("SIGINT", 130));
-  process.on("SIGTERM", () => handleTerminationSignal("SIGTERM", 143));
-
-  try {
-    logInfo("Starting OpenDucktor TypeScript host...");
-    logInfo("Waiting for OpenDucktor TypeScript host readiness...");
-    await waitForBackend(backendUrl, appToken, readinessTimeoutMs, hostBackend);
-    logInfo("Starting OpenDucktor frontend server...");
-    frontendServer = await startFrontendServer(options, backendUrl, appToken);
-    logFrontendAvailability(options.frontendPort);
-
-    const exitCode = await hostBackend.exited;
-    if (stopPromise) {
-      await stop();
-    } else {
-      logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
-      await closeFrontendServer(frontendServer);
-      logSuccess("OpenDucktor web stopped.");
+    if (launcherExit._tag === "Success") {
+      return launcherExit.value;
     }
-    return exitCode;
-  } catch (error) {
-    await stop();
-    throw error;
-  }
-};
+
+    const stopExit = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () => stop(),
+        catch: (cause) =>
+          new WebOperationError({
+            operation: "web.launcher.stop-after-failure",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    );
+    if (stopExit._tag === "Failure") {
+      return yield* causeToWebBoundaryError(stopExit.cause);
+    }
+    return yield* causeToWebBoundaryError(launcherExit.cause);
+  });
+
+export const runLauncher = (options: LauncherOptions): Promise<number> =>
+  runWebBoundary(runLauncherEffect(options));

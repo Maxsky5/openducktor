@@ -1,16 +1,30 @@
-export const validateExternalBrowserUrl = (url: string): string => {
-  const trimmedUrl = url.trim();
-  let parsedUrl: URL;
+import { Effect } from "effect";
+import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
-  try {
-    parsedUrl = new URL(trimmedUrl);
-  } catch {
-    throw new Error("OpenDucktor web can only open absolute http or https URLs.");
-  }
+export const validateExternalBrowserUrlEffect = (
+  url: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    const trimmedUrl = url.trim();
+    const parsedUrl = yield* Effect.try({
+      try: () => new URL(trimmedUrl),
+      catch: (cause) =>
+        new WebValidationError({
+          message: "OpenDucktor web can only open absolute http or https URLs.",
+          cause,
+          details: { url },
+        }),
+    });
 
-  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-    throw new Error("OpenDucktor web can only open http or https URLs.");
-  }
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return yield* new WebValidationError({
+        message: "OpenDucktor web can only open http or https URLs.",
+        details: { url },
+      });
+    }
 
-  return parsedUrl.href;
-};
+    return parsedUrl.href;
+  });
+
+export const validateExternalBrowserUrl = (url: string): string =>
+  runWebSyncBoundary(validateExternalBrowserUrlEffect(url));

@@ -20,12 +20,15 @@ describe("resolveWebRuntimeDistribution", () => {
   });
 
   test("requires an explicit workspace root in web dev mode", () => {
-    expect(() =>
+    const resolveDistribution = () =>
       resolveWebRuntimeDistribution({
         packageRoot: "/repo/packages/openducktor-web",
         workspaceMode: true,
-      }),
-    ).toThrow("OpenDucktor web workspace mode requires a workspace root.");
+      });
+    expect(resolveDistribution).toThrow(
+      "OpenDucktor web workspace mode requires a workspace root.",
+    );
+    expect(resolveDistribution).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
   test("uses the self-contained package MCP entrypoint in npm package mode", () => {

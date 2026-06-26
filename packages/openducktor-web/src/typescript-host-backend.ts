@@ -8,7 +8,14 @@ import {
   type HostRuntimeDistribution,
   type ToolDiscoveryId,
 } from "@openducktor/host";
-import { Cause, Data, Effect } from "effect";
+import { Cause, Effect } from "effect";
+import {
+  errorMessage,
+  runWebBoundary,
+  toWebOperationError,
+  WebHostRequestError,
+  WebOperationError,
+} from "./effect/web-errors";
 import { logError, logInfo } from "./logger";
 import {
   allowedOriginsForFrontendOrigin,
@@ -17,7 +24,7 @@ import {
   type BufferedHostEventStream,
   STREAM_PATH_TO_CHANNEL,
   stopTypescriptHostBackendServices,
-  validateWebFrontendOrigin,
+  validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
 
 export type TypescriptHostBackendOptions = {
@@ -224,33 +231,17 @@ const isWithinDirectory = (directory: string, candidate: string): boolean => {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-class WebHostRequestRejection extends Data.TaggedError("WebHostRequestRejection")<{
-  message: string;
-  status: number;
-  failureKind?: string | undefined;
-}> {}
-
-class WebHostStartupError extends Data.TaggedError("WebHostStartupError")<{
-  message: string;
-  cause?: unknown | undefined;
-}> {}
-
 const rejectWebHostRequest = (
   message: string,
   status: number,
   failureKind?: string,
-): Effect.Effect<never, WebHostRequestRejection> =>
+): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(
-    new WebHostRequestRejection(
-      failureKind ? { failureKind, message, status } : { message, status },
-    ),
+    new WebHostRequestError(failureKind ? { failureKind, message, status } : { message, status }),
   );
 
 const webHostRequestErrorResponse = (
-  error: WebHostRequestRejection,
+  error: WebHostRequestError,
   corsHeaders: HeadersInit,
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
@@ -259,12 +250,12 @@ const isJsonObject = (value: unknown): value is Record<string, unknown> =>
 
 const parseJsonObjectBody = (
   request: Request,
-): Effect.Effect<Record<string, unknown>, WebHostRequestRejection> =>
+): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed: unknown = yield* Effect.tryPromise({
       try: () => request.json(),
       catch: (error) =>
-        new WebHostRequestRejection({
+        new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",
           status: 400,
         }),
@@ -275,9 +266,7 @@ const parseJsonObjectBody = (
     return parsed;
   });
 
-const parseLastEventId = (
-  request: Request,
-): Effect.Effect<number | null, WebHostRequestRejection> =>
+const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>
   Effect.gen(function* () {
     const raw = request.headers.get(LAST_EVENT_ID_HEADER);
     if (raw === null) {
@@ -292,11 +281,11 @@ const parseLastEventId = (
 
 const statLocalAttachmentPreview = (
   requestedPath: string,
-): Effect.Effect<Stats, WebHostRequestRejection> =>
+): Effect.Effect<Stats, WebHostRequestError> =>
   Effect.tryPromise({
     try: () => stat(requestedPath),
     catch: (error) =>
-      new WebHostRequestRejection({
+      new WebHostRequestError({
         message: `Failed to stat local attachment preview: ${errorMessage(error)}`,
         status: 404,
       }),
@@ -306,7 +295,7 @@ const localAttachmentPreviewResponse = (
   request: Request,
   localAttachmentPort: ReturnType<typeof createLocalAttachmentAdapter>,
   corsHeaders: HeadersInit,
-): Effect.Effect<Response, WebHostRequestRejection> =>
+): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
     const requestedPath = requestUrl.searchParams.get("path");
@@ -327,7 +316,7 @@ const localAttachmentPreviewResponse = (
       .pipe(
         Effect.mapError(
           (error) =>
-            new WebHostRequestRejection({
+            new WebHostRequestError({
               message: `Failed to resolve local attachment preview directory: ${errorMessage(error)}`,
               status: 500,
             }),
@@ -336,7 +325,7 @@ const localAttachmentPreviewResponse = (
     const canonicalPath = yield* localAttachmentPort.canonicalizePath(requestedPath).pipe(
       Effect.mapError(
         (error) =>
-          new WebHostRequestRejection({
+          new WebHostRequestError({
             message: `Failed to resolve local attachment preview path: ${errorMessage(error)}`,
             status: 500,
           }),
@@ -381,7 +370,7 @@ const routeCorsRequest = ({
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
-}): Effect.Effect<Response, WebHostRequestRejection> =>
+}): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
     if (requestUrl.pathname === "/health" && request.method === "GET") {
@@ -465,7 +454,7 @@ const routeCorsRequest = ({
       const result = yield* hostCommandRouter.invoke(decodeURIComponent(command), args).pipe(
         Effect.mapError(
           (error) =>
-            new WebHostRequestRejection({
+            new WebHostRequestError({
               message: errorMessage(error),
               status: 500,
             }),
@@ -526,22 +515,18 @@ const handleTypescriptHostBackendRequest = ({
     );
   });
 
-const toWebHostStartupError = (message: string, cause?: unknown): WebHostStartupError =>
-  new WebHostStartupError(cause === undefined ? { message } : { cause, message });
-
-const startTypescriptHostBackendEffect = ({
+export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,
   appToken,
   providedToolPaths,
   runtimeDistribution,
-}: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebHostStartupError> =>
+}: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
-    const validatedFrontendOrigin = yield* Effect.try({
-      try: () => validateWebFrontendOrigin(frontendOrigin),
-      catch: (error) => toWebHostStartupError(errorMessage(error), error),
-    });
+    const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
+      Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
+    );
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
     const eventBus = new BufferedHostEventBus();
     const localAttachments = createLocalAttachmentAdapter();
@@ -575,33 +560,39 @@ const startTypescriptHostBackendEffect = ({
       return stopPromise;
     };
 
-    const server = Bun.serve({
-      hostname: LOCALHOST,
-      idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
-      port,
-      fetch(request, server) {
-        return Effect.runPromise(
-          handleTypescriptHostBackendRequest({
-            allowedOrigins,
-            appToken,
-            controlToken,
-            eventBus,
-            hostCommandRouter,
-            localAttachments,
-            request,
-            requestTimeouts: server,
-            shutdownStarted,
-            stop,
-          }),
-        );
-      },
+    const server = yield* Effect.try({
+      try: () =>
+        Bun.serve({
+          hostname: LOCALHOST,
+          idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
+          port,
+          fetch(request, server) {
+            return Effect.runPromise(
+              handleTypescriptHostBackendRequest({
+                allowedOrigins,
+                appToken,
+                controlToken,
+                eventBus,
+                hostCommandRouter,
+                localAttachments,
+                request,
+                requestTimeouts: server,
+                shutdownStarted,
+                stop,
+              }),
+            );
+          },
+        }),
+      catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
     });
 
     if (server.port === undefined) {
       server.stop(true);
-      return yield* Effect.fail(
-        toWebHostStartupError("OpenDucktor TypeScript host did not expose a listening port."),
-      );
+      return yield* new WebOperationError({
+        operation: "web.host.start-server",
+        message: "OpenDucktor TypeScript host did not expose a listening port.",
+        details: { port },
+      });
     }
 
     const initializeExit = yield* Effect.exit(hostCommandRouter.initialize());
@@ -615,14 +606,13 @@ const startTypescriptHostBackendEffect = ({
           )}`,
         );
       }
-      return yield* Effect.fail(
-        toWebHostStartupError(
-          `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${Cause.pretty(
-            initializeExit.cause,
-          )}`,
+      return yield* new WebOperationError({
+        operation: "web.host.initialize",
+        message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${Cause.pretty(
           initializeExit.cause,
-        ),
-      );
+        )}`,
+        cause: initializeExit.cause,
+      });
     }
 
     return {
@@ -634,4 +624,4 @@ const startTypescriptHostBackendEffect = ({
 
 export const startTypescriptHostBackend = (
   options: TypescriptHostBackendOptions,
-): Promise<TypescriptHostBackend> => Effect.runPromise(startTypescriptHostBackendEffect(options));
+): Promise<TypescriptHostBackend> => runWebBoundary(startTypescriptHostBackendEffect(options));

@@ -1,4 +1,13 @@
 import path from "node:path";
+import { Effect } from "effect";
+import {
+  causeToWebBoundaryError,
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+  type WebError,
+  WebOperationError,
+} from "./effect/web-errors";
 import { logError } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
@@ -48,28 +57,58 @@ export const buildFrontendDisplayUrls = (port: number): string[] => [
   `http://${LOCALHOST}:${port}/`,
 ];
 
-const verifyBackendReadiness = async (
+const verifyBackendReadinessEffect = (
   backendUrl: string,
   appToken: string,
   fetchImpl: FetchFunction,
-): Promise<void> => {
-  const healthResponse = await fetchImpl(`${backendUrl}/health`);
-  if (!healthResponse.ok) {
-    throw new Error(`Health endpoint returned ${healthResponse.status}.`);
-  }
+): Effect.Effect<void, WebDependencyError> =>
+  Effect.gen(function* () {
+    const healthResponse = yield* Effect.tryPromise({
+      try: () => fetchImpl(`${backendUrl}/health`),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "typescript-host-backend",
+          operation: "health-check",
+          message: errorMessage(cause),
+          cause,
+          details: { backendUrl },
+        }),
+    });
+    if (!healthResponse.ok) {
+      return yield* new WebDependencyError({
+        dependency: "typescript-host-backend",
+        operation: "health-check",
+        message: `Health endpoint returned ${healthResponse.status}.`,
+        details: { backendUrl, status: healthResponse.status },
+      });
+    }
 
-  const sessionResponse = await fetchImpl(`${backendUrl}/session`, {
-    method: "POST",
-    headers: {
-      [APP_TOKEN_HEADER]: appToken,
-    },
+    const sessionResponse = yield* Effect.tryPromise({
+      try: () =>
+        fetchImpl(`${backendUrl}/session`, {
+          method: "POST",
+          headers: {
+            [APP_TOKEN_HEADER]: appToken,
+          },
+        }),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "typescript-host-backend",
+          operation: "session-check",
+          message: errorMessage(cause),
+          cause,
+          details: { backendUrl },
+        }),
+    });
+    if (!sessionResponse.ok) {
+      return yield* new WebDependencyError({
+        dependency: "typescript-host-backend",
+        operation: "session-check",
+        message: `Session endpoint rejected the launcher app token with status ${sessionResponse.status}.`,
+        details: { backendUrl, status: sessionResponse.status },
+      });
+    }
   });
-  if (!sessionResponse.ok) {
-    throw new Error(
-      `Session endpoint rejected the launcher app token with status ${sessionResponse.status}.`,
-    );
-  }
-};
 
 const forceCloseFrontendConnections = (server: FrontendServer): void => {
   const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
@@ -77,64 +116,113 @@ const forceCloseFrontendConnections = (server: FrontendServer): void => {
   httpServer?.closeAllConnections?.();
 };
 
-export const closeFrontendServer = async (
+export const closeFrontendServerEffect = (
   server: FrontendServer | null,
   sleep: SleepFunction = Bun.sleep,
-): Promise<void> => {
-  if (!server) {
-    return;
-  }
+): Effect.Effect<void, WebDependencyError> =>
+  Effect.gen(function* () {
+    if (!server) {
+      return;
+    }
 
-  let closePromise: Promise<void>;
-  try {
-    closePromise = server.close();
-  } finally {
-    forceCloseFrontendConnections(server);
-  }
-  await Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]);
-};
+    const closePromise = yield* Effect.try({
+      try: () => server.close(),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "frontend-server",
+          operation: "close",
+          message: errorMessage(cause),
+          cause,
+        }),
+    }).pipe(Effect.ensuring(Effect.sync(() => forceCloseFrontendConnections(server))));
+    yield* Effect.tryPromise({
+      try: () => Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "frontend-server",
+          operation: "close",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
+  });
 
-export const waitForBackend = async (
+export const closeFrontendServer = (
+  server: FrontendServer | null,
+  sleep: SleepFunction = Bun.sleep,
+): Promise<void> => runWebBoundary(closeFrontendServerEffect(server, sleep));
+
+export const waitForBackendEffect = (
   backendUrl: string,
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
   dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
-): Promise<void> => {
-  const startedAt = Date.now();
-  let lastError: unknown;
-  let earlyExitCode: number | null = null;
+): Effect.Effect<void, WebDependencyError | WebOperationError> =>
+  Effect.gen(function* () {
+    const startedAt = Date.now();
+    let lastError: unknown;
+    let earlyExitCode: number | null = null;
 
-  void hostProcess.exited.then((exitCode) => {
-    earlyExitCode = exitCode;
+    yield* Effect.sync(() => {
+      void hostProcess.exited.then((exitCode) => {
+        earlyExitCode = exitCode;
+      });
+    });
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (earlyExitCode !== null) {
+        return yield* new WebOperationError({
+          operation: "web.launcher.wait-for-backend",
+          message: `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
+          details: { backendUrl, exitCode: earlyExitCode },
+        });
+      }
+
+      const readinessExit = yield* Effect.exit(
+        verifyBackendReadinessEffect(backendUrl, appToken, dependencies.fetch),
+      );
+      if (readinessExit._tag === "Success") {
+        return;
+      }
+      lastError = causeToWebBoundaryError(readinessExit.cause);
+
+      yield* Effect.tryPromise({
+        try: () => dependencies.sleep(250),
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "timer",
+            operation: "wait-for-backend",
+            message: errorMessage(cause),
+            cause,
+          }),
+      });
+    }
+
+    if (earlyExitCode !== null) {
+      return yield* new WebOperationError({
+        operation: "web.launcher.wait-for-backend",
+        message: `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
+        details: { backendUrl, exitCode: earlyExitCode },
+      });
+    }
+
+    const detail = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";
+    return yield* new WebOperationError({
+      operation: "web.launcher.wait-for-backend",
+      message: `Timed out waiting for OpenDucktor web host at ${backendUrl}.${detail}`,
+      details: { backendUrl, timeoutMs },
+    });
   });
 
-  while (Date.now() - startedAt < timeoutMs) {
-    if (earlyExitCode !== null) {
-      throw new Error(
-        `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
-      );
-    }
-
-    try {
-      await verifyBackendReadiness(backendUrl, appToken, dependencies.fetch);
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-
-    await dependencies.sleep(250);
-  }
-
-  if (earlyExitCode !== null) {
-    throw new Error(
-      `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
-    );
-  }
-
-  const detail = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";
-  throw new Error(`Timed out waiting for OpenDucktor web host at ${backendUrl}.${detail}`);
-};
+export const waitForBackend = (
+  backendUrl: string,
+  appToken: string,
+  timeoutMs: number,
+  hostProcess: ManagedHost,
+  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
+): Promise<void> =>
+  runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
 
 export const buildBrowserRuntimeConfigJson = (backendUrl: string, appToken: string): string =>
   `${JSON.stringify({ backendUrl, appToken })}\n`;
@@ -150,14 +238,23 @@ export const resolveStaticAssetPath = (staticRoot: string, requestPath: string):
   return path.join(staticRoot, normalized);
 };
 
-const throwLauncherShutdownFailures = (failures: unknown[]): void => {
+const launcherShutdownFailure = (failures: unknown[]): WebOperationError | null => {
   if (failures.length === 0) {
-    return;
+    return null;
   }
   if (failures.length === 1) {
-    throw failures[0];
+    const [failure] = failures;
+    return new WebOperationError({
+      operation: "web.launcher.shutdown",
+      message: errorMessage(failure),
+      cause: failure,
+    });
   }
-  throw new AggregateError(failures, "OpenDucktor web shutdown failed.");
+  return new WebOperationError({
+    operation: "web.launcher.shutdown",
+    message: "OpenDucktor web shutdown failed.",
+    details: { failures: failures.map(errorMessage) },
+  });
 };
 
 const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
@@ -165,46 +262,112 @@ const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
   stopHost: (hostBackend) => hostBackend.stop(),
 };
 
-export const stopLauncherServices = async (
+export const stopLauncherServicesEffect = (
   { frontendServer, hostBackend }: StopLauncherServicesInput,
   { closeServer, stopHost }: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
-): Promise<void> => {
-  const [frontendCloseResult, hostStopResult] = await Promise.allSettled([
-    closeServer(frontendServer),
-    stopHost(hostBackend),
-  ]);
-  const shutdownFailures = [frontendCloseResult, hostStopResult]
-    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-    .map((result) => result.reason);
-  for (const failure of shutdownFailures) {
-    logError(failure instanceof Error ? failure.message : failure);
-  }
-  if (hostStopResult.status === "rejected") {
-    throwLauncherShutdownFailures(shutdownFailures);
-    return;
-  }
-
-  const hostExitCode = await hostBackend.exited;
-  if (hostExitCode !== 0) {
-    shutdownFailures.push(
-      new Error(`OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`),
+): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    const [frontendCloseExit, hostStopExit] = yield* Effect.all(
+      [
+        Effect.exit(
+          Effect.tryPromise({
+            try: () => closeServer(frontendServer),
+            catch: (cause) =>
+              new WebDependencyError({
+                dependency: "frontend-server",
+                operation: "close",
+                message: errorMessage(cause),
+                cause,
+              }),
+          }),
+        ),
+        Effect.exit(
+          Effect.tryPromise({
+            try: () => stopHost(hostBackend),
+            catch: (cause) =>
+              new WebDependencyError({
+                dependency: "typescript-host-backend",
+                operation: "stop",
+                message: errorMessage(cause),
+                cause,
+              }),
+          }),
+        ),
+      ],
+      { concurrency: "unbounded" },
     );
-  }
+    const shutdownFailures = [frontendCloseExit, hostStopExit]
+      .filter((result) => result._tag === "Failure")
+      .map((result) => causeToWebBoundaryError(result.cause));
+    for (const failure of shutdownFailures) {
+      logError(errorMessage(failure));
+    }
+    if (hostStopExit._tag === "Failure") {
+      const failure = launcherShutdownFailure(shutdownFailures);
+      if (failure) {
+        return yield* failure;
+      }
+      return;
+    }
 
-  throwLauncherShutdownFailures(shutdownFailures);
-};
+    const hostExitCode = yield* Effect.tryPromise({
+      try: () => hostBackend.exited,
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "typescript-host-backend",
+          operation: "await-exit",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
+    if (hostExitCode !== 0) {
+      shutdownFailures.push(
+        new WebOperationError({
+          operation: "web.launcher.shutdown",
+          message: `OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`,
+          details: { hostExitCode },
+        }),
+      );
+    }
 
-export const keepProcessAliveDuring = async <T>(
+    const failure = launcherShutdownFailure(shutdownFailures);
+    if (failure) {
+      return yield* failure;
+    }
+  });
+
+export const stopLauncherServices = (
+  input: StopLauncherServicesInput,
+  dependencies: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
+): Promise<void> => runWebBoundary(stopLauncherServicesEffect(input, dependencies));
+
+export const keepProcessAliveDuringEffect = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
     clearInterval,
     setInterval,
   },
-): Promise<T> => {
-  const timer = dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS);
-  try {
-    return await operation;
-  } finally {
-    dependencies.clearInterval(timer);
-  }
-};
+): Effect.Effect<T, WebDependencyError> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    () =>
+      Effect.tryPromise({
+        try: () => operation,
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "launcher-operation",
+            operation: "keep-process-alive",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+  );
+
+export const keepProcessAliveDuring = <T>(
+  operation: Promise<T>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Promise<T> => runWebBoundary(keepProcessAliveDuringEffect(operation, dependencies));

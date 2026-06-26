@@ -1,5 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
+import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
 
 type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
 type KeepAliveTimer = ReturnType<typeof setInterval>;
@@ -16,19 +18,31 @@ const WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
 
-const waitForProcessExit = async (
+const waitForProcessExitEffect = (
   subprocess: Pick<ManagedWebProcess, "exited">,
   timeoutMs: number,
-): Promise<boolean> => {
-  let exited = false;
-  await Promise.race([
-    subprocess.exited.then(() => {
-      exited = true;
-    }),
-    sleep(timeoutMs),
-  ]);
-  return exited;
-};
+): Effect.Effect<boolean, WebDependencyError> =>
+  Effect.gen(function* () {
+    let exited = false;
+    yield* Effect.tryPromise({
+      try: () =>
+        Promise.race([
+          subprocess.exited.then(() => {
+            exited = true;
+          }),
+          sleep(timeoutMs),
+        ]),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "web-cli-process",
+          operation: "await-exit",
+          message: errorMessage(cause),
+          cause,
+          details: { timeoutMs },
+        }),
+    });
+    return exited;
+  });
 
 export const shouldDetachWebProcessGroup = (
   platform: NodeJS.Platform = process.platform,
@@ -46,85 +60,134 @@ export const buildWebDevProcessEnvironment = (
   FORCE_COLOR: env.FORCE_COLOR ?? "1",
 });
 
-export const keepWebDevProcessAliveDuring = async <T>(
+export const keepWebDevProcessAliveDuringEffect = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
     clearInterval,
     setInterval,
   },
-): Promise<T> => {
-  const timer = dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS);
-  try {
-    return await operation;
-  } finally {
-    dependencies.clearInterval(timer);
-  }
-};
+): Effect.Effect<T, WebDependencyError> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    () =>
+      Effect.tryPromise({
+        try: () => operation,
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "web-dev-operation",
+            operation: "keep-process-alive",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+  );
 
-const startWebCli = (args: readonly string[]): ManagedWebProcess =>
-  Bun.spawn(buildWebDevCommand(args), {
-    cwd: packageRoot,
-    detached: shouldDetachWebProcessGroup(),
-    stdout: "inherit",
-    stderr: "inherit",
-    env: buildWebDevProcessEnvironment(),
+export const keepWebDevProcessAliveDuring = <T>(
+  operation: Promise<T>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Promise<T> => runWebBoundary(keepWebDevProcessAliveDuringEffect(operation, dependencies));
+
+const startWebCliEffect = (
+  args: readonly string[],
+): Effect.Effect<ManagedWebProcess, WebDependencyError> =>
+  Effect.try({
+    try: () =>
+      Bun.spawn(buildWebDevCommand(args), {
+        cwd: packageRoot,
+        detached: shouldDetachWebProcessGroup(),
+        stdout: "inherit",
+        stderr: "inherit",
+        env: buildWebDevProcessEnvironment(),
+      }),
+    catch: (cause) =>
+      new WebDependencyError({
+        dependency: "web-cli-process",
+        operation: "spawn",
+        message: errorMessage(cause),
+        cause,
+        details: { args },
+      }),
   });
 
-const stopWebCli = async (webCli: ManagedWebProcess | null): Promise<void> => {
-  if (!webCli) {
-    return;
-  }
-
-  webCli.kill();
-  if (await waitForProcessExit(webCli, WEB_STOP_TIMEOUT_MS)) {
-    return;
-  }
-
-  webCli.kill(9);
-  await waitForProcessExit(webCli, WEB_STOP_TIMEOUT_MS);
-};
-
-export const runWebDev = async (
-  args: readonly string[] = process.argv.slice(2),
-): Promise<number> => {
-  const webCli = startWebCli(args);
-  let webCliExited = false;
-  let shutdownStarted = false;
-  let resolveExit: (exitCode: number) => void = () => {};
-  const exited = new Promise<number>((resolve) => {
-    resolveExit = resolve;
-  });
-
-  const shutdown = async (exitCode: number): Promise<void> => {
-    if (shutdownStarted) {
+const stopWebCliEffect = (
+  webCli: ManagedWebProcess | null,
+): Effect.Effect<void, WebDependencyError> =>
+  Effect.gen(function* () {
+    if (!webCli) {
       return;
     }
-    shutdownStarted = true;
-    await keepWebDevProcessAliveDuring(stopWebCli(webCli));
-    resolveExit(exitCode);
-  };
 
-  void webCli.exited.then((exitCode) => {
-    webCliExited = true;
-    if (!shutdownStarted) {
-      void shutdown(exitCode);
+    yield* Effect.sync(() => webCli.kill());
+    if (yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS)) {
+      return;
     }
+
+    yield* Effect.sync(() => webCli.kill(9));
+    yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS);
   });
 
-  process.on("SIGINT", () => {
-    void shutdown(130);
-  });
-  process.on("SIGTERM", () => {
-    void shutdown(143);
-  });
-  process.once("exit", () => {
-    if (!webCliExited) {
-      webCli.kill();
-    }
+export const runWebDevEffect = (
+  args: readonly string[] = process.argv.slice(2),
+): Effect.Effect<number, WebDependencyError> =>
+  Effect.gen(function* () {
+    const webCli = yield* startWebCliEffect(args);
+    let webCliExited = false;
+    let shutdownStarted = false;
+    let resolveExit: (exitCode: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+
+    const shutdown = async (exitCode: number): Promise<void> => {
+      if (shutdownStarted) {
+        return;
+      }
+      shutdownStarted = true;
+      await runWebBoundary(
+        keepWebDevProcessAliveDuringEffect(runWebBoundary(stopWebCliEffect(webCli))),
+      );
+      resolveExit(exitCode);
+    };
+
+    yield* Effect.sync(() => {
+      void webCli.exited.then((exitCode) => {
+        webCliExited = true;
+        if (!shutdownStarted) {
+          void shutdown(exitCode);
+        }
+      });
+
+      process.on("SIGINT", () => {
+        void shutdown(130);
+      });
+      process.on("SIGTERM", () => {
+        void shutdown(143);
+      });
+      process.once("exit", () => {
+        if (!webCliExited) {
+          webCli.kill();
+        }
+      });
+    });
+
+    return yield* Effect.tryPromise({
+      try: () => exited,
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "web-dev-supervisor",
+          operation: "await-exit",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
   });
 
-  return exited;
-};
+export const runWebDev = (args: readonly string[] = process.argv.slice(2)): Promise<number> =>
+  runWebBoundary(runWebDevEffect(args));
 
 if (import.meta.main) {
   const exitCode = await runWebDev().catch((error: unknown) => {

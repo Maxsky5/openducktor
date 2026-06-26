@@ -142,6 +142,22 @@ describe("readLocalHostErrorPayload", () => {
 });
 
 describe("createLocalHostClient", () => {
+  test("rejects local host session failures with a typed web host request error", async () => {
+    const { ensureLocalHostSession } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ error: "Session rejected" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof globalThis.fetch;
+
+    await expect(ensureLocalHostSession()).rejects.toThrow("Session rejected");
+    await expect(ensureLocalHostSession()).rejects.toMatchObject({
+      _tag: "WebHostRequestError",
+    });
+  });
+
   test("preserves structured timeout metadata through local web runtimeEnsure", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
     const fetchMock = mock(async (url: string | URL | Request) => {

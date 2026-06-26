@@ -57,6 +57,12 @@ describe("launcher internals", () => {
         sleep: async () => {},
       }),
     ).rejects.toThrow("OpenDucktor web host exited before startup completed with code 9.");
+    await expect(
+      waitForBackend("http://127.0.0.1:14327", "app-token", 1_000, createHostProcess(exited), {
+        fetch: async () => new Response(null, { status: 503 }),
+        sleep: async () => {},
+      }),
+    ).rejects.toMatchObject({ _tag: "WebOperationError" });
   });
 
   test("stops frontend and host services directly", async () => {
@@ -147,7 +153,17 @@ describe("launcher internals", () => {
       },
     };
 
-    await expect(closeFrontendServer(frontendServer)).rejects.toThrow("close failed");
+    const result = await closeFrontendServer(frontendServer).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+
+    if (result.ok) {
+      throw new Error("Expected closeFrontendServer to reject");
+    }
+
+    expect(result.error).toMatchObject({ _tag: "WebDependencyError" });
+    expect(result.error).toEqual(expect.objectContaining({ message: "close failed" }));
     expect(closeIdleConnectionsCalls).toBe(1);
     expect(closeAllConnectionsCalls).toBe(1);
   });
@@ -221,6 +237,20 @@ describe("launcher internals", () => {
         },
       ),
     ).rejects.toThrow("host stop failed");
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend,
+        },
+        {
+          closeServer: async () => {},
+          stopHost: async () => {
+            throw new Error("host stop failed");
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ _tag: "WebOperationError" });
   });
 
   test("builds runtime config JSON for the browser shell", () => {
