@@ -212,16 +212,34 @@ export const stopTypescriptHostBackendServicesEffect = ({
       exitCode = 1;
       logError(Cause.pretty(disposeExit.cause));
     }
-    yield* Effect.try({
-      try: stopServer,
-      catch: (cause) =>
+    const stopServerExit = yield* Effect.exit(
+      Effect.try({
+        try: stopServer,
+        catch: (cause) =>
+          new WebOperationError({
+            operation: "web.host.stop-server",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    );
+    let stopServerError: WebOperationError | null = null;
+    if (stopServerExit._tag === "Failure") {
+      stopServerError =
+        Array.from(Cause.failures(stopServerExit.cause))[0] ??
         new WebOperationError({
           operation: "web.host.stop-server",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
+          message: Cause.pretty(stopServerExit.cause),
+          cause: stopServerExit.cause,
+        });
+    }
+    if (stopServerError) {
+      exitCode = 1;
+    }
     resolveExited(exitCode);
+    if (stopServerError) {
+      return yield* stopServerError;
+    }
   });
 
 export const stopTypescriptHostBackendServices = (

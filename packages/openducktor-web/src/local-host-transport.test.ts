@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { configureBrowserRuntimeConfig } from "./browser-config";
 
 type FakeEventSourceListener = (event: MessageEvent<string>) => void;
 
@@ -79,6 +80,7 @@ beforeEach(async () => {
   localHostTransportImportId += 1;
   localHostTransportImportPath = `./local-host-transport.ts?test=${localHostTransportImportId}`;
   FakeEventSource.reset();
+  configureBrowserRuntimeConfig({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" });
   process.env.VITE_ODT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
   process.env.VITE_ODT_BROWSER_AUTH_TOKEN = "app-token";
   // @ts-expect-error test shim
@@ -88,6 +90,7 @@ beforeEach(async () => {
 afterEach(() => {
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
+  configureBrowserRuntimeConfig({});
   if (originalBackendUrl === undefined) {
     delete process.env.VITE_ODT_BROWSER_BACKEND_URL;
   } else {
@@ -313,6 +316,33 @@ describe("local host SSE subscriptions", () => {
     });
 
     unsubscribe();
+  });
+
+  test("rejects dev-server subscriptions when EventSource errors before opening", async () => {
+    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+
+    const subscription = subscribeLocalHostDevServerEvents(mock(() => {}));
+    const eventSource = await waitForEventSourceInstance();
+
+    eventSource.emit("error", "failed");
+
+    await expect(subscription).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      dependency: "event-source",
+      operation: "await-ready",
+    });
+    expect(eventSource.closed).toBe(true);
+
+    const retrySubscription = subscribeLocalHostDevServerEvents(mock(() => {}));
+    const retryEventSource = await waitForEventSourceInstance(1);
+    retryEventSource.emit("open", "");
+    const unsubscribe = await retrySubscription;
+    expect(typeof unsubscribe).toBe("function");
+    unsubscribe();
+    expect(retryEventSource.closed).toBe(true);
   });
 
   test("buildLocalAttachmentPreviewUrl normalizes the backend base URL", async () => {

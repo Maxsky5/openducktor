@@ -178,6 +178,42 @@ describe("TypeScript web host backend", () => {
     });
   });
 
+  test("rejects malformed invoke command URI components as typed host request errors", async () => {
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/%E0%A4%A", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid command URI component: %E0%A4%A",
+      message: "Invalid command URI component: %E0%A4%A",
+    });
+  });
+
+  test("resolves host backend exit after stop server failures", async () => {
+    const resolvedExitCodes: number[] = [];
+
+    await expect(
+      stopTypescriptHostBackendServices({
+        disposeHost: () => Effect.void,
+        resolveExited: (exitCode) => {
+          resolvedExitCodes.push(exitCode);
+        },
+        stopServer: () => {
+          throw new Error("stop server failed");
+        },
+      }),
+    ).rejects.toMatchObject({ _tag: "WebOperationError" });
+    expect(resolvedExitCodes).toEqual([1]);
+  });
+
   test("rejects missing or invalid backend auth through typed route errors", async () => {
     const sessionMissing = await handleTestRequest(
       new Request("http://127.0.0.1/session", { method: "POST" }),

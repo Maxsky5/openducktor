@@ -6,10 +6,10 @@ import {
   errorMessage,
   runWebBoundary,
   runWebSyncBoundary,
-  WebOperationError,
+  type WebError,
   WebValidationError,
 } from "./effect/web-errors";
-import { runLauncher } from "./launcher";
+import { runLauncherEffect } from "./launcher";
 import { logError } from "./logger";
 
 type CliOptions = {
@@ -83,6 +83,7 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
       if (arg === "-h" || arg === "--help") {
         yield* Effect.sync(printHelp);
         yield* Effect.sync(() => process.exit(0));
+        return options;
       }
 
       return yield* new WebValidationError({
@@ -95,7 +96,7 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
     return options;
   });
 
-const runCliEffect = (): Effect.Effect<number, WebOperationError | WebValidationError> =>
+const runCliEffect = (): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const __filename = fileURLToPath(import.meta.url);
     const packageRoot = path.resolve(path.dirname(__filename), "..");
@@ -107,15 +108,7 @@ const runCliEffect = (): Effect.Effect<number, WebOperationError | WebValidation
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
     };
-    return yield* Effect.tryPromise({
-      try: () => runLauncher(launcherOptions),
-      catch: (cause) =>
-        new WebOperationError({
-          operation: "web.cli.launch",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
+    return yield* runLauncherEffect(launcherOptions);
   });
 
 const runCli = async (): Promise<void> => {

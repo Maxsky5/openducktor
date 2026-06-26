@@ -304,48 +304,62 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       );
     };
 
-    process.on("SIGINT", () => handleTerminationSignal("SIGINT", 130));
-    process.on("SIGTERM", () => handleTerminationSignal("SIGTERM", 143));
+    const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);
+    const handleSigterm = (): void => handleTerminationSignal("SIGTERM", 143);
 
-    const launcherExit = yield* Effect.exit(
-      Effect.gen(function* () {
-        logInfo("Starting OpenDucktor TypeScript host...");
-        logInfo("Waiting for OpenDucktor TypeScript host readiness...");
-        yield* waitForBackendEffect(backendUrl, appToken, readinessTimeoutMs, hostBackend);
-        logInfo("Starting OpenDucktor frontend server...");
-        frontendServer = yield* startFrontendServerEffect(options, backendUrl, appToken);
-        logFrontendAvailability(options.frontendPort);
-
-        const exitCode = yield* Effect.tryPromise({
-          try: () => hostBackend.exited,
-          catch: (cause) =>
-            new WebDependencyError({
-              dependency: "typescript-host-backend",
-              operation: "await-exit",
-              message: errorMessage(cause),
-              cause,
-            }),
-        });
-        if (stopStarted) {
-          yield* stopEffect();
-        } else {
-          logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
-          yield* closeFrontendServerEffect(frontendServer);
-          logSuccess("OpenDucktor web stopped.");
-        }
-        return exitCode;
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        process.on("SIGINT", handleSigint);
+        process.on("SIGTERM", handleSigterm);
       }),
+      () =>
+        Effect.gen(function* () {
+          const launcherExit = yield* Effect.exit(
+            Effect.gen(function* () {
+              logInfo("Starting OpenDucktor TypeScript host...");
+              logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+              yield* waitForBackendEffect(backendUrl, appToken, readinessTimeoutMs, hostBackend);
+              logInfo("Starting OpenDucktor frontend server...");
+              frontendServer = yield* startFrontendServerEffect(options, backendUrl, appToken);
+              logFrontendAvailability(options.frontendPort);
+
+              const exitCode = yield* Effect.tryPromise({
+                try: () => hostBackend.exited,
+                catch: (cause) =>
+                  new WebDependencyError({
+                    dependency: "typescript-host-backend",
+                    operation: "await-exit",
+                    message: errorMessage(cause),
+                    cause,
+                  }),
+              });
+              if (stopStarted) {
+                yield* stopEffect();
+              } else {
+                logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
+                yield* closeFrontendServerEffect(frontendServer);
+                logSuccess("OpenDucktor web stopped.");
+              }
+              return exitCode;
+            }),
+          );
+
+          if (launcherExit._tag === "Success") {
+            return launcherExit.value;
+          }
+
+          const stopExit = yield* Effect.exit(stopEffect());
+          if (stopExit._tag === "Failure") {
+            return yield* causeToWebBoundaryError(stopExit.cause);
+          }
+          return yield* causeToWebBoundaryError(launcherExit.cause);
+        }),
+      () =>
+        Effect.sync(() => {
+          process.off("SIGINT", handleSigint);
+          process.off("SIGTERM", handleSigterm);
+        }),
     );
-
-    if (launcherExit._tag === "Success") {
-      return launcherExit.value;
-    }
-
-    const stopExit = yield* Effect.exit(stopEffect());
-    if (stopExit._tag === "Failure") {
-      return yield* causeToWebBoundaryError(stopExit.cause);
-    }
-    return yield* causeToWebBoundaryError(launcherExit.cause);
   });
 
 export const runLauncher = (options: LauncherOptions): Promise<number> =>

@@ -88,5 +88,8 @@ export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError>
 export const buildWebPackage = (): Promise<void> => runWebBoundary(buildWebPackageEffect());
 
 if (import.meta.main) {
-  await buildWebPackage();
+  await buildWebPackage().catch((error: unknown) => {
+    console.error(errorMessage(error));
+    process.exit(1);
+  });
 }

@@ -125,6 +125,8 @@ export const closeFrontendServerEffect = (
       return;
     }
 
+    // Capture only synchronous close-call failures here while preserving the
+    // close Promise for Promise.race; async rejections are handled below.
     const closePromise = yield* Effect.try({
       try: () => server.close(),
       catch: (cause) =>

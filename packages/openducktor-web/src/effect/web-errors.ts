@@ -1,4 +1,4 @@
-import { Cause, Chunk, Data, Effect, Exit, Option } from "effect";
+import { Cause, Data, Effect, Exit } from "effect";
 
 export type WebErrorDetails = Readonly<Record<string, unknown>>;
 
@@ -85,9 +85,17 @@ export const toWebOperationError = (
 export const causeToWebBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
 ): Failure | WebOperationError => {
-  const firstFailure = Chunk.head(Cause.failures(cause));
-  if (Option.isSome(firstFailure)) {
-    return firstFailure.value;
+  const failures = Array.from(Cause.failures(cause));
+  if (failures.length === 1) {
+    return failures[0] as Failure;
+  }
+  if (failures.length > 1) {
+    return new WebOperationError({
+      operation: "web.effect.run",
+      message: "Multiple Effect failures crossed the web boundary.",
+      cause: { failures },
+      details: { failureMessages: failures.map(errorMessage) },
+    });
   }
 
   return new WebOperationError({

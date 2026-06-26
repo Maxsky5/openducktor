@@ -126,12 +126,32 @@ const stopWebCliEffect = (
       return;
     }
 
-    yield* Effect.sync(() => webCli.kill());
+    yield* Effect.try({
+      try: () => webCli.kill(),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "web-cli-process",
+          operation: "terminate",
+          message: errorMessage(cause),
+          cause,
+          details: { signal: "SIGTERM" },
+        }),
+    });
     if (yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS)) {
       return;
     }
 
-    yield* Effect.sync(() => webCli.kill(9));
+    yield* Effect.try({
+      try: () => webCli.kill(9),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "web-cli-process",
+          operation: "force-terminate",
+          message: errorMessage(cause),
+          cause,
+          details: { signal: 9 },
+        }),
+    });
     yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS);
   });
 
@@ -143,8 +163,10 @@ export const runWebDevEffect = (
     let webCliExited = false;
     let shutdownStarted = false;
     let resolveExit: (exitCode: number) => void = () => {};
-    const exited = new Promise<number>((resolve) => {
+    let rejectExit: (cause: unknown) => void = () => {};
+    const exited = new Promise<number>((resolve, reject) => {
       resolveExit = resolve;
+      rejectExit = reject;
     });
 
     const shutdown = async (exitCode: number): Promise<void> => {
@@ -152,41 +174,72 @@ export const runWebDevEffect = (
         return;
       }
       shutdownStarted = true;
-      await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
-      resolveExit(exitCode);
+      try {
+        await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
+        resolveExit(exitCode);
+      } catch (error) {
+        rejectExit(error);
+      }
     };
 
-    yield* Effect.sync(() => {
-      void webCli.exited.then((exitCode) => {
+    void webCli.exited.then(
+      (exitCode) => {
         webCliExited = true;
         if (!shutdownStarted) {
           void shutdown(exitCode);
         }
-      });
-
-      process.on("SIGINT", () => {
-        void shutdown(130);
-      });
-      process.on("SIGTERM", () => {
-        void shutdown(143);
-      });
-      process.once("exit", () => {
-        if (!webCliExited) {
-          webCli.kill();
+      },
+      (error: unknown) => {
+        webCliExited = true;
+        if (!shutdownStarted) {
+          shutdownStarted = true;
+          rejectExit(error);
         }
-      });
-    });
+      },
+    );
 
-    return yield* Effect.tryPromise({
-      try: () => exited,
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "web-dev-supervisor",
-          operation: "await-exit",
-          message: errorMessage(cause),
-          cause,
+    const handleSigint = (): void => {
+      void shutdown(130);
+    };
+    const handleSigterm = (): void => {
+      void shutdown(143);
+    };
+    const handleExit = (): void => {
+      if (!webCliExited) {
+        try {
+          webCli.kill();
+        } catch (error) {
+          console.error(errorMessage(error));
+        }
+      }
+    };
+
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        process.on("SIGINT", handleSigint);
+        process.on("SIGTERM", handleSigterm);
+        process.on("exit", handleExit);
+      }),
+      () =>
+        Effect.tryPromise({
+          try: () => exited,
+          catch: (cause) =>
+            cause instanceof WebDependencyError
+              ? cause
+              : new WebDependencyError({
+                  dependency: "web-dev-supervisor",
+                  operation: "await-exit",
+                  message: errorMessage(cause),
+                  cause,
+                }),
         }),
-    });
+      () =>
+        Effect.sync(() => {
+          process.off("SIGINT", handleSigint);
+          process.off("SIGTERM", handleSigterm);
+          process.off("exit", handleExit);
+        }),
+    );
   });
 
 export const runWebDev = (args: readonly string[] = process.argv.slice(2)): Promise<number> =>
@@ -194,7 +247,7 @@ export const runWebDev = (args: readonly string[] = process.argv.slice(2)): Prom
 
 if (import.meta.main) {
   const exitCode = await runWebDev().catch((error: unknown) => {
-    console.error(error);
+    console.error(errorMessage(error));
     return 1;
   });
   process.exit(exitCode);

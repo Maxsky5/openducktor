@@ -7,6 +7,7 @@ import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
 import {
+  causeToWebBoundaryError,
   errorMessage,
   isWebError,
   runWebBoundary,
@@ -21,6 +22,7 @@ type BrowserSseListener = (payload: unknown) => void;
 const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
+const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 
 type BrowserSseChannel = {
   eventSource: EventSource;
@@ -28,6 +30,7 @@ type BrowserSseChannel = {
   ready: Promise<void>;
   handleMessage: (event: MessageEvent<string>) => void;
   handleOpen: () => void;
+  handleError: (event: Event) => void;
   handleStreamWarning: (event: MessageEvent<string>) => void;
 };
 
@@ -183,6 +186,7 @@ const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void
   }
   channel.eventSource.removeEventListener("message", channel.handleMessage as EventListener);
   channel.eventSource.removeEventListener("open", channel.handleOpen as EventListener);
+  channel.eventSource.removeEventListener("error", channel.handleError as EventListener);
   channel.eventSource.removeEventListener(
     "stream-warning",
     channel.handleStreamWarning as EventListener,
@@ -215,9 +219,12 @@ const subscribeSseChannelEffect = (
       const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
       let hasOpened = false;
       let resolveReady: () => void = () => {};
-      const ready = new Promise<void>((resolve) => {
+      let rejectReady: (error: unknown) => void = () => {};
+      const ready = new Promise<void>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
       });
+      void ready.catch(() => {});
       const handleMessage = (event: MessageEvent<string>): void => {
         const payload = parseSsePayload(event.data);
         for (const currentListener of listeners.values()) {
@@ -237,6 +244,20 @@ const subscribeSseChannelEffect = (
           currentListener(browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND));
         }
       };
+      const handleError = (event: Event): void => {
+        if (hasOpened) {
+          return;
+        }
+        rejectReady(
+          new WebDependencyError({
+            dependency: "event-source",
+            operation: "await-ready",
+            message: `EventSource failed before opening ${path}.`,
+            cause: event,
+            details: { path },
+          }),
+        );
+      };
       const handleStreamWarning = (event: MessageEvent<string>): void => {
         if (!shouldEmitControlEvents) {
           return;
@@ -250,6 +271,7 @@ const subscribeSseChannelEffect = (
 
       eventSource.addEventListener("message", handleMessage as EventListener);
       eventSource.addEventListener("open", handleOpen as EventListener);
+      eventSource.addEventListener("error", handleError as EventListener);
       eventSource.addEventListener("stream-warning", handleStreamWarning as EventListener);
       channel = {
         eventSource,
@@ -257,6 +279,7 @@ const subscribeSseChannelEffect = (
         ready,
         handleMessage,
         handleOpen,
+        handleError,
         handleStreamWarning,
       };
       sseChannels.set(path, channel);
@@ -297,17 +320,51 @@ export const subscribeLocalHostDevServerEvents = async (
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
       const subscription = yield* subscribeSseChannelEffect("dev-server-events", listener);
-      yield* Effect.tryPromise({
-        try: () => subscription.ready,
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "event-source",
-            operation: "await-ready",
-            message: errorMessage(cause),
-            cause,
-            details: { path: "dev-server-events" },
-          }),
-      });
+      const readyExit = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => {
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            const timeout = new Promise<never>((_, reject) => {
+              timeoutId = setTimeout(
+                () =>
+                  reject(
+                    new WebDependencyError({
+                      dependency: "event-source",
+                      operation: "await-ready",
+                      message: `Timed out waiting for EventSource dev-server-events subscription to open.`,
+                      details: {
+                        path: "dev-server-events",
+                        timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
+                      },
+                    }),
+                  ),
+                INITIAL_SSE_READY_TIMEOUT_MS,
+              );
+            });
+            return Promise.race([subscription.ready, timeout]).finally(() => {
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+              }
+            });
+          },
+          catch: (cause) => {
+            if (isWebError(cause)) {
+              return cause;
+            }
+            return new WebDependencyError({
+              dependency: "event-source",
+              operation: "await-ready",
+              message: errorMessage(cause),
+              cause,
+              details: { path: "dev-server-events" },
+            });
+          },
+        }),
+      );
+      if (readyExit._tag === "Failure") {
+        subscription.unsubscribe();
+        return yield* causeToWebBoundaryError(readyExit.cause);
+      }
       return subscription.unsubscribe;
     }),
   );

@@ -463,7 +463,9 @@ const routeCorsRequest = ({
       yield* validateControlToken(request, controlToken);
       yield* Effect.sync(() => {
         setTimeout(() => {
-          void stop();
+          void stop().catch((error: unknown) => {
+            logError(errorMessage(error));
+          });
         }, 10);
       });
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
@@ -505,7 +507,15 @@ const routeCorsRequest = ({
       if (!command) {
         return yield* rejectWebHostRequest("Host command is required.", 400);
       }
-      const decodedCommand = decodeURIComponent(command);
+      const decodedCommand = yield* Effect.try({
+        try: () => decodeURIComponent(command),
+        catch: (cause) =>
+          new WebHostRequestError({
+            message: `Invalid command URI component: ${command}`,
+            status: 400,
+            cause,
+          }),
+      });
       const result = yield* hostCommandRouter
         .invoke(decodedCommand, args)
         .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
