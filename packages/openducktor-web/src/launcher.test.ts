@@ -216,6 +216,14 @@ describe("launcher internals", () => {
     expect(source).toContain("OpenDucktor web shutdown is already in progress");
   });
 
+  test("registers launcher resource cleanup in Effect finalizers", async () => {
+    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
+
+    expect(source).toContain("if (!servicesReleased)");
+    expect(source).toContain("const stopExit = yield* Effect.exit(stopEffect())");
+    expect(source).toContain("Effect.onInterrupt");
+  });
+
   test("does not wait for the host exit code when host stop fails", async () => {
     const hostBackend = {
       exited: new Promise<number>(() => {}),

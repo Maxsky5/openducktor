@@ -70,4 +70,11 @@ describe("web dev script", () => {
 
     return expect(source).resolves.not.toContain("webCli.killed");
   });
+
+  test("stops the child CLI from the Effect finalizer when needed", async () => {
+    const source = await Bun.file(new URL("./dev.ts", import.meta.url)).text();
+
+    expect(source).toContain("if (cleanupCompleted || webCliExited)");
+    expect(source).toContain("keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli))");
+  });
 });

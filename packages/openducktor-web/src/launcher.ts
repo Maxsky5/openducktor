@@ -74,11 +74,19 @@ const contentTypeForPath = (filePath: string): string => {
   }
 };
 
+const cleanupStartedFrontendServerEffect = (server: FrontendServer): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const closeExit = yield* Effect.exit(closeFrontendServerEffect(server));
+    if (closeExit._tag === "Failure") {
+      logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+    }
+  });
+
 const startViteServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
-): Effect.Effect<ViteDevServer, WebDependencyError> =>
+): Effect.Effect<ViteDevServer, WebError> =>
   Effect.gen(function* () {
     const { createServer } = yield* Effect.tryPromise({
       try: () => import("vite"),
@@ -91,52 +99,67 @@ const startViteServerEffect = (
         }),
     });
     const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
-    const server = yield* Effect.tryPromise({
-      try: () =>
-        createServer({
-          root: options.packageRoot,
-          configFile: path.join(options.packageRoot, "vite.config.ts"),
-          plugins: [
-            {
-              name: "openducktor-runtime-config",
-              configureServer(devServer) {
-                devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
-                  response.statusCode = 200;
-                  response.setHeader("content-type", "application/json; charset=utf-8");
-                  response.setHeader("cache-control", "no-store");
-                  response.end(runtimeConfigJson);
-                });
-              },
-            },
-          ],
-          server: {
-            host: LOCALHOST,
-            port: options.frontendPort,
-            strictPort: true,
-          },
-        }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "vite",
-          operation: "create-server",
-          message: errorMessage(cause),
-          cause,
-          details: { frontendPort: options.frontendPort },
-        }),
-    });
 
-    yield* Effect.tryPromise({
-      try: () => server.listen(options.frontendPort),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "vite",
-          operation: "listen",
-          message: errorMessage(cause),
-          cause,
-          details: { frontendPort: options.frontendPort },
-        }),
-    });
-    return server;
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const server = yield* Effect.tryPromise({
+          try: () =>
+            createServer({
+              root: options.packageRoot,
+              configFile: path.join(options.packageRoot, "vite.config.ts"),
+              plugins: [
+                {
+                  name: "openducktor-runtime-config",
+                  configureServer(devServer) {
+                    devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
+                      response.statusCode = 200;
+                      response.setHeader("content-type", "application/json; charset=utf-8");
+                      response.setHeader("cache-control", "no-store");
+                      response.end(runtimeConfigJson);
+                    });
+                  },
+                },
+              ],
+              server: {
+                host: LOCALHOST,
+                port: options.frontendPort,
+                strictPort: true,
+              },
+            }),
+          catch: (cause) =>
+            new WebDependencyError({
+              dependency: "vite",
+              operation: "create-server",
+              message: errorMessage(cause),
+              cause,
+              details: { frontendPort: options.frontendPort },
+            }),
+        });
+
+        yield* restore(
+          Effect.tryPromise({
+            try: () => server.listen(options.frontendPort),
+            catch: (cause) =>
+              new WebDependencyError({
+                dependency: "vite",
+                operation: "listen",
+                message: errorMessage(cause),
+                cause,
+                details: { frontendPort: options.frontendPort },
+              }),
+          }),
+        ).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              yield* cleanupStartedFrontendServerEffect(server);
+              return yield* error;
+            }),
+          ),
+          Effect.onInterrupt(() => cleanupStartedFrontendServerEffect(server)),
+        );
+        return server;
+      }),
+    );
   });
 
 const startStaticFrontendServerEffect = (
@@ -168,55 +191,57 @@ const startStaticFrontendServerEffect = (
     }
 
     const runtimeConfigJson = buildBrowserRuntimeConfigJson(backendUrl, appToken);
-    const server = yield* Effect.try({
-      try: () =>
-        Bun.serve({
-          hostname: LOCALHOST,
-          port: options.frontendPort,
-          fetch(request) {
-            const requestUrl = new URL(request.url);
-            if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
-              return new Response(runtimeConfigJson, {
+    return yield* Effect.uninterruptible(
+      Effect.try({
+        try: () =>
+          Bun.serve({
+            hostname: LOCALHOST,
+            port: options.frontendPort,
+            fetch(request) {
+              const requestUrl = new URL(request.url);
+              if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
+                return new Response(runtimeConfigJson, {
+                  headers: {
+                    "cache-control": "no-store",
+                    "content-type": "application/json; charset=utf-8",
+                  },
+                });
+              }
+
+              const assetPath = resolveStaticAssetPath(staticRoot, requestUrl.pathname);
+              if (!assetPath) {
+                return new Response("Not found", { status: 404 });
+              }
+
+              const assetExists = existsSync(assetPath) && statSync(assetPath).isFile();
+              if (!assetExists && path.extname(requestUrl.pathname)) {
+                return new Response("Not found", { status: 404 });
+              }
+
+              const responsePath = assetExists ? assetPath : indexPath;
+              return new Response(Bun.file(responsePath), {
                 headers: {
-                  "cache-control": "no-store",
-                  "content-type": "application/json; charset=utf-8",
+                  "content-type": contentTypeForPath(responsePath),
                 },
               });
-            }
-
-            const assetPath = resolveStaticAssetPath(staticRoot, requestUrl.pathname);
-            if (!assetPath) {
-              return new Response("Not found", { status: 404 });
-            }
-
-            const assetExists = existsSync(assetPath) && statSync(assetPath).isFile();
-            if (!assetExists && path.extname(requestUrl.pathname)) {
-              return new Response("Not found", { status: 404 });
-            }
-
-            const responsePath = assetExists ? assetPath : indexPath;
-            return new Response(Bun.file(responsePath), {
-              headers: {
-                "content-type": contentTypeForPath(responsePath),
-              },
-            });
+            },
+          }),
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "bun-server",
+            operation: "start-static-frontend",
+            message: errorMessage(cause),
+            cause,
+            details: { frontendPort: options.frontendPort },
+          }),
+      }).pipe(
+        Effect.map((server) => ({
+          async close() {
+            server.stop(true);
           },
-        }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "bun-server",
-          operation: "start-static-frontend",
-          message: errorMessage(cause),
-          cause,
-          details: { frontendPort: options.frontendPort },
-        }),
-    });
-
-    return {
-      async close() {
-        server.stop(true);
-      },
-    };
+        })),
+      ),
+    );
   });
 
 const startFrontendServerEffect = (
@@ -241,123 +266,193 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
     });
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
-    const hostBackend = yield* startTypescriptHostBackendEffect({
-      port: options.backendPort,
-      frontendOrigin: frontendUrl,
-      controlToken,
-      appToken,
-      providedToolPaths,
-      runtimeDistribution,
-    });
     let frontendServer: FrontendServer | null = null;
-    const stopDeferred = yield* Deferred.make<void, WebError>();
-    let stopStarted = false;
-    let terminationStarted = false;
-    let duplicateTerminationNoticeLogged = false;
+    let frontendClosed = false;
+    let servicesReleased = false;
+    let stopEffectRef: (() => Effect.Effect<void, WebError>) | null = null;
 
-    const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
-      Effect.gen(function* () {
-        logInfo("Stopping OpenDucktor frontend server...");
-        logInfo("Stopping OpenDucktor TypeScript host services...");
-
-        yield* stopLauncherServicesEffect({ frontendServer, hostBackend });
-        logSuccess("OpenDucktor web stopped.");
-      });
-
-    const stopEffect = (): Effect.Effect<void, WebError> =>
+    const closeFrontendOnceEffect = (
+      server: FrontendServer | null,
+    ): Effect.Effect<void, WebError> =>
       Effect.suspend(() => {
-        if (stopStarted) {
-          return Deferred.await(stopDeferred);
+        if (!server || frontendClosed) {
+          return Effect.void;
         }
-        stopStarted = true;
-        return Effect.gen(function* () {
-          const stopExit = yield* Effect.exit(stopServicesWithLogsEffect());
-          yield* Deferred.done(stopDeferred, stopExit);
-          return yield* Deferred.await(stopDeferred);
-        });
+        frontendClosed = true;
+        return closeFrontendServerEffect(server);
       });
-
-    const stopForSignal = (): Promise<void> =>
-      runWebBoundary(keepProcessAliveDuringEffect(stopEffect()));
-
-    const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
-      if (terminationStarted) {
-        if (!duplicateTerminationNoticeLogged) {
-          duplicateTerminationNoticeLogged = true;
-          logInfo(
-            "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
-          );
-        }
-        return;
-      }
-      terminationStarted = true;
-      logInfo(`Stopping OpenDucktor web after ${signal}...`);
-
-      void stopForSignal().then(
-        () => {
-          process.exit(exitCode);
-        },
-        (error: unknown) => {
-          logError(errorMessage(error));
-          process.exit(1);
-        },
-      );
-    };
-
-    const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);
-    const handleSigterm = (): void => handleTerminationSignal("SIGTERM", 143);
 
     return yield* Effect.acquireUseRelease(
-      Effect.sync(() => {
-        process.on("SIGINT", handleSigint);
-        process.on("SIGTERM", handleSigterm);
+      startTypescriptHostBackendEffect({
+        port: options.backendPort,
+        frontendOrigin: frontendUrl,
+        controlToken,
+        appToken,
+        providedToolPaths,
+        runtimeDistribution,
       }),
-      () =>
+      (hostBackend) =>
         Effect.gen(function* () {
-          const launcherExit = yield* Effect.exit(
+          const stopDeferred = yield* Deferred.make<void, WebError>();
+          let stopStarted = false;
+          let terminationStarted = false;
+          let duplicateTerminationNoticeLogged = false;
+
+          const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
             Effect.gen(function* () {
-              logInfo("Starting OpenDucktor TypeScript host...");
-              logInfo("Waiting for OpenDucktor TypeScript host readiness...");
-              yield* waitForBackendEffect(backendUrl, appToken, readinessTimeoutMs, hostBackend);
-              logInfo("Starting OpenDucktor frontend server...");
-              frontendServer = yield* startFrontendServerEffect(options, backendUrl, appToken);
-              logFrontendAvailability(options.frontendPort);
+              logInfo("Stopping OpenDucktor frontend server...");
+              logInfo("Stopping OpenDucktor TypeScript host services...");
 
-              const exitCode = yield* Effect.tryPromise({
-                try: () => hostBackend.exited,
-                catch: (cause) =>
-                  new WebDependencyError({
-                    dependency: "typescript-host-backend",
-                    operation: "await-exit",
-                    message: errorMessage(cause),
-                    cause,
-                  }),
-              });
+              yield* stopLauncherServicesEffect(
+                { frontendServer, hostBackend },
+                {
+                  closeServer: (server) => runWebBoundary(closeFrontendOnceEffect(server)),
+                  stopHost: (backend) => backend.stop(),
+                },
+              );
+              logSuccess("OpenDucktor web stopped.");
+            });
+
+          const stopEffect = (): Effect.Effect<void, WebError> =>
+            Effect.suspend(() => {
               if (stopStarted) {
-                yield* stopEffect();
-              } else {
-                logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
-                yield* closeFrontendServerEffect(frontendServer);
-                logSuccess("OpenDucktor web stopped.");
+                return Deferred.await(stopDeferred);
               }
-              return exitCode;
+              stopStarted = true;
+              return Effect.gen(function* () {
+                const stopExit = yield* Effect.exit(stopServicesWithLogsEffect());
+                servicesReleased = true;
+                yield* Deferred.done(stopDeferred, stopExit);
+                return yield* Deferred.await(stopDeferred);
+              });
+            });
+          stopEffectRef = stopEffect;
+
+          const stopForSignal = (): Promise<void> =>
+            runWebBoundary(keepProcessAliveDuringEffect(stopEffect()));
+
+          const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
+            if (terminationStarted) {
+              if (!duplicateTerminationNoticeLogged) {
+                duplicateTerminationNoticeLogged = true;
+                logInfo(
+                  "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
+                );
+              }
+              return;
+            }
+            terminationStarted = true;
+            logInfo(`Stopping OpenDucktor web after ${signal}...`);
+
+            void stopForSignal().then(
+              () => {
+                process.exit(exitCode);
+              },
+              (error: unknown) => {
+                logError(errorMessage(error));
+                process.exit(1);
+              },
+            );
+          };
+
+          const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);
+          const handleSigterm = (): void => handleTerminationSignal("SIGTERM", 143);
+
+          return yield* Effect.acquireUseRelease(
+            Effect.sync(() => {
+              process.on("SIGINT", handleSigint);
+              process.on("SIGTERM", handleSigterm);
             }),
+            () =>
+              Effect.gen(function* () {
+                const launcherExit = yield* Effect.exit(
+                  Effect.gen(function* () {
+                    logInfo("Starting OpenDucktor TypeScript host...");
+                    logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+                    yield* waitForBackendEffect(
+                      backendUrl,
+                      appToken,
+                      readinessTimeoutMs,
+                      hostBackend,
+                    );
+                    logInfo("Starting OpenDucktor frontend server...");
+                    return yield* Effect.acquireUseRelease(
+                      startFrontendServerEffect(options, backendUrl, appToken),
+                      (server) =>
+                        Effect.gen(function* () {
+                          frontendServer = server;
+                          logFrontendAvailability(options.frontendPort);
+
+                          const exitCode = yield* Effect.tryPromise({
+                            try: () => hostBackend.exited,
+                            catch: (cause) =>
+                              new WebDependencyError({
+                                dependency: "typescript-host-backend",
+                                operation: "await-exit",
+                                message: errorMessage(cause),
+                                cause,
+                              }),
+                          });
+                          if (stopStarted) {
+                            yield* stopEffect();
+                          } else {
+                            logInfo(
+                              "OpenDucktor TypeScript host exited; stopping frontend server...",
+                            );
+                            yield* closeFrontendOnceEffect(server);
+                            logSuccess("OpenDucktor web stopped.");
+                            servicesReleased = true;
+                          }
+                          return exitCode;
+                        }),
+                      (server) =>
+                        Effect.gen(function* () {
+                          const closeExit = yield* Effect.exit(closeFrontendOnceEffect(server));
+                          if (closeExit._tag === "Failure") {
+                            logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+                          }
+                        }),
+                    );
+                  }),
+                );
+
+                if (launcherExit._tag === "Success") {
+                  return launcherExit.value;
+                }
+
+                const stopExit = yield* Effect.exit(stopEffect());
+                if (stopExit._tag === "Failure") {
+                  return yield* causeToWebBoundaryError(stopExit.cause);
+                }
+                return yield* causeToWebBoundaryError(launcherExit.cause);
+              }),
+            () =>
+              Effect.gen(function* () {
+                process.off("SIGINT", handleSigint);
+                process.off("SIGTERM", handleSigterm);
+                if (!servicesReleased) {
+                  const stopExit = yield* Effect.exit(stopEffect());
+                  if (stopExit._tag === "Failure") {
+                    logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+                  }
+                }
+              }),
           );
-
-          if (launcherExit._tag === "Success") {
-            return launcherExit.value;
-          }
-
-          const stopExit = yield* Effect.exit(stopEffect());
-          if (stopExit._tag === "Failure") {
-            return yield* causeToWebBoundaryError(stopExit.cause);
-          }
-          return yield* causeToWebBoundaryError(launcherExit.cause);
         }),
-      () =>
-        Effect.sync(() => {
-          process.off("SIGINT", handleSigint);
-          process.off("SIGTERM", handleSigterm);
+      (hostBackend) =>
+        Effect.gen(function* () {
+          if (servicesReleased) {
+            return;
+          }
+          const stopExit = yield* Effect.exit(
+            stopEffectRef
+              ? stopEffectRef()
+              : stopLauncherServicesEffect({ frontendServer, hostBackend }),
+          );
+          servicesReleased = true;
+          if (stopExit._tag === "Failure") {
+            logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+          }
         }),
     );
   });

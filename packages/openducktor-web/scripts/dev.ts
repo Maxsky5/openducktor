@@ -1,7 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
-import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
+import {
+  causeToWebBoundaryError,
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+} from "../src/effect/web-errors";
 
 type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
 type KeepAliveTimer = ReturnType<typeof setInterval>;
@@ -159,85 +164,106 @@ export const runWebDevEffect = (
   args: readonly string[] = process.argv.slice(2),
 ): Effect.Effect<number, WebDependencyError> =>
   Effect.gen(function* () {
-    const webCli = yield* startWebCliEffect(args);
     let webCliExited = false;
     let shutdownStarted = false;
-    let resolveExit: (exitCode: number) => void = () => {};
-    let rejectExit: (cause: unknown) => void = () => {};
-    const exited = new Promise<number>((resolve, reject) => {
-      resolveExit = resolve;
-      rejectExit = reject;
-    });
-
-    const shutdown = async (exitCode: number): Promise<void> => {
-      if (shutdownStarted) {
-        return;
-      }
-      shutdownStarted = true;
-      try {
-        await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
-        resolveExit(exitCode);
-      } catch (error) {
-        rejectExit(error);
-      }
-    };
-
-    void webCli.exited.then(
-      (exitCode) => {
-        webCliExited = true;
-        if (!shutdownStarted) {
-          void shutdown(exitCode);
-        }
-      },
-      (error: unknown) => {
-        webCliExited = true;
-        if (!shutdownStarted) {
-          shutdownStarted = true;
-          rejectExit(error);
-        }
-      },
-    );
-
-    const handleSigint = (): void => {
-      void shutdown(130);
-    };
-    const handleSigterm = (): void => {
-      void shutdown(143);
-    };
-    const handleExit = (): void => {
-      if (!webCliExited) {
-        try {
-          webCli.kill();
-        } catch (error) {
-          console.error(errorMessage(error));
-        }
-      }
-    };
+    let cleanupCompleted = false;
 
     return yield* Effect.acquireUseRelease(
-      Effect.sync(() => {
-        process.on("SIGINT", handleSigint);
-        process.on("SIGTERM", handleSigterm);
-        process.on("exit", handleExit);
-      }),
-      () =>
-        Effect.tryPromise({
-          try: () => exited,
-          catch: (cause) =>
-            cause instanceof WebDependencyError
-              ? cause
-              : new WebDependencyError({
-                  dependency: "web-dev-supervisor",
-                  operation: "await-exit",
-                  message: errorMessage(cause),
-                  cause,
-                }),
+      startWebCliEffect(args),
+      (webCli) =>
+        Effect.gen(function* () {
+          let resolveExit: (exitCode: number) => void = () => {};
+          let rejectExit: (cause: unknown) => void = () => {};
+          const exited = new Promise<number>((resolve, reject) => {
+            resolveExit = resolve;
+            rejectExit = reject;
+          });
+
+          const shutdown = async (exitCode: number): Promise<void> => {
+            if (shutdownStarted) {
+              return;
+            }
+            shutdownStarted = true;
+            try {
+              await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
+              cleanupCompleted = true;
+              resolveExit(exitCode);
+            } catch (error) {
+              cleanupCompleted = true;
+              rejectExit(error);
+            }
+          };
+
+          void webCli.exited.then(
+            (exitCode) => {
+              webCliExited = true;
+              if (!shutdownStarted) {
+                void shutdown(exitCode);
+              }
+            },
+            (error: unknown) => {
+              webCliExited = true;
+              if (!shutdownStarted) {
+                shutdownStarted = true;
+                rejectExit(error);
+              }
+            },
+          );
+
+          const handleSigint = (): void => {
+            void shutdown(130);
+          };
+          const handleSigterm = (): void => {
+            void shutdown(143);
+          };
+          const handleExit = (): void => {
+            if (!webCliExited) {
+              try {
+                webCli.kill();
+              } catch (error) {
+                console.error(errorMessage(error));
+              }
+            }
+          };
+
+          return yield* Effect.acquireUseRelease(
+            Effect.sync(() => {
+              process.on("SIGINT", handleSigint);
+              process.on("SIGTERM", handleSigterm);
+              process.on("exit", handleExit);
+            }),
+            () =>
+              Effect.tryPromise({
+                try: () => exited,
+                catch: (cause) =>
+                  cause instanceof WebDependencyError
+                    ? cause
+                    : new WebDependencyError({
+                        dependency: "web-dev-supervisor",
+                        operation: "await-exit",
+                        message: errorMessage(cause),
+                        cause,
+                      }),
+              }),
+            () =>
+              Effect.sync(() => {
+                process.off("SIGINT", handleSigint);
+                process.off("SIGTERM", handleSigterm);
+                process.off("exit", handleExit);
+              }),
+          );
         }),
-      () =>
-        Effect.sync(() => {
-          process.off("SIGINT", handleSigint);
-          process.off("SIGTERM", handleSigterm);
-          process.off("exit", handleExit);
+      (webCli) =>
+        Effect.gen(function* () {
+          if (cleanupCompleted || webCliExited) {
+            return;
+          }
+          const stopExit = yield* Effect.exit(
+            keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)),
+          );
+          if (stopExit._tag === "Failure") {
+            console.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+          }
         }),
     );
   });

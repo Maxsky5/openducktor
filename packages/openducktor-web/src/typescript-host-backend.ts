@@ -46,6 +46,7 @@ export type TypescriptHostBackend = {
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
 };
+type TypescriptHostBackendServer = ReturnType<typeof Bun.serve>;
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -602,6 +603,7 @@ export const startTypescriptHostBackendEffect = ({
     let shutdownStarted = false;
     let stopPromise: Promise<void> | null = null;
     let resolveExited: (exitCode: number) => void = () => {};
+    let server: TypescriptHostBackendServer;
     const exited = new Promise<number>((resolve) => {
       resolveExited = resolve;
     });
@@ -619,66 +621,79 @@ export const startTypescriptHostBackendEffect = ({
       return stopPromise;
     };
 
-    const server = yield* Effect.try({
-      try: () =>
-        Bun.serve({
-          hostname: LOCALHOST,
-          idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
-          port,
-          fetch(request, server) {
-            return Effect.runPromise(
-              handleTypescriptHostBackendRequest({
-                allowedOrigins,
-                appToken,
-                controlToken,
-                eventBus,
-                hostCommandRouter,
-                localAttachments,
-                request,
-                requestTimeouts: server,
-                shutdownStarted,
-                stop,
-              }),
-            );
-          },
-        }),
-      catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
-    });
-
-    if (server.port === undefined) {
-      server.stop(true);
-      return yield* new WebOperationError({
-        operation: "web.host.start-server",
-        message: "OpenDucktor TypeScript host did not expose a listening port.",
-        details: { port },
+    const cleanupStartedServerEffect = (): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+        yield* Effect.sync(() => server.stop(true));
+        if (disposeExit._tag === "Failure") {
+          logError(
+            `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
+              disposeExit.cause,
+            )}`,
+          );
+        }
       });
-    }
 
-    const initializeExit = yield* Effect.exit(hostCommandRouter.initialize());
-    if (initializeExit._tag === "Failure") {
-      const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
-      yield* Effect.sync(() => server.stop(true));
-      if (disposeExit._tag === "Failure") {
-        logError(
-          `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
-            disposeExit.cause,
-          )}`,
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        server = yield* Effect.try({
+          try: () =>
+            Bun.serve({
+              hostname: LOCALHOST,
+              idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
+              port,
+              fetch(request, server) {
+                return Effect.runPromise(
+                  handleTypescriptHostBackendRequest({
+                    allowedOrigins,
+                    appToken,
+                    controlToken,
+                    eventBus,
+                    hostCommandRouter,
+                    localAttachments,
+                    request,
+                    requestTimeouts: server,
+                    shutdownStarted,
+                    stop,
+                  }),
+                );
+              },
+            }),
+          catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
+        });
+
+        if (server.port === undefined) {
+          yield* cleanupStartedServerEffect();
+          return yield* new WebOperationError({
+            operation: "web.host.start-server",
+            message: "OpenDucktor TypeScript host did not expose a listening port.",
+            details: { port },
+          });
+        }
+
+        yield* restore(hostCommandRouter.initialize()).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              yield* cleanupStartedServerEffect();
+              return yield* new WebOperationError({
+                operation: "web.host.initialize",
+                message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${errorMessage(
+                  error,
+                )}`,
+                cause: error,
+              });
+            }),
+          ),
+          Effect.onInterrupt(cleanupStartedServerEffect),
         );
-      }
-      return yield* new WebOperationError({
-        operation: "web.host.initialize",
-        message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${Cause.pretty(
-          initializeExit.cause,
-        )}`,
-        cause: initializeExit.cause,
-      });
-    }
 
-    return {
-      exited,
-      port: server.port,
-      stop,
-    };
+        return {
+          exited,
+          port: server.port,
+          stop,
+        };
+      }),
+    );
   });
 
 export const startTypescriptHostBackend = (
