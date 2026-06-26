@@ -1,4 +1,4 @@
-import { CircleX, Loader2 } from "lucide-react";
+import { CircleCheckBig, Loader2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,7 +52,7 @@ export function TaskCloseConfirmDialog({
         </DialogHeader>
 
         <DialogBody className="py-4">
-          <div className="flex flex-col gap-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
+          <div className="flex flex-col gap-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground">
             <p className="font-medium">
               This manual override moves the task to Done and bypasses unfinished workflow steps.
             </p>
@@ -88,8 +88,8 @@ export function TaskCloseConfirmDialog({
           </Button>
           <Button
             type="button"
-            variant="destructive"
-            className="w-[132px] justify-center disabled:bg-destructive/80 disabled:text-destructive-foreground disabled:opacity-100"
+            variant="outline"
+            className="w-[132px] justify-center border-warning-border bg-warning-surface text-warning-muted hover:bg-warning-surface/80 hover:text-warning-surface-foreground disabled:border-warning-border/70 disabled:bg-warning-surface/70 disabled:text-warning-muted disabled:opacity-100"
             disabled={isClosePending || isLoadingImpact}
             aria-busy={isClosePending || isLoadingImpact}
             onClick={onConfirm}
@@ -97,7 +97,7 @@ export function TaskCloseConfirmDialog({
             {isClosePending || isLoadingImpact ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <CircleX className="size-4" />
+              <CircleCheckBig className="size-4" />
             )}
             {isClosePending ? "Closing..." : isLoadingImpact ? "Checking..." : "Close task"}
           </Button>

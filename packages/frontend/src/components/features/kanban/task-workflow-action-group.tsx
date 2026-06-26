@@ -9,6 +9,7 @@ import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-w
 import {
   TASK_ACTION_ICON,
   taskActionIsDestructive,
+  taskActionIsWarning,
   taskActionLabel,
   taskPrimaryActionVariant,
 } from "./task-action-ui";
@@ -16,6 +17,10 @@ import {
 const EMPTY_EXTRA_MENU_ACTIONS: readonly ExtraTaskMenuAction[] = [];
 const DESTRUCTIVE_MENU_ITEM_CLASS_NAME =
   "text-destructive-muted hover:border-destructive-border/60 hover:bg-destructive-surface/70 hover:text-destructive-surface-foreground dark:hover:bg-destructive-surface/55";
+const WARNING_MENU_ITEM_CLASS_NAME =
+  "text-warning-muted hover:border-warning-border/60 hover:bg-warning-surface/70 hover:text-warning-surface-foreground dark:hover:bg-warning-surface/55";
+const WARNING_PRIMARY_ACTION_CLASS_NAME =
+  "border-warning-border bg-warning-surface text-warning-muted hover:bg-warning-surface/80 hover:text-warning-surface-foreground";
 
 type ExtraTaskMenuAction = {
   id: string;
@@ -105,7 +110,11 @@ export function TaskWorkflowActionGroup({
           type="button"
           size={size}
           variant={taskPrimaryActionVariant(primary)}
-          className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
+          className={cn(
+            expandPrimary ? "min-w-0 flex-1" : "",
+            taskActionIsWarning(primary) ? WARNING_PRIMARY_ACTION_CLASS_NAME : "",
+            primaryClassName,
+          )}
           onClick={() => onAction(primary)}
         >
           {primaryContent ?? (
@@ -146,6 +155,7 @@ export function TaskWorkflowActionGroup({
                   className={cn(
                     "h-8 w-full justify-start border border-transparent",
                     taskActionIsDestructive(action) ? DESTRUCTIVE_MENU_ITEM_CLASS_NAME : "",
+                    taskActionIsWarning(action) ? WARNING_MENU_ITEM_CLASS_NAME : "",
                   )}
                   onClick={() => {
                     onAction(action);

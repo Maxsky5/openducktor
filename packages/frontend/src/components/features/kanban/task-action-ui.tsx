@@ -2,7 +2,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import {
   ArrowUpRightFromSquare,
   CircleCheckBig,
-  CircleX,
   RotateCcw,
   ScrollText,
   ShieldCheck,
@@ -78,7 +77,7 @@ export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
   open_qa: <ArrowUpRightFromSquare className="size-3.5" />,
   reset_implementation: <RotateCcw className="size-3.5" />,
   reset_task: <RotateCcw className="size-3.5" />,
-  close_task: <CircleX className="size-3.5" />,
+  close_task: <CircleCheckBig className="size-3.5" />,
   build_start: <Wrench className="size-3.5" />,
   qa_start: <ShieldCheck className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
@@ -91,11 +90,13 @@ export const taskPrimaryActionVariant = (
   if (action === "build_start" || action === "qa_start" || action === "human_approve") {
     return "default";
   }
-  if (action === "reset_implementation" || action === "reset_task" || action === "close_task") {
+  if (action === "reset_implementation" || action === "reset_task") {
     return "destructive";
   }
   return "outline";
 };
 
 export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
-  action === "reset_implementation" || action === "reset_task" || action === "close_task";
+  action === "reset_implementation" || action === "reset_task";
+
+export const taskActionIsWarning = (action: TaskWorkflowAction): boolean => action === "close_task";

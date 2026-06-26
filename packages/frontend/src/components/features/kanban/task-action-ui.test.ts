@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { CircleCheckBig } from "lucide-react";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
+  TASK_ACTION_ICON,
   taskActionIsDestructive,
+  taskActionIsWarning,
   taskActionLabel,
   taskPrimaryActionVariant,
 } from "./task-action-ui";
@@ -85,11 +88,16 @@ describe("taskActionLabel", () => {
     expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
     expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
     expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
-    expect(taskPrimaryActionVariant("close_task")).toBe("destructive");
+    expect(taskPrimaryActionVariant("close_task")).toBe("outline");
 
     expect(taskActionIsDestructive("human_request_changes")).toBe(false);
     expect(taskActionIsDestructive("reset_implementation")).toBe(true);
     expect(taskActionIsDestructive("reset_task")).toBe(true);
-    expect(taskActionIsDestructive("close_task")).toBe(true);
+    expect(taskActionIsDestructive("close_task")).toBe(false);
+    expect(taskActionIsWarning("close_task")).toBe(true);
+  });
+
+  test("uses the approval-style icon for manual close", () => {
+    expect(TASK_ACTION_ICON.close_task.type).toBe(CircleCheckBig);
   });
 });

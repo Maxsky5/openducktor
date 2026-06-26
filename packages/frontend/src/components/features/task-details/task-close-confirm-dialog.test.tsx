@@ -31,6 +31,10 @@ describe("TaskCloseConfirmDialog", () => {
     expect(
       screen.getByText(/task record, documents, QA reports, and linked history/i),
     ).toBeDefined();
+    expect(document.body.innerHTML).toContain("border-warning-border");
+    expect(document.body.innerHTML).toContain("bg-warning-surface");
+    expect(document.body.innerHTML).not.toContain("border-destructive-border");
+    expect(document.body.innerHTML).not.toContain("bg-destructive-surface");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Checking/i }).disabled).toBe(
       true,
     );
@@ -60,6 +64,7 @@ describe("TaskCloseConfirmDialog", () => {
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Close task/i }).disabled).toBe(
       false,
     );
+    expect(document.body.innerHTML).toContain("lucide-circle-check-big");
 
     unmount();
   });
