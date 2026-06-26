@@ -255,6 +255,15 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
     let terminationStarted = false;
     let duplicateTerminationNoticeLogged = false;
 
+    const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
+      Effect.gen(function* () {
+        logInfo("Stopping OpenDucktor frontend server...");
+        logInfo("Stopping OpenDucktor TypeScript host services...");
+
+        yield* stopLauncherServicesEffect({ frontendServer, hostBackend });
+        logSuccess("OpenDucktor web stopped.");
+      });
+
     const stopEffect = (): Effect.Effect<void, WebError> =>
       Effect.suspend(() => {
         if (stopStarted) {
@@ -262,15 +271,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
         }
         stopStarted = true;
         return Effect.gen(function* () {
-          const stopExit = yield* Effect.exit(
-            Effect.gen(function* () {
-              logInfo("Stopping OpenDucktor frontend server...");
-              logInfo("Stopping OpenDucktor TypeScript host services...");
-
-              yield* stopLauncherServicesEffect({ frontendServer, hostBackend });
-              logSuccess("OpenDucktor web stopped.");
-            }),
-          );
+          const stopExit = yield* Effect.exit(stopServicesWithLogsEffect());
           yield* Deferred.done(stopDeferred, stopExit);
           return yield* Deferred.await(stopDeferred);
         });

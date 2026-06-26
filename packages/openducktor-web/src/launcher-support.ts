@@ -347,7 +347,7 @@ export const keepProcessAliveDuringEffect = <T, E>(
     clearInterval,
     setInterval,
   },
-): Effect.Effect<T, E | WebDependencyError> =>
+): Effect.Effect<T, E> =>
   Effect.acquireUseRelease(
     Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,

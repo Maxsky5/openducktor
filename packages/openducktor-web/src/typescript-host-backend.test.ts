@@ -39,11 +39,13 @@ class StructuredHostCommandFailure extends Error {
   }
 }
 
+type TestHostCommandInvoke = (
+  command: string,
+  args?: Record<string, unknown>,
+) => Effect.Effect<unknown, unknown>;
+
 const createTestHostCommandRouter = (
-  invoke: (
-    command: string,
-    args?: Record<string, unknown>,
-  ) => Effect.Effect<unknown, unknown> = () => Effect.succeed(null),
+  invoke: TestHostCommandInvoke = () => Effect.succeed(null),
 ): EffectHostCommandRouter => ({
   dispose: () => Effect.void,
   initialize: () => Effect.void,
