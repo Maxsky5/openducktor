@@ -458,6 +458,32 @@ describe("Codex subagent event mapper", () => {
     ]);
   });
 
+  test("rejects terminal receiver updates without child agent state", () => {
+    const pipeline = createCodexEventMapperPipeline();
+
+    expect(() =>
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "wait-1",
+            tool: "wait",
+            status: "completed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: ["child-thread"],
+            agentsStates: {},
+          },
+        },
+        {
+          source: "live",
+          threadId: "parent-thread",
+          timestamp: "2026-05-09T00:00:00.000Z",
+        },
+      ),
+    ).toThrow("missing collab agent state");
+  });
+
   test("lets later source-backed child errors override earlier completed state", () => {
     const pipeline = createCodexEventMapperPipeline();
     const ctx = {
@@ -511,6 +537,39 @@ describe("Codex subagent event mapper", () => {
         externalSessionId: "child-thread",
       }),
     ]);
+  });
+
+  test("keeps cancelled subagent status after idle inventory refresh", () => {
+    const subagents = new CodexSubagentLinkState();
+    const cancelled = subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "activity-1",
+      status: "cancelled",
+    });
+
+    expect(cancelled).toEqual(expect.objectContaining({ status: "cancelled" }));
+
+    subagents.recordThread({
+      id: "child-thread",
+      cwd: "/repo",
+      startedAt: "2026-05-09T00:00:00.000Z",
+      title: "Child",
+      status: { classification: "idle" },
+      parentThreadId: "parent-thread",
+      agentNickname: null,
+      agentRole: null,
+      subAgentSource: null,
+    });
+
+    expect(
+      subagents.upsertLink({
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "probe-1",
+        status: "running",
+      }),
+    ).toEqual(expect.objectContaining({ status: "cancelled" }));
   });
 
   test("fails fast when one Codex child is linked to two parents", () => {

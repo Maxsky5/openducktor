@@ -48,8 +48,8 @@ const provisionalCorrelationKey = (parentThreadId: string, itemId: string): stri
 const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
   pending: 0,
   running: 1,
-  cancelled: 2,
-  completed: 3,
+  completed: 2,
+  cancelled: 3,
   error: 4,
 };
 
@@ -239,6 +239,18 @@ export class CodexSubagentLinkState {
     return routes;
   }
 
+  clearSession(externalSessionId: string): void {
+    const linksToClear = new Set<CodexStoredSubagentLink>();
+    for (const link of this.linksByCorrelationKey.values()) {
+      if (link.parentThreadId === externalSessionId || link.childThreadId === externalSessionId) {
+        linksToClear.add(link);
+      }
+    }
+    for (const link of linksToClear) {
+      this.deleteLink(link);
+    }
+  }
+
   private emitRouteLearned(route: CodexSubagentRoute): void {
     for (const listener of this.routeListeners) {
       listener(route);
@@ -256,6 +268,19 @@ export class CodexSubagentLinkState {
     }
     this.linksByParentChildKey.set(subagentKey(link.parentThreadId, link.childThreadId), link);
     this.linksByChildThreadId.set(link.childThreadId, link);
+  }
+
+  private deleteLink(link: CodexStoredSubagentLink): void {
+    this.linksByCorrelationKey.delete(link.correlationKey);
+    if (link.childThreadId) {
+      this.linksByParentChildKey.delete(subagentKey(link.parentThreadId, link.childThreadId));
+      this.linksByChildThreadId.delete(link.childThreadId);
+    }
+    for (const [key, provisional] of this.provisionalByParentItemKey) {
+      if (provisional.correlationKey === link.correlationKey) {
+        this.provisionalByParentItemKey.delete(key);
+      }
+    }
   }
 
   private toPart(link: CodexStoredSubagentLink): AgentStreamPart {

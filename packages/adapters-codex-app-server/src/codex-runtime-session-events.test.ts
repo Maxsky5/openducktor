@@ -7,6 +7,7 @@ import type { CodexThreadSnapshot } from "./codex-app-server-threads";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
+import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexSessionState } from "./types";
 
@@ -302,6 +303,57 @@ describe("CodexRuntimeSessionEvents", () => {
 
     expect(pendingInput.question("53")).toBeUndefined();
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
+  });
+
+  test("emits an error for subscribed server requests with no known session or child route", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      pendingInput,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: 54,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "unknown-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-1",
+              header: "Choose",
+              question: "Proceed?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("54")).toBeUndefined();
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: "parent-thread",
+        message: expect.stringContaining("Cannot route Codex server request"),
+      }),
+    );
   });
 
   test("drains buffered child approvals when an inventory route is known before parent load", async () => {

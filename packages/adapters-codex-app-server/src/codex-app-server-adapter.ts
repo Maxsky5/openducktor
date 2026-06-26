@@ -127,6 +127,7 @@ export class CodexAppServerAdapter
     this.localSessions = new CodexLocalSessionState({
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
+      subagents: this.subagents,
       threadStatusOverrides: {
         clear: (runtimeId, threadId) => this.threadInventory.clearThreadStatus(runtimeId, threadId),
       },

@@ -24,6 +24,7 @@ const createStore = () => {
   const clearedSessionEvents: string[] = [];
   const clearedPendingInput: string[] = [];
   const clearedRuntimeEvents: string[] = [];
+  const clearedSubagents: string[] = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
   const drainedRuntimeEvents: string[] = [];
   const stoppedRuntimeSubscriptions: string[] = [];
@@ -35,6 +36,9 @@ const createStore = () => {
     activeTurnsBySessionId,
     pendingInput: {
       clearSession: (externalSessionId) => clearedPendingInput.push(externalSessionId),
+    },
+    subagents: {
+      clearSession: (externalSessionId) => clearedSubagents.push(externalSessionId),
     },
     threadStatusOverrides: {
       clear: (runtimeId, threadId) => clearedThreadStatusOverrides.push({ runtimeId, threadId }),
@@ -53,6 +57,7 @@ const createStore = () => {
     clearedSessionEvents,
     clearedPendingInput,
     clearedRuntimeEvents,
+    clearedSubagents,
     clearedThreadStatusOverrides,
     drainedRuntimeEvents,
     stoppedRuntimeSubscriptions,
@@ -79,6 +84,7 @@ describe("CodexLocalSessionState", () => {
       clearedSessionEvents,
       clearedPendingInput,
       clearedRuntimeEvents,
+      clearedSubagents,
       clearedThreadStatusOverrides,
       stoppedRuntimeSubscriptions,
     } = createStore();
@@ -97,6 +103,7 @@ describe("CodexLocalSessionState", () => {
     expect(clearedSessionEvents).toEqual(["thread-1"]);
     expect(clearedPendingInput).toEqual(["thread-1"]);
     expect(clearedRuntimeEvents).toEqual(["thread-1"]);
+    expect(clearedSubagents).toEqual(["thread-1"]);
     expect(clearedThreadStatusOverrides).toEqual([
       { runtimeId: "runtime-1", threadId: "thread-1" },
     ]);

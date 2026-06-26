@@ -158,6 +158,16 @@ const statusForChild = (
     if (tool === "closeAgent" && aggregateStatus === "completed") {
       return { status: "cancelled" };
     }
+    if (aggregateStatus === "failed") {
+      return mapAggregateStatus(aggregateStatus, tool);
+    }
+    if (tool === "wait" && aggregateStatus !== "inProgress") {
+      throw itemError(item, "missing collab agent state", {
+        aggregateStatus,
+        childThreadId,
+        tool,
+      });
+    }
     return { status: "running" };
   }
   return mapAgentStatus(item, state.status, state.message, childThreadId);

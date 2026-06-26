@@ -11,6 +11,7 @@ import type {
   CodexThreadItemInput,
   RegisteredCodexEventMapper,
 } from "./codex-event-mapper";
+import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
 
 export type CodexEventMapperPipeline = {
@@ -45,7 +46,7 @@ const runFirstHandled = <Input>(
 };
 
 export const createCodexEventMapperPipeline = (
-  mappers: RegisteredCodexEventMapper[] = createCodexEventMappers(),
+  mappers: RegisteredCodexEventMapper[] = createCodexEventMappers(new CodexSubagentLinkState()),
 ): CodexEventMapperPipeline => {
   const states = createMapperStates(mappers);
   return {

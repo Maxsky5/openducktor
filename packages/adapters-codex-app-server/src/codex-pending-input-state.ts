@@ -87,7 +87,13 @@ export class CodexPendingInputState {
     if (!approval) {
       throw new Error(`Unknown Codex approval request '${requestId}'.`);
     }
-    this.requireRequestSession("approval", requestId, approval.threadId, externalSessionId);
+    this.requireRequestSession(
+      "approval",
+      requestId,
+      approval.threadId,
+      externalSessionId,
+      approval.route,
+    );
     return approval;
   }
 
@@ -96,7 +102,13 @@ export class CodexPendingInputState {
     if (!question) {
       throw new Error(`Unknown Codex question request '${requestId}'.`);
     }
-    this.requireRequestSession("question", requestId, question.threadId, externalSessionId);
+    this.requireRequestSession(
+      "question",
+      requestId,
+      question.threadId,
+      externalSessionId,
+      question.route,
+    );
     return question;
   }
 
@@ -334,8 +346,16 @@ export class CodexPendingInputState {
     requestId: string,
     ownerSessionId: string,
     externalSessionId: string,
+    route: CodexSubagentRoute | undefined,
   ): void {
     if (ownerSessionId === externalSessionId) {
+      return;
+    }
+    if (
+      route &&
+      route.childExternalSessionId === ownerSessionId &&
+      route.parentExternalSessionId === externalSessionId
+    ) {
       return;
     }
     throw new Error(

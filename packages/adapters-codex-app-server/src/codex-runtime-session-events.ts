@@ -359,6 +359,10 @@ export class CodexRuntimeSessionEvents {
           await this.processRuntimeStreamEventForSession(parentSession, event);
           return;
         }
+        this.emitUnroutableRuntimeServerRequest(
+          event.runtimeId,
+          `Cannot route Codex server request for thread '${threadId}' because there is no known session or subagent route for the request owner.`,
+        );
       }
       this.bufferRuntimeStreamEvent(threadId, event);
       return;
@@ -477,7 +481,10 @@ export class CodexRuntimeSessionEvents {
     this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
 
-  private emitUnroutableRuntimeServerRequest(runtimeId: string): void {
+  private emitUnroutableRuntimeServerRequest(
+    runtimeId: string,
+    message = "Cannot route Codex app-server request because it is missing params.threadId.",
+  ): void {
     for (const session of this.deps.sessions.values()) {
       if (session.runtimeId !== runtimeId) {
         continue;
@@ -486,7 +493,7 @@ export class CodexRuntimeSessionEvents {
         type: "session_error",
         externalSessionId: session.threadId,
         timestamp: new Date().toISOString(),
-        message: "Cannot route Codex app-server request because it is missing params.threadId.",
+        message,
       });
     }
   }

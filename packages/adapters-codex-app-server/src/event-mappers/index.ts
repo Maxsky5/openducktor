@@ -1,5 +1,5 @@
 import type { RegisteredCodexEventMapper } from "../codex-event-mapper";
-import { CodexSubagentLinkState } from "../codex-subagent-link-state";
+import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 import { emptyMapper } from "./empty";
 import { compactionMapper, deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
 import { assistantMessageMapper, userMessageMapper } from "./messages";
@@ -24,7 +24,7 @@ export {
 } from "./todo";
 
 export const createCodexEventMappers = (
-  subagents: CodexSubagentLinkState = new CodexSubagentLinkState(),
+  subagents: CodexSubagentLinkState,
 ): RegisteredCodexEventMapper[] => [
   compactionMapper,
   lifecycleMapper,
@@ -45,5 +45,3 @@ export const createCodexEventMappers = (
   dynamicToolMapper,
   hiddenItemMapper,
 ];
-
-export const CODEX_EVENT_MAPPERS = createCodexEventMappers();

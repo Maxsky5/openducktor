@@ -91,7 +91,7 @@ describe("CodexPendingInputState", () => {
     );
   });
 
-  test("mirrors child pending input to the parent without changing reply ownership", () => {
+  test("mirrors child pending input to the parent while preserving reply ownership", () => {
     const pendingInput = new CodexPendingInputState();
     const route = {
       parentExternalSessionId: "parent-thread",
@@ -121,9 +121,12 @@ describe("CodexPendingInputState", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([
       { request: questionRequest("question-1"), route },
     ]);
-    expect(() => pendingInput.requireApprovalForSession("approval-1", "parent-thread")).toThrow(
-      "belongs to session 'child-thread', not 'parent-thread'",
-    );
+    expect(pendingInput.requireApprovalForSession("approval-1", "parent-thread")).toMatchObject({
+      threadId: "child-thread",
+    });
+    expect(pendingInput.requireQuestionForSession("question-1", "parent-thread")).toMatchObject({
+      threadId: "child-thread",
+    });
     expect(pendingInput.requireApprovalForSession("approval-1", "child-thread")).toMatchObject({
       threadId: "child-thread",
     });
