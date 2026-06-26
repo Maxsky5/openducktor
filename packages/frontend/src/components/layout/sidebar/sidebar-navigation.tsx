@@ -35,7 +35,7 @@ type ShouldActivateSidebarNavigationArgs = {
   currentPathname: string;
   event: MouseEvent<HTMLAnchorElement>;
   isDisabled: boolean;
-  targetPathname: NavigationRoute;
+  linkTarget: NavigationRoute;
 };
 
 const isModifiedEvent = (event: MouseEvent<HTMLAnchorElement>): boolean =>
@@ -45,9 +45,9 @@ const shouldActivateSidebarNavigation = ({
   currentPathname,
   event,
   isDisabled,
-  targetPathname,
+  linkTarget,
 }: ShouldActivateSidebarNavigationArgs): boolean => {
-  if (isDisabled || currentPathname === targetPathname || event.defaultPrevented) {
+  if (isDisabled || currentPathname === linkTarget || event.defaultPrevented) {
     return false;
   }
 
@@ -78,11 +78,10 @@ export function SidebarNavigation({
 
   const activateRoute = (
     event: MouseEvent<HTMLAnchorElement>,
-    item: (typeof NAV_ITEMS)[number],
+    linkTarget: NavigationRoute,
+    isDisabled: boolean,
   ): void => {
-    const isDisabled = item.requiresRepo && !hasActiveWorkspace;
-
-    if (currentPathname === item.to) {
+    if (currentPathname === linkTarget) {
       setNavigationState({ activatedNavigation: null, committedLocationKey: currentLocationKey });
       return;
     }
@@ -92,11 +91,11 @@ export function SidebarNavigation({
         currentPathname,
         event,
         isDisabled,
-        targetPathname: item.to,
+        linkTarget,
       })
     ) {
       setNavigationState({
-        activatedNavigation: { route: item.to, sourceLocationKey: currentLocationKey },
+        activatedNavigation: { route: linkTarget, sourceLocationKey: currentLocationKey },
         committedLocationKey: currentLocationKey,
       });
     }
@@ -107,20 +106,20 @@ export function SidebarNavigation({
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
         const isDisabled = item.requiresRepo && !hasActiveWorkspace;
+        const linkTarget: NavigationRoute = isDisabled ? "/kanban" : item.to;
         const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS[item.to];
         const isActivated =
-          activatedNavigation?.route === item.to &&
+          activatedNavigation?.route === linkTarget &&
           activatedNavigation.sourceLocationKey === currentLocationKey;
         return (
           <NavLink
             key={item.to}
-            to={isDisabled ? "/kanban" : item.to}
+            to={linkTarget}
             title={item.label}
             aria-label={item.label}
-            prefetch={isDisabled ? "none" : "intent"}
             onFocus={preloadRoute}
             onPointerEnter={preloadRoute}
-            onClick={(event) => activateRoute(event, item)}
+            onClick={(event) => activateRoute(event, linkTarget, isDisabled)}
             className={({ isActive }) =>
               sidebarNavLinkClassName({
                 compact,

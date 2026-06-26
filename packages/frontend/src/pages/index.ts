@@ -4,46 +4,55 @@ type PageModule = {
   default: ComponentType;
 };
 
-let agentsPageLoad: Promise<PageModule> | null = null;
-let kanbanPageLoad: Promise<PageModule> | null = null;
-let notFoundPageLoad: Promise<PageModule> | null = null;
+type PageLoader = () => Promise<PageModule>;
+
+export const createCachedPageLoader = (loadPage: PageLoader): PageLoader => {
+  let cachedPageLoad: Promise<PageModule> | null = null;
+
+  return () => {
+    cachedPageLoad ??= loadPage().catch((error) => {
+      cachedPageLoad = null;
+      throw error;
+    });
+
+    return cachedPageLoad;
+  };
+};
 
 const reportRoutePreloadError = (pageName: string, error: unknown): void => {
   console.error(`[route-preload] Failed to preload ${pageName} page.`, error);
 };
 
-const preloadRoutePage = (pageName: string, loadPage: () => Promise<PageModule>): void => {
+const preloadRoutePage = (pageName: string, loadPage: PageLoader): void => {
   void loadPage().catch((error) => reportRoutePreloadError(pageName, error));
 };
 
-export const loadAgentsPage = (): Promise<PageModule> => {
-  agentsPageLoad ??= import("./agents/agents-page").then((module) => ({
+export const loadAgentsPage = createCachedPageLoader(() =>
+  import("./agents/agents-page").then((module) => ({
     default: module.AgentsPage,
-  }));
-
-  return agentsPageLoad;
-};
+  })),
+);
 
 export const preloadAgentsPage = (): void => {
   preloadRoutePage("Agent Studio", loadAgentsPage);
 };
 
-export const loadKanbanPage = (): Promise<PageModule> => {
-  kanbanPageLoad ??= import("./kanban/kanban-page").then((module) => ({
+export const loadKanbanPage = createCachedPageLoader(() =>
+  import("./kanban/kanban-page").then((module) => ({
     default: module.KanbanPage,
-  }));
-
-  return kanbanPageLoad;
-};
+  })),
+);
 
 export const preloadKanbanPage = (): void => {
   preloadRoutePage("Kanban", loadKanbanPage);
 };
 
-export const loadNotFoundPage = (): Promise<PageModule> => {
-  notFoundPageLoad ??= import("./not-found-page").then((module) => ({
+export const loadNotFoundPage = createCachedPageLoader(() =>
+  import("./not-found-page").then((module) => ({
     default: module.NotFoundPage,
-  }));
+  })),
+);
 
-  return notFoundPageLoad;
+export const preloadNotFoundPage = (): void => {
+  preloadRoutePage("Not Found", loadNotFoundPage);
 };

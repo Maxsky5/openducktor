@@ -134,6 +134,19 @@ describe("SidebarNavigation", () => {
     expect(className).not.toContain("hover:bg-accent");
   });
 
+  test("keeps disabled links disabled-looking even when the router marks them active", () => {
+    const className = sidebarNavLinkClassName({
+      compact: false,
+      isActive: true,
+      isActivated: false,
+      isDisabled: true,
+    });
+
+    expect(className).toContain("cursor-not-allowed");
+    expect(className).toContain("opacity-50");
+    expect(className).not.toContain("bg-sidebar-accent");
+  });
+
   test("shows Agents as selected immediately while declarative routing to Agents is still suspended", () => {
     renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/agents" });
 
@@ -191,6 +204,33 @@ describe("SidebarNavigation", () => {
     expect(screen.getByRole("link", { name: "Agents" }).className).not.toContain(
       "bg-sidebar-accent",
     );
+  });
+
+  test("clears optimistic selection when clicking the currently active route", () => {
+    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/agents" });
+
+    fireEvent.click(screen.getByRole("link", { name: "Agents" }));
+    expect(screen.getByRole("link", { name: "Agents" }).className).toContain("bg-sidebar-accent");
+
+    fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
+
+    expect(screen.getByRole("link", { name: "Kanban" }).className).toContain("bg-sidebar-accent");
+    expect(screen.getByRole("link", { name: "Agents" }).className).not.toContain(
+      "bg-sidebar-accent",
+    );
+  });
+
+  test("keeps focus while optimistic selection waits on a suspended target route", () => {
+    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/agents" });
+
+    const agentsLink = screen.getByRole("link", { name: "Agents" });
+    agentsLink.focus();
+    fireEvent.click(agentsLink);
+
+    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
+    expect(agentsLink.isConnected).toBe(true);
+    expect(document.activeElement).toBe(agentsLink);
+    expect(agentsLink.className).toContain("bg-sidebar-accent");
   });
 
   test("keeps focus when route commit replaces optimistic selection with active selection", async () => {
