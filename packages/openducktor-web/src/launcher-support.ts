@@ -190,6 +190,8 @@ export const waitForBackendEffect = (
         earlyExitCode = exitCode;
       });
     });
+    // Let an already-settled host exit promise win before applying the timeout path.
+    yield* Effect.promise(() => Promise.resolve());
 
     while (Date.now() - startedAt < timeoutMs) {
       if (earlyExitCode !== null) {
