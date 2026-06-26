@@ -61,10 +61,11 @@ const verifyBackendReadinessEffect = (
   backendUrl: string,
   appToken: string,
   fetchImpl: FetchFunction,
+  signal?: AbortSignal,
 ): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
     const healthResponse = yield* Effect.tryPromise({
-      try: () => fetchImpl(`${backendUrl}/health`),
+      try: () => fetchImpl(`${backendUrl}/health`, signal ? { signal } : undefined),
       catch: (cause) =>
         new WebDependencyError({
           dependency: "typescript-host-backend",
@@ -90,6 +91,7 @@ const verifyBackendReadinessEffect = (
           headers: {
             [APP_TOKEN_HEADER]: appToken,
           },
+          ...(signal ? { signal } : {}),
         }),
       catch: (cause) =>
         new WebDependencyError({
@@ -149,6 +151,23 @@ export const closeFrontendServerEffect = (
     });
   });
 
+const verifyBackendReadinessAttemptEffect = (
+  backendUrl: string,
+  appToken: string,
+  fetchImpl: FetchFunction,
+  timeoutMs: number,
+): Effect.Effect<void, WebDependencyError> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      return { controller, timeout };
+    }),
+    ({ controller }) =>
+      verifyBackendReadinessEffect(backendUrl, appToken, fetchImpl, controller.signal),
+    ({ timeout }) => Effect.sync(() => clearTimeout(timeout)),
+  );
+
 export const closeFrontendServer = (
   server: FrontendServer | null,
   sleep: SleepFunction = Bun.sleep,
@@ -181,8 +200,13 @@ export const waitForBackendEffect = (
         });
       }
 
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        break;
+      }
+
       const readinessExit = yield* Effect.exit(
-        verifyBackendReadinessEffect(backendUrl, appToken, dependencies.fetch),
+        verifyBackendReadinessAttemptEffect(backendUrl, appToken, dependencies.fetch, remainingMs),
       );
       if (readinessExit._tag === "Success") {
         return;

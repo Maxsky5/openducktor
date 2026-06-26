@@ -65,6 +65,31 @@ describe("launcher internals", () => {
     ).rejects.toMatchObject({ _tag: "WebOperationError" });
   });
 
+  test("aborts readiness fetches when the launcher timeout expires", async () => {
+    let aborted = false;
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new Error("readiness aborted"));
+        });
+      });
+
+    await expect(
+      waitForBackend(
+        "http://127.0.0.1:14327",
+        "app-token",
+        10,
+        createHostProcess(new Promise<number>(() => {})),
+        {
+          fetch: fetchImpl,
+          sleep: async () => {},
+        },
+      ),
+    ).rejects.toThrow("Timed out waiting for OpenDucktor web host");
+    expect(aborted).toBe(true);
+  });
+
   test("stops frontend and host services directly", async () => {
     let stopCalls = 0;
     let frontendCloseCalls = 0;
