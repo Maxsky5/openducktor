@@ -124,7 +124,7 @@ export const readElectronLocalAttachmentPreviewRequestPathEffect = (
       cause instanceof ElectronValidationError
         ? cause
         : new ElectronValidationError({
-            operation: "electron.preview.parse-url",
+            operation: "electron.preview.read-request-path",
             message: errorMessage(cause),
             field: "url",
             cause,

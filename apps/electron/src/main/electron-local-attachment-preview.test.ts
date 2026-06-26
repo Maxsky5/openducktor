@@ -8,6 +8,15 @@ import {
   registerElectronLocalAttachmentPreviewProtocol,
 } from "./electron-local-attachment-preview";
 
+const captureThrown = (action: () => unknown): unknown => {
+  try {
+    action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected action to fail.");
+};
+
 describe("electron local attachment previews", () => {
   test("creates an app protocol URL for staged attachment paths", () => {
     const previewUrl = createElectronLocalAttachmentPreviewUrl(
@@ -23,14 +32,7 @@ describe("electron local attachment previews", () => {
   });
 
   test("rejects missing or malformed preview paths", () => {
-    const blankPathError = (() => {
-      try {
-        readLocalAttachmentPreviewPath("  ");
-      } catch (error) {
-        return error;
-      }
-      throw new Error("Expected readLocalAttachmentPreviewPath to fail.");
-    })();
+    const blankPathError = captureThrown(() => readLocalAttachmentPreviewPath("  "));
 
     expect(blankPathError).toBeInstanceOf(ElectronValidationError);
     expect(blankPathError).toMatchObject({
@@ -38,19 +40,40 @@ describe("electron local attachment previews", () => {
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",
     });
-    expect(() => readLocalAttachmentPreviewPath(null)).toThrow(
-      "Local attachment preview path must be a non-empty string.",
-    );
-    expect(() =>
+    const nullPathError = captureThrown(() => readLocalAttachmentPreviewPath(null));
+    expect(nullPathError).toBeInstanceOf(ElectronValidationError);
+    expect(nullPathError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.read-path",
+      field: "path",
+      message: "Local attachment preview path must be a non-empty string.",
+    });
+
+    const invalidUrlError = captureThrown(() =>
       readElectronLocalAttachmentPreviewRequestPath(
         "file:///tmp/openducktor-local-attachments/a.png",
       ),
-    ).toThrow("Invalid local attachment preview URL.");
-    expect(() =>
+    );
+    expect(invalidUrlError).toBeInstanceOf(ElectronValidationError);
+    expect(invalidUrlError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.validate-url",
+      field: "url",
+      message: "Invalid local attachment preview URL.",
+    });
+
+    const malformedUrlError = captureThrown(() =>
       readElectronLocalAttachmentPreviewRequestPath(
         `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://preview/%`,
       ),
-    ).toThrow("Invalid local attachment preview URL.");
+    );
+    expect(malformedUrlError).toBeInstanceOf(ElectronValidationError);
+    expect(malformedUrlError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.decode-url-path",
+      field: "url",
+      message: "Invalid local attachment preview URL.",
+    });
   });
 
   test("resolves the protocol request through the host before serving the file", async () => {
