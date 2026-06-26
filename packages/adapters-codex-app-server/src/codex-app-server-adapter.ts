@@ -73,7 +73,7 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
-import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { CodexSubagentLinkState, codexSubagentRouteEventFields } from "./codex-subagent-link-state";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -592,13 +592,7 @@ export class CodexAppServerAdapter
           type: "approval_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
-          ...(route
-            ? {
-                parentExternalSessionId: route.parentExternalSessionId,
-                childExternalSessionId: route.childExternalSessionId,
-                subagentCorrelationKey: route.subagentCorrelationKey,
-              }
-            : {}),
+          ...codexSubagentRouteEventFields(route),
         }),
       );
     }
@@ -611,13 +605,7 @@ export class CodexAppServerAdapter
           type: "question_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
-          ...(route
-            ? {
-                parentExternalSessionId: route.parentExternalSessionId,
-                childExternalSessionId: route.childExternalSessionId,
-                subagentCorrelationKey: route.subagentCorrelationKey,
-              }
-            : {}),
+          ...codexSubagentRouteEventFields(route),
         }),
       );
     }
@@ -683,7 +671,6 @@ export class CodexAppServerAdapter
       threadInventory: this.threadInventory,
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
-      subagents: this.subagents,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
         return Boolean(activeTurn && !activeTurn.isTurnSettled());

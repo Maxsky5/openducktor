@@ -32,6 +32,22 @@ const subagentEvents = (
   };
 };
 
+const shouldMapAsSubagentItem = (item: Record<string, unknown>): boolean => {
+  if (!codexItemTypeMatches(item, "collabAgentToolCall")) {
+    return codexItemTypeMatches(item, "subAgentActivity");
+  }
+
+  const tool = item.tool;
+  const receiverThreadIds = item.receiverThreadIds ?? item.receiver_thread_ids;
+  if (tool === "spawnAgent") {
+    return true;
+  }
+  if (receiverThreadIds !== undefined && !Array.isArray(receiverThreadIds)) {
+    return true;
+  }
+  return Array.isArray(receiverThreadIds) && receiverThreadIds.length > 0;
+};
+
 export const createSubagentMapper = (linkState: CodexSubagentLinkState): CodexEventMapper => ({
   name: "subagent",
   createState: noCodexMapperState,
@@ -39,19 +55,13 @@ export const createSubagentMapper = (linkState: CodexSubagentLinkState): CodexEv
     if (input.kind !== "item_completed" && input.kind !== "item_started") {
       return emptyCodexMappingResult();
     }
-    if (
-      !codexItemTypeMatches(input.item, "collabAgentToolCall") &&
-      !codexItemTypeMatches(input.item, "subAgentActivity")
-    ) {
+    if (!shouldMapAsSubagentItem(input.item)) {
       return emptyCodexMappingResult();
     }
     return subagentEvents(input.item, ctx, linkState);
   },
   fromThreadItem(input, ctx): CodexMappingResult {
-    if (
-      !codexItemTypeMatches(input.item, "collabAgentToolCall") &&
-      !codexItemTypeMatches(input.item, "subAgentActivity")
-    ) {
+    if (!shouldMapAsSubagentItem(input.item)) {
       return emptyCodexMappingResult();
     }
     return subagentEvents(input.item, ctx, linkState, input.timestamp);

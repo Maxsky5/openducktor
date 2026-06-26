@@ -15,7 +15,11 @@ import {
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import { READ_ONLY_ROLES } from "./codex-session-policy";
-import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
+import {
+  type CodexSubagentLinkState,
+  type CodexSubagentRoute,
+  codexSubagentRouteEventFields,
+} from "./codex-subagent-link-state";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
@@ -69,15 +73,6 @@ type RequestRouteContext = {
   route: CodexSubagentRoute | null;
 };
 
-const eventRouteFields = (route: CodexSubagentRoute | null) =>
-  route
-    ? {
-        parentExternalSessionId: route.parentExternalSessionId,
-        childExternalSessionId: route.childExternalSessionId,
-        subagentCorrelationKey: route.subagentCorrelationKey,
-      }
-    : {};
-
 const resolveRequestRouteContext = (
   context: CodexServerRequestHandlerContext,
   session: CodexSessionState,
@@ -126,7 +121,7 @@ const emitPendingEvent = (
     context.emitSessionEvent(routeContext.ownerThreadId, {
       ...event,
       externalSessionId: routeContext.ownerThreadId,
-      ...eventRouteFields(routeContext.route),
+      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
   if (
@@ -136,7 +131,7 @@ const emitPendingEvent = (
     context.emitSessionEvent(routeContext.route.parentExternalSessionId, {
       ...event,
       externalSessionId: routeContext.route.parentExternalSessionId,
-      ...eventRouteFields(routeContext.route),
+      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
 };

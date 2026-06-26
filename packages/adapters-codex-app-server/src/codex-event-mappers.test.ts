@@ -421,6 +421,44 @@ describe("Codex subagent event mapper", () => {
     ]);
   });
 
+  test("leaves receiverless wait collab items to the generic collab mapper", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const events = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_started",
+          item: {
+            type: "collabAgentToolCall",
+            id: "wait-any",
+            tool: "wait",
+            status: "inProgress",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: [],
+            prompt: null,
+            agentsStates: {},
+          },
+        },
+        {
+          source: "live",
+          threadId: "parent-thread",
+          timestamp: "2026-05-09T00:00:00.000Z",
+        },
+      ),
+    );
+
+    expect(projectedSubagents(events)).toEqual([]);
+    expect(projectedTool(events)).toEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          tool: "collab.wait",
+          status: "running",
+        }),
+      }),
+    );
+  });
+
   test("keeps interrupted Codex subagents resumable", () => {
     const pipeline = createCodexEventMapperPipeline();
     const ctx = {

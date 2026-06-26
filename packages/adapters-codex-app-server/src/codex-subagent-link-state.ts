@@ -8,6 +8,15 @@ export type CodexSubagentRoute = {
   subagentCorrelationKey: string;
 };
 
+export const codexSubagentRouteEventFields = (route: CodexSubagentRoute | null | undefined) =>
+  route
+    ? {
+        parentExternalSessionId: route.parentExternalSessionId,
+        childExternalSessionId: route.childExternalSessionId,
+        subagentCorrelationKey: route.subagentCorrelationKey,
+      }
+    : {};
+
 export type CodexSubagentLinkInput = {
   runtimeId?: string;
   parentThreadId: string;

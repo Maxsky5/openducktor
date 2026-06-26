@@ -498,7 +498,7 @@ describe("session history loader", () => {
           id: "accepted-user-message",
           role: "user",
           content: "Hi",
-          timestamp: "2026-06-12T08:00:01.000Z",
+          timestamp: "2026-06-12T08:00:01.123Z",
           meta: {
             kind: "user",
             state: "read",

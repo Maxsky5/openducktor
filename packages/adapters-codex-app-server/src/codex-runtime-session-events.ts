@@ -41,7 +41,11 @@ import {
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
-import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
+import {
+  type CodexSubagentLinkState,
+  type CodexSubagentRoute,
+  codexSubagentRouteEventFields,
+} from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
 import type {
   CodexAppServerAdapterOptions,
@@ -285,9 +289,7 @@ export class CodexRuntimeSessionEvents {
         type: "approval_required",
         externalSessionId: route.parentExternalSessionId,
         timestamp: new Date().toISOString(),
-        parentExternalSessionId: route.parentExternalSessionId,
-        childExternalSessionId: route.childExternalSessionId,
-        subagentCorrelationKey: route.subagentCorrelationKey,
+        ...codexSubagentRouteEventFields(route),
       });
     }
 
@@ -297,9 +299,7 @@ export class CodexRuntimeSessionEvents {
         type: "question_required",
         externalSessionId: route.parentExternalSessionId,
         timestamp: new Date().toISOString(),
-        parentExternalSessionId: route.parentExternalSessionId,
-        childExternalSessionId: route.childExternalSessionId,
-        subagentCorrelationKey: route.subagentCorrelationKey,
+        ...codexSubagentRouteEventFields(route),
       });
     }
   }
@@ -453,13 +453,7 @@ export class CodexRuntimeSessionEvents {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId,
-      ...(route
-        ? {
-            parentExternalSessionId: route.parentExternalSessionId,
-            childExternalSessionId: route.childExternalSessionId,
-            subagentCorrelationKey: route.subagentCorrelationKey,
-          }
-        : {}),
+      ...codexSubagentRouteEventFields(route),
     };
     const activeTurn = approval
       ? this.deps.pendingInput.resolveApproval(requestId)
