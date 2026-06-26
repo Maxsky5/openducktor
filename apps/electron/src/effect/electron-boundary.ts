@@ -1,5 +1,5 @@
-import { type Cause, Effect, Exit } from "effect";
-import { causeToElectronBoundaryError, errorMessage } from "./electron-errors";
+import { Effect, Exit } from "effect";
+import { causeToElectronBoundaryError } from "./electron-errors";
 
 export const runElectronEffect = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
   const exit = await Effect.runPromiseExit(effect);
@@ -17,8 +17,4 @@ export const runElectronSync = <A, E>(effect: Effect.Effect<A, E>): A => {
   }
 
   throw causeToElectronBoundaryError(exit.cause);
-};
-
-export const logElectronBoundaryError = <E>(cause: Cause.Cause<E>): void => {
-  console.error(errorMessage(causeToElectronBoundaryError(cause)));
 };

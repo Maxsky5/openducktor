@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { Cause, Chunk, Effect, Exit } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
+import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
   closeRendererServer,
+  type ElectronDevProcessHandlers,
   electronGracefulShutdownSignal,
   electronRuntimeEnv,
   mainEffect,
@@ -15,6 +17,25 @@ import {
   shouldRestartElectronForChange,
   stopElectronEffect,
 } from "./dev";
+
+const createFakeProcessHandlers = () => {
+  const registered: Array<{ event: string; listener: () => void }> = [];
+  const removed: Array<{ event: string; listener: () => void }> = [];
+  const processHandlers: ElectronDevProcessHandlers = {
+    off(event, listener) {
+      removed.push({ event, listener });
+    },
+    once(event, listener) {
+      registered.push({ event, listener });
+    },
+  };
+
+  return {
+    processHandlers,
+    registered,
+    removed,
+  };
+};
 
 describe("electron dev script", () => {
   test("uses the default renderer dev server port", () => {
@@ -288,6 +309,7 @@ describe("electron dev script", () => {
     const watchedRoots: string[][] = [];
     const watchedEvents: string[] = [];
     const startCalls: Array<{ executablePath: string; rendererDevUrl: string }> = [];
+    const processHandlerFake = createFakeProcessHandlers();
     let buildCalls = 0;
     let closeCalls = 0;
     const rendererServer = {
@@ -313,6 +335,7 @@ describe("electron dev script", () => {
             buildCalls += 1;
           }),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        processHandlers: processHandlerFake.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
         rendererServer: rendererServer as never,
         startElectronProcess: (rendererDevUrl, electronExecutablePath) => {
@@ -336,5 +359,63 @@ describe("electron dev script", () => {
     expect(watchedRoots).toHaveLength(1);
     expect(watchedEvents).toEqual(["add", "change", "unlink"]);
     expect(closeCalls).toBe(1);
+    expect(processHandlerFake.registered.map(({ event }) => event)).toEqual([
+      "SIGINT",
+      "SIGTERM",
+      "exit",
+    ]);
+    expect(processHandlerFake.removed.map(({ event }) => event)).toEqual([
+      "exit",
+      "SIGTERM",
+      "SIGINT",
+    ]);
+  });
+
+  test("keeps initial lifecycle setup failures in the typed failure channel", async () => {
+    const processHandlerFake = createFakeProcessHandlers();
+    const setupError = new ElectronOperationError({
+      operation: "electron.dev.test-build",
+      message: "build failed before launch",
+    });
+    const rendererServer = {
+      close: async () => {},
+      config: { server: { port: 1430 } },
+      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
+      watcher: {
+        add() {},
+        on() {},
+      },
+    };
+
+    const exit = await Effect.runPromiseExit(
+      runElectronDevLifecycleEffect({
+        buildBundles: () => Effect.fail(setupError),
+        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        processHandlers: processHandlerFake.processHandlers,
+        rendererDevUrl: "http://127.0.0.1:1430",
+        rendererServer: rendererServer as never,
+        startElectronProcess: () => {
+          throw new Error("Electron should not launch after setup failure.");
+        },
+      }),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) {
+      throw new Error("Expected initial lifecycle setup failure to fail the Effect.");
+    }
+
+    const failureOption = Chunk.head(Cause.failures(exit.cause));
+    expect(failureOption._tag).toBe("Some");
+    if (failureOption._tag !== "Some") {
+      throw new Error("Expected setup failure in the typed failure channel.");
+    }
+
+    expect(failureOption.value).toBe(setupError);
+    expect(processHandlerFake.removed.map(({ event }) => event)).toEqual([
+      "exit",
+      "SIGTERM",
+      "SIGINT",
+    ]);
   });
 });

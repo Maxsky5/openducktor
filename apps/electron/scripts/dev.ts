@@ -92,9 +92,6 @@ const runStepEffect = (
       }),
   });
 
-const runStep = (label: string, command: string[]): Promise<void> =>
-  runElectronEffect(runStepEffect(label, command));
-
 const nodeErrorCode = (cause: unknown): string | null =>
   typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
@@ -119,9 +116,6 @@ const readFileIfExistsEffect = (
     ),
   );
 
-const readFileIfExists = (filePath: string): Promise<string | null> =>
-  runElectronEffect(readFileIfExistsEffect(filePath));
-
 const fileExistsEffect = (filePath: string): Effect.Effect<boolean, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {
@@ -141,9 +135,6 @@ const fileExistsEffect = (filePath: string): Effect.Effect<boolean, ElectronOper
       error.details?.code === "ENOENT" ? Effect.succeed(false) : Effect.fail(error),
     ),
   );
-
-const fileExists = (filePath: string): Promise<boolean> =>
-  runElectronEffect(fileExistsEffect(filePath));
 
 const assertFileExistsEffect = (
   filePath: string,
@@ -168,9 +159,6 @@ const assertFileExistsEffect = (
       }),
   });
 
-const assertFileExists = (filePath: string, label: string): Promise<void> =>
-  runElectronEffect(assertFileExistsEffect(filePath, label));
-
 const fileSignatureEffect = (
   filePath: string,
 ): Effect.Effect<{ mtimeMs: number; size: number }, ElectronOperationError> =>
@@ -190,9 +178,6 @@ const fileSignatureEffect = (
         cause,
       }),
   });
-
-const fileSignature = (filePath: string): Promise<{ mtimeMs: number; size: number }> =>
-  runElectronEffect(fileSignatureEffect(filePath));
 
 const normalizePath = (filePath: string): string => path.resolve(filePath);
 
@@ -248,12 +233,32 @@ export const resolveMacosDevExecutablePath = (devAppPath: string, executableName
 
 const resolveElectronExecutablePath = (): string => String(nodeRequire("electron"));
 
-const replacePlistString = async (
+const runDevFileOperationEffect = (
+  operation: string,
+  filePath: string,
+  action: () => Promise<unknown>,
+  details?: Record<string, unknown>,
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      await action();
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation,
+        message: errorMessage(cause),
+        path: filePath,
+        cause,
+        details,
+      }),
+  });
+
+const replacePlistStringEffect = (
   infoPlistPath: string,
   key: string,
   value: string,
-): Promise<void> => {
-  await runStep(`Electron dev app ${key}`, [
+): Effect.Effect<void, ElectronOperationError> =>
+  runStepEffect(`Electron dev app ${key}`, [
     "/usr/bin/plutil",
     "-replace",
     key,
@@ -261,9 +266,8 @@ const replacePlistString = async (
     value,
     infoPlistPath,
   ]);
-};
 
-const buildMacosDevAppSignature = async ({
+const buildMacosDevAppSignatureEffect = ({
   devAppPath,
   iconPath,
   sourceAppPath,
@@ -273,74 +277,111 @@ const buildMacosDevAppSignature = async ({
   iconPath: string;
   sourceAppPath: string;
   sourceExecutablePath: string;
-}): Promise<string> =>
-  `${JSON.stringify(
-    {
-      appName: APPLICATION_NAME,
-      bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+}): Effect.Effect<string, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const icon = yield* fileSignatureEffect(iconPath);
+    const sourceExecutable = yield* fileSignatureEffect(sourceExecutablePath);
+    const sourceInfoPlist = yield* fileSignatureEffect(
+      path.join(sourceAppPath, "Contents", "Info.plist"),
+    );
+
+    return `${JSON.stringify(
+      {
+        appName: APPLICATION_NAME,
+        bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+        devAppPath,
+        icon,
+        iconFileName: MACOS_DEV_ICON_FILE_NAME,
+        sourceAppPath,
+        sourceExecutablePath,
+        sourceExecutable,
+        sourceInfoPlist,
+      },
+      null,
+      2,
+    )}\n`;
+  });
+
+const resolveRequiredMacosAppBundlePathEffect = (
+  sourceExecutablePath: string,
+): Effect.Effect<string, ElectronOperationError> =>
+  Effect.try({
+    try: () => resolveRequiredMacosAppBundlePath(sourceExecutablePath),
+    catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-macos-app-bundle"),
+  });
+
+const prepareMacosDevElectronBundleEffect = (
+  sourceExecutablePath: string,
+): Effect.Effect<string, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const sourceAppPath = yield* resolveRequiredMacosAppBundlePathEffect(sourceExecutablePath);
+
+    const devRoot = path.join(packageRoot, ".electron-dev");
+    const devAppPath = resolveMacosDevAppPath();
+    const executableName = path.basename(sourceExecutablePath);
+    const devExecutablePath = resolveMacosDevExecutablePath(devAppPath, executableName);
+    const iconPath = path.join(packageRoot, "resources", "icon.icns");
+    const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
+    const markerPath = path.join(devRoot, "app-source.json");
+    yield* assertFileExistsEffect(iconPath, "Electron macOS dev icon");
+    const signature = yield* buildMacosDevAppSignatureEffect({
       devAppPath,
-      icon: await fileSignature(iconPath),
-      iconFileName: MACOS_DEV_ICON_FILE_NAME,
+      iconPath,
       sourceAppPath,
       sourceExecutablePath,
-      sourceExecutable: await fileSignature(sourceExecutablePath),
-      sourceInfoPlist: await fileSignature(path.join(sourceAppPath, "Contents", "Info.plist")),
-    },
-    null,
-    2,
-  )}\n`;
+    });
+    const existingSignature = yield* readFileIfExistsEffect(markerPath);
+    const devExecutableExists = yield* fileExistsEffect(devExecutablePath);
+    const shouldCopyBundle = existingSignature !== signature || !devExecutableExists;
 
-const prepareMacosDevElectronBundle = async (sourceExecutablePath: string): Promise<string> => {
-  const sourceAppPath = resolveRequiredMacosAppBundlePath(sourceExecutablePath);
+    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, () =>
+      mkdir(devRoot, { recursive: true }),
+    );
+    if (shouldCopyBundle) {
+      yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-marker", markerPath, () =>
+        rm(markerPath, { force: true }),
+      );
+      yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-app", devAppPath, () =>
+        rm(devAppPath, { force: true, recursive: true }),
+      );
+      yield* runStepEffect("Electron macOS dev app copy", [
+        "/bin/cp",
+        "-cR",
+        sourceAppPath,
+        devAppPath,
+      ]);
+    }
 
-  const devRoot = path.join(packageRoot, ".electron-dev");
-  const devAppPath = resolveMacosDevAppPath();
-  const executableName = path.basename(sourceExecutablePath);
-  const devExecutablePath = resolveMacosDevExecutablePath(devAppPath, executableName);
-  const iconPath = path.join(packageRoot, "resources", "icon.icns");
-  const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
-  const markerPath = path.join(devRoot, "app-source.json");
-  await assertFileExists(iconPath, "Electron macOS dev icon");
-  const signature = await buildMacosDevAppSignature({
-    devAppPath,
-    iconPath,
-    sourceAppPath,
-    sourceExecutablePath,
+    yield* runDevFileOperationEffect(
+      "electron.dev.copy-macos-dev-icon",
+      iconPath,
+      () =>
+        copyFile(
+          iconPath,
+          path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME),
+        ),
+      { targetPath: path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME) },
+    );
+    yield* runDevFileOperationEffect("electron.dev.copy-macos-dev-icon", iconPath, () =>
+      copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "icon.icns")),
+    );
+    yield* runDevFileOperationEffect("electron.dev.copy-macos-dev-icon", iconPath, () =>
+      copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "electron.icns")),
+    );
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleName", APPLICATION_NAME);
+    yield* replacePlistStringEffect(
+      infoPlistPath,
+      "CFBundleIdentifier",
+      MACOS_DEV_BUNDLE_IDENTIFIER,
+    );
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
+    yield* runDevFileOperationEffect("electron.dev.write-macos-dev-marker", markerPath, () =>
+      writeFile(markerPath, signature, "utf8"),
+    );
+
+    return devExecutablePath;
   });
-  const existingSignature = await readFileIfExists(markerPath);
-  const shouldCopyBundle =
-    existingSignature !== signature || !(await fileExists(devExecutablePath));
-
-  await mkdir(devRoot, { recursive: true });
-  if (shouldCopyBundle) {
-    await rm(markerPath, { force: true });
-    await rm(devAppPath, { force: true, recursive: true });
-    await runStep("Electron macOS dev app copy", ["/bin/cp", "-cR", sourceAppPath, devAppPath]);
-  }
-
-  await copyFile(
-    iconPath,
-    path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME),
-  );
-  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "icon.icns"));
-  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "electron.icns"));
-  await replacePlistString(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
-  await replacePlistString(infoPlistPath, "CFBundleName", APPLICATION_NAME);
-  await replacePlistString(infoPlistPath, "CFBundleIdentifier", MACOS_DEV_BUNDLE_IDENTIFIER);
-  await replacePlistString(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
-  await writeFile(markerPath, signature, "utf8");
-
-  return devExecutablePath;
-};
-
-const resolveElectronDevExecutablePath = async (): Promise<string> => {
-  const electronExecutablePath = resolveElectronExecutablePath();
-  if (process.platform !== "darwin") {
-    return electronExecutablePath;
-  }
-
-  return prepareMacosDevElectronBundle(electronExecutablePath);
-};
 
 export const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperationError> =>
   Effect.gen(function* () {
@@ -363,9 +404,16 @@ const resolveRendererDevUrlEffect = (
   });
 
 const resolveElectronDevExecutablePathEffect = (): Effect.Effect<string, ElectronOperationError> =>
-  Effect.tryPromise({
-    try: resolveElectronDevExecutablePath,
-    catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-executable-path"),
+  Effect.gen(function* () {
+    const electronExecutablePath = yield* Effect.try({
+      try: resolveElectronExecutablePath,
+      catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-executable-path"),
+    });
+    if (process.platform !== "darwin") {
+      return electronExecutablePath;
+    }
+
+    return yield* prepareMacosDevElectronBundleEffect(electronExecutablePath);
   });
 
 const createRendererDevServerEffect = (
@@ -531,9 +579,26 @@ type StartElectronProcess = (
   electronExecutablePath: string,
 ) => ManagedElectronProcess;
 
+type ElectronDevProcessEvent = "SIGINT" | "SIGTERM" | "exit";
+
+export type ElectronDevProcessHandlers = {
+  off(event: ElectronDevProcessEvent, listener: () => void): void;
+  once(event: ElectronDevProcessEvent, listener: () => void): void;
+};
+
+const defaultElectronDevProcessHandlers: ElectronDevProcessHandlers = {
+  off(event, listener) {
+    process.off(event, listener);
+  },
+  once(event, listener) {
+    process.once(event, listener);
+  },
+};
+
 type ElectronDevLifecycleOptions = {
   buildBundles?: () => Effect.Effect<void, ElectronOperationError>;
   electronExecutablePath: string;
+  processHandlers?: ElectronDevProcessHandlers;
   rendererDevUrl: string;
   rendererServer: ViteDevServer;
   startElectronProcess?: StartElectronProcess;
@@ -542,6 +607,7 @@ type ElectronDevLifecycleOptions = {
 export const runElectronDevLifecycleEffect = ({
   buildBundles = buildElectronBundlesEffect,
   electronExecutablePath,
+  processHandlers = defaultElectronDevProcessHandlers,
   rendererDevUrl,
   rendererServer,
   startElectronProcess = startElectron,
@@ -552,6 +618,10 @@ export const runElectronDevLifecycleEffect = ({
     let restarting = false;
     let restartQueued = false;
     let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    const registeredProcessHandlers: Array<{
+      event: ElectronDevProcessEvent;
+      listener: () => void;
+    }> = [];
     let settled = false;
 
     const settle = (effect: Effect.Effect<number, ElectronOperationError>): void => {
@@ -559,7 +629,18 @@ export const runElectronDevLifecycleEffect = ({
         return;
       }
       settled = true;
+      while (registeredProcessHandlers.length > 0) {
+        const registered = registeredProcessHandlers.pop();
+        if (registered) {
+          processHandlers.off(registered.event, registered.listener);
+        }
+      }
       resume(effect);
+    };
+
+    const registerProcessHandler = (event: ElectronDevProcessEvent, listener: () => void): void => {
+      processHandlers.once(event, listener);
+      registeredProcessHandlers.push({ event, listener });
     };
 
     const completeFailure = (cause: unknown): void => {
@@ -591,12 +672,18 @@ export const runElectronDevLifecycleEffect = ({
       });
     };
 
-    const runLifecycleTask = (effect: Effect.Effect<void, ElectronOperationError>): void => {
+    const shutdownAfterLifecycleFailure = (cause: unknown): void => {
+      console.error(cause);
+      runShutdown(1);
+    };
+
+    const runLifecycleTask = (
+      effect: Effect.Effect<void, ElectronOperationError>,
+      onFailure: (cause: unknown) => void,
+    ): void => {
       void Effect.runPromiseExit(effect).then((exit) => {
         if (Exit.isFailure(exit)) {
-          const error = causeToElectronBoundaryError(exit.cause);
-          console.error(error);
-          runShutdown(1);
+          onFailure(causeToElectronBoundaryError(exit.cause));
         }
       });
     };
@@ -665,7 +752,7 @@ export const runElectronDevLifecycleEffect = ({
       }
       restartTimer = setTimeout(() => {
         restartTimer = null;
-        runLifecycleTask(restartElectronEffect());
+        runLifecycleTask(restartElectronEffect(), shutdownAfterLifecycleFailure);
       }, ELECTRON_RESTART_DEBOUNCE_MS);
     };
 
@@ -693,15 +780,15 @@ export const runElectronDevLifecycleEffect = ({
 
     const registerProcessHandlersEffect = (): Effect.Effect<void, never> =>
       Effect.sync(() => {
-        process.once("SIGINT", () => {
+        registerProcessHandler("SIGINT", () => {
           console.log("[electron:dev] Received SIGINT, shutting down...");
           runShutdown(130);
         });
-        process.once("SIGTERM", () => {
+        registerProcessHandler("SIGTERM", () => {
           console.log("[electron:dev] Received SIGTERM, shutting down...");
           runShutdown(143);
         });
-        process.once("exit", () => {
+        registerProcessHandler("exit", () => {
           if (electron) {
             electron.kill();
           }
@@ -714,6 +801,7 @@ export const runElectronDevLifecycleEffect = ({
         yield* registerProcessHandlersEffect();
         yield* launchElectronEffect();
       }),
+      completeFailure,
     );
   });
 
