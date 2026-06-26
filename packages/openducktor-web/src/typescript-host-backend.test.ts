@@ -8,7 +8,6 @@ import {
   type EffectHostCommandRouter,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import { HostOperationError } from "../../host/src/effect/host-errors";
 import {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
@@ -30,12 +29,25 @@ const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
 );
 
+class StructuredHostCommandFailure extends Error {
+  readonly details: { readonly command: string; readonly failureKind: "timeout" };
+
+  constructor(command: string) {
+    super(`Failed to invoke ${command}.`);
+    this.name = "StructuredHostCommandFailure";
+    this.details = { command, failureKind: "timeout" };
+  }
+}
+
 const createTestHostCommandRouter = (
-  invoke: EffectHostCommandRouter["invoke"] = () => Effect.succeed(null),
+  invoke: (
+    command: string,
+    args?: Record<string, unknown>,
+  ) => Effect.Effect<unknown, unknown> = () => Effect.succeed(null),
 ): EffectHostCommandRouter => ({
   dispose: () => Effect.void,
   initialize: () => Effect.void,
-  invoke,
+  invoke: (command, args) => invoke(command, args) as ReturnType<EffectHostCommandRouter["invoke"]>,
 });
 
 const handleTestRequest = (
@@ -141,13 +153,7 @@ describe("TypeScript web host backend", () => {
 
   test("preserves structured host command failure kind in invoke error responses", async () => {
     const hostCommandRouter = createTestHostCommandRouter((command) =>
-      Effect.fail(
-        new HostOperationError({
-          operation: "host-command-router.invoke",
-          message: `Failed to invoke ${command}.`,
-          details: { command, failureKind: "timeout" },
-        }),
-      ),
+      Effect.fail(new StructuredHostCommandFailure(command)),
     );
 
     const response = await handleTestRequest(

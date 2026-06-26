@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@openducktor/build-tools": "workspace:*",
+    "@openducktor/contracts": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/frontend": "workspace:*",
     "@openducktor/host": "workspace:*",

@@ -1,6 +1,7 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { failureKindSchema } from "@openducktor/contracts";
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
@@ -128,16 +129,16 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const HOST_FAILURE_KINDS = new Set<string>(["error", "timeout"]);
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readUnknownProperty = (value: unknown, property: string): unknown =>
   isRecord(value) ? value[property] : undefined;
 
-const readValidFailureKind = (value: unknown): string | undefined =>
-  typeof value === "string" && HOST_FAILURE_KINDS.has(value) ? value : undefined;
+const readValidFailureKind = (value: unknown): string | undefined => {
+  const parsed = failureKindSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
 
 const readStructuredDetails = (value: unknown): Record<string, unknown> | undefined => {
   const details = readUnknownProperty(value, "details");

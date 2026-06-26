@@ -341,16 +341,28 @@ export const stopLauncherServices = (
   dependencies: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
 ): Promise<void> => runWebBoundary(stopLauncherServicesEffect(input, dependencies));
 
-export const keepProcessAliveDuringEffect = <T>(
+export const keepProcessAliveDuringEffect = <T, E>(
+  operation: Effect.Effect<T, E>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Effect.Effect<T, E | WebDependencyError> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    () => operation,
+    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+  );
+
+export const keepProcessAliveDuring = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
     clearInterval,
     setInterval,
   },
-): Effect.Effect<T, WebDependencyError> =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
-    () =>
+): Promise<T> =>
+  runWebBoundary(
+    keepProcessAliveDuringEffect(
       Effect.tryPromise({
         try: () => operation,
         catch: (cause) =>
@@ -361,13 +373,6 @@ export const keepProcessAliveDuringEffect = <T>(
             cause,
           }),
       }),
-    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+      dependencies,
+    ),
   );
-
-export const keepProcessAliveDuring = <T>(
-  operation: Promise<T>,
-  dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
-  },
-): Promise<T> => runWebBoundary(keepProcessAliveDuringEffect(operation, dependencies));

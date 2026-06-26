@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import type { ViteDevServer } from "vite";
 import {
   causeToWebBoundaryError,
@@ -9,7 +9,6 @@ import {
   runWebBoundary,
   WebDependencyError,
   type WebError,
-  WebOperationError,
   WebResourceError,
 } from "./effect/web-errors";
 import {
@@ -17,9 +16,9 @@ import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
   buildFrontendUrl,
-  closeFrontendServer,
+  closeFrontendServerEffect,
   type FrontendServer,
-  keepProcessAliveDuring,
+  keepProcessAliveDuringEffect,
   LOCALHOST,
   resolveStaticAssetPath,
   stopLauncherServicesEffect,
@@ -251,25 +250,34 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       runtimeDistribution,
     });
     let frontendServer: FrontendServer | null = null;
-    let stopPromise: Promise<void> | null = null;
+    const stopDeferred = yield* Deferred.make<void, WebError>();
+    let stopStarted = false;
     let terminationStarted = false;
     let duplicateTerminationNoticeLogged = false;
 
-    const stop = async (): Promise<void> => {
-      if (stopPromise) {
-        return stopPromise;
-      }
+    const stopEffect = (): Effect.Effect<void, WebError> =>
+      Effect.suspend(() => {
+        if (stopStarted) {
+          return Deferred.await(stopDeferred);
+        }
+        stopStarted = true;
+        return Effect.gen(function* () {
+          const stopExit = yield* Effect.exit(
+            Effect.gen(function* () {
+              logInfo("Stopping OpenDucktor frontend server...");
+              logInfo("Stopping OpenDucktor TypeScript host services...");
 
-      stopPromise = (async () => {
-        logInfo("Stopping OpenDucktor frontend server...");
-        logInfo("Stopping OpenDucktor TypeScript host services...");
+              yield* stopLauncherServicesEffect({ frontendServer, hostBackend });
+              logSuccess("OpenDucktor web stopped.");
+            }),
+          );
+          yield* Deferred.done(stopDeferred, stopExit);
+          return yield* Deferred.await(stopDeferred);
+        });
+      });
 
-        await runWebBoundary(stopLauncherServicesEffect({ frontendServer, hostBackend }));
-        logSuccess("OpenDucktor web stopped.");
-      })();
-
-      return stopPromise;
-    };
+    const stopForSignal = (): Promise<void> =>
+      runWebBoundary(keepProcessAliveDuringEffect(stopEffect()));
 
     const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
       if (terminationStarted) {
@@ -284,7 +292,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       terminationStarted = true;
       logInfo(`Stopping OpenDucktor web after ${signal}...`);
 
-      void keepProcessAliveDuring(stop()).then(
+      void stopForSignal().then(
         () => {
           process.exit(exitCode);
         },
@@ -317,27 +325,11 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
               cause,
             }),
         });
-        if (stopPromise) {
-          yield* Effect.tryPromise({
-            try: () => stop(),
-            catch: (cause) =>
-              new WebOperationError({
-                operation: "web.launcher.stop",
-                message: errorMessage(cause),
-                cause,
-              }),
-          });
+        if (stopStarted) {
+          yield* stopEffect();
         } else {
           logInfo("OpenDucktor TypeScript host exited; stopping frontend server...");
-          yield* Effect.tryPromise({
-            try: () => closeFrontendServer(frontendServer),
-            catch: (cause) =>
-              new WebOperationError({
-                operation: "web.launcher.close-frontend",
-                message: errorMessage(cause),
-                cause,
-              }),
-          });
+          yield* closeFrontendServerEffect(frontendServer);
           logSuccess("OpenDucktor web stopped.");
         }
         return exitCode;
@@ -348,17 +340,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       return launcherExit.value;
     }
 
-    const stopExit = yield* Effect.exit(
-      Effect.tryPromise({
-        try: () => stop(),
-        catch: (cause) =>
-          new WebOperationError({
-            operation: "web.launcher.stop-after-failure",
-            message: errorMessage(cause),
-            cause,
-          }),
-      }),
-    );
+    const stopExit = yield* Effect.exit(stopEffect());
     if (stopExit._tag === "Failure") {
       return yield* causeToWebBoundaryError(stopExit.cause);
     }

@@ -60,16 +60,28 @@ export const buildWebDevProcessEnvironment = (
   FORCE_COLOR: env.FORCE_COLOR ?? "1",
 });
 
-export const keepWebDevProcessAliveDuringEffect = <T>(
+export const keepWebDevProcessAliveDuringEffect = <T, E>(
+  operation: Effect.Effect<T, E>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Effect.Effect<T, E | WebDependencyError> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    () => operation,
+    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+  );
+
+export const keepWebDevProcessAliveDuring = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
     clearInterval,
     setInterval,
   },
-): Effect.Effect<T, WebDependencyError> =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
-    () =>
+): Promise<T> =>
+  runWebBoundary(
+    keepWebDevProcessAliveDuringEffect(
       Effect.tryPromise({
         try: () => operation,
         catch: (cause) =>
@@ -80,16 +92,9 @@ export const keepWebDevProcessAliveDuringEffect = <T>(
             cause,
           }),
       }),
-    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+      dependencies,
+    ),
   );
-
-export const keepWebDevProcessAliveDuring = <T>(
-  operation: Promise<T>,
-  dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
-  },
-): Promise<T> => runWebBoundary(keepWebDevProcessAliveDuringEffect(operation, dependencies));
 
 const startWebCliEffect = (
   args: readonly string[],
@@ -147,9 +152,7 @@ export const runWebDevEffect = (
         return;
       }
       shutdownStarted = true;
-      await runWebBoundary(
-        keepWebDevProcessAliveDuringEffect(runWebBoundary(stopWebCliEffect(webCli))),
-      );
+      await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
       resolveExit(exitCode);
     };
 
