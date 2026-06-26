@@ -2,9 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createSourceRuntimeDistribution } from "@openducktor/host";
-import { Effect } from "effect";
 import {
+  createLocalAttachmentAdapter,
+  createSourceRuntimeDistribution,
+  type EffectHostCommandRouter,
+} from "@openducktor/host";
+import { Effect } from "effect";
+import { HostOperationError } from "../../host/src/effect/host-errors";
+import {
+  BufferedHostEventBus,
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 } from "./typescript-host-backend-support";
@@ -13,7 +19,9 @@ const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const { startTypescriptHostBackend } = await import("./typescript-host-backend");
+const { handleTypescriptHostBackendRequest, startTypescriptHostBackend } = await import(
+  "./typescript-host-backend"
+);
 
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
@@ -21,6 +29,37 @@ const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
 const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
 );
+
+const createTestHostCommandRouter = (
+  invoke: EffectHostCommandRouter["invoke"] = () => Effect.succeed(null),
+): EffectHostCommandRouter => ({
+  dispose: () => Effect.void,
+  initialize: () => Effect.void,
+  invoke,
+});
+
+const handleTestRequest = (
+  request: Request,
+  options: Partial<{
+    appToken: string;
+    controlToken: string;
+    hostCommandRouter: EffectHostCommandRouter;
+    stop: () => Promise<void>;
+  }> = {},
+): Promise<Response> =>
+  Effect.runPromise(
+    handleTypescriptHostBackendRequest({
+      allowedOrigins: new Set(),
+      appToken: options.appToken ?? APP_TOKEN,
+      controlToken: options.controlToken ?? CONTROL_TOKEN,
+      eventBus: new BufferedHostEventBus(),
+      hostCommandRouter: options.hostCommandRouter ?? createTestHostCommandRouter(),
+      localAttachments: createLocalAttachmentAdapter(),
+      request,
+      shutdownStarted: false,
+      stop: options.stop ?? (async () => {}),
+    }),
+  );
 
 describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
@@ -98,6 +137,106 @@ describe("TypeScript web host backend", () => {
     expect(() => validateWebFrontendOrigin("http://example.com:1420")).toThrow(
       "browser frontend origin must target 127.0.0.1, localhost, or [::1]",
     );
+  });
+
+  test("preserves structured host command failure kind in invoke error responses", async () => {
+    const hostCommandRouter = createTestHostCommandRouter((command) =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "host-command-router.invoke",
+          message: `Failed to invoke ${command}.`,
+          details: { command, failureKind: "timeout" },
+        }),
+      ),
+    );
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/runtime_ensure", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      }),
+      { hostCommandRouter },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Failed to invoke runtime_ensure.",
+      failureKind: "timeout",
+      message: "Failed to invoke runtime_ensure.",
+    });
+  });
+
+  test("rejects missing or invalid backend auth through typed route errors", async () => {
+    const sessionMissing = await handleTestRequest(
+      new Request("http://127.0.0.1/session", { method: "POST" }),
+    );
+    expect(sessionMissing.status).toBe(401);
+    expect(await sessionMissing.json()).toEqual({
+      error: "Missing OpenDucktor web host app token.",
+      message: "Missing OpenDucktor web host app token.",
+    });
+
+    const sessionInvalid = await handleTestRequest(
+      new Request("http://127.0.0.1/session", {
+        method: "POST",
+        headers: { "x-openducktor-app-token": "wrong" },
+      }),
+    );
+    expect(sessionInvalid.status).toBe(403);
+    expect(await sessionInvalid.json()).toEqual({
+      error: "Invalid OpenDucktor web host app token.",
+      message: "Invalid OpenDucktor web host app token.",
+    });
+
+    let stopCalls = 0;
+    const stop = async () => {
+      stopCalls += 1;
+    };
+    const shutdownMissing = await handleTestRequest(
+      new Request("http://127.0.0.1/shutdown", { method: "POST" }),
+      { stop },
+    );
+    expect(shutdownMissing.status).toBe(401);
+    expect(await shutdownMissing.json()).toEqual({
+      error: "Missing OpenDucktor web host control token.",
+      message: "Missing OpenDucktor web host control token.",
+    });
+    expect(stopCalls).toBe(0);
+
+    const shutdownInvalid = await handleTestRequest(
+      new Request("http://127.0.0.1/shutdown", {
+        method: "POST",
+        headers: { "x-openducktor-control-token": "wrong" },
+      }),
+      { stop },
+    );
+    expect(shutdownInvalid.status).toBe(403);
+    expect(await shutdownInvalid.json()).toEqual({
+      error: "Invalid OpenDucktor web host control token.",
+      message: "Invalid OpenDucktor web host control token.",
+    });
+    expect(stopCalls).toBe(0);
+
+    const previewUrl = "http://127.0.0.1/local-attachment-preview?path=/tmp/file";
+    const previewMissing = await handleTestRequest(new Request(previewUrl));
+    expect(previewMissing.status).toBe(401);
+    expect(await previewMissing.json()).toEqual({
+      error: "Missing OpenDucktor web host app token.",
+      message: "Missing OpenDucktor web host app token.",
+    });
+
+    const previewInvalid = await handleTestRequest(
+      new Request(previewUrl, { headers: { cookie: "openducktor_web_session=wrong" } }),
+    );
+    expect(previewInvalid.status).toBe(403);
+    expect(await previewInvalid.json()).toEqual({
+      error: "Invalid OpenDucktor web host app token.",
+      message: "Invalid OpenDucktor web host app token.",
+    });
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {

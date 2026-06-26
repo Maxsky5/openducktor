@@ -128,19 +128,76 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
+const HOST_FAILURE_KINDS = new Set<string>(["error", "timeout"]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readUnknownProperty = (value: unknown, property: string): unknown =>
+  isRecord(value) ? value[property] : undefined;
+
+const readValidFailureKind = (value: unknown): string | undefined =>
+  typeof value === "string" && HOST_FAILURE_KINDS.has(value) ? value : undefined;
+
+const readStructuredDetails = (value: unknown): Record<string, unknown> | undefined => {
+  const details = readUnknownProperty(value, "details");
+  return isRecord(details) ? details : undefined;
+};
+
+const extractHostCommandFailureKind = (
+  value: unknown,
+  visited = new Set<object>(),
+): string | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (visited.has(value)) {
+    return undefined;
+  }
+  visited.add(value);
+
+  const direct = readValidFailureKind(readUnknownProperty(value, "failureKind"));
+  if (direct) {
+    return direct;
+  }
+
+  const details = readStructuredDetails(value);
+  const detailsFailureKind = readValidFailureKind(readUnknownProperty(details, "failureKind"));
+  if (detailsFailureKind) {
+    return detailsFailureKind;
+  }
+
+  return extractHostCommandFailureKind(readUnknownProperty(value, "cause"), visited);
+};
+
+const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
+  const failureKind = extractHostCommandFailureKind(error);
+  const details = readStructuredDetails(error);
+  return new WebHostRequestError({
+    message: errorMessage(error),
+    status: 500,
+    cause: error,
+    details: {
+      command,
+      ...(details ? { hostDetails: details } : {}),
+    },
+    ...(failureKind ? { failureKind } : {}),
+  });
+};
+
 const validateExpectedToken = (
   receivedToken: string | null,
   expectedToken: string,
   missingMessage: string,
   invalidMessage: string,
-): Response | null => {
+): Effect.Effect<void, WebHostRequestError> => {
   if (receivedToken === null) {
-    return errorResponse(missingMessage, 401);
+    return Effect.fail(new WebHostRequestError({ message: missingMessage, status: 401 }));
   }
   if (receivedToken !== expectedToken) {
-    return errorResponse(invalidMessage, 403);
+    return Effect.fail(new WebHostRequestError({ message: invalidMessage, status: 403 }));
   }
-  return null;
+  return Effect.void;
 };
 
 const readCookie = (request: Request, name: string): string | null => {
@@ -158,7 +215,10 @@ const readCookie = (request: Request, name: string): string | null => {
   return null;
 };
 
-const validateControlToken = (request: Request, expectedToken: string): Response | null =>
+const validateControlToken = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     request.headers.get(CONTROL_TOKEN_HEADER),
     expectedToken,
@@ -166,7 +226,10 @@ const validateControlToken = (request: Request, expectedToken: string): Response
     "Invalid OpenDucktor web host control token.",
   );
 
-const validateAppTokenHeader = (request: Request, expectedToken: string): Response | null =>
+const validateAppTokenHeader = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     request.headers.get(APP_TOKEN_HEADER),
     expectedToken,
@@ -174,7 +237,10 @@ const validateAppTokenHeader = (request: Request, expectedToken: string): Respon
     "Invalid OpenDucktor web host app token.",
   );
 
-const validateAppSessionCookie = (request: Request, expectedToken: string): Response | null =>
+const validateAppSessionCookie = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     readCookie(request, APP_SESSION_COOKIE_NAME),
     expectedToken,
@@ -182,7 +248,10 @@ const validateAppSessionCookie = (request: Request, expectedToken: string): Resp
     "Invalid OpenDucktor web host app token.",
   );
 
-const validateAppCookieOrHeader = (request: Request, expectedToken: string): Response | null =>
+const validateAppCookieOrHeader = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     readCookie(request, APP_SESSION_COOKIE_NAME) ?? request.headers.get(APP_TOKEN_HEADER),
     expectedToken,
@@ -245,8 +314,7 @@ const webHostRequestErrorResponse = (
   corsHeaders: HeadersInit,
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
 
 const parseJsonObjectBody = (
   request: Request,
@@ -378,10 +446,7 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/session" && request.method === "POST") {
-      const tokenError = validateAppTokenHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppTokenHeader(request, appToken);
       return jsonResponse(
         { ok: true },
         {
@@ -394,10 +459,7 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/shutdown" && request.method === "POST") {
-      const tokenError = validateControlToken(request, controlToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateControlToken(request, controlToken);
       yield* Effect.sync(() => {
         setTimeout(() => {
           void stop();
@@ -408,10 +470,7 @@ const routeCorsRequest = ({
 
     const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
     if (streamChannel && request.method === "GET") {
-      const tokenError = validateAppCookieOrHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
           "Browser backend is shutting down and is no longer accepting new work.",
@@ -427,19 +486,13 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
-      const tokenError = validateAppSessionCookie(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppSessionCookie(request, appToken);
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
     if (invokeMatch && request.method === "POST") {
-      const tokenError = validateAppTokenHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppTokenHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
           "Browser backend is shutting down and is no longer accepting new work.",
@@ -451,22 +504,17 @@ const routeCorsRequest = ({
       if (!command) {
         return yield* rejectWebHostRequest("Host command is required.", 400);
       }
-      const result = yield* hostCommandRouter.invoke(decodeURIComponent(command), args).pipe(
-        Effect.mapError(
-          (error) =>
-            new WebHostRequestError({
-              message: errorMessage(error),
-              status: 500,
-            }),
-        ),
-      );
+      const decodedCommand = decodeURIComponent(command);
+      const result = yield* hostCommandRouter
+        .invoke(decodedCommand, args)
+        .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
       return jsonResponse(result, undefined, corsHeaders);
     }
 
-    return errorResponse("Not found", 404, corsHeaders);
+    return yield* rejectWebHostRequest("Not found", 404);
   });
 
-const handleTypescriptHostBackendRequest = ({
+export const handleTypescriptHostBackendRequest = ({
   allowedOrigins,
   appToken,
   controlToken,
