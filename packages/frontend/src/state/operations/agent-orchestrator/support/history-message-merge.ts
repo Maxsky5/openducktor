@@ -69,6 +69,52 @@ const findMatchingCurrentToolMessages = ({
   return matches;
 };
 
+const isUserMessage = (
+  message: AgentChatMessage,
+): message is AgentChatMessage & {
+  role: "user";
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
+} => message.role === "user" && message.meta?.kind === "user";
+
+const confirmsLocalAcceptedUserMessage = (
+  loadedMessage: AgentChatMessage,
+  currentMessage: AgentChatMessage,
+): boolean =>
+  isUserMessage(loadedMessage) &&
+  isUserMessage(currentMessage) &&
+  loadedMessage.content === currentMessage.content &&
+  loadedMessage.timestamp === currentMessage.timestamp;
+
+const findConfirmedLocalAcceptedUserMessage = ({
+  currentOwner,
+  loadedMessage,
+  sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
+}: {
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  loadedMessage: AgentChatMessage;
+  sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
+}): AgentChatMessage[] => {
+  const matches = sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
+  if (matches.length > 0) {
+    return matches;
+  }
+
+  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
+    const candidate = currentSlice[index];
+    if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
+      continue;
+    }
+    if (confirmsLocalAcceptedUserMessage(loadedMessage, candidate)) {
+      return [candidate];
+    }
+  }
+
+  return [];
+};
+
 const findMatchingCurrentMessages = ({
   currentOwner,
   loadedMessage,
@@ -82,6 +128,15 @@ const findMatchingCurrentMessages = ({
 }): AgentChatMessage[] => {
   if (isSubagentMessage(loadedMessage)) {
     return findCurrentSubagentMessagesForLoadedHistory({
+      currentOwner,
+      loadedMessage,
+      sameIdCurrentMessage,
+      absorbedCurrentMessageIds,
+    });
+  }
+
+  if (isUserMessage(loadedMessage)) {
+    return findConfirmedLocalAcceptedUserMessage({
       currentOwner,
       loadedMessage,
       sameIdCurrentMessage,

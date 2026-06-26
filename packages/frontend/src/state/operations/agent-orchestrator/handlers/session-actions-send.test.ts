@@ -9,6 +9,10 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  createSessionUpdater as createEventSessionUpdater,
+  listenToAgentSessionEvents,
+} from "../events/session-events-test-harness";
 import { createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
@@ -82,6 +86,71 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       ]);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("stores a live accepted user message only once when send returns the same event", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const originalSubscribeEvents = adapter.subscribeEvents;
+    const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
+    adapter.subscribeEvents = async (_sessionRef, handler) => {
+      handlers.push(handler);
+      return () => {};
+    };
+    adapter.sendUserMessage = async (input) => {
+      const event = acceptedUserMessage(input);
+      for (const handler of handlers) {
+        handler(event);
+      }
+      return event;
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "loaded",
+      }),
+    ]);
+
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      sessionsRef,
+      updateSession: createEventSessionUpdater(sessionsRef),
+      externalSessionId: "session-1",
+      repoPath: "/tmp/repo",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      const userMessages = sessionMessagesToArray(getSession(sessionsRef)).filter(
+        (message) => message.role === "user",
+      );
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]).toEqual(
+        expect.objectContaining({
+          id: "accepted-user-message",
+          role: "user",
+          content: "hello",
+        }),
+      );
+    } finally {
+      unsubscribe();
+      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.subscribeEvents = originalSubscribeEvents;
     }
   });
 
