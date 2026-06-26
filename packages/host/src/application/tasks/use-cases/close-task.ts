@@ -2,7 +2,10 @@ import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
-import { requireTaskCloseDependencies } from "../support/task-cleanup-dependencies";
+import {
+  requireTaskCloseDependencies,
+  requireTaskCloseWorktreeService,
+} from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
   collectRelatedTaskBranches,
@@ -78,13 +81,9 @@ export const createTaskCloseUseCase = ({
           devServerService,
           gitPort,
           settingsConfig,
-          taskWorktreeService,
           workspaceSettingsService,
         ),
       );
-      // The task worktree service is the source of truth for whether a
-      // task-managed worktree exists, so resolve cleanup dependencies before
-      // deciding there is no local worktree cleanup to run.
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
@@ -93,8 +92,20 @@ export const createTaskCloseUseCase = ({
         repoConfig,
       );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
+      const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+      const taskWorktreePathExists =
+        yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
+      let taskWorktreeDependency = taskWorktreeService;
+      if (!taskWorktreeDependency && taskWorktreePathExists) {
+        taskWorktreeDependency = yield* requireDependencies(() =>
+          requireTaskCloseWorktreeService(taskWorktreeService),
+        );
+      }
+      const closeWorktreeDependencies = taskWorktreeDependency
+        ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
+        : dependencies;
       const worktreePaths = yield* collectCloseWorktreePaths(
-        dependencies,
+        closeWorktreeDependencies,
         effectiveRepoPath,
         branchPrefix,
         current,

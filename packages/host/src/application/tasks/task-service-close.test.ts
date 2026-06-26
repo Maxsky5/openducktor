@@ -194,6 +194,40 @@ describe("TaskService.closeTask", () => {
     expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
   });
 
+  test("does not require task worktree service when no task worktree exists", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    const closed = await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(closed.status).toBe("closed");
+    expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
+  });
+
+  test("requires task worktree service when a task worktree exists", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "Task worktree service is required for task_close.",
+    );
+    expect(calls).toEqual([]);
+  });
+
   test("closes an in-progress task", async () => {
     const service = createTaskService({
       taskStore: createTaskStore([task({ status: "in_progress" })]),

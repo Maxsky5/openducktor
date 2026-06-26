@@ -43,13 +43,11 @@ export const requireTaskCloseDependencies = (
   devServerService: DevServerService | undefined,
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
-  taskWorktreeService: TaskWorktreeService | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
 ): {
   devServerService: DevServerService;
   gitPort: GitPort;
   settingsConfig: SettingsConfigPort;
-  taskWorktreeService: TaskWorktreeService;
   workspaceSettingsService: WorkspaceSettingsService;
 } => {
   if (!devServerService) {
@@ -61,9 +59,6 @@ export const requireTaskCloseDependencies = (
   if (!settingsConfig) {
     throw missingTaskDependency("Settings config port is required for task_close.");
   }
-  if (!taskWorktreeService) {
-    throw missingTaskDependency("Task worktree service is required for task_close.");
-  }
   if (!workspaceSettingsService) {
     throw missingTaskDependency("Workspace settings service is required for task_close.");
   }
@@ -72,9 +67,17 @@ export const requireTaskCloseDependencies = (
     devServerService,
     gitPort,
     settingsConfig,
-    taskWorktreeService,
     workspaceSettingsService,
   };
+};
+
+export const requireTaskCloseWorktreeService = (
+  taskWorktreeService: TaskWorktreeService | undefined,
+): TaskWorktreeService => {
+  if (!taskWorktreeService) {
+    throw missingTaskDependency("Task worktree service is required for task_close.");
+  }
+  return taskWorktreeService;
 };
 
 export const requireImplementationResetStoreDependencies = (

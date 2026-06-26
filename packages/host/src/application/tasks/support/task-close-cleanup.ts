@@ -2,6 +2,7 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
+import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
 import { implementationSessionRoles, isRelatedTaskBranch } from "./task-cleanup-support";
 
@@ -27,7 +28,9 @@ const collectCloseManagedSessionWorktreePaths = (
   }, []);
 
 export const collectCloseWorktreePaths = (
-  dependencies: ReturnType<typeof requireTaskCloseDependencies>,
+  dependencies: ReturnType<typeof requireTaskCloseDependencies> & {
+    taskWorktreeService?: TaskWorktreeService;
+  },
   repoPath: string,
   branchPrefix: string,
   task: TaskCard,
@@ -35,10 +38,12 @@ export const collectCloseWorktreePaths = (
 ) =>
   Effect.gen(function* () {
     const normalizedRepo = normalizePathForComparison(repoPath);
-    const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
-      repoPath,
-      taskId: task.id,
-    });
+    const taskWorktree = dependencies.taskWorktreeService
+      ? yield* dependencies.taskWorktreeService.getTaskWorktree({
+          repoPath,
+          taskId: task.id,
+        })
+      : null;
     const candidatePaths: CloseWorktreeCandidate[] = [
       ...(taskWorktree
         ? [{ path: taskWorktree.workingDirectory, source: "task_worktree" as const }]
