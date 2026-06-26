@@ -634,12 +634,20 @@ export class CodexAppServerAdapter
     const inventory = await this.threadInventory.refresh(client, runtimeId);
     const thread = inventory.threadsById.get(input.externalSessionId);
     if (!thread) {
+      if (this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
+        await this.ensureSessionState(input);
+        this.clearThreadInventory(runtimeId);
+      }
       return;
     }
     if (thread.cwd !== input.workingDirectory) {
       return;
     }
+    this.subagents.recordThread(thread, runtimeId);
     if (thread.status.classification === "idle") {
+      if (!this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
+        return;
+      }
       const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);
       this.localSessions.remember(
         preserveRuntimeContextForExistingThread(

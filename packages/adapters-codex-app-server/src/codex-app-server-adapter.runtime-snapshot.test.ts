@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexUserMessageInput,
   createDeferred,
   createHarness,
   flushCodexAdapterWork,
@@ -618,6 +619,31 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
   });
 
+  test("resumes a stored main session before sending after an idle event subscription", async () => {
+    const transport = new StoredIdleHistoryTransport("runtime-live", false);
+    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
+    const { adapter } = createHarness({
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    const unsubscribe = await adapter.subscribeEvents(codexSessionRef("thread-idle"), () => {});
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+    unsubscribe();
+
+    const resumeIndex = transport.calls.findIndex((call) => call.method === "thread/resume");
+    const turnStartIndex = transport.calls.findIndex((call) => call.method === "turn/start");
+    expect(resumeIndex).toBeGreaterThanOrEqual(0);
+    expect(turnStartIndex).toBeGreaterThanOrEqual(0);
+    expect(resumeIndex).toBeLessThan(turnStartIndex);
+  });
+
   test("lists loaded Codex sessions from App Server", async () => {
     const { adapter } = createHarness();
 
@@ -919,6 +945,100 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
     expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
     unsubscribe();
+  });
+
+  test("streams child transcript events for a learned subagent route absent from inventory", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications: mock(async () => [] as unknown[]),
+      drainServerRequests: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    const parentEvents: unknown[] = [];
+    const unsubscribeParent = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => parentEvents.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_452_000,
+          item: {
+            type: "collabAgentToolCall",
+            id: "spawn-live",
+            tool: "spawnAgent",
+            status: "completed",
+            senderThreadId: "thread-saved",
+            receiverThreadIds: ["child-thread"],
+            prompt: "Inspect child work",
+            agentsStates: {
+              "child-thread": { status: "running", message: null },
+            },
+          },
+        },
+      },
+    });
+    await waitForEvent(
+      parentEvents,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown }).type === "assistant_part" &&
+        (event as { part?: { kind?: unknown; externalSessionId?: unknown } }).part?.kind ===
+          "subagent" &&
+        (event as { part?: { externalSessionId?: unknown } }).part?.externalSessionId ===
+          "child-thread",
+    );
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("child-thread"),
+      (event) => events.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-live",
+          itemId: "agent-live",
+          delta: "child route text",
+        },
+      },
+    });
+
+    await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; delta?: unknown }).type === "assistant_delta" &&
+        (event as { delta?: unknown }).delta === "child route text",
+    );
+    expect(transport.calls).toContainEqual(
+      expect.objectContaining({
+        method: "thread/resume",
+        params: expect.objectContaining({ threadId: "child-thread" }),
+      }),
+    );
+    unsubscribe();
+    unsubscribeParent();
   });
 
   test("does not resurrect an idle local session from stale active thread inventory", async () => {
