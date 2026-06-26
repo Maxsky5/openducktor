@@ -40,7 +40,7 @@ export const resolveRendererDevPort = (
   }
 
   const port = Number(trimmedPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+  if (port <= 0 || port > 65_535) {
     throw new ElectronValidationError({
       operation,
       message: `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${rawPort}`,
@@ -69,9 +69,19 @@ export const readPackageVersionEffect = (
   });
 
 export const readPackageVersion = (packageJsonPath: string): string => {
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
-    version?: unknown;
-  };
+  let packageJson: { version?: unknown };
+  try {
+    packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
+      version?: unknown;
+    };
+  } catch (cause) {
+    throw new ElectronValidationError({
+      operation: "electron.config.read-package-version",
+      message: errorMessage(cause),
+      path: packageJsonPath,
+      cause,
+    });
+  }
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
     throw new ElectronValidationError({
       operation: "electron.config.read-package-version",

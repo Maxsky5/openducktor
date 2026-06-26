@@ -140,17 +140,18 @@ const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 |
 const resolveLocalAttachmentPathEffect = (
   resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
   requestedPath: string,
-): Effect.Effect<string, ElectronValidationError> =>
+): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
   Effect.tryPromise({
     try: () => resolveLocalAttachmentPath(requestedPath),
     catch: (cause) =>
-      new ElectronValidationError({
-        operation: "electron.preview.resolve-path",
-        message: errorMessage(cause),
-        field: "path",
-        cause,
-        details: { requestedPath },
-      }),
+      cause instanceof ElectronValidationError || cause instanceof ElectronOperationError
+        ? cause
+        : new ElectronOperationError({
+            operation: "electron.preview.resolve-path",
+            message: errorMessage(cause),
+            path: requestedPath,
+            cause,
+          }),
   }).pipe(
     Effect.flatMap((resolvedPath) =>
       readLocalAttachmentPreviewPathEffect(resolvedPath).pipe(
@@ -207,8 +208,15 @@ export const registerElectronLocalAttachmentPreviewProtocol = ({
     if (Option.isSome(firstFailure) && firstFailure.value instanceof ElectronValidationError) {
       return createLocalAttachmentPreviewErrorResponse(firstFailure.value, 400);
     }
+    if (Option.isSome(firstFailure)) {
+      return createLocalAttachmentPreviewErrorResponse(firstFailure.value, 500);
+    }
     return createLocalAttachmentPreviewErrorResponse(
-      Option.isSome(firstFailure) ? firstFailure.value : Cause.pretty(exit.cause),
+      new ElectronOperationError({
+        operation: "electron.preview.handle-request",
+        message: "Local attachment preview failed.",
+        details: { defect: true },
+      }),
       500,
     );
   });

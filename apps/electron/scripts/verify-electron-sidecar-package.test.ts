@@ -205,9 +205,17 @@ describe("verifyPackagedElectronSidecars", () => {
       releaseDirectory,
     });
 
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "x64", platform: "linux", releaseDirectory }),
-    ).rejects.toThrow("expected an executable file");
+    const error = await verifyPackagedElectronSidecars({
+      arch: "x64",
+      platform: "linux",
+      releaseDirectory,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.sidecar.verify-packaged-executable",
+    });
+    expect((error as Error).message).toContain("expected an executable file");
   });
 
   test("accepts non-empty executable macOS MCP sidecar", async () => {

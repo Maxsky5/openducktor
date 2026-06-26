@@ -186,12 +186,14 @@ export const collectReleaseArtifactsEffect = ({
     );
 
     if (copiedArtifacts.length === 0) {
-      return yield* new ElectronOperationError({
-        operation: "electron.package.collect-release-artifacts",
-        message: `No Electron release artifacts were produced for ${platform}.`,
-        path: releaseDirectory,
-        platform,
-      });
+      return yield* Effect.fail(
+        new ElectronOperationError({
+          operation: "electron.package.collect-release-artifacts",
+          message: `No Electron release artifacts were produced for ${platform}.`,
+          path: releaseDirectory,
+          platform,
+        }),
+      );
     }
 
     return copiedArtifacts;
@@ -291,11 +293,13 @@ export const buildElectronPackageEffect = ({
     }
 
     if (!outputDirectory) {
-      return yield* new ElectronValidationError({
-        operation: "electron.package.require-output-directory",
-        message: "--output-dir is required when staging Electron release artifacts.",
-        field: "outputDirectory",
-      });
+      return yield* Effect.fail(
+        new ElectronValidationError({
+          operation: "electron.package.require-output-directory",
+          message: "--output-dir is required when staging Electron release artifacts.",
+          field: "outputDirectory",
+        }),
+      );
     }
 
     return yield* collectReleaseArtifactsEffect({

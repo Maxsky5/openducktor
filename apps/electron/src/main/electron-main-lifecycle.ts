@@ -1,6 +1,10 @@
 import { Effect, Exit } from "effect";
-import type { ElectronError, ElectronLifecycleError } from "../effect/electron-errors";
-import { causeToElectronBoundaryError } from "../effect/electron-errors";
+import {
+  causeToElectronBoundaryError,
+  type ElectronError,
+  type ElectronErrorDetails,
+  ElectronLifecycleError,
+} from "../effect/electron-errors";
 
 type ElectronMainLifecycleLogger = {
   error(message: string, error?: unknown): void;
@@ -13,7 +17,26 @@ export type ElectronMainStartupSteps<PreReady, Ready> = {
   initializeHost(ready: Ready): Effect.Effect<void, ElectronError>;
   preparePreReady(): Effect.Effect<PreReady, ElectronError>;
   registerActivateHandler(ready: Ready): void;
+  shouldContinueStartup?(): boolean;
   waitUntilReady(): Effect.Effect<void, ElectronError>;
+};
+
+const ensureStartupContinuesEffect = (
+  shouldContinueStartup: (() => boolean) | undefined,
+  operation: string,
+  details?: ElectronErrorDetails,
+): Effect.Effect<void, ElectronLifecycleError> => {
+  if (!shouldContinueStartup || shouldContinueStartup()) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    new ElectronLifecycleError({
+      operation,
+      message: "Electron startup stopped because host shutdown has started.",
+      reason: "shutdown-started",
+      details,
+    }),
+  );
 };
 
 export const composeElectronMainStartupEffect = <PreReady, Ready>({
@@ -22,14 +45,28 @@ export const composeElectronMainStartupEffect = <PreReady, Ready>({
   initializeHost,
   preparePreReady,
   registerActivateHandler,
+  shouldContinueStartup,
   waitUntilReady,
 }: ElectronMainStartupSteps<PreReady, Ready>): Effect.Effect<Ready, ElectronError> =>
   Effect.gen(function* () {
     const preReady = yield* preparePreReady();
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.before-ready-wait");
     yield* waitUntilReady();
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.configure-ready", {
+      phase: "configure-ready",
+    });
     const ready = yield* configureReady(preReady);
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.initialize-host", {
+      phase: "initialize-host",
+    });
     yield* initializeHost(ready);
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.create-window", {
+      phase: "create-window",
+    });
     yield* createMainWindow(ready);
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.register-activate", {
+      phase: "register-activate",
+    });
     yield* Effect.sync(() => {
       registerActivateHandler(ready);
     });

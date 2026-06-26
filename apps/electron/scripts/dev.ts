@@ -624,17 +624,38 @@ export const runElectronDevLifecycleEffect = ({
     }> = [];
     let settled = false;
 
-    const settle = (effect: Effect.Effect<number, ElectronOperationError>): void => {
+    const removeRegisteredProcessHandlers = ({
+      keepExitHandler,
+    }: {
+      keepExitHandler: boolean;
+    }): void => {
+      const retainedProcessHandlers: Array<{
+        event: ElectronDevProcessEvent;
+        listener: () => void;
+      }> = [];
+      while (registeredProcessHandlers.length > 0) {
+        const registered = registeredProcessHandlers.pop();
+        if (!registered) {
+          continue;
+        }
+        if (keepExitHandler && registered.event === "exit") {
+          retainedProcessHandlers.push(registered);
+          continue;
+        }
+        processHandlers.off(registered.event, registered.listener);
+      }
+      registeredProcessHandlers.push(...retainedProcessHandlers.reverse());
+    };
+
+    const settle = (
+      effect: Effect.Effect<number, ElectronOperationError>,
+      options: { keepExitHandler?: boolean } = {},
+    ): void => {
       if (settled) {
         return;
       }
       settled = true;
-      while (registeredProcessHandlers.length > 0) {
-        const registered = registeredProcessHandlers.pop();
-        if (registered) {
-          processHandlers.off(registered.event, registered.listener);
-        }
-      }
+      removeRegisteredProcessHandlers({ keepExitHandler: options.keepExitHandler ?? false });
       resume(effect);
     };
 
@@ -644,7 +665,9 @@ export const runElectronDevLifecycleEffect = ({
     };
 
     const completeFailure = (cause: unknown): void => {
-      settle(Effect.fail(toElectronOperationError(cause, "electron.dev.lifecycle")));
+      settle(Effect.fail(toElectronOperationError(cause, "electron.dev.lifecycle")), {
+        keepExitHandler: true,
+      });
     };
 
     const shutdownEffect = (exitCode: number): Effect.Effect<void, ElectronOperationError> =>
@@ -690,7 +713,13 @@ export const runElectronDevLifecycleEffect = ({
 
     const launchElectronEffect = (): Effect.Effect<void, ElectronOperationError> =>
       Effect.gen(function* () {
+        if (shutdownStarted || settled) {
+          return;
+        }
         yield* buildBundles();
+        if (shutdownStarted || settled) {
+          return;
+        }
         const nextElectron = yield* Effect.sync(() =>
           startElectronProcess(rendererDevUrl, electronExecutablePath),
         );
@@ -716,31 +745,35 @@ export const runElectronDevLifecycleEffect = ({
         }
 
         restarting = true;
-        const restartExit = yield* Effect.exit(
-          Effect.gen(function* () {
-            console.log(
-              "[electron:dev] Restarting Electron after main-process dependency change...",
+        while (!shutdownStarted) {
+          restartQueued = false;
+          const restartExit = yield* Effect.exit(
+            Effect.gen(function* () {
+              console.log(
+                "[electron:dev] Restarting Electron after main-process dependency change...",
+              );
+              yield* stopElectronEffect(electron);
+              yield* launchElectronEffect();
+            }),
+          );
+          if (Exit.isFailure(restartExit)) {
+            yield* Effect.sync(() => {
+              restarting = false;
+            });
+            return yield* Effect.fail(
+              toElectronOperationError(
+                causeToElectronBoundaryError(restartExit.cause),
+                "electron.dev.restart-electron",
+              ),
             );
-            yield* stopElectronEffect(electron);
-            yield* launchElectronEffect();
-          }),
-        );
+          }
+          if (!restartQueued) {
+            break;
+          }
+        }
         yield* Effect.sync(() => {
           restarting = false;
         });
-        if (Exit.isFailure(restartExit)) {
-          return yield* Effect.fail(
-            toElectronOperationError(
-              causeToElectronBoundaryError(restartExit.cause),
-              "electron.dev.restart-electron",
-            ),
-          );
-        }
-
-        if (restartQueued) {
-          restartQueued = false;
-          yield* restartElectronEffect();
-        }
       });
 
     const scheduleRestart = (): void => {
@@ -830,7 +863,15 @@ export const mainEffect = (): Effect.Effect<
       return lifecycleExit.value;
     }
 
-    yield* closeRendererServerEffect(rendererServer);
+    const closeExit = yield* Effect.exit(closeRendererServerEffect(rendererServer));
+    if (Exit.isFailure(closeExit)) {
+      yield* Effect.sync(() => {
+        console.error(
+          "[electron:dev] Renderer shutdown after lifecycle failure failed.",
+          causeToElectronBoundaryError(closeExit.cause),
+        );
+      });
+    }
     return yield* Effect.fail(
       toElectronOperationError(
         causeToElectronBoundaryError(lifecycleExit.cause),

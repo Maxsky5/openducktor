@@ -412,10 +412,58 @@ describe("electron dev script", () => {
     }
 
     expect(failureOption.value).toBe(setupError);
-    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
-      "exit",
-      "SIGTERM",
-      "SIGINT",
-    ]);
+    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual(["SIGTERM", "SIGINT"]);
+  });
+
+  test("does not launch Electron when shutdown starts during bundle build", async () => {
+    const fakeProcessHandlers = createFakeProcessHandlers();
+    const rendererServer = {
+      close: async () => {},
+      config: { server: { port: 1430 } },
+      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
+      watcher: {
+        add() {},
+        on() {},
+      },
+    };
+    let startCalls = 0;
+
+    const exitCode = await runElectronEffect(
+      runElectronDevLifecycleEffect({
+        buildBundles: () =>
+          Effect.tryPromise({
+            try: async () => {
+              const shutdownHandler = fakeProcessHandlers.registered.find(
+                ({ event }) => event === "SIGTERM",
+              );
+              if (!shutdownHandler) {
+                throw new Error("Expected SIGTERM handler to be registered before build.");
+              }
+              shutdownHandler.listener();
+              await Promise.resolve();
+            },
+            catch: (cause) =>
+              new ElectronOperationError({
+                operation: "electron.dev.test-build",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+          }),
+        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        processHandlers: fakeProcessHandlers.processHandlers,
+        rendererDevUrl: "http://127.0.0.1:1430",
+        rendererServer: rendererServer as never,
+        startElectronProcess: () => {
+          startCalls += 1;
+          return {
+            exited: Promise.resolve(0),
+            kill() {},
+          } as never;
+        },
+      }),
+    );
+
+    expect(exitCode).toBe(143);
+    expect(startCalls).toBe(0);
   });
 });

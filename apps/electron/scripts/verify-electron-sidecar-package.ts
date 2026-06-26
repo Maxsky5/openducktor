@@ -127,13 +127,15 @@ export const verifyPackagedElectronSidecarsEffect = ({
       });
 
       if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
-        return yield* new ElectronOperationError({
-          operation: "electron.sidecar.verify-packaged-executable",
-          message: `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: expected an executable file. Expected path: ${sidecarPath}`,
-          path: sidecarPath,
-          platform,
-          details: { sidecarId },
-        });
+        return yield* Effect.fail(
+          new ElectronOperationError({
+            operation: "electron.sidecar.verify-packaged-executable",
+            message: `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: expected an executable file. Expected path: ${sidecarPath}`,
+            path: sidecarPath,
+            platform,
+            details: { sidecarId },
+          }),
+        );
       }
 
       verifiedSidecars.push({ id: sidecarId, path: sidecarPath });

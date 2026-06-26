@@ -47,4 +47,29 @@ describe("resolveAppVersion", () => {
       await rm(tempDirectory, { force: true, recursive: true });
     }
   });
+
+  test("fails with a typed error when the package file is malformed", async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-vite-config-"));
+    const packageJsonPath = join(tempDirectory, "package.json");
+
+    try {
+      await writeFile(packageJsonPath, "{not-json");
+      const error = (() => {
+        try {
+          resolveAppVersion({}, packageJsonPath);
+        } catch (caught) {
+          return caught;
+        }
+        throw new Error("Expected resolveAppVersion to fail.");
+      })();
+
+      expect(error).toMatchObject({
+        _tag: "ElectronValidationError",
+        operation: "electron.config.read-package-version",
+        path: packageJsonPath,
+      });
+    } finally {
+      await rm(tempDirectory, { force: true, recursive: true });
+    }
+  });
 });

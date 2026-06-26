@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ElectronValidationError } from "../effect/electron-errors";
+import { ElectronOperationError, ElectronValidationError } from "../effect/electron-errors";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -142,7 +142,11 @@ describe("electron local attachment previews", () => {
         },
       },
       async resolveLocalAttachmentPath() {
-        throw new Error("Attachment path is not a staged local attachment.");
+        throw new ElectronValidationError({
+          operation: "electron.preview.resolve-host-path",
+          message: "Attachment path is not a staged local attachment.",
+          field: "path",
+        });
       },
     });
 
@@ -158,6 +162,44 @@ describe("electron local attachment previews", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toBe("Attachment path is not a staged local attachment.");
+  });
+
+  test("returns structured error responses for host resolver operation failures", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run when host resolution fails.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        throw new ElectronOperationError({
+          operation: "electron.preview.resolve-host-path",
+          message: "Host command router failed.",
+        });
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/staged.png"),
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Host command router failed.");
   });
 
   test("returns structured error responses for invalid host resolver return shapes", async () => {

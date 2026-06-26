@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Effect } from "effect";
+import { Cause, Chunk, Effect, Exit } from "effect";
 import { runElectronEffect } from "../effect/electron-boundary";
 import { ElectronLifecycleError } from "../effect/electron-errors";
 import {
@@ -92,6 +92,59 @@ describe("Electron main lifecycle policy", () => {
       "create-window:renderer-session",
       "register-activate:renderer-session",
     ]);
+  });
+
+  test("startup stops before ready configuration when shutdown has started", async () => {
+    const calls: string[] = [];
+    let shutdownStarted = false;
+
+    const exit = await Effect.runPromiseExit(
+      composeElectronMainStartupEffect({
+        configureReady: (preReady: string) =>
+          Effect.sync(() => {
+            calls.push(`configure-ready:${preReady}`);
+            return { router: preReady, session: "renderer-session" };
+          }),
+        createMainWindow: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`create-window:${runtime.session}`);
+          }),
+        initializeHost: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`initialize-host:${runtime.router}`);
+          }),
+        preparePreReady: () =>
+          Effect.sync(() => {
+            calls.push("prepare-pre-ready");
+            return "host-router";
+          }),
+        registerActivateHandler: (runtime) => {
+          calls.push(`register-activate:${runtime.session}`);
+        },
+        shouldContinueStartup: () => !shutdownStarted,
+        waitUntilReady: () =>
+          Effect.sync(() => {
+            calls.push("wait-until-ready");
+            shutdownStarted = true;
+          }),
+      }),
+    );
+
+    expect(calls).toEqual(["prepare-pre-ready", "wait-until-ready"]);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) {
+      throw new Error("Expected startup to fail after shutdown starts.");
+    }
+    const failure = Chunk.head(Cause.failures(exit.cause));
+    expect(failure._tag).toBe("Some");
+    if (failure._tag !== "Some") {
+      throw new Error("Expected startup shutdown failure.");
+    }
+    expect(failure.value).toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.configure-ready",
+      reason: "shutdown-started",
+    });
   });
 
   test("startup boundary logs typed setup failures, runs cleanup, marks shutdown, and exits", async () => {

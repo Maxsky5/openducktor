@@ -64,6 +64,20 @@ const workspaceRoot = path.resolve(distDirectory, "../../..");
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 
+const isTaggedHostValidationError = (
+  cause: unknown,
+): cause is {
+  readonly field?: string;
+  readonly message: string;
+  readonly _tag: "HostValidationError";
+} =>
+  typeof cause === "object" &&
+  cause !== null &&
+  "_tag" in cause &&
+  cause._tag === "HostValidationError" &&
+  "message" in cause &&
+  typeof cause.message === "string";
+
 const shutdownController = createElectronMainShutdownController({
   disposeHost: (reason) => disposeActiveHostEffect(reason),
   exitProcess: (exitCode) => {
@@ -364,16 +378,41 @@ const resolveLocalAttachmentPathForPreviewEffect = (
   filePath: string,
 ) =>
   Effect.gen(function* () {
-    const resolved = yield* hostCommandRouter.invoke("workspace_resolve_local_attachment_path", {
-      path: filePath,
-    });
+    const resolved = yield* hostCommandRouter
+      .invoke("workspace_resolve_local_attachment_path", {
+        path: filePath,
+      })
+      .pipe(
+        Effect.mapError((cause) => {
+          if (isElectronError(cause)) {
+            return cause;
+          }
+          if (isTaggedHostValidationError(cause)) {
+            return new ElectronValidationError({
+              operation: "electron.preview.resolve-host-path",
+              message: cause.message,
+              field: cause.field ?? "path",
+              cause,
+              details: { filePath },
+            });
+          }
+          return new ElectronOperationError({
+            operation: "electron.preview.resolve-host-path",
+            message: errorMessage(cause),
+            path: filePath,
+            cause,
+          });
+        }),
+      );
     if (typeof resolved !== "object" || resolved === null || !("path" in resolved)) {
-      return yield* new ElectronValidationError({
-        operation: "electron.preview.resolve-host-path",
-        message: "Local attachment preview resolver returned an invalid response.",
-        field: "path",
-        details: { filePath },
-      });
+      return yield* Effect.fail(
+        new ElectronValidationError({
+          operation: "electron.preview.resolve-host-path",
+          message: "Local attachment preview resolver returned an invalid response.",
+          field: "path",
+          details: { filePath },
+        }),
+      );
     }
 
     return yield* readLocalAttachmentPreviewPathEffect(resolved.path).pipe(
@@ -518,6 +557,7 @@ const startupEffect = composeElectronMainStartupEffect({
       }
     });
   },
+  shouldContinueStartup: () => !shutdownController.isHostShutdownStarted(),
   waitUntilReady: waitForElectronReadyEffect,
 });
 

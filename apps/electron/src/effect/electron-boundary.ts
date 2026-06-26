@@ -1,7 +1,9 @@
 import { Effect, Exit } from "effect";
 import { causeToElectronBoundaryError } from "./electron-errors";
 
-export const runElectronEffect = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
+export const runElectronEffect = async <A, E extends Error>(
+  effect: Effect.Effect<A, E>,
+): Promise<A> => {
   const exit = await Effect.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) {
     return exit.value;
@@ -10,7 +12,7 @@ export const runElectronEffect = async <A, E>(effect: Effect.Effect<A, E>): Prom
   throw causeToElectronBoundaryError(exit.cause);
 };
 
-export const runElectronSync = <A, E>(effect: Effect.Effect<A, E>): A => {
+export const runElectronSync = <A, E extends Error>(effect: Effect.Effect<A, E>): A => {
   const exit = Effect.runSyncExit(effect);
   if (Exit.isSuccess(exit)) {
     return exit.value;
