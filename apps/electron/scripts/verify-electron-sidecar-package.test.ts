@@ -158,9 +158,17 @@ describe("verifyPackagedElectronSidecars", () => {
   test("rejects a missing required Windows MCP sidecar at the expected package path", async () => {
     const releaseDirectory = await makeReleaseDirectory();
 
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "x64", platform: "windows", releaseDirectory }),
-    ).rejects.toThrow("openducktor-mcp.exe");
+    const error = await verifyPackagedElectronSidecars({
+      arch: "x64",
+      platform: "windows",
+      releaseDirectory,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.sidecar.verify-packaged",
+    });
+    expect((error as Error).message).toContain("openducktor-mcp.exe");
   });
 
   test("rejects an empty required Windows MCP sidecar", async () => {
@@ -197,9 +205,17 @@ describe("verifyPackagedElectronSidecars", () => {
       releaseDirectory,
     });
 
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "x64", platform: "linux", releaseDirectory }),
-    ).rejects.toThrow("expected an executable file");
+    const error = await verifyPackagedElectronSidecars({
+      arch: "x64",
+      platform: "linux",
+      releaseDirectory,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.sidecar.verify-packaged-executable",
+    });
+    expect((error as Error).message).toContain("expected an executable file");
   });
 
   test("accepts non-empty executable macOS MCP sidecar", async () => {

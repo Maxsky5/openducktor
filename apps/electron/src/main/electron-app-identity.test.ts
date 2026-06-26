@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import path from "node:path";
+import { ElectronOperationError } from "../effect/electron-errors";
 import { configureElectronAppIdentity, resolveElectronProfilePath } from "./electron-app-identity";
 
 const customAppName = "Custom App";
@@ -154,23 +155,36 @@ describe("configureElectronAppIdentity", () => {
   });
 
   test("surfaces profile directory creation failures with the app name and profile path", () => {
-    expect(() =>
-      configureElectronAppIdentity(
-        {
-          setName() {},
-          setPath() {
-            throw new Error("setPath should not run after mkdir failure");
+    const error = (() => {
+      try {
+        configureElectronAppIdentity(
+          {
+            setName() {},
+            setPath() {
+              throw new Error("setPath should not run after mkdir failure");
+            },
           },
-        },
-        {
-          appName: customAppName,
-          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
-          createDirectory() {
-            throw new Error("permission denied");
+          {
+            appName: customAppName,
+            processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+            createDirectory() {
+              throw new Error("permission denied");
+            },
           },
-        },
-      ),
-    ).toThrow(
+        );
+      } catch (caught) {
+        return caught;
+      }
+      throw new Error("Expected configureElectronAppIdentity to fail.");
+    })();
+
+    expect(error).toBeInstanceOf(ElectronOperationError);
+    expect(error).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.app-identity.prepare-profile-directory",
+      path: customProfilePath,
+    });
+    expect((error as Error).message).toBe(
       `Failed to prepare Custom App Electron profile directory at ${customProfilePath}: permission denied`,
     );
   });

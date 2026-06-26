@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Cause, Chunk, Effect, Exit } from "effect";
+import { runElectronEffect } from "../effect/electron-boundary";
+import { ElectronLifecycleError } from "../effect/electron-errors";
+import {
+  composeElectronMainStartupEffect,
+  createElectronMainShutdownController,
+  runElectronMainStartupBoundary,
+} from "./electron-main-lifecycle";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 
@@ -13,7 +21,8 @@ describe("Electron main lifecycle policy", () => {
 
     expect(source).toContain("resolveElectronWindowIcon()");
     expect(source).toContain("nativeImage.createFromPath(iconPath)");
-    expect(source).toContain("throw new Error(");
+    expect(source).toContain("throw new ElectronOperationError({");
+    expect(source).toContain('operation: "electron.main.load-icon"');
     expect(source).toContain("icon is missing or invalid:");
     expect(source).toContain("icon: resolveElectronWindowIcon()");
   });
@@ -26,16 +35,13 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("app.dock.setIcon(");
   });
 
-  test("window close quits through host shutdown instead of keeping macOS app alive", () => {
+  test("window close hides windows and routes through host shutdown", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
     expect(source).toContain('window.on("close"');
     expect(source).toContain("event.preventDefault();");
     expect(source).toContain("hideWindowsForShutdown();");
     expect(source).not.toContain("window.destroy();");
-    expect(source).toContain('app.on("window-all-closed"');
-    expect(source).toContain('void shutdownHostAndQuit({ reason: "window-all-closed" });');
-    expect(source).toContain("if (hostShutdownStarted)");
   });
 
   test("Windows and Linux keep the menu hidden until the native reveal shortcut", () => {
@@ -44,24 +50,228 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('autoHideMenuBar: process.platform !== "darwin"');
   });
 
-  test("Cmd+Q waits for the host shutdown boundary before quitting", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
+  test("startup runs pre-ready setup before app readiness and initializes host before window", async () => {
+    const calls: string[] = [];
 
-    expect(source).toContain('app.on("before-quit"');
-    expect(source).toContain("event.preventDefault();");
-    expect(source).toContain("hideWindowsForShutdown();");
-    expect(source).toContain("await hostCommandRouter.dispose();");
+    const ready = await runElectronEffect(
+      composeElectronMainStartupEffect({
+        configureReady: (preReady: string) =>
+          Effect.sync(() => {
+            calls.push(`configure-ready:${preReady}`);
+            return { router: preReady, session: "renderer-session" };
+          }),
+        createMainWindow: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`create-window:${runtime.session}`);
+          }),
+        initializeHost: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`initialize-host:${runtime.router}`);
+          }),
+        preparePreReady: () =>
+          Effect.sync(() => {
+            calls.push("prepare-pre-ready");
+            return "host-router";
+          }),
+        registerActivateHandler: (runtime) => {
+          calls.push(`register-activate:${runtime.session}`);
+        },
+        waitUntilReady: () =>
+          Effect.sync(() => {
+            calls.push("wait-until-ready");
+          }),
+      }),
+    );
+
+    expect(ready).toEqual({ router: "host-router", session: "renderer-session" });
+    expect(calls).toEqual([
+      "prepare-pre-ready",
+      "wait-until-ready",
+      "configure-ready:host-router",
+      "initialize-host:host-router",
+      "create-window:renderer-session",
+      "register-activate:renderer-session",
+    ]);
   });
 
-  test("process signals wait for host shutdown before exiting", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
+  test("startup stops before ready configuration when shutdown has started", async () => {
+    const calls: string[] = [];
+    let shutdownStarted = false;
 
-    expect(source).toContain('process.once("SIGINT"');
-    expect(source).toContain('process.once("SIGTERM"');
-    expect(source).toContain('process.once("SIGHUP"');
-    expect(source).toContain("exitAfterShutdown: true");
-    expect(source).toContain("process.exit(exitCode)");
-    expect(source).toContain("OpenDucktor host shutdown started");
-    expect(source).toContain("OpenDucktor host shutdown complete");
+    const exit = await Effect.runPromiseExit(
+      composeElectronMainStartupEffect({
+        configureReady: (preReady: string) =>
+          Effect.sync(() => {
+            calls.push(`configure-ready:${preReady}`);
+            return { router: preReady, session: "renderer-session" };
+          }),
+        createMainWindow: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`create-window:${runtime.session}`);
+          }),
+        initializeHost: (runtime) =>
+          Effect.sync(() => {
+            calls.push(`initialize-host:${runtime.router}`);
+          }),
+        preparePreReady: () =>
+          Effect.sync(() => {
+            calls.push("prepare-pre-ready");
+            return "host-router";
+          }),
+        registerActivateHandler: (runtime) => {
+          calls.push(`register-activate:${runtime.session}`);
+        },
+        shouldContinueStartup: () => !shutdownStarted,
+        waitUntilReady: () =>
+          Effect.sync(() => {
+            calls.push("wait-until-ready");
+            shutdownStarted = true;
+          }),
+      }),
+    );
+
+    expect(calls).toEqual(["prepare-pre-ready", "wait-until-ready"]);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) {
+      throw new Error("Expected startup to fail after shutdown starts.");
+    }
+    const failure = Chunk.head(Cause.failures(exit.cause));
+    expect(failure._tag).toBe("Some");
+    if (failure._tag !== "Some") {
+      throw new Error("Expected startup shutdown failure.");
+    }
+    expect(failure.value).toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.configure-ready",
+      reason: "shutdown-started",
+    });
+  });
+
+  test("startup boundary logs typed setup failures, runs cleanup, marks shutdown, and exits", async () => {
+    const startupError = new ElectronLifecycleError({
+      operation: "electron.main.configure-app-identity",
+      message: "profile setup failed",
+    });
+    const errors: Array<{ error: unknown; message: string }> = [];
+    const exitCodes: number[] = [];
+    let cleanupCalls = 0;
+    let shutdownStarted = false;
+    let shutdownComplete = false;
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () =>
+        Effect.sync(() => {
+          cleanupCalls += 1;
+        }),
+      exitProcess: (exitCode) => {
+        exitCodes.push(exitCode);
+      },
+      logger: {
+        error(message, error) {
+          errors.push({ message, error });
+        },
+        info() {},
+      },
+      markShutdownComplete: () => {
+        shutdownComplete = true;
+      },
+      markShutdownStarted: () => {
+        shutdownStarted = true;
+      },
+      startupEffect: Effect.fail(startupError),
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(shutdownStarted).toBe(true);
+    expect(shutdownComplete).toBe(true);
+    expect(exitCodes).toEqual([1]);
+    expect(errors).toEqual([
+      {
+        message: "OpenDucktor Electron startup failed",
+        error: startupError,
+      },
+    ]);
+  });
+
+  test("shutdown controller disposes the host once for concurrent shutdown triggers", async () => {
+    const disposeReasons: string[] = [];
+    const quitCalls: string[] = [];
+    let releaseDispose: () => void = () => {};
+    const disposeGate = new Promise<void>((resolve) => {
+      releaseDispose = resolve;
+    });
+    const controller = createElectronMainShutdownController({
+      disposeHost: (reason) =>
+        Effect.tryPromise({
+          try: async () => {
+            disposeReasons.push(reason);
+            await disposeGate;
+          },
+          catch: (cause) =>
+            new ElectronLifecycleError({
+              operation: "electron.main.dispose-host",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        }),
+      exitProcess: () => {},
+      logger: {
+        error() {},
+        info() {},
+      },
+      quitApp: () => {
+        quitCalls.push("quit");
+      },
+    });
+
+    const firstShutdown = controller.shutdownHostAndQuit({ reason: "window-all-closed" });
+    const secondShutdown = controller.shutdownHostAndQuit({ reason: "before-quit" });
+
+    await Promise.resolve();
+    expect(disposeReasons).toEqual(["window-all-closed"]);
+    expect(controller.isHostShutdownStarted()).toBe(true);
+
+    releaseDispose();
+    await Promise.all([firstShutdown, secondShutdown]);
+
+    expect(disposeReasons).toEqual(["window-all-closed"]);
+    expect(quitCalls).toEqual(["quit"]);
+    expect(controller.isHostShutdownComplete()).toBe(true);
+  });
+
+  test("shutdown controller exits with failure when host disposal fails on a signal path", async () => {
+    const errors: Array<{ error: unknown; message: string }> = [];
+    const exitCodes: number[] = [];
+    const disposalError = new ElectronLifecycleError({
+      operation: "electron.main.dispose-host",
+      message: "dispose failed",
+      reason: "SIGTERM",
+    });
+
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => Effect.fail(disposalError),
+      exitProcess: (exitCode) => {
+        exitCodes.push(exitCode);
+      },
+      logger: {
+        error(message, error) {
+          errors.push({ message, error });
+        },
+        info() {},
+      },
+      quitApp: () => {
+        throw new Error("Expected signal shutdown to exit instead of quitting the app.");
+      },
+    });
+
+    await controller.shutdownHostAndQuit({ exitAfterShutdown: true, reason: "SIGTERM" });
+
+    expect(exitCodes).toEqual([1]);
+    expect(errors).toEqual([
+      {
+        message: "OpenDucktor host shutdown failed",
+        error: disposalError,
+      },
+    ]);
   });
 });

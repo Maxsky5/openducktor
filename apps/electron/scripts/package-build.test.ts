@@ -153,4 +153,57 @@ describe("build Electron release artifact", () => {
       await rm(baseDirectory, { force: true, recursive: true });
     }
   });
+
+  it("uses a typed error when the release directory is missing", async () => {
+    const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
+    const releaseDirectory = join(baseDirectory, "release");
+    const outputDirectory = join(baseDirectory, "release-publish");
+
+    try {
+      const error = await collectReleaseArtifacts({
+        outputDirectory,
+        platform: "macos",
+        releaseDirectory,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toMatchObject({
+        _tag: "ElectronOperationError",
+        operation: "electron.package.read-release-directory",
+        path: releaseDirectory,
+      });
+      expect((error as Error).message).toBe(
+        `Electron release directory is missing: ${releaseDirectory}`,
+      );
+    } finally {
+      await rm(baseDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("uses a typed error when no platform release artifacts were produced", async () => {
+    const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
+    const releaseDirectory = join(baseDirectory, "release");
+    const outputDirectory = join(baseDirectory, "release-publish");
+
+    try {
+      await mkdir(releaseDirectory, { recursive: true });
+
+      const error = await collectReleaseArtifacts({
+        outputDirectory,
+        platform: "macos",
+        releaseDirectory,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toMatchObject({
+        _tag: "ElectronOperationError",
+        operation: "electron.package.collect-release-artifacts",
+        path: releaseDirectory,
+        platform: "macos",
+      });
+      expect((error as Error).message).toBe(
+        "No Electron release artifacts were produced for macos.",
+      );
+    } finally {
+      await rm(baseDirectory, { force: true, recursive: true });
+    }
+  });
 });

@@ -1,3 +1,5 @@
+import { ElectronValidationError } from "../src/effect/electron-errors";
+
 export type ElectronReleasePlatform = "linux" | "macos" | "windows";
 export type ElectronReleaseArch = "arm64" | "x64";
 
@@ -24,7 +26,11 @@ export const resolveHostReleasePlatform = (platform: NodeJS.Platform): ElectronR
     return target;
   }
 
-  throw new Error(`Unsupported Electron release host platform: ${platform}`);
+  throw new ElectronValidationError({
+    operation: "electron.release-target.resolve-host-platform",
+    message: `Unsupported Electron release host platform: ${platform}`,
+    platform,
+  });
 };
 
 export const resolveHostReleaseArch = (arch: NodeJS.Architecture): ElectronReleaseArch => {
@@ -33,5 +39,9 @@ export const resolveHostReleaseArch = (arch: NodeJS.Architecture): ElectronRelea
     return target;
   }
 
-  throw new Error(`Unsupported Electron release host architecture: ${arch}`);
+  throw new ElectronValidationError({
+    operation: "electron.release-target.resolve-host-arch",
+    message: `Unsupported Electron release host architecture: ${arch}`,
+    arch,
+  });
 };

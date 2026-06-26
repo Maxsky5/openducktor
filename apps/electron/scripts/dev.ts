@@ -2,17 +2,45 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
-import { copySqliteTaskStoreMigrations, resolveSqliteTaskStoreMigrationCopyPlan } from "./build";
+import { Effect, Exit } from "effect";
+import { createServer } from "vite";
+import { runElectronEffect } from "../src/effect/electron-boundary";
+import {
+  resolveRendererDevPortEffect,
+  resolveRendererDevPort as resolveRendererDevPortFromConfig,
+} from "../src/effect/electron-config";
+import {
+  causeToElectronBoundaryError,
+  ElectronOperationError,
+  type ElectronValidationError,
+  errorMessage,
+  toElectronOperationError,
+} from "../src/effect/electron-errors";
+import {
+  copySqliteTaskStoreMigrationsEffect,
+  resolveSqliteTaskStoreMigrationCopyPlan,
+} from "./build";
 
-type ManagedElectronProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+export type ManagedElectronProcess = {
+  readonly exited: Promise<number>;
+  kill(signal?: NodeJS.Signals | number): void;
+};
 type ForceCloseableHttpServer = {
   closeAllConnections?: () => void;
   closeIdleConnections?: () => void;
 };
-type ViteDevServerWithHttpConnections = ViteDevServer & {
-  httpServer?: ForceCloseableHttpServer | null;
+type ElectronDevRendererWatcher = {
+  add(paths: string | readonly string[]): unknown;
+  on(event: "add" | "change" | "unlink", listener: (filePath: string) => void): unknown;
 };
+export type ElectronDevRendererServer = {
+  close(): Promise<void>;
+  config: { server: { port?: number | null } };
+  httpServer?: object | null;
+  resolvedUrls?: { local: string[] } | null;
+  watcher: ElectronDevRendererWatcher;
+};
+type ElectronDevRendererServerHandle = Pick<ElectronDevRendererServer, "close" | "httpServer">;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +52,6 @@ const APPLICATION_NAME = "OpenDucktor";
 const MACOS_DEV_BUNDLE_IDENTIFIER = "com.openducktor.app.dev";
 const MACOS_DEV_ICON_FILE_NAME = "openducktor-dev-rounded.icns";
 const RENDERER_DEV_HOST = "127.0.0.1";
-const DEFAULT_RENDERER_DEV_PORT = 1430;
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
 const RENDERER_CLOSE_TIMEOUT_MS = 3_000;
 const ELECTRON_STOP_TIMEOUT_MS = 30_000;
@@ -52,64 +79,117 @@ const ELECTRON_RESTART_EXTENSIONS = new Set([
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
 
-const runStep = async (label: string, command: string[]): Promise<void> => {
-  const process = Bun.spawn(command, {
-    cwd: packageRoot,
-    stdout: "inherit",
-    stderr: "inherit",
+const runStepEffect = (
+  label: string,
+  command: string[],
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const process = Bun.spawn(command, {
+        cwd: packageRoot,
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      const exitCode = await process.exited;
+      if (exitCode !== 0) {
+        throw new Error(`${label} failed with exit code ${exitCode}.`);
+      }
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.run-step",
+        message: errorMessage(cause),
+        cause,
+        details: { command, label },
+      }),
   });
-  const exitCode = await process.exited;
-  if (exitCode !== 0) {
-    throw new Error(`${label} failed with exit code ${exitCode}.`);
-  }
-};
 
-const readFileIfExists = async (filePath: string): Promise<string | null> => {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-};
+const nodeErrorCode = (cause: unknown): string | null =>
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+    ? cause.code
+    : null;
 
-const fileExists = async (filePath: string): Promise<boolean> => {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-};
+const readFileIfExistsEffect = (
+  filePath: string,
+): Effect.Effect<string | null, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: () => readFile(filePath, "utf8"),
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.read-file",
+        message: errorMessage(cause),
+        path: filePath,
+        cause,
+        details: { code: nodeErrorCode(cause) },
+      }),
+  }).pipe(
+    Effect.catchAll((error) =>
+      error.details?.code === "ENOENT" ? Effect.succeed(null) : Effect.fail(error),
+    ),
+  );
 
-const assertFileExists = async (filePath: string, label: string): Promise<void> => {
-  let metadata: Awaited<ReturnType<typeof stat>>;
-  try {
-    metadata = await stat(filePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`${label} was not found: ${filePath}`);
-    }
-    throw error;
-  }
+const fileExistsEffect = (filePath: string): Effect.Effect<boolean, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      await stat(filePath);
+      return true;
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.stat-file",
+        message: errorMessage(cause),
+        path: filePath,
+        cause,
+        details: { code: nodeErrorCode(cause) },
+      }),
+  }).pipe(
+    Effect.catchAll((error) =>
+      error.details?.code === "ENOENT" ? Effect.succeed(false) : Effect.fail(error),
+    ),
+  );
 
-  if (!metadata.isFile()) {
-    throw new Error(`${label} must be a file: ${filePath}`);
-  }
-};
+const assertFileExistsEffect = (
+  filePath: string,
+  label: string,
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(filePath);
+      if (!metadata.isFile()) {
+        throw new Error(`${label} must be a file: ${filePath}`);
+      }
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.assert-file-exists",
+        message:
+          nodeErrorCode(cause) === "ENOENT"
+            ? `${label} was not found: ${filePath}`
+            : errorMessage(cause),
+        path: filePath,
+        cause,
+      }),
+  });
 
-const fileSignature = async (filePath: string): Promise<{ mtimeMs: number; size: number }> => {
-  const metadata = await stat(filePath);
-  return {
-    mtimeMs: metadata.mtimeMs,
-    size: metadata.size,
-  };
-};
+const fileSignatureEffect = (
+  filePath: string,
+): Effect.Effect<{ mtimeMs: number; size: number }, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(filePath);
+      return {
+        mtimeMs: metadata.mtimeMs,
+        size: metadata.size,
+      };
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.file-signature",
+        message: errorMessage(cause),
+        path: filePath,
+        cause,
+      }),
+  });
 
 const normalizePath = (filePath: string): string => path.resolve(filePath);
 
@@ -119,25 +199,7 @@ const isWithinDirectory = (directory: string, candidate: string): boolean => {
 };
 
 export const resolveRendererDevPort = (rawPort: string | undefined): number => {
-  const trimmedPort = rawPort?.trim();
-  if (!trimmedPort) {
-    return DEFAULT_RENDERER_DEV_PORT;
-  }
-
-  if (!/^\d+$/.test(trimmedPort)) {
-    throw new Error(
-      `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${rawPort}`,
-    );
-  }
-
-  const port = Number(trimmedPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-    throw new Error(
-      `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${rawPort}`,
-    );
-  }
-
-  return port;
+  return resolveRendererDevPortFromConfig(rawPort, "electron.dev.resolve-renderer-dev-port");
 };
 
 export const shouldRestartElectronForChange = (
@@ -162,6 +224,19 @@ export const resolveMacosAppBundlePath = (electronExecutablePath: string): strin
   return appBundlePath;
 };
 
+export const resolveRequiredMacosAppBundlePath = (electronExecutablePath: string): string => {
+  const sourceAppPath = resolveMacosAppBundlePath(electronExecutablePath);
+  if (!sourceAppPath) {
+    throw new ElectronOperationError({
+      operation: "electron.dev.resolve-macos-app-bundle",
+      message: `Electron macOS dev executable is not inside an app bundle: ${electronExecutablePath}`,
+      path: electronExecutablePath,
+    });
+  }
+
+  return sourceAppPath;
+};
+
 export const resolveMacosDevAppPath = (): string =>
   path.join(packageRoot, ".electron-dev", `${APPLICATION_NAME}.app`);
 
@@ -170,12 +245,32 @@ export const resolveMacosDevExecutablePath = (devAppPath: string, executableName
 
 const resolveElectronExecutablePath = (): string => String(nodeRequire("electron"));
 
-const replacePlistString = async (
+const runDevFileOperationEffect = (
+  operation: string,
+  filePath: string,
+  action: () => Promise<unknown>,
+  details?: Record<string, unknown>,
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      await action();
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation,
+        message: errorMessage(cause),
+        path: filePath,
+        cause,
+        details,
+      }),
+  });
+
+const replacePlistStringEffect = (
   infoPlistPath: string,
   key: string,
   value: string,
-): Promise<void> => {
-  await runStep(`Electron dev app ${key}`, [
+): Effect.Effect<void, ElectronOperationError> =>
+  runStepEffect(`Electron dev app ${key}`, [
     "/usr/bin/plutil",
     "-replace",
     key,
@@ -183,9 +278,8 @@ const replacePlistString = async (
     value,
     infoPlistPath,
   ]);
-};
 
-const buildMacosDevAppSignature = async ({
+const buildMacosDevAppSignatureEffect = ({
   devAppPath,
   iconPath,
   sourceAppPath,
@@ -195,107 +289,173 @@ const buildMacosDevAppSignature = async ({
   iconPath: string;
   sourceAppPath: string;
   sourceExecutablePath: string;
-}): Promise<string> =>
-  `${JSON.stringify(
-    {
-      appName: APPLICATION_NAME,
-      bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+}): Effect.Effect<string, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const icon = yield* fileSignatureEffect(iconPath);
+    const sourceExecutable = yield* fileSignatureEffect(sourceExecutablePath);
+    const sourceInfoPlist = yield* fileSignatureEffect(
+      path.join(sourceAppPath, "Contents", "Info.plist"),
+    );
+
+    return `${JSON.stringify(
+      {
+        appName: APPLICATION_NAME,
+        bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+        devAppPath,
+        icon,
+        iconFileName: MACOS_DEV_ICON_FILE_NAME,
+        sourceAppPath,
+        sourceExecutablePath,
+        sourceExecutable,
+        sourceInfoPlist,
+      },
+      null,
+      2,
+    )}\n`;
+  });
+
+const resolveRequiredMacosAppBundlePathEffect = (
+  sourceExecutablePath: string,
+): Effect.Effect<string, ElectronOperationError> =>
+  Effect.try({
+    try: () => resolveRequiredMacosAppBundlePath(sourceExecutablePath),
+    catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-macos-app-bundle"),
+  });
+
+const prepareMacosDevElectronBundleEffect = (
+  sourceExecutablePath: string,
+): Effect.Effect<string, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const sourceAppPath = yield* resolveRequiredMacosAppBundlePathEffect(sourceExecutablePath);
+
+    const devRoot = path.join(packageRoot, ".electron-dev");
+    const devAppPath = resolveMacosDevAppPath();
+    const executableName = path.basename(sourceExecutablePath);
+    const devExecutablePath = resolveMacosDevExecutablePath(devAppPath, executableName);
+    const iconPath = path.join(packageRoot, "resources", "icon.icns");
+    const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
+    const markerPath = path.join(devRoot, "app-source.json");
+    yield* assertFileExistsEffect(iconPath, "Electron macOS dev icon");
+    const signature = yield* buildMacosDevAppSignatureEffect({
       devAppPath,
-      icon: await fileSignature(iconPath),
-      iconFileName: MACOS_DEV_ICON_FILE_NAME,
+      iconPath,
       sourceAppPath,
       sourceExecutablePath,
-      sourceExecutable: await fileSignature(sourceExecutablePath),
-      sourceInfoPlist: await fileSignature(path.join(sourceAppPath, "Contents", "Info.plist")),
-    },
-    null,
-    2,
-  )}\n`;
+    });
+    const existingSignature = yield* readFileIfExistsEffect(markerPath);
+    const devExecutableExists = yield* fileExistsEffect(devExecutablePath);
+    const shouldCopyBundle = existingSignature !== signature || !devExecutableExists;
+    const resolveResourcePath = (fileName: string): string =>
+      path.join(devAppPath, "Contents", "Resources", fileName);
+    const copyIconResourceEffect = (
+      targetFileName: string,
+    ): Effect.Effect<void, ElectronOperationError> => {
+      const targetPath = resolveResourcePath(targetFileName);
+      return runDevFileOperationEffect(
+        "electron.dev.copy-macos-dev-icon",
+        iconPath,
+        () => copyFile(iconPath, targetPath),
+        { targetPath },
+      );
+    };
 
-const prepareMacosDevElectronBundle = async (sourceExecutablePath: string): Promise<string> => {
-  const sourceAppPath = resolveMacosAppBundlePath(sourceExecutablePath);
-  if (!sourceAppPath) {
-    throw new Error(
-      `Electron macOS dev executable is not inside an app bundle: ${sourceExecutablePath}`,
+    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, () =>
+      mkdir(devRoot, { recursive: true }),
     );
-  }
+    if (shouldCopyBundle) {
+      yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-marker", markerPath, () =>
+        rm(markerPath, { force: true }),
+      );
+      yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-app", devAppPath, () =>
+        rm(devAppPath, { force: true, recursive: true }),
+      );
+      yield* runStepEffect("Electron macOS dev app copy", [
+        "/bin/cp",
+        "-cR",
+        sourceAppPath,
+        devAppPath,
+      ]);
+    }
 
-  const devRoot = path.join(packageRoot, ".electron-dev");
-  const devAppPath = resolveMacosDevAppPath();
-  const executableName = path.basename(sourceExecutablePath);
-  const devExecutablePath = resolveMacosDevExecutablePath(devAppPath, executableName);
-  const iconPath = path.join(packageRoot, "resources", "icon.icns");
-  const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
-  const markerPath = path.join(devRoot, "app-source.json");
-  await assertFileExists(iconPath, "Electron macOS dev icon");
-  const signature = await buildMacosDevAppSignature({
-    devAppPath,
-    iconPath,
-    sourceAppPath,
-    sourceExecutablePath,
+    yield* copyIconResourceEffect(MACOS_DEV_ICON_FILE_NAME);
+    yield* copyIconResourceEffect("icon.icns");
+    yield* copyIconResourceEffect("electron.icns");
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleName", APPLICATION_NAME);
+    yield* replacePlistStringEffect(
+      infoPlistPath,
+      "CFBundleIdentifier",
+      MACOS_DEV_BUNDLE_IDENTIFIER,
+    );
+    yield* replacePlistStringEffect(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
+    yield* runDevFileOperationEffect("electron.dev.write-macos-dev-marker", markerPath, () =>
+      writeFile(markerPath, signature, "utf8"),
+    );
+
+    return devExecutablePath;
   });
-  const existingSignature = await readFileIfExists(markerPath);
-  const shouldCopyBundle =
-    existingSignature !== signature || !(await fileExists(devExecutablePath));
 
-  await mkdir(devRoot, { recursive: true });
-  if (shouldCopyBundle) {
-    await rm(markerPath, { force: true });
-    await rm(devAppPath, { force: true, recursive: true });
-    await runStep("Electron macOS dev app copy", ["/bin/cp", "-cR", sourceAppPath, devAppPath]);
-  }
+export const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperationError> =>
+  Effect.gen(function* () {
+    yield* runStepEffect("Electron main build", ["bun", "run", "build:main"]);
+    yield* runStepEffect("Electron preload build", ["bun", "run", "build:preload"]);
+    yield* copySqliteTaskStoreMigrationsEffect(
+      resolveSqliteTaskStoreMigrationCopyPlan({
+        electronPackageRoot: packageRoot,
+        workspaceRoot,
+      }),
+    );
+  });
 
-  await copyFile(
-    iconPath,
-    path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME),
-  );
-  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "icon.icns"));
-  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "electron.icns"));
-  await replacePlistString(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
-  await replacePlistString(infoPlistPath, "CFBundleName", APPLICATION_NAME);
-  await replacePlistString(infoPlistPath, "CFBundleIdentifier", MACOS_DEV_BUNDLE_IDENTIFIER);
-  await replacePlistString(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
-  await writeFile(markerPath, signature, "utf8");
+const resolveRendererDevUrlEffect = (
+  server: ElectronDevRendererServer,
+): Effect.Effect<string, ElectronOperationError> =>
+  Effect.try({
+    try: () => resolveRendererDevUrl(server),
+    catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-renderer-url"),
+  });
 
-  return devExecutablePath;
-};
+const resolveElectronDevExecutablePathEffect = (): Effect.Effect<string, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const electronExecutablePath = yield* Effect.try({
+      try: resolveElectronExecutablePath,
+      catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-executable-path"),
+    });
+    if (process.platform !== "darwin") {
+      return electronExecutablePath;
+    }
 
-const resolveElectronDevExecutablePath = async (): Promise<string> => {
-  const electronExecutablePath = resolveElectronExecutablePath();
-  if (process.platform !== "darwin") {
-    return electronExecutablePath;
-  }
+    return yield* prepareMacosDevElectronBundleEffect(electronExecutablePath);
+  });
 
-  return prepareMacosDevElectronBundle(electronExecutablePath);
-};
-
-const buildElectronBundles = async (): Promise<void> => {
-  await runStep("Electron main build", ["bun", "run", "build:main"]);
-  await runStep("Electron preload build", ["bun", "run", "build:preload"]);
-  await copySqliteTaskStoreMigrations(
-    resolveSqliteTaskStoreMigrationCopyPlan({
-      electronPackageRoot: packageRoot,
-      workspaceRoot,
-    }),
-  );
-};
-
-const createRendererDevServer = async (port: number): Promise<ViteDevServer> => {
-  const server = await createServer({
-    root: packageRoot,
-    configFile: path.join(packageRoot, "vite.config.ts"),
-    server: {
-      host: RENDERER_DEV_HOST,
-      port,
-      strictPort: true,
+const createRendererDevServerEffect = (
+  port: number,
+): Effect.Effect<ElectronDevRendererServer, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const server = await createServer({
+        root: packageRoot,
+        configFile: path.join(packageRoot, "vite.config.ts"),
+        server: {
+          host: RENDERER_DEV_HOST,
+          port,
+          strictPort: true,
+        },
+      });
+      await server.listen(port);
+      server.printUrls();
+      return server;
     },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.create-renderer-server",
+        message: errorMessage(cause),
+        cause,
+        details: { port },
+      }),
   });
-  await server.listen(port);
-  server.printUrls();
-  return server;
-};
 
-const resolveRendererDevUrl = (server: ViteDevServer): string => {
+const resolveRendererDevUrl = (server: ElectronDevRendererServer): string => {
   const localUrl = server.resolvedUrls?.local.find((url) => url.includes(RENDERER_DEV_HOST));
   if (localUrl) {
     return localUrl.replace(/\/$/u, "");
@@ -303,7 +463,10 @@ const resolveRendererDevUrl = (server: ViteDevServer): string => {
 
   const configuredPort = server.config.server.port;
   if (!configuredPort) {
-    throw new Error("Vite renderer dev server did not expose a configured port.");
+    throw new ElectronOperationError({
+      operation: "electron.dev.resolve-renderer-url",
+      message: "Vite renderer dev server did not expose a configured port.",
+    });
   }
 
   return `http://${RENDERER_DEV_HOST}:${configuredPort}`;
@@ -332,174 +495,458 @@ const startElectron = (
     },
   });
 
-const forceCloseRendererConnections = (server: ViteDevServer): void => {
-  const httpServer = (server as ViteDevServerWithHttpConnections).httpServer;
-  httpServer?.closeIdleConnections?.();
-  httpServer?.closeAllConnections?.();
-};
-
-const stopElectron = async (electron: ManagedElectronProcess | null): Promise<void> => {
-  if (!electron) {
+const callRendererConnectionCloseMethod = (
+  httpServer: object | null | undefined,
+  method: keyof ForceCloseableHttpServer,
+): void => {
+  if (!httpServer || !(method in httpServer)) {
     return;
   }
 
-  let exited = false;
-  const exitedPromise = electron.exited.then(() => {
-    exited = true;
-  });
-
-  const gracefulSignal = electronGracefulShutdownSignal(process.platform);
-  console.log(`[electron:dev] Requesting Electron shutdown with ${gracefulSignal}...`);
-  electron.kill(gracefulSignal);
-  await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
-  if (!exited) {
-    console.error(
-      `[electron:dev] Electron did not exit within ${ELECTRON_STOP_TIMEOUT_MS}ms; forcing shutdown...`,
-    );
-    electron.kill(9);
-    await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
-    if (!exited) {
-      throw new Error(
-        `[electron:dev] Electron did not exit after forced shutdown within ${ELECTRON_STOP_TIMEOUT_MS}ms.`,
-      );
-    }
+  const close = Reflect.get(httpServer, method);
+  if (typeof close === "function") {
+    close.call(httpServer);
   }
 };
+
+const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle): void => {
+  callRendererConnectionCloseMethod(server.httpServer, "closeIdleConnections");
+  callRendererConnectionCloseMethod(server.httpServer, "closeAllConnections");
+};
+
+export const stopElectronEffect = (
+  electron: ManagedElectronProcess | null,
+  stopSleep: (durationMs: number) => Promise<unknown> = sleep,
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      if (!electron) {
+        return;
+      }
+
+      let exited = false;
+      const exitedPromise = electron.exited.then(() => {
+        exited = true;
+      });
+
+      const gracefulSignal = electronGracefulShutdownSignal(process.platform);
+      console.log(`[electron:dev] Requesting Electron shutdown with ${gracefulSignal}...`);
+      electron.kill(gracefulSignal);
+      await Promise.race([exitedPromise, stopSleep(ELECTRON_STOP_TIMEOUT_MS)]);
+      if (!exited) {
+        console.error(
+          `[electron:dev] Electron did not exit within ${ELECTRON_STOP_TIMEOUT_MS}ms; forcing shutdown...`,
+        );
+        electron.kill(9);
+        await Promise.race([exitedPromise, stopSleep(ELECTRON_STOP_TIMEOUT_MS)]);
+        if (!exited) {
+          throw new Error(
+            `[electron:dev] Electron did not exit after forced shutdown within ${ELECTRON_STOP_TIMEOUT_MS}ms.`,
+          );
+        }
+      }
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.stop-electron",
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
 
 export const closeRendererServer = async (
-  server: ViteDevServer | null,
+  server: ElectronDevRendererServerHandle | null,
   closeSleep: (durationMs: number) => Promise<unknown> = sleep,
 ): Promise<void> => {
-  if (server) {
-    let closePromise: Promise<void>;
-    try {
-      closePromise = server.close();
-    } finally {
-      forceCloseRendererConnections(server);
-    }
-    await Promise.race([closePromise, closeSleep(RENDERER_CLOSE_TIMEOUT_MS)]);
-  }
+  await runElectronEffect(closeRendererServerEffect(server, closeSleep));
 };
 
-const main = async (): Promise<number> => {
-  const rendererPort = resolveRendererDevPort(process.env.ELECTRON_RENDERER_DEV_PORT);
-  const electronExecutablePath = await resolveElectronDevExecutablePath();
-  const rendererServer = await createRendererDevServer(rendererPort);
-  const rendererDevUrl = resolveRendererDevUrl(rendererServer);
-  let electron: ManagedElectronProcess | null = null;
-  let shutdownStarted = false;
-  let restarting = false;
-  let restartQueued = false;
-  let restartTimer: ReturnType<typeof setTimeout> | null = null;
-  let resolveExit: (exitCode: number) => void = () => {};
-  const exited = new Promise<number>((resolve) => {
-    resolveExit = resolve;
+export const closeRendererServerEffect = (
+  server: ElectronDevRendererServerHandle | null,
+  closeSleep: (durationMs: number) => Promise<unknown> = sleep,
+): Effect.Effect<void, ElectronOperationError> => {
+  if (!server) {
+    return Effect.void;
+  }
+
+  return Effect.gen(function* () {
+    const closePromise = yield* Effect.try({
+      try: () => {
+        try {
+          return server.close();
+        } finally {
+          forceCloseRendererConnections(server);
+        }
+      },
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.dev.close-renderer-server",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
+    yield* Effect.tryPromise({
+      try: async () => {
+        await Promise.race([closePromise, closeSleep(RENDERER_CLOSE_TIMEOUT_MS)]);
+      },
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.dev.close-renderer-server",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
+  });
+};
+
+type StartElectronProcess = (
+  rendererDevUrl: string,
+  electronExecutablePath: string,
+) => ManagedElectronProcess;
+
+type ElectronDevProcessEvent = "SIGINT" | "SIGTERM" | "exit";
+
+export type ElectronDevProcessHandlers = {
+  off(event: ElectronDevProcessEvent, listener: () => void): void;
+  once(event: ElectronDevProcessEvent, listener: () => void): void;
+};
+
+const defaultElectronDevProcessHandlers: ElectronDevProcessHandlers = {
+  off(event, listener) {
+    process.off(event, listener);
+  },
+  once(event, listener) {
+    process.once(event, listener);
+  },
+};
+
+type ElectronDevLifecycleOptions = {
+  buildBundles?: () => Effect.Effect<void, ElectronOperationError>;
+  electronExecutablePath: string;
+  processHandlers?: ElectronDevProcessHandlers;
+  rendererDevUrl: string;
+  rendererServer: ElectronDevRendererServer;
+  startElectronProcess?: StartElectronProcess;
+};
+
+export const runElectronDevLifecycleEffect = ({
+  buildBundles = buildElectronBundlesEffect,
+  electronExecutablePath,
+  processHandlers = defaultElectronDevProcessHandlers,
+  rendererDevUrl,
+  rendererServer,
+  startElectronProcess = startElectron,
+}: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationError> =>
+  Effect.async<number, ElectronOperationError>((resume) => {
+    let electron: ManagedElectronProcess | null = null;
+    let shutdownStarted = false;
+    let restarting = false;
+    let restartQueued = false;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    const registeredProcessHandlers: Array<{
+      event: ElectronDevProcessEvent;
+      listener: () => void;
+    }> = [];
+    let settled = false;
+
+    const removeRegisteredProcessHandlers = ({
+      keepExitHandler,
+    }: {
+      keepExitHandler: boolean;
+    }): void => {
+      const retainedProcessHandlers: Array<{
+        event: ElectronDevProcessEvent;
+        listener: () => void;
+      }> = [];
+      while (registeredProcessHandlers.length > 0) {
+        const registered = registeredProcessHandlers.pop();
+        if (!registered) {
+          continue;
+        }
+        if (keepExitHandler && registered.event === "exit") {
+          retainedProcessHandlers.push(registered);
+          continue;
+        }
+        processHandlers.off(registered.event, registered.listener);
+      }
+      registeredProcessHandlers.push(...retainedProcessHandlers.reverse());
+    };
+
+    const settle = (
+      effect: Effect.Effect<number, ElectronOperationError>,
+      options: { keepExitHandler?: boolean } = {},
+    ): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      removeRegisteredProcessHandlers({ keepExitHandler: options.keepExitHandler ?? false });
+      resume(effect);
+    };
+
+    const registerProcessHandler = (event: ElectronDevProcessEvent, listener: () => void): void => {
+      processHandlers.once(event, listener);
+      registeredProcessHandlers.push({ event, listener });
+    };
+
+    const completeFailure = (cause: unknown): void => {
+      settle(Effect.fail(toElectronOperationError(cause, "electron.dev.lifecycle")), {
+        keepExitHandler: true,
+      });
+    };
+
+    const shutdownEffect = (exitCode: number): Effect.Effect<void, ElectronOperationError> =>
+      Effect.gen(function* () {
+        if (shutdownStarted) {
+          return;
+        }
+        shutdownStarted = true;
+        if (restartTimer) {
+          clearTimeout(restartTimer);
+          restartTimer = null;
+        }
+        yield* stopElectronEffect(electron);
+        yield* closeRendererServerEffect(rendererServer);
+        yield* Effect.sync(() => {
+          settle(Effect.succeed(exitCode));
+        });
+      });
+
+    const runShutdown = (exitCode: number): void => {
+      void Effect.runPromiseExit(shutdownEffect(exitCode)).then((exit) => {
+        if (Exit.isFailure(exit)) {
+          completeFailure(causeToElectronBoundaryError(exit.cause));
+        }
+      });
+    };
+
+    const shutdownAfterLifecycleFailure = (cause: unknown): void => {
+      console.error(cause);
+      runShutdown(1);
+    };
+
+    const runLifecycleTask = (
+      effect: Effect.Effect<void, ElectronOperationError>,
+      onFailure: (cause: unknown) => void,
+    ): void => {
+      void Effect.runPromiseExit(effect).then((exit) => {
+        if (Exit.isFailure(exit)) {
+          onFailure(causeToElectronBoundaryError(exit.cause));
+        }
+      });
+    };
+
+    const launchElectronEffect = (): Effect.Effect<void, ElectronOperationError> =>
+      Effect.gen(function* () {
+        if (shutdownStarted || settled) {
+          return;
+        }
+        yield* buildBundles();
+        if (shutdownStarted || settled) {
+          return;
+        }
+        const nextElectron = yield* Effect.sync(() =>
+          startElectronProcess(rendererDevUrl, electronExecutablePath),
+        );
+        electron = nextElectron;
+        void nextElectron.exited.then((exitCode) => {
+          if (electron === nextElectron) {
+            electron = null;
+          }
+          if (!shutdownStarted && !restarting) {
+            runShutdown(exitCode);
+          }
+        });
+      });
+
+    const restartElectronEffect = (): Effect.Effect<void, ElectronOperationError> =>
+      Effect.gen(function* () {
+        if (shutdownStarted) {
+          return;
+        }
+        if (restarting) {
+          restartQueued = true;
+          return;
+        }
+
+        restarting = true;
+        while (!shutdownStarted) {
+          restartQueued = false;
+          const restartExit = yield* Effect.exit(
+            Effect.gen(function* () {
+              console.log(
+                "[electron:dev] Restarting Electron after main-process dependency change...",
+              );
+              yield* stopElectronEffect(electron);
+              yield* launchElectronEffect();
+            }),
+          );
+          if (Exit.isFailure(restartExit)) {
+            yield* Effect.sync(() => {
+              restarting = false;
+            });
+            return yield* Effect.fail(
+              toElectronOperationError(
+                causeToElectronBoundaryError(restartExit.cause),
+                "electron.dev.restart-electron",
+              ),
+            );
+          }
+          if (!restartQueued) {
+            break;
+          }
+        }
+        yield* Effect.sync(() => {
+          restarting = false;
+        });
+      });
+
+    const scheduleRestart = (): void => {
+      if (shutdownStarted) {
+        return;
+      }
+      if (restartTimer) {
+        clearTimeout(restartTimer);
+      }
+      restartTimer = setTimeout(() => {
+        restartTimer = null;
+        runLifecycleTask(restartElectronEffect(), shutdownAfterLifecycleFailure);
+      }, ELECTRON_RESTART_DEBOUNCE_MS);
+    };
+
+    const handleWatchedFileChange = (filePath: string): void => {
+      if (shouldRestartElectronForChange(filePath)) {
+        scheduleRestart();
+      }
+    };
+
+    const registerWatcherEffect = (): Effect.Effect<void, ElectronOperationError> =>
+      Effect.try({
+        try: () => {
+          rendererServer.watcher.add([...ELECTRON_RESTART_WATCH_ROOTS]);
+          rendererServer.watcher.on("add", handleWatchedFileChange);
+          rendererServer.watcher.on("change", handleWatchedFileChange);
+          rendererServer.watcher.on("unlink", handleWatchedFileChange);
+        },
+        catch: (cause) =>
+          new ElectronOperationError({
+            operation: "electron.dev.register-watcher",
+            message: errorMessage(cause),
+            cause,
+          }),
+      });
+
+    const registerProcessHandlersEffect = (): Effect.Effect<void, never> =>
+      Effect.sync(() => {
+        registerProcessHandler("SIGINT", () => {
+          console.log("[electron:dev] Received SIGINT, shutting down...");
+          runShutdown(130);
+        });
+        registerProcessHandler("SIGTERM", () => {
+          console.log("[electron:dev] Received SIGTERM, shutting down...");
+          runShutdown(143);
+        });
+        registerProcessHandler("exit", () => {
+          if (electron) {
+            electron.kill();
+          }
+        });
+      });
+
+    const interruptCleanupEffect = (): Effect.Effect<void, never> =>
+      Effect.gen(function* () {
+        if (settled || shutdownStarted) {
+          return;
+        }
+
+        shutdownStarted = true;
+        if (restartTimer) {
+          clearTimeout(restartTimer);
+          restartTimer = null;
+        }
+        removeRegisteredProcessHandlers({ keepExitHandler: true });
+
+        const stopExit = yield* Effect.exit(stopElectronEffect(electron));
+        if (Exit.isFailure(stopExit)) {
+          yield* Effect.sync(() => {
+            console.error(
+              "[electron:dev] Electron shutdown after lifecycle interruption failed.",
+              causeToElectronBoundaryError(stopExit.cause),
+            );
+          });
+        }
+
+        const closeExit = yield* Effect.exit(closeRendererServerEffect(rendererServer));
+        if (Exit.isFailure(closeExit)) {
+          yield* Effect.sync(() => {
+            console.error(
+              "[electron:dev] Renderer shutdown after lifecycle interruption failed.",
+              causeToElectronBoundaryError(closeExit.cause),
+            );
+          });
+        }
+
+        yield* Effect.sync(() => {
+          removeRegisteredProcessHandlers({ keepExitHandler: false });
+        });
+      });
+
+    runLifecycleTask(
+      Effect.gen(function* () {
+        yield* registerWatcherEffect();
+        yield* registerProcessHandlersEffect();
+        yield* launchElectronEffect();
+      }),
+      completeFailure,
+    );
+
+    return interruptCleanupEffect();
   });
 
-  const shutdown = async (exitCode: number): Promise<void> => {
-    if (shutdownStarted) {
-      return;
-    }
-    shutdownStarted = true;
-    if (restartTimer) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
-    }
-    await stopElectron(electron);
-    await closeRendererServer(rendererServer);
-    resolveExit(exitCode);
-  };
-
-  const launchElectron = async (): Promise<void> => {
-    await buildElectronBundles();
-    const nextElectron = startElectron(rendererDevUrl, electronExecutablePath);
-    electron = nextElectron;
-    void nextElectron.exited.then((exitCode) => {
-      if (electron === nextElectron) {
-        electron = null;
-      }
-      if (!shutdownStarted && !restarting) {
-        void shutdown(exitCode);
-      }
-    });
-  };
-
-  const restartElectron = async (): Promise<void> => {
-    if (shutdownStarted) {
-      return;
-    }
-    if (restarting) {
-      restartQueued = true;
-      return;
+export const mainEffect = (): Effect.Effect<
+  number,
+  ElectronOperationError | ElectronValidationError
+> =>
+  Effect.gen(function* () {
+    const rendererPort = yield* resolveRendererDevPortEffect(
+      process.env.ELECTRON_RENDERER_DEV_PORT,
+      "electron.dev.resolve-renderer-dev-port",
+    );
+    const electronExecutablePath = yield* resolveElectronDevExecutablePathEffect();
+    const rendererServer = yield* createRendererDevServerEffect(rendererPort);
+    const lifecycleExit = yield* Effect.exit(
+      Effect.gen(function* () {
+        const rendererDevUrl = yield* resolveRendererDevUrlEffect(rendererServer);
+        return yield* runElectronDevLifecycleEffect({
+          electronExecutablePath,
+          rendererDevUrl,
+          rendererServer,
+        });
+      }),
+    );
+    if (Exit.isSuccess(lifecycleExit)) {
+      return lifecycleExit.value;
     }
 
-    restarting = true;
-    try {
-      console.log("[electron:dev] Restarting Electron after main-process dependency change...");
-      await stopElectron(electron);
-      await launchElectron();
-    } finally {
-      restarting = false;
-    }
-
-    if (restartQueued) {
-      restartQueued = false;
-      await restartElectron();
-    }
-  };
-
-  const scheduleRestart = (): void => {
-    if (shutdownStarted) {
-      return;
-    }
-    if (restartTimer) {
-      clearTimeout(restartTimer);
-    }
-    restartTimer = setTimeout(() => {
-      restartTimer = null;
-      void restartElectron().catch((error: unknown) => {
-        console.error(error);
-        void shutdown(1);
+    const closeExit = yield* Effect.exit(closeRendererServerEffect(rendererServer));
+    if (Exit.isFailure(closeExit)) {
+      yield* Effect.sync(() => {
+        console.error(
+          "[electron:dev] Renderer shutdown after lifecycle failure failed.",
+          causeToElectronBoundaryError(closeExit.cause),
+        );
       });
-    }, ELECTRON_RESTART_DEBOUNCE_MS);
-  };
-
-  const handleWatchedFileChange = (filePath: string): void => {
-    if (shouldRestartElectronForChange(filePath)) {
-      scheduleRestart();
     }
-  };
-
-  try {
-    rendererServer.watcher.add([...ELECTRON_RESTART_WATCH_ROOTS]);
-    rendererServer.watcher.on("add", handleWatchedFileChange);
-    rendererServer.watcher.on("change", handleWatchedFileChange);
-    rendererServer.watcher.on("unlink", handleWatchedFileChange);
-
-    process.once("SIGINT", () => {
-      console.log("[electron:dev] Received SIGINT, shutting down...");
-      void shutdown(130);
-    });
-    process.once("SIGTERM", () => {
-      console.log("[electron:dev] Received SIGTERM, shutting down...");
-      void shutdown(143);
-    });
-    process.once("exit", () => {
-      if (electron) {
-        electron.kill();
-      }
-    });
-
-    await launchElectron();
-    return exited;
-  } catch (error) {
-    await closeRendererServer(rendererServer);
-    throw error;
-  }
-};
+    return yield* Effect.fail(
+      toElectronOperationError(
+        causeToElectronBoundaryError(lifecycleExit.cause),
+        "electron.dev.main",
+      ),
+    );
+  });
 
 if (import.meta.main) {
-  const exitCode = await main().catch((error: unknown) => {
+  const exitCode = await runElectronEffect(mainEffect()).catch((error: unknown) => {
     console.error(error);
     return 1;
   });

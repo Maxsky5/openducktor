@@ -3,6 +3,13 @@ import { chmod, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { $ } from "bun";
+import { Effect } from "effect";
+import { runElectronEffect } from "../src/effect/electron-boundary";
+import {
+  ElectronOperationError,
+  ElectronValidationError,
+  errorMessage,
+} from "../src/effect/electron-errors";
 import {
   type ElectronReleaseArch,
   type ElectronReleasePlatform,
@@ -61,7 +68,7 @@ export const resolveElectronSidecarBuildPlan = ({
   };
 };
 
-const assertSidecarFile = async ({
+const assertSidecarFileEffect = ({
   label,
   path,
   platform,
@@ -69,51 +76,83 @@ const assertSidecarFile = async ({
   label: string;
   path: string;
   platform: ElectronReleasePlatform;
-}): Promise<Stats> => {
-  try {
-    const metadata = await stat(path);
-    if (!metadata.isFile()) {
-      throw new Error("expected a file but found a non-file entry");
-    }
-    if (metadata.size === 0) {
-      throw new Error("expected a non-empty file");
-    }
-    if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
-      throw new Error("expected an executable file");
-    }
-    return metadata;
-  } catch (cause) {
-    if (cause instanceof Error) {
-      throw new Error(`${label} is invalid: ${cause.message}. Expected path: ${path}`, { cause });
-    }
-    throw cause;
-  }
-};
+}): Effect.Effect<Stats, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(path);
+      if (!metadata.isFile()) {
+        throw new Error("expected a file but found a non-file entry");
+      }
+      if (metadata.size === 0) {
+        throw new Error("expected a non-empty file");
+      }
+      if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
+        throw new Error("expected an executable file");
+      }
+      return metadata;
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.sidecar.verify-compiled",
+        message: `${label} is invalid: ${errorMessage(cause)}. Expected path: ${path}`,
+        path,
+        platform,
+        cause,
+      }),
+  });
 
-const assertFileExists = async (path: string, label: string): Promise<void> => {
-  try {
-    const metadata = await stat(path);
-    if (metadata.isFile()) {
-      return;
-    }
-  } catch {
-    // Report a single actionable error below.
-  }
-
-  throw new Error(`${label} is missing: ${path}`);
-};
+const assertFileExistsEffect = (
+  path: string,
+  label: string,
+): Effect.Effect<void, ElectronValidationError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(path);
+      if (!metadata.isFile()) {
+        throw new Error("expected a file but found a non-file entry");
+      }
+    },
+    catch: (cause) =>
+      new ElectronValidationError({
+        operation: "electron.sidecar.assert-file-exists",
+        message: `${label} is missing: ${path}`,
+        path,
+        cause,
+      }),
+  });
 
 const compileMcpSidecar = async (plan: ElectronSidecarBuildPlan): Promise<void> => {
   await $`bun build --compile --outfile ${plan.outputPaths["openducktor-mcp"]} ${plan.entrypoint}`;
 };
 
-const resetSidecarOutput = async (plan: ElectronSidecarBuildPlan): Promise<void> => {
-  await assertFileExists(plan.entrypoint, "OpenDucktor MCP entrypoint");
-  await rm(plan.outputDirectory, { force: true, recursive: true });
-  await mkdir(plan.outputDirectory, { recursive: true });
-};
+const resetSidecarOutputEffect = (
+  plan: ElectronSidecarBuildPlan,
+): Effect.Effect<void, ElectronOperationError | ElectronValidationError> =>
+  Effect.gen(function* () {
+    yield* assertFileExistsEffect(plan.entrypoint, "OpenDucktor MCP entrypoint");
+    yield* Effect.tryPromise({
+      try: () => rm(plan.outputDirectory, { force: true, recursive: true }),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.sidecar.clean-output",
+          message: errorMessage(cause),
+          path: plan.outputDirectory,
+          cause,
+        }),
+    });
+    yield* Effect.tryPromise({
+      try: () => mkdir(plan.outputDirectory, { recursive: true }),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.sidecar.create-output",
+          message: errorMessage(cause),
+          path: plan.outputDirectory,
+          cause,
+        }),
+    });
+  });
 
-const compileAndVerifyMcpSidecar = async ({
+const compileAndVerifyMcpSidecarEffect = ({
   chmodFile,
   compile,
   plan,
@@ -123,22 +162,73 @@ const compileAndVerifyMcpSidecar = async ({
   compile: (plan: ElectronSidecarBuildPlan) => Promise<void>;
   plan: ElectronSidecarBuildPlan;
   platform: ElectronReleasePlatform;
-}): Promise<PreparedElectronSidecar> => {
-  const outputPath = plan.outputPaths["openducktor-mcp"];
-  await compile(plan);
-  if (platform !== "windows") {
-    await chmodFile(outputPath, 0o755);
-  }
-  await assertSidecarFile({
-    label: "Compiled OpenDucktor MCP sidecar",
-    path: outputPath,
-    platform,
+}): Effect.Effect<PreparedElectronSidecar, ElectronOperationError> =>
+  Effect.gen(function* () {
+    const outputPath = plan.outputPaths["openducktor-mcp"];
+    yield* Effect.tryPromise({
+      try: () => compile(plan),
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.sidecar.compile-mcp",
+          message: errorMessage(cause),
+          path: outputPath,
+          platform,
+          cause,
+        }),
+    });
+    if (platform !== "windows") {
+      yield* Effect.tryPromise({
+        try: () => chmodFile(outputPath, 0o755),
+        catch: (cause) =>
+          new ElectronOperationError({
+            operation: "electron.sidecar.chmod",
+            message: errorMessage(cause),
+            path: outputPath,
+            platform,
+            cause,
+          }),
+      });
+    }
+    yield* assertSidecarFileEffect({
+      label: "Compiled OpenDucktor MCP sidecar",
+      path: outputPath,
+      platform,
+    });
+
+    return { id: "openducktor-mcp", outputPath };
   });
 
-  return { id: "openducktor-mcp", outputPath };
-};
+export const prepareElectronSidecarsEffect = ({
+  arch,
+  chmodFile = chmod,
+  compileMcp = compileMcpSidecar,
+  ...input
+}: PrepareElectronSidecarsInput): Effect.Effect<
+  {
+    plan: ElectronSidecarBuildPlan;
+    sidecars: PreparedElectronSidecar[];
+  },
+  ElectronOperationError | ElectronValidationError
+> =>
+  Effect.gen(function* () {
+    void arch;
+    const plan = resolveElectronSidecarBuildPlan(input);
 
-export const prepareElectronSidecars = async ({
+    yield* resetSidecarOutputEffect(plan);
+    const mcpSidecar = yield* compileAndVerifyMcpSidecarEffect({
+      chmodFile,
+      compile: compileMcp,
+      plan,
+      platform: input.platform,
+    });
+
+    return {
+      plan,
+      sidecars: [mcpSidecar],
+    };
+  });
+
+export const prepareElectronSidecars = ({
   arch,
   chmodFile = chmod,
   compileMcp = compileMcpSidecar,
@@ -146,38 +236,35 @@ export const prepareElectronSidecars = async ({
 }: PrepareElectronSidecarsInput): Promise<{
   plan: ElectronSidecarBuildPlan;
   sidecars: PreparedElectronSidecar[];
-}> => {
-  void arch;
-  const plan = resolveElectronSidecarBuildPlan(input);
-
-  await resetSidecarOutput(plan);
-  const mcpSidecar = await compileAndVerifyMcpSidecar({
-    chmodFile,
-    compile: compileMcp,
-    plan,
-    platform: input.platform,
-  });
-
-  return {
-    plan,
-    sidecars: [mcpSidecar],
-  };
-};
+}> =>
+  runElectronEffect(
+    prepareElectronSidecarsEffect({
+      arch,
+      chmodFile,
+      compileMcp,
+      ...input,
+    }),
+  );
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const electronPackageDirectory = dirname(scriptDirectory);
 const workspaceRoot = resolve(electronPackageDirectory, "../..");
 
 if (import.meta.main) {
-  const prepared = await prepareElectronSidecars({
-    arch: resolveHostReleaseArch(process.arch),
-    electronPackageDirectory,
-    platform: resolveHostReleasePlatform(process.platform),
-    workspaceRoot,
-  });
-  for (const sidecar of prepared.sidecars) {
-    console.log(
-      `Prepared ${electronSidecarDisplayName(sidecar.id)} sidecar: ${sidecar.outputPath}`,
-    );
+  try {
+    const prepared = await prepareElectronSidecars({
+      arch: resolveHostReleaseArch(process.arch),
+      electronPackageDirectory,
+      platform: resolveHostReleasePlatform(process.platform),
+      workspaceRoot,
+    });
+    for (const sidecar of prepared.sidecars) {
+      console.log(
+        `Prepared ${electronSidecarDisplayName(sidecar.id)} sidecar: ${sidecar.outputPath}`,
+      );
+    }
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
   }
 }

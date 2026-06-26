@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ElectronOperationError, ElectronValidationError } from "../effect/electron-errors";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -6,6 +7,15 @@ import {
   readLocalAttachmentPreviewPath,
   registerElectronLocalAttachmentPreviewProtocol,
 } from "./electron-local-attachment-preview";
+
+const captureThrown = (action: () => unknown): unknown => {
+  try {
+    action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected action to fail.");
+};
 
 describe("electron local attachment previews", () => {
   test("creates an app protocol URL for staged attachment paths", () => {
@@ -22,22 +32,48 @@ describe("electron local attachment previews", () => {
   });
 
   test("rejects missing or malformed preview paths", () => {
-    expect(() => readLocalAttachmentPreviewPath("  ")).toThrow(
-      "Local attachment preview path must be a non-empty string.",
-    );
-    expect(() => readLocalAttachmentPreviewPath(null)).toThrow(
-      "Local attachment preview path must be a non-empty string.",
-    );
-    expect(() =>
+    const blankPathError = captureThrown(() => readLocalAttachmentPreviewPath("  "));
+
+    expect(blankPathError).toBeInstanceOf(ElectronValidationError);
+    expect(blankPathError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.read-path",
+      message: "Local attachment preview path must be a non-empty string.",
+    });
+    const nullPathError = captureThrown(() => readLocalAttachmentPreviewPath(null));
+    expect(nullPathError).toBeInstanceOf(ElectronValidationError);
+    expect(nullPathError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.read-path",
+      field: "path",
+      message: "Local attachment preview path must be a non-empty string.",
+    });
+
+    const invalidUrlError = captureThrown(() =>
       readElectronLocalAttachmentPreviewRequestPath(
         "file:///tmp/openducktor-local-attachments/a.png",
       ),
-    ).toThrow("Invalid local attachment preview URL.");
-    expect(() =>
+    );
+    expect(invalidUrlError).toBeInstanceOf(ElectronValidationError);
+    expect(invalidUrlError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.validate-url",
+      field: "url",
+      message: "Invalid local attachment preview URL.",
+    });
+
+    const malformedUrlError = captureThrown(() =>
       readElectronLocalAttachmentPreviewRequestPath(
         `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://preview/%`,
       ),
-    ).toThrow("Invalid local attachment preview URL.");
+    );
+    expect(malformedUrlError).toBeInstanceOf(ElectronValidationError);
+    expect(malformedUrlError).toMatchObject({
+      _tag: "ElectronValidationError",
+      operation: "electron.preview.decode-url-path",
+      field: "url",
+      message: "Invalid local attachment preview URL.",
+    });
   });
 
   test("resolves the protocol request through the host before serving the file", async () => {
@@ -129,7 +165,11 @@ describe("electron local attachment previews", () => {
         },
       },
       async resolveLocalAttachmentPath() {
-        throw new Error("Attachment path is not a staged local attachment.");
+        throw new ElectronValidationError({
+          operation: "electron.preview.resolve-host-path",
+          message: "Attachment path is not a staged local attachment.",
+          field: "path",
+        });
       },
     });
 
@@ -145,6 +185,79 @@ describe("electron local attachment previews", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toBe("Attachment path is not a staged local attachment.");
+  });
+
+  test("returns structured error responses for host resolver operation failures", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run when host resolution fails.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        throw new ElectronOperationError({
+          operation: "electron.preview.resolve-host-path",
+          message: "Host command router failed.",
+        });
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/staged.png"),
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Host command router failed.");
+  });
+
+  test("returns structured error responses for invalid host resolver return shapes", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run when resolution returns an invalid shape.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        return null;
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/staged.png"),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe("Local attachment preview path must be a non-empty string.");
   });
 
   test("returns structured error responses for preview file serving failures", async () => {

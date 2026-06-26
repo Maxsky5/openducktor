@@ -1,4 +1,10 @@
 import { pathToFileURL } from "node:url";
+import { Cause, Chunk, Effect, Exit, Option } from "effect";
+import {
+  ElectronOperationError,
+  ElectronValidationError,
+  errorMessage,
+} from "../effect/electron-errors";
 
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL = "openducktor-local-attachment";
 
@@ -18,17 +24,38 @@ type ElectronPreviewNet = {
 
 type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   net: ElectronPreviewNet;
-  resolveLocalAttachmentPath: (filePath: string) => Promise<string>;
+  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>;
   session: ElectronPreviewSession;
 };
 
 export const readLocalAttachmentPreviewPath = (filePath: unknown): string => {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
-    throw new Error("Local attachment preview path must be a non-empty string.");
+    throw new ElectronValidationError({
+      operation: "electron.preview.read-path",
+      message: "Local attachment preview path must be a non-empty string.",
+      field: "path",
+      details: { valueType: typeof filePath },
+    });
   }
 
   return filePath.trim();
 };
+
+export const readLocalAttachmentPreviewPathEffect = (
+  filePath: unknown,
+): Effect.Effect<string, ElectronValidationError> =>
+  Effect.try({
+    try: () => readLocalAttachmentPreviewPath(filePath),
+    catch: (cause) =>
+      cause instanceof ElectronValidationError
+        ? cause
+        : new ElectronValidationError({
+            operation: "electron.preview.read-path",
+            message: errorMessage(cause),
+            field: "path",
+            cause,
+          }),
+  });
 
 export const createElectronLocalAttachmentPreviewUrl = (filePath: string): string => {
   const previewPath = readLocalAttachmentPreviewPath(filePath);
@@ -40,36 +67,121 @@ export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string
   try {
     parsedUrl = new URL(requestUrl);
   } catch {
-    throw new Error("Invalid local attachment preview URL.");
+    throw new ElectronValidationError({
+      operation: "electron.preview.parse-url",
+      message: "Invalid local attachment preview URL.",
+      field: "url",
+      details: { requestUrl },
+    });
   }
 
   if (
     parsedUrl.protocol !== `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}:` ||
     parsedUrl.hostname !== ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST
   ) {
-    throw new Error("Invalid local attachment preview URL.");
+    throw new ElectronValidationError({
+      operation: "electron.preview.validate-url",
+      message: "Invalid local attachment preview URL.",
+      field: "url",
+      details: { requestUrl },
+    });
   }
 
   const encodedPath = parsedUrl.pathname.startsWith("/")
     ? parsedUrl.pathname.slice(1)
     : parsedUrl.pathname;
   if (encodedPath.length === 0) {
-    throw new Error("Local attachment preview path must be a non-empty string.");
+    throw new ElectronValidationError({
+      operation: "electron.preview.validate-url-path",
+      message: "Local attachment preview path must be a non-empty string.",
+      field: "path",
+      details: { requestUrl },
+    });
   }
 
   try {
     return readLocalAttachmentPreviewPath(decodeURIComponent(encodedPath));
   } catch (error) {
     if (error instanceof URIError) {
-      throw new Error("Invalid local attachment preview URL.");
+      throw new ElectronValidationError({
+        operation: "electron.preview.decode-url-path",
+        message: "Invalid local attachment preview URL.",
+        field: "url",
+        cause: error,
+        details: { requestUrl },
+      });
     }
     throw error;
   }
 };
 
+export const readElectronLocalAttachmentPreviewRequestPathEffect = (
+  requestUrl: string,
+): Effect.Effect<string, ElectronValidationError> =>
+  Effect.try({
+    try: () => readElectronLocalAttachmentPreviewRequestPath(requestUrl),
+    catch: (cause) =>
+      cause instanceof ElectronValidationError
+        ? cause
+        : new ElectronValidationError({
+            operation: "electron.preview.read-request-path",
+            message: errorMessage(cause),
+            field: "url",
+            cause,
+            details: { requestUrl },
+          }),
+  });
+
 const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 | 500): Response =>
-  new Response(error instanceof Error ? error.message : "Local attachment preview failed.", {
+  new Response(errorMessage(error) || "Local attachment preview failed.", {
     status,
+  });
+
+const resolveLocalAttachmentPathEffect = (
+  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>,
+  requestedPath: string,
+): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
+  Effect.tryPromise({
+    try: () => resolveLocalAttachmentPath(requestedPath),
+    catch: (cause) =>
+      cause instanceof ElectronValidationError || cause instanceof ElectronOperationError
+        ? cause
+        : new ElectronOperationError({
+            operation: "electron.preview.resolve-path",
+            message: errorMessage(cause),
+            path: requestedPath,
+            cause,
+          }),
+  }).pipe(
+    Effect.flatMap((resolvedPath) =>
+      readLocalAttachmentPreviewPathEffect(resolvedPath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ElectronValidationError({
+              operation: "electron.preview.validate-resolved-path",
+              message: cause.message,
+              field: "path",
+              cause,
+              details: { requestedPath },
+            }),
+        ),
+      ),
+    ),
+  );
+
+const fetchLocalAttachmentPreviewEffect = (
+  net: ElectronPreviewNet,
+  resolvedPath: string,
+): Effect.Effect<Response, ElectronOperationError> =>
+  Effect.tryPromise({
+    try: () => net.fetch(pathToFileURL(resolvedPath).href),
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.preview.fetch-file",
+        message: errorMessage(cause),
+        path: resolvedPath,
+        cause,
+      }),
   });
 
 export const registerElectronLocalAttachmentPreviewProtocol = ({
@@ -78,26 +190,34 @@ export const registerElectronLocalAttachmentPreviewProtocol = ({
   session,
 }: RegisterElectronLocalAttachmentPreviewProtocolInput): void => {
   session.protocol.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL, async (request) => {
-    let requestedPath: string;
-    try {
-      requestedPath = readElectronLocalAttachmentPreviewRequestPath(request.url);
-    } catch (error) {
-      return createLocalAttachmentPreviewErrorResponse(error, 400);
-    }
-
-    let resolvedPath: string;
-    try {
-      resolvedPath = readLocalAttachmentPreviewPath(
-        await resolveLocalAttachmentPath(requestedPath),
+    const effect = Effect.gen(function* () {
+      const requestedPath = yield* readElectronLocalAttachmentPreviewRequestPathEffect(request.url);
+      const resolvedPath = yield* resolveLocalAttachmentPathEffect(
+        resolveLocalAttachmentPath,
+        requestedPath,
       );
-    } catch (error) {
-      return createLocalAttachmentPreviewErrorResponse(error, 400);
+      return yield* fetchLocalAttachmentPreviewEffect(net, resolvedPath);
+    });
+
+    const exit = await Effect.runPromiseExit(effect);
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
     }
 
-    try {
-      return await net.fetch(pathToFileURL(resolvedPath).href);
-    } catch (error) {
-      return createLocalAttachmentPreviewErrorResponse(error, 500);
+    const firstFailure = Chunk.head(Cause.failures(exit.cause));
+    if (Option.isSome(firstFailure) && firstFailure.value instanceof ElectronValidationError) {
+      return createLocalAttachmentPreviewErrorResponse(firstFailure.value, 400);
     }
+    if (Option.isSome(firstFailure)) {
+      return createLocalAttachmentPreviewErrorResponse(firstFailure.value, 500);
+    }
+    return createLocalAttachmentPreviewErrorResponse(
+      new ElectronOperationError({
+        operation: "electron.preview.handle-request",
+        message: "Local attachment preview failed.",
+        details: { defect: true },
+      }),
+      500,
+    );
   });
 };

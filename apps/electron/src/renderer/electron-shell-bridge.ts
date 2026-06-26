@@ -7,12 +7,19 @@ const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
 
+export class ElectronPreloadBridgeUnavailableError extends Error {
+  constructor() {
+    super(
+      "OpenDucktor Electron preload bridge is unavailable. Check that BrowserWindow webPreferences.preload points to the built preload.cjs file.",
+    );
+    this.name = "ElectronPreloadBridgeUnavailableError";
+  }
+}
+
 const getElectronApi = (): OpenDucktorElectronApi => {
   const electronApi = window.openducktorElectron;
   if (!electronApi) {
-    throw new Error(
-      "OpenDucktor Electron preload bridge is unavailable. Check that BrowserWindow webPreferences.preload points to the built preload.cjs file.",
-    );
+    throw new ElectronPreloadBridgeUnavailableError();
   }
 
   return electronApi;
