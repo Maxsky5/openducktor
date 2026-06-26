@@ -18,6 +18,7 @@ import {
   bindSubagentExternalSession,
   emitSessionIdle,
   flushPendingSubagentInputEventsForSession,
+  isSessionUserMessageTurnStartPending,
   markSessionActive,
   markSessionIdle,
   readEventDirectory,
@@ -232,6 +233,9 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
     if (status.type === "busy") {
       markSessionActive(runtime);
     } else {
+      if (isSessionUserMessageTurnStartPending(runtime)) {
+        return true;
+      }
       markSessionIdle(runtime);
       publishUserMessageReadStateChanges(runtime);
     }
@@ -358,6 +362,7 @@ const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boo
   }
 
   const properties = readEventProperties(event);
+  markSessionIdle(runtime);
   runtime.emit(runtime.externalSessionId, {
     type: "session_error",
     externalSessionId: runtime.externalSessionId,
@@ -372,6 +377,9 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
     return false;
   }
 
+  if (isSessionUserMessageTurnStartPending(runtime)) {
+    return true;
+  }
   emitSessionIdle(runtime);
   publishUserMessageReadStateChanges(runtime);
   return true;

@@ -9,6 +9,7 @@ export const markStreamTurnActive = (session: SessionRecord | undefined): void =
     return;
   }
   session.streamTurnStatus = "active";
+  session.isAwaitingRuntimeTurnStart = false;
 };
 
 export const markStreamTurnIdle = (session: SessionRecord | undefined): void => {
@@ -16,11 +17,13 @@ export const markStreamTurnIdle = (session: SessionRecord | undefined): void => 
     return;
   }
   session.streamTurnStatus = "idle";
+  session.isAwaitingRuntimeTurnStart = false;
   session.activeAssistantMessageId = null;
 };
 
 export const startUserMessageSend = (session: SessionRecord): void => {
   session.isSendingUserMessage = true;
+  session.isAwaitingRuntimeTurnStart = true;
 };
 
 export const finishUserMessageSend = (session: SessionRecord): void => {
@@ -31,6 +34,21 @@ export const isUserMessageSendInFlight = (session: SessionRecord | undefined): b
   return session?.isSendingUserMessage === true;
 };
 
+export const isUserMessageTurnStartPending = (session: SessionRecord | undefined): boolean => {
+  return session?.isSendingUserMessage === true || session?.isAwaitingRuntimeTurnStart === true;
+};
+
+export const clearUserMessageTurnStartPending = (session: SessionRecord | undefined): void => {
+  if (!session) {
+    return;
+  }
+  session.isAwaitingRuntimeTurnStart = false;
+};
+
 export const isLocalSessionBusy = (session: SessionRecord): boolean => {
-  return session.isSendingUserMessage || session.streamTurnStatus === "active";
+  return (
+    session.isSendingUserMessage ||
+    session.isAwaitingRuntimeTurnStart ||
+    session.streamTurnStatus === "active"
+  );
 };

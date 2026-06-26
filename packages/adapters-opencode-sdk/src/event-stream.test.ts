@@ -1506,6 +1506,56 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(0);
   });
 
+  test("ignores session.status idle while a user message send is still in flight", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [makeSessionStatusIdleEvent()],
+      (session) => {
+        session.isSendingUserMessage = true;
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_status")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
+    expect(sessionRecord.streamTurnStatus).toBe("active");
+  });
+
+  test("ignores OpenCode idle events while waiting for runtime turn start", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [makeSessionStatusIdleEvent(), makeSessionIdleEvent()],
+      (session) => {
+        session.isAwaitingRuntimeTurnStart = true;
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_status")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
+    expect(sessionRecord.streamTurnStatus).toBe("active");
+    expect(sessionRecord.isAwaitingRuntimeTurnStart).toBe(true);
+  });
+
+  test("terminal assistant events clear pending turn start even when stream status is idle", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        makeAssistantMessageUpdatedEvent({
+          messageId: "assistant-message-pending-terminal",
+          finish: "stop",
+          completedAt: 1,
+          text: "Done after pending turn",
+          partId: "text-pending-terminal-1",
+        }),
+      ],
+      (session) => {
+        session.streamTurnStatus = "idle";
+        session.isAwaitingRuntimeTurnStart = true;
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(sessionRecord.isAwaitingRuntimeTurnStart).toBe(false);
+    expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
   test("keeps late terminal part updates out of assistant_part emission once idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
@@ -2764,15 +2814,20 @@ describe("event-stream", () => {
   });
 
   test("normalizes unknown session error payload", async () => {
-    const emitted = await runEventStream([
-      {
-        type: "session.error",
-        properties: {
-          sessionID: "external-session-1",
-          error: { data: {} },
-        },
-      } as unknown as Event,
-    ]);
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "session.error",
+          properties: {
+            sessionID: "external-session-1",
+            error: { data: {} },
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.isAwaitingRuntimeTurnStart = true;
+      },
+    );
 
     const errors = emitted.filter((event) => event.type === "session_error");
     expect(errors).toHaveLength(1);
@@ -2780,6 +2835,8 @@ describe("event-stream", () => {
       throw new Error("Expected session_error event");
     }
     expect(errors[0].message).toBe("Unknown session error");
+    expect(sessionRecord.isAwaitingRuntimeTurnStart).toBe(false);
+    expect(sessionRecord.streamTurnStatus).toBe("idle");
   });
 
   test("does not replay duplicate delta after suppressed known user-part update", async () => {

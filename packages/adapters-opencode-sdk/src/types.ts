@@ -51,6 +51,7 @@ export type SessionRecord = {
   runtimeId: string;
   streamTurnStatus: SessionStreamTurnStatus;
   isSendingUserMessage: boolean;
+  isAwaitingRuntimeTurnStart: boolean;
   activeAssistantMessageId: string | null;
   completedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;

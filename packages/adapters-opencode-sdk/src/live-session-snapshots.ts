@@ -8,7 +8,11 @@ import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { readStringProp } from "./guards";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
-import { isLocalSessionBusy, isUserMessageSendInFlight } from "./session-activity";
+import {
+  clearUserMessageTurnStartPending,
+  isLocalSessionBusy,
+  isUserMessageTurnStartPending,
+} from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, SessionRecord } from "./types";
 
@@ -122,12 +126,20 @@ export const applyOpencodeInFlightSendToRuntimeSnapshot = ({
   snapshot,
 }: ApplyOpencodeInFlightSendToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
   const localSession = sessions.get(snapshot.externalSessionId);
-  if (
-    !localSession ||
-    localSession.runtimeId !== runtimeId ||
-    !isUserMessageSendInFlight(localSession) ||
-    snapshot.runtimeActivity !== "idle"
-  ) {
+  if (!localSession || localSession.runtimeId !== runtimeId) {
+    return snapshot;
+  }
+
+  const hasRuntimeTurnStartEvidence =
+    snapshot.runtimeActivity !== "idle" ||
+    snapshot.pendingApprovals.length > 0 ||
+    snapshot.pendingQuestions.length > 0;
+  if (hasRuntimeTurnStartEvidence) {
+    clearUserMessageTurnStartPending(localSession);
+    return snapshot;
+  }
+
+  if (!isUserMessageTurnStartPending(localSession)) {
     return snapshot;
   }
 
