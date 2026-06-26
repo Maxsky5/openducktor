@@ -29,4 +29,18 @@ describe("web Effect boundary errors", () => {
 
     expect(causeToWebBoundaryError(exit.cause)).toBe(failure);
   });
+
+  test("preserves mixed causes instead of unwrapping their typed failure", () => {
+    const failure = new WebValidationError({ field: "name", message: "name failed" });
+    const cause = Cause.sequential(Cause.fail(failure), Cause.die(new Error("unexpected")));
+
+    const error = causeToWebBoundaryError(cause);
+
+    expect(error).toBeInstanceOf(WebOperationError);
+    expect(error).toMatchObject({
+      _tag: "WebOperationError",
+      details: { defect: true, failureMessages: ["name failed"] },
+    });
+    expect(Reflect.get(error, "cause")).toBe(cause);
+  });
 });

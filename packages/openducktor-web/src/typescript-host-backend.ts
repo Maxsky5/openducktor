@@ -428,6 +428,7 @@ const routeCorsRequest = ({
   request,
   requestTimeouts,
   shutdownStarted,
+  beginShutdown,
   stop,
 }: {
   appToken: string;
@@ -439,6 +440,7 @@ const routeCorsRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
+  beginShutdown: () => void;
   stop: () => Promise<void>;
 }): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
@@ -463,6 +465,7 @@ const routeCorsRequest = ({
     if (requestUrl.pathname === "/shutdown" && request.method === "POST") {
       yield* validateControlToken(request, controlToken);
       yield* Effect.sync(() => {
+        beginShutdown();
         setTimeout(() => {
           void stop().catch((error: unknown) => {
             logError(errorMessage(error));
@@ -536,6 +539,7 @@ export const handleTypescriptHostBackendRequest = ({
   request,
   requestTimeouts,
   shutdownStarted,
+  beginShutdown,
   stop,
 }: {
   allowedOrigins: Set<string>;
@@ -547,6 +551,7 @@ export const handleTypescriptHostBackendRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
+  beginShutdown: () => void;
   stop: () => Promise<void>;
 }): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -569,6 +574,7 @@ export const handleTypescriptHostBackendRequest = ({
       request,
       requestTimeouts,
       shutdownStarted,
+      beginShutdown,
       stop,
     }).pipe(
       Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
@@ -601,6 +607,9 @@ export const startTypescriptHostBackendEffect = ({
       runtimeDistribution,
     });
     let shutdownStarted = false;
+    const beginShutdown = (): void => {
+      shutdownStarted = true;
+    };
     let stopPromise: Promise<void> | null = null;
     let resolveExited: (exitCode: number) => void = () => {};
     let server: TypescriptHostBackendServer;
@@ -612,7 +621,7 @@ export const startTypescriptHostBackendEffect = ({
       if (stopPromise) {
         return stopPromise;
       }
-      shutdownStarted = true;
+      beginShutdown();
       stopPromise = stopTypescriptHostBackendServices({
         disposeHost: () => hostCommandRouter.dispose(),
         resolveExited,
@@ -654,6 +663,7 @@ export const startTypescriptHostBackendEffect = ({
                     request,
                     requestTimeouts: server,
                     shutdownStarted,
+                    beginShutdown,
                     stop,
                   }),
                 );

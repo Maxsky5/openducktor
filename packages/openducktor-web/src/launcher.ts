@@ -422,7 +422,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
 
                 const stopExit = yield* Effect.exit(stopEffect());
                 if (stopExit._tag === "Failure") {
-                  return yield* causeToWebBoundaryError(stopExit.cause);
+                  logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
                 }
                 return yield* causeToWebBoundaryError(launcherExit.cause);
               }),

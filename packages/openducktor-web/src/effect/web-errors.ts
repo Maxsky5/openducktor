@@ -86,10 +86,14 @@ export const causeToWebBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
 ): Failure | WebOperationError => {
   const failures = Array.from(Cause.failures(cause));
-  if (failures.length === 1) {
-    return failures[0] as Failure;
+  const hasOnlyTypedFailures = !Cause.isDie(cause) && !Cause.isInterrupted(cause);
+  if (failures.length === 1 && hasOnlyTypedFailures) {
+    const firstFailure = failures[0];
+    if (firstFailure !== undefined) {
+      return firstFailure;
+    }
   }
-  if (failures.length > 1) {
+  if (failures.length > 1 && hasOnlyTypedFailures) {
     return new WebOperationError({
       operation: "web.effect.run",
       message: "Multiple Effect failures crossed the web boundary.",
@@ -101,7 +105,12 @@ export const causeToWebBoundaryError = <Failure>(
   return new WebOperationError({
     operation: "web.effect.run",
     message: Cause.pretty(cause),
-    details: { defect: true },
+    cause,
+    details: {
+      defect: Cause.isDie(cause),
+      failureMessages: failures.map(errorMessage),
+      interrupted: Cause.isInterrupted(cause),
+    },
   });
 };
 

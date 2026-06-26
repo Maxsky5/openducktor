@@ -155,8 +155,9 @@ describe("createLocalHostClient", () => {
         }),
     ) as unknown as typeof globalThis.fetch;
 
-    await expect(ensureLocalHostSession()).rejects.toThrow("Session rejected");
-    await expect(ensureLocalHostSession()).rejects.toMatchObject({
+    const session = ensureLocalHostSession();
+    await expect(session).rejects.toThrow("Session rejected");
+    await expect(session).rejects.toMatchObject({
       _tag: "WebHostRequestError",
     });
   });

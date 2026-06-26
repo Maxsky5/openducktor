@@ -36,6 +36,14 @@ describe("web CLI argument parsing", () => {
     expect(parseMissingPort).toThrow("Missing value for --port.");
     expect(parseMissingPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
 
+    const parseFlagAsPort = () => parseCliArgs(["--port", "--backend-port", "14328"]);
+    expect(parseFlagAsPort).toThrow("Missing value for --port.");
+    expect(parseFlagAsPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseFlagAsBackendPort = () => parseCliArgs(["--backend-port", "--workspace"]);
+    expect(parseFlagAsBackendPort).toThrow("Missing value for --backend-port.");
+    expect(parseFlagAsBackendPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
     const parseUnknownOption = () => parseCliArgs(["--unexpected"]);
     expect(parseUnknownOption).toThrow("Unknown option: --unexpected");
     expect(parseUnknownOption).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));

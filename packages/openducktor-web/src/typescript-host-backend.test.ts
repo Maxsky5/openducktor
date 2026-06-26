@@ -58,6 +58,8 @@ const handleTestRequest = (
     appToken: string;
     controlToken: string;
     hostCommandRouter: EffectHostCommandRouter;
+    beginShutdown: () => void;
+    shutdownStarted: boolean;
     stop: () => Promise<void>;
   }> = {},
 ): Promise<Response> =>
@@ -70,7 +72,8 @@ const handleTestRequest = (
       hostCommandRouter: options.hostCommandRouter ?? createTestHostCommandRouter(),
       localAttachments: createLocalAttachmentAdapter(),
       request,
-      shutdownStarted: false,
+      shutdownStarted: options.shutdownStarted ?? false,
+      beginShutdown: options.beginShutdown ?? (() => {}),
       stop: options.stop ?? (async () => {}),
     }),
   );
@@ -281,6 +284,30 @@ describe("TypeScript web host backend", () => {
       error: "Invalid OpenDucktor web host app token.",
       message: "Invalid OpenDucktor web host app token.",
     });
+  });
+
+  test("marks shutdown as started before deferred host teardown runs", async () => {
+    let shutdownStarted = false;
+    let stopCalls = 0;
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/shutdown", {
+        method: "POST",
+        headers: { "x-openducktor-control-token": CONTROL_TOKEN },
+      }),
+      {
+        beginShutdown: () => {
+          shutdownStarted = true;
+        },
+        stop: async () => {
+          stopCalls += 1;
+        },
+      },
+    );
+
+    expect(response.status).toBe(202);
+    expect(shutdownStarted).toBe(true);
+    expect(stopCalls).toBe(0);
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {

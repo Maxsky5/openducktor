@@ -119,7 +119,7 @@ export class BufferedHostEventBus implements HostEventBusPort {
     }
     throw new WebResourceError({
       resource: "host-event-channel",
-      operation: "browser-event-bus.require-channel",
+      operation: "host-event-bus.require-channel",
       message: `Unknown OpenDucktor host event channel: ${channel}`,
       details: { channel },
     });

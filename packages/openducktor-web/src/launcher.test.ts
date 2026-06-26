@@ -52,13 +52,13 @@ describe("launcher internals", () => {
     await exited;
 
     await expect(
-      waitForBackend("http://127.0.0.1:14327", "app-token", 1_000, createHostProcess(exited), {
+      waitForBackend("http://127.0.0.1:14327", "app-token", 1, createHostProcess(exited), {
         fetch: async () => new Response(null, { status: 503 }),
         sleep: async () => {},
       }),
     ).rejects.toThrow("OpenDucktor web host exited before startup completed with code 9.");
     await expect(
-      waitForBackend("http://127.0.0.1:14327", "app-token", 1_000, createHostProcess(exited), {
+      waitForBackend("http://127.0.0.1:14327", "app-token", 1, createHostProcess(exited), {
         fetch: async () => new Response(null, { status: 503 }),
         sleep: async () => {},
       }),

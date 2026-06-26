@@ -157,7 +157,14 @@ const stopWebCliEffect = (
           details: { signal: 9 },
         }),
     });
-    yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS);
+    if (!(yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS))) {
+      return yield* new WebDependencyError({
+        dependency: "web-cli-process",
+        operation: "force-terminate-timeout",
+        message: `Web CLI process did not exit within ${WEB_STOP_TIMEOUT_MS}ms after SIGKILL.`,
+        details: { signal: 9, timeoutMs: WEB_STOP_TIMEOUT_MS },
+      });
+    }
   });
 
 export const runWebDevEffect = (

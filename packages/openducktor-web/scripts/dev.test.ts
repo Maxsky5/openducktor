@@ -76,5 +76,6 @@ describe("web dev script", () => {
 
     expect(source).toContain("if (cleanupCompleted || webCliExited)");
     expect(source).toContain("keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli))");
+    expect(source).toContain("force-terminate-timeout");
   });
 });

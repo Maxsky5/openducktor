@@ -4,6 +4,7 @@ import { getBrowserBackendUrlEffect } from "./browser-config";
 import { validateExternalBrowserUrlEffect } from "./browser-url-validation";
 import {
   errorMessage,
+  isWebError,
   runWebBoundary,
   WebDependencyError,
   type WebError,
@@ -21,7 +22,7 @@ import {
 const openExternalUrlEffect = (url: string): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const validatedUrl = yield* validateExternalBrowserUrlEffect(url);
-    const opened = yield* Effect.try({
+    yield* Effect.try({
       try: () => window.open(validatedUrl, "_blank", "noopener,noreferrer"),
       catch: (cause) =>
         new WebDependencyError({
@@ -32,14 +33,6 @@ const openExternalUrlEffect = (url: string): Effect.Effect<void, WebError> =>
           details: { url: validatedUrl },
         }),
     });
-    if (!opened) {
-      return yield* new WebDependencyError({
-        dependency: "browser-window",
-        operation: "open-external-url",
-        message: "Browser blocked the external URL window. Allow popups for OpenDucktor web.",
-        details: { url: validatedUrl },
-      });
-    }
   });
 
 const resolveLocalAttachmentPreviewSrcEffect = (
@@ -50,13 +43,15 @@ const resolveLocalAttachmentPreviewSrcEffect = (
     const resolvedPath = yield* Effect.tryPromise({
       try: () => client.workspaceResolveLocalAttachmentPath({ path }),
       catch: (cause) =>
-        new WebDependencyError({
-          dependency: "local-web-host",
-          operation: "resolve-local-attachment-path",
-          message: errorMessage(cause),
-          cause,
-          details: { path },
-        }),
+        isWebError(cause)
+          ? cause
+          : new WebDependencyError({
+              dependency: "local-web-host",
+              operation: "resolve-local-attachment-path",
+              message: errorMessage(cause),
+              cause,
+              details: { path },
+            }),
     });
     yield* ensureLocalHostSessionDedupedEffect();
     return buildLocalAttachmentPreviewUrl(yield* getBrowserBackendUrlEffect(), resolvedPath.path);

@@ -34,6 +34,13 @@ const invalidPortError = (raw: string, flag: string): WebValidationError =>
     details: { raw },
   });
 
+const isKnownCliFlag = (value: string | undefined): boolean =>
+  value === "--workspace" ||
+  value === "--port" ||
+  value === "--backend-port" ||
+  value === "-h" ||
+  value === "--help";
+
 const parsePortEffect = (
   raw: string | undefined,
   flag: string,
@@ -71,12 +78,26 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
         continue;
       }
       if (arg === "--port") {
-        options.frontendPort = yield* parsePortEffect(args[index + 1], "--port");
+        const value = args[index + 1];
+        if (isKnownCliFlag(value)) {
+          return yield* new WebValidationError({
+            message: "Missing value for --port.",
+            field: "--port",
+          });
+        }
+        options.frontendPort = yield* parsePortEffect(value, "--port");
         index += 1;
         continue;
       }
       if (arg === "--backend-port") {
-        options.backendPort = yield* parsePortEffect(args[index + 1], "--backend-port");
+        const value = args[index + 1];
+        if (isKnownCliFlag(value)) {
+          return yield* new WebValidationError({
+            message: "Missing value for --backend-port.",
+            field: "--backend-port",
+          });
+        }
+        options.backendPort = yield* parsePortEffect(value, "--backend-port");
         index += 1;
         continue;
       }
