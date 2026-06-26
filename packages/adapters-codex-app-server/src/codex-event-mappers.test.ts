@@ -305,6 +305,73 @@ describe("Codex subagent event mapper", () => {
     ]);
   });
 
+  test("keeps interrupted Codex subagents resumable", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const ctx = {
+      source: "live" as const,
+      threadId: "parent-thread",
+      timestamp: "2026-05-09T00:00:00.000Z",
+    };
+    const interruptedEvents = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "wait-1",
+            tool: "wait",
+            status: "completed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: ["child-thread"],
+            prompt: null,
+            agentsStates: {
+              "child-thread": { status: "interrupted", message: "Paused for input" },
+            },
+          },
+        },
+        ctx,
+      ),
+    );
+
+    expect(projectedSubagents(interruptedEvents)).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        status: "running",
+        description: "Paused for input",
+        externalSessionId: "child-thread",
+      }),
+    ]);
+
+    const resumedEvents = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "resume-1",
+            tool: "resumeAgent",
+            status: "completed",
+            senderThreadId: "parent-thread",
+            receiverThreadIds: ["child-thread"],
+            prompt: null,
+            agentsStates: {
+              "child-thread": { status: "running", message: null },
+            },
+          },
+        },
+        ctx,
+      ),
+    );
+
+    expect(projectedSubagents(resumedEvents)).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        status: "running",
+        externalSessionId: "child-thread",
+      }),
+    ]);
+  });
+
   test("projects thread-read collab items to subagent history instead of generic collab tools", () => {
     const pipeline = createCodexEventMapperPipeline();
     const result = pipeline.runThreadItemResult(

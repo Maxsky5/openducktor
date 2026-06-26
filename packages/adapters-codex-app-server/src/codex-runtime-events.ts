@@ -24,11 +24,16 @@ export type CodexRuntimeStreamEvent = {
 
 export type BufferedCodexRuntimeEvent =
   | { kind: "notification"; notification: CodexNotificationRecord }
-  | { kind: "server_request"; request: CodexServerRequestRecord };
+  | { kind: "server_request"; runtimeId: string; request: CodexServerRequestRecord };
+
+type BufferedCodexServerRequest = {
+  runtimeId: string;
+  request: CodexServerRequestRecord;
+};
 
 export class CodexRuntimeEventBuffer {
   readonly notificationsByThreadId = new Map<string, CodexNotificationRecord[]>();
-  readonly serverRequestsByThreadId = new Map<string, CodexServerRequestRecord[]>();
+  readonly serverRequestsByThreadId = new Map<string, BufferedCodexServerRequest[]>();
 
   takeNotifications(threadId: string): CodexNotificationRecord[] {
     const notifications = this.notificationsByThreadId.get(threadId) ?? [];
@@ -36,14 +41,33 @@ export class CodexRuntimeEventBuffer {
     return notifications;
   }
 
-  takeServerRequests(threadId: string): CodexServerRequestRecord[] {
-    const requests = this.serverRequestsByThreadId.get(threadId) ?? [];
-    this.serverRequestsByThreadId.delete(threadId);
+  takeServerRequests(threadId: string, runtimeId?: string): CodexServerRequestRecord[] {
+    const entries = this.serverRequestsByThreadId.get(threadId) ?? [];
+    if (!runtimeId) {
+      this.serverRequestsByThreadId.delete(threadId);
+      return entries.map((entry) => entry.request);
+    }
+
+    const requests: CodexServerRequestRecord[] = [];
+    const remaining: BufferedCodexServerRequest[] = [];
+    for (const entry of entries) {
+      if (entry.runtimeId === runtimeId) {
+        requests.push(entry.request);
+      } else {
+        remaining.push(entry);
+      }
+    }
+    if (remaining.length > 0) {
+      this.serverRequestsByThreadId.set(threadId, remaining);
+    } else {
+      this.serverRequestsByThreadId.delete(threadId);
+    }
     return requests;
   }
 
-  hasServerRequests(threadId: string): boolean {
-    return (this.serverRequestsByThreadId.get(threadId)?.length ?? 0) > 0;
+  hasServerRequests(threadId: string, runtimeId?: string): boolean {
+    const entries = this.serverRequestsByThreadId.get(threadId) ?? [];
+    return runtimeId ? entries.some((entry) => entry.runtimeId === runtimeId) : entries.length > 0;
   }
 
   clearSession(threadId: string): void {
@@ -61,7 +85,7 @@ export class CodexRuntimeEventBuffer {
 
   bufferRuntimeStreamEvent(
     threadId: string,
-    event: Pick<CodexRuntimeStreamEvent, "kind" | "message">,
+    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "message">,
   ): BufferedCodexRuntimeEvent {
     if (event.kind === "notification") {
       const notification = parseNotificationRecord(event.message);
@@ -70,8 +94,8 @@ export class CodexRuntimeEventBuffer {
     }
 
     const request = parseServerRequestRecord(event.message);
-    this.bufferServerRequestForThread(threadId, request);
-    return { kind: "server_request", request };
+    this.bufferServerRequestForThread(threadId, event.runtimeId, request);
+    return { kind: "server_request", runtimeId: event.runtimeId, request };
   }
 
   private bufferNotificationForThread(threadId: string, notification: CodexNotificationRecord) {
@@ -80,9 +104,13 @@ export class CodexRuntimeEventBuffer {
     this.trimAndStore(this.notificationsByThreadId, threadId, buffered);
   }
 
-  private bufferServerRequestForThread(threadId: string, request: CodexServerRequestRecord) {
+  private bufferServerRequestForThread(
+    threadId: string,
+    runtimeId: string,
+    request: CodexServerRequestRecord,
+  ) {
     const buffered = this.serverRequestsByThreadId.get(threadId) ?? [];
-    buffered.push(request);
+    buffered.push({ runtimeId, request });
     this.trimAndStore(this.serverRequestsByThreadId, threadId, buffered);
   }
 

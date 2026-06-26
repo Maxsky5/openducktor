@@ -120,6 +120,7 @@ const mapAgentStatus = (
     case "completed":
       return text ? { status: "completed", description: text } : { status: "completed" };
     case "interrupted":
+      return text ? { status: "running", description: text } : { status: "running" };
     case "shutdown":
       return text ? { status: "cancelled", description: text } : { status: "cancelled" };
     case "errored":
@@ -183,7 +184,7 @@ const activityKind = (item: Record<string, unknown>): CodexSubagentActivityKind 
 
 const mapActivityStatus = (kind: CodexSubagentActivityKind): StatusMapping => {
   if (kind === "interrupted") {
-    return { status: "cancelled", description: "Subagent interrupted." };
+    return { status: "running", description: "Subagent interrupted." };
   }
   if (kind === "started") {
     return { status: "running", description: "Subagent started." };
@@ -249,6 +250,7 @@ export const codexSubagentPartsFromItem = (
       const mapped = mapAggregateStatus(aggregateStatus, tool);
       return [
         linkState.upsertLink({
+          ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
           parentThreadId,
           itemId,
           status: mapped.status,
@@ -263,6 +265,7 @@ export const codexSubagentPartsFromItem = (
     return receivers.map((childThreadId) => {
       const mapped = statusForChild(item, tool, aggregateStatus, childThreadId);
       return linkState.upsertLink({
+        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
         parentThreadId,
         childThreadId,
         itemId,
@@ -294,6 +297,7 @@ export const codexSubagentPartsFromItem = (
     const mapped = mapActivityStatus(activityKind(item));
     return [
       linkState.upsertLink({
+        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
         parentThreadId,
         childThreadId,
         itemId,

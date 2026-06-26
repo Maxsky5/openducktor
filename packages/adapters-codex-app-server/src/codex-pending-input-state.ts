@@ -34,6 +34,7 @@ export type PendingInputRouteApplication = {
 };
 
 const sameRoute = (a: CodexSubagentRoute, b: CodexSubagentRoute): boolean =>
+  a.runtimeId === b.runtimeId &&
   a.parentExternalSessionId === b.parentExternalSessionId &&
   a.childExternalSessionId === b.childExternalSessionId &&
   a.subagentCorrelationKey === b.subagentCorrelationKey;
@@ -293,6 +294,7 @@ export class CodexPendingInputState {
     return this.applyRoute(
       "approval",
       entry.request.requestId,
+      entry.runtimeId,
       entry.threadId,
       entry.route,
       route,
@@ -307,6 +309,7 @@ export class CodexPendingInputState {
     return this.applyRoute(
       "question",
       entry.request.requestId,
+      entry.runtimeId,
       entry.threadId,
       entry.route,
       route,
@@ -320,12 +323,16 @@ export class CodexPendingInputState {
   private applyRoute(
     kind: "approval" | "question",
     requestId: string,
+    runtimeId: string,
     ownerThreadId: string,
     existingRoute: CodexSubagentRoute | undefined,
     route: CodexSubagentRoute,
     setRoute: (route: CodexSubagentRoute) => void,
     mirrorIndex: Map<string, Set<string>>,
   ): boolean {
+    if (route.runtimeId && route.runtimeId !== runtimeId) {
+      return false;
+    }
     if (ownerThreadId !== route.childExternalSessionId) {
       return false;
     }

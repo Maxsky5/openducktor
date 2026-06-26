@@ -61,6 +61,11 @@ const createSession = (threadId: string): CodexSessionState => ({
   model,
 });
 
+const createSessionForRuntime = (threadId: string, runtimeId: string): CodexSessionState => ({
+  ...createSession(threadId),
+  runtimeId,
+});
+
 const createActiveTurn = (
   threadId: string,
   turnModel: AgentModelSelection = model,
@@ -241,6 +246,71 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(1);
   });
 
+  test("does not let history projection drain live buffered child requests", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      pendingInput,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: 57,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-1",
+              header: "Choose",
+              question: "Proceed?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    runtimeEvents.historyLoadContext().eventMapperPipeline.runThreadItem(
+      {
+        index: 0,
+        timestamp: "2026-06-13T00:00:00.000Z",
+        item: {
+          type: "collabAgentToolCall",
+          id: "spawn-history",
+          tool: "spawnAgent",
+          status: "completed",
+          senderThreadId: "parent-thread",
+          receiverThreadIds: ["child-thread"],
+          agentsStates: {
+            "child-thread": { status: "running" },
+          },
+        },
+      },
+      {
+        source: "thread_read",
+        threadId: "parent-thread",
+        timestamp: "2026-06-13T00:00:00.000Z",
+      },
+    );
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("57")).toBeUndefined();
+    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
+  });
+
   test("applies buffered child request resolutions after route-learned request replay", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
@@ -352,6 +422,145 @@ describe("CodexRuntimeSessionEvents", () => {
         type: "session_error",
         externalSessionId: "parent-thread",
         message: expect.stringContaining("Cannot route Codex server request"),
+      }),
+    );
+  });
+
+  test("emits routed child request processing errors on the loaded parent session", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      subagents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: 58,
+        method: "",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: "parent-thread",
+        message: "Codex app-server server request is missing method.",
+      }),
+    );
+  });
+
+  test("does not drain buffered child requests across runtimes", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    const parentSession = createSessionForRuntime("parent-thread", "runtime-1");
+    const runtimeTwoSession = createSessionForRuntime("runtime-two-thread", "runtime-2");
+    const sessions = new Map([
+      [parentSession.threadId, parentSession],
+      [runtimeTwoSession.threadId, runtimeTwoSession],
+    ]);
+    const sessionEvents = new CodexSessionEventBus();
+    const runtimeTwoEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(runtimeTwoSession), (event) =>
+      runtimeTwoEvents.push(event),
+    );
+    const pendingInput = new CodexPendingInputState();
+    const subagents = new CodexSubagentLinkState();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, next);
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      pendingInput,
+      subagents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    listeners.get("runtime-2")?.({
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: {
+        id: 59,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-1",
+              header: "Choose",
+              question: "Proceed?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("59")).toBeUndefined();
+
+    listeners.get("runtime-2")?.({
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: {
+        id: 60,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-2",
+              header: "Choose",
+              question: "Proceed again?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.question("60")).toBeUndefined();
+    expect(runtimeTwoEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: "runtime-two-thread",
+        message: expect.stringContaining("belongs to runtime 'runtime-1'"),
       }),
     );
   });

@@ -241,7 +241,7 @@ const emitStartedItem = (
   }
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_started", item },
-    { source: "live", threadId: session.threadId, timestamp },
+    { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
   );
   for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
     if (event.type !== "assistant_part") {
@@ -334,6 +334,7 @@ const emitCompletedItem = (
     { kind: "item_completed", item },
     {
       source: "live",
+      runtimeId: session.runtimeId,
       threadId: session.threadId,
       ...(turnId ? { turnId } : {}),
       timestamp,
@@ -469,7 +470,13 @@ export const handleCodexPendingNotifications = async (
           context,
           context.eventMapperPipeline.runLive(
             { kind: "notification", notification },
-            { source: "live", threadId: session.threadId, turnId: usageTurnId, timestamp },
+            {
+              source: "live",
+              runtimeId: session.runtimeId,
+              threadId: session.threadId,
+              turnId: usageTurnId,
+              timestamp,
+            },
           ),
         );
       }
@@ -483,7 +490,13 @@ export const handleCodexPendingNotifications = async (
           context,
           context.eventMapperPipeline.runLive(
             { kind: "notification", notification },
-            { source: "live", threadId: session.threadId, turnId: todoTurnId, timestamp },
+            {
+              source: "live",
+              runtimeId: session.runtimeId,
+              threadId: session.threadId,
+              turnId: todoTurnId,
+              timestamp,
+            },
           ),
         );
       }
@@ -495,6 +508,7 @@ export const handleCodexPendingNotifications = async (
         { kind: "notification", notification },
         {
           source: "live",
+          runtimeId: session.runtimeId,
           threadId: session.threadId,
           ...(notificationTurnId ? { turnId: notificationTurnId } : {}),
           timestamp,
@@ -549,6 +563,7 @@ export const handleCodexPendingNotifications = async (
           { kind: "notification", notification },
           {
             source: "live",
+            runtimeId: session.runtimeId,
             threadId: session.threadId,
             ...(turnId ? { turnId } : {}),
             timestamp,

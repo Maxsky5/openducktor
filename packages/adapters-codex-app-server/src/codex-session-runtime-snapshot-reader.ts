@@ -34,9 +34,10 @@ const threadMatchesDirectories = (thread: CodexThreadSnapshot, directories: Set<
 const recordInventorySubagentLinks = (
   deps: CodexSessionRuntimeSnapshotReaderDeps,
   inventory: CodexThreadInventory,
+  runtimeId: string,
 ): CodexThreadInventory => {
   for (const thread of inventory.threadsById.values()) {
-    deps.subagents.recordThread(thread);
+    deps.subagents.recordThread(thread, runtimeId);
   }
   return inventory;
 };
@@ -52,6 +53,7 @@ const toLocalRuntimeSnapshot = async (
       deps.runtimeClients.clientForRuntime(session.runtimeId),
       session.runtimeId,
     ),
+    session.runtimeId,
   );
   return toRefreshedRuntimeSnapshot({
     session,
@@ -96,6 +98,7 @@ export const listCodexSessionRuntimeSnapshots = async (
         inventory: recordInventorySubagentLinks(
           deps,
           await readRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
+          session.runtimeId,
         ),
         pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
         pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
@@ -111,6 +114,7 @@ export const listCodexSessionRuntimeSnapshots = async (
   const inventory = recordInventorySubagentLinks(
     deps,
     await deps.threadInventory.refresh(client, runtimeId),
+    runtimeId,
   );
   const remoteSnapshots = [...inventory.threadsById.values()]
     .filter((thread) => inventory.loadedIds.has(thread.id))
@@ -141,6 +145,7 @@ export const readCodexSessionRuntimeSnapshot = async (
   const inventory = recordInventorySubagentLinks(
     deps,
     await deps.threadInventory.refresh(client, runtimeId),
+    runtimeId,
   );
   if (!inventory.loadedIds.has(input.externalSessionId)) {
     return missingRuntimeSnapshot(input);

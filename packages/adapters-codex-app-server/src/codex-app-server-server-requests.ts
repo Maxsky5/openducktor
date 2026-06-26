@@ -87,11 +87,26 @@ const resolveRequestRouteContext = (
   const ownerSession =
     context.sessionForThreadId(ownerThreadId) ??
     (ownerThreadId === session.threadId ? session : undefined);
-  const route = context.subagents.routeForChild(ownerThreadId);
+  const route = context.subagents.routeForChild(ownerThreadId, session.runtimeId);
+  if (route?.runtimeId && route.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because its subagent route belongs to runtime '${route.runtimeId}'.`,
+    );
+  }
   const parentSession = route
     ? (context.sessionForThreadId(route.parentExternalSessionId) ??
       (route.parentExternalSessionId === session.threadId ? session : undefined))
     : undefined;
+  if (ownerSession && ownerSession.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because the owner session belongs to runtime '${ownerSession.runtimeId}'.`,
+    );
+  }
+  if (parentSession && parentSession.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because the parent session belongs to runtime '${parentSession.runtimeId}'.`,
+    );
+  }
   const policySession = parentSession ?? ownerSession ?? session;
   return {
     ownerThreadId,
