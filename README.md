@@ -103,17 +103,10 @@ Desktop-managed sessions use that MCP internally, and the same task surface is a
 
 That keeps the workflow task-centric and auditable: agents act through a controlled task interface, while OpenDucktor keeps task state, documents, approvals, and delivery history connected in one place.
 
-## Architecture Notes
-
-OpenDucktor uses shared Zod contracts in `packages/contracts` for public runtime, task, workflow, host-bridge, and MCP payloads. The shared React app lives in `packages/frontend` and uses TanStack Query as the cache and deduplication layer for server-owned reads.
-
-The TypeScript host in `packages/host` is the Effect-native host boundary used by the Electron shell and the local web runner. Effect owns internal host execution concerns such as typed failures, dependency wiring, I/O orchestration, resource lifecycle, and boundary wrapping, while Promise APIs remain at shell-facing transport edges.
-
 ## Current Scope
 
 - Platform support today: macOS is the primary supported desktop target.
 - Windows and Linux: experimental Electron desktop builds. Feedback is welcome, but these builds are not stable yet.
-- The SQLite task store is the V1 task source of truth
 - Supported runtimes today: OpenCode (`opencode`) and Codex (`codex`)
   - OpenCode remains the default runtime.
   - More runtimes may be added through the runtime descriptor and adapter model.
