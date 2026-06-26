@@ -206,19 +206,16 @@ describe("Codex app-server protocol", () => {
 
   test("represents Codex collab and subagent activity thread items", () => {
     const collabItem = {
-      type: "collabAgentToolCall",
+      type: "collabToolCall",
       id: "collab-1",
       tool: "wait",
       status: "failed",
       senderThreadId: "parent-thread",
-      receiverThreadIds: ["child-ok", "child-failed"],
+      receiverThreadId: "child-failed",
       prompt: null,
       model: null,
       reasoningEffort: null,
-      agentsStates: {
-        "child-ok": { status: "completed", message: null },
-        "child-failed": { status: "errored", message: "Tests failed" },
-      },
+      agentStatus: "errored",
     } satisfies CodexAppServerCollabAgentToolCallThreadItem;
     const activityItem = {
       type: "subAgentActivity",
@@ -228,7 +225,7 @@ describe("Codex app-server protocol", () => {
       agentPath: "/root/worker",
     } satisfies CodexAppServerSubAgentActivityThreadItem;
 
-    expect(collabItem.agentsStates["child-failed"]?.status).toBe("errored");
+    expect(collabItem.agentStatus).toBe("errored");
     expect(activityItem.agentThreadId).toBe("child-failed");
   });
 });

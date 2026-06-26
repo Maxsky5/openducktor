@@ -69,8 +69,8 @@ const provisionalCorrelationKey = (parentThreadId: string, itemId: string): stri
 const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
   pending: 0,
   running: 1,
-  completed: 2,
-  cancelled: 3,
+  cancelled: 2,
+  completed: 3,
   error: 4,
 };
 
@@ -155,6 +155,7 @@ export class CodexSubagentLinkState {
       return;
     }
     const agent = preferredAgentLabel(thread);
+    const existing = this.linkForChild(thread.id, runtimeId);
     this.upsertLink({
       ...(runtimeId ? { runtimeId } : {}),
       parentThreadId,
@@ -164,7 +165,9 @@ export class CodexSubagentLinkState {
         thread.status.classification === "running"
           ? "running"
           : thread.status.classification === "idle"
-            ? "completed"
+            ? existing?.status === "cancelled"
+              ? "cancelled"
+              : "completed"
             : "running",
       ...(agent ? { agent } : {}),
       metadata: {

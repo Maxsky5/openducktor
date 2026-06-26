@@ -173,6 +173,9 @@ describe("CodexRuntimeSessionEvents", () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
     const pendingInput = new CodexPendingInputState();
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
@@ -181,6 +184,7 @@ describe("CodexRuntimeSessionEvents", () => {
         return () => undefined;
       },
       sessions,
+      sessionEvents,
       pendingInput,
       subagents,
     });
@@ -210,6 +214,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     expect(pendingInput.question("51")).toBeUndefined();
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
+    expect(emittedEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("Cannot route Codex server request"),
+      }),
+    );
 
     listener?.({
       runtimeId: "runtime-1",
@@ -375,7 +385,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(0);
   });
 
-  test("emits an error for subscribed server requests with no known session or child route", async () => {
+  test("emits an error for subscribed server requests missing an owner thread id", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
@@ -401,7 +411,6 @@ describe("CodexRuntimeSessionEvents", () => {
         id: 54,
         method: "item/tool/requestUserInput",
         params: {
-          threadId: "unknown-thread",
           turnId: "turn-child",
           questions: [
             {
@@ -421,7 +430,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "parent-thread",
-        message: expect.stringContaining("Cannot route Codex server request"),
+        message: expect.stringContaining("missing params.threadId"),
       }),
     );
   });
@@ -556,13 +565,7 @@ describe("CodexRuntimeSessionEvents", () => {
     await flushRuntimeEvents();
 
     expect(pendingInput.question("60")).toBeUndefined();
-    expect(runtimeTwoEvents).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        externalSessionId: "runtime-two-thread",
-        message: expect.stringContaining("belongs to runtime 'runtime-1'"),
-      }),
-    );
+    expect(runtimeTwoEvents).toEqual([]);
   });
 
   test("drains buffered child approvals when an inventory route is known before parent load", async () => {

@@ -72,16 +72,19 @@ export type CodexAppServerCollabAgentState = {
   message: string | null;
 };
 export type CodexAppServerCollabAgentToolCallThreadItem = {
-  type: "collabAgentToolCall";
+  type: "collabAgentToolCall" | "collabToolCall";
   id: string;
   tool: CodexAppServerCollabAgentTool;
   status: CodexAppServerCollabAgentToolCallStatus;
   senderThreadId: string;
-  receiverThreadIds: string[];
-  prompt: string | null;
-  model: string | null;
-  reasoningEffort: CodexAppServerReasoningEffort | null;
-  agentsStates: { [key in string]?: CodexAppServerCollabAgentState };
+  receiverThreadIds?: string[];
+  receiverThreadId?: string | null;
+  newThreadId?: string | null;
+  prompt?: string | null;
+  model?: string | null;
+  reasoningEffort?: CodexAppServerReasoningEffort | null;
+  agentsStates?: { [key in string]?: CodexAppServerCollabAgentState };
+  agentStatus?: CodexAppServerCollabAgentStatus | null;
 };
 export type CodexAppServerSubAgentActivityKind = "started" | "interacted" | "interrupted";
 export type CodexAppServerSubAgentActivityThreadItem = {

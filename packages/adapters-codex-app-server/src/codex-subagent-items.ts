@@ -20,6 +20,8 @@ type StatusMapping = {
   error?: string;
 };
 
+type CodexCollabItemType = "collabAgentToolCall" | "collabToolCall";
+
 export class CodexSubagentItemError extends Error {
   constructor(message: string) {
     super(message);
@@ -91,15 +93,44 @@ const collabCallStatus = (item: Record<string, unknown>): CodexCollabCallStatus 
   return status as CodexCollabCallStatus;
 };
 
-const receiverThreadIds = (item: Record<string, unknown>): string[] =>
-  arrayFromUnknown(item.receiverThreadIds ?? item.receiver_thread_ids).filter(
+const stringArrayField = (value: unknown): string[] =>
+  arrayFromUnknown(value).filter(
     (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );
+
+const receiverThreadIds = (item: Record<string, unknown>): string[] => {
+  const receivers = [
+    ...stringArrayField(item.receiverThreadIds ?? item.receiver_thread_ids),
+    extractStringField(item, ["receiverThreadId", "receiver_thread_id"]),
+    extractStringField(item, ["newThreadId", "new_thread_id"]),
+  ].filter((entry): entry is string => Boolean(entry));
+  return [...new Set(receivers)];
+};
 
 const agentsStates = (item: Record<string, unknown>): Record<string, unknown> => {
   const states = item.agentsStates ?? item.agents_states;
   return isPlainObject(states) ? states : {};
 };
+
+const agentStateForChild = (
+  item: Record<string, unknown>,
+  childThreadId: string,
+): Record<string, unknown> | null => {
+  const state = agentsStates(item)[childThreadId];
+  if (isPlainObject(state)) {
+    return state;
+  }
+  const status = extractStringField(item, ["agentStatus", "agent_status"]);
+  if (!status) {
+    return null;
+  }
+  return {
+    status,
+    message: extractStringField(item, ["agentMessage", "agent_message"]),
+  };
+};
+
+const assertNever = (value: never): never => value;
 
 const mapAgentStatus = (
   item: Record<string, unknown>,
@@ -111,7 +142,8 @@ const mapAgentStatus = (
     throw itemError(item, "unknown collab agent status", { status, childThreadId });
   }
   const text = typeof message === "string" && message.trim().length > 0 ? message : undefined;
-  switch (status as CodexCollabAgentStatus) {
+  const agentStatus = status as CodexCollabAgentStatus;
+  switch (agentStatus) {
     case "pendingInit":
       return { status: "pending" };
     case "running":
@@ -126,8 +158,10 @@ const mapAgentStatus = (
     case "notFound":
       return {
         status: "error",
-        error: text ?? `Codex subagent '${childThreadId}' status is ${status}.`,
+        error: text ?? `Codex subagent '${childThreadId}' status is ${agentStatus}.`,
       };
+    default:
+      return assertNever(agentStatus);
   }
 };
 
@@ -153,8 +187,8 @@ const statusForChild = (
   aggregateStatus: CodexCollabCallStatus,
   childThreadId: string,
 ): StatusMapping => {
-  const state = agentsStates(item)[childThreadId];
-  if (!isPlainObject(state)) {
+  const state = agentStateForChild(item, childThreadId);
+  if (!state) {
     if (tool === "closeAgent" && aggregateStatus === "completed") {
       return { status: "cancelled" };
     }
@@ -206,11 +240,12 @@ const creationDescriptionForPrompt = (
 
 const collabMetadata = (
   item: Record<string, unknown>,
+  source: CodexCollabItemType,
   parentThreadId: string,
   childThreadId?: string,
 ): Record<string, unknown> => ({
   codexSubagent: {
-    source: "collabAgentToolCall",
+    source,
     itemId: extractStringField(item, ["id"]),
     tool: extractStringField(item, ["tool"]),
     parentThreadId,
@@ -222,18 +257,19 @@ const activityMetadata = (
   item: Record<string, unknown>,
   parentThreadId: string,
   childThreadId: string,
-): Record<string, unknown> => ({
-  codexSubagent: {
-    source: "subAgentActivity",
-    itemId: extractStringField(item, ["id"]),
-    kind: extractStringField(item, ["kind"]),
-    parentThreadId,
-    childThreadId,
-    ...(extractStringField(item, ["agentPath", "agent_path"])
-      ? { agentPath: extractStringField(item, ["agentPath", "agent_path"]) }
-      : {}),
-  },
-});
+): Record<string, unknown> => {
+  const agentPath = extractStringField(item, ["agentPath", "agent_path"]);
+  return {
+    codexSubagent: {
+      source: "subAgentActivity",
+      itemId: extractStringField(item, ["id"]),
+      kind: extractStringField(item, ["kind"]),
+      parentThreadId,
+      childThreadId,
+      ...(agentPath ? { agentPath } : {}),
+    },
+  };
+};
 
 export const codexSubagentPartsFromItem = (
   item: Record<string, unknown>,
@@ -241,7 +277,7 @@ export const codexSubagentPartsFromItem = (
   linkState: CodexSubagentLinkState,
 ): AgentStreamPart[] => {
   const type = extractStringField(item, ["type"]);
-  if (type === "collabAgentToolCall") {
+  if (type === "collabAgentToolCall" || type === "collabToolCall") {
     const itemId = requireStringField(item, ["id"], "id");
     const tool = collabTool(item);
     const aggregateStatus = collabCallStatus(item);
@@ -270,7 +306,7 @@ export const codexSubagentPartsFromItem = (
           ...(prompt ? { prompt } : {}),
           ...(creationDescription ? { description: creationDescription } : {}),
           ...(mapped.error ? { error: mapped.error } : {}),
-          metadata: collabMetadata(item, parentThreadId),
+          metadata: collabMetadata(item, type, parentThreadId),
         }),
       ];
     }
@@ -285,7 +321,7 @@ export const codexSubagentPartsFromItem = (
         ...(prompt ? { prompt } : {}),
         ...(creationDescription ? { description: creationDescription } : {}),
         ...(mapped.error ? { error: mapped.error } : {}),
-        metadata: collabMetadata(item, parentThreadId, childThreadId),
+        metadata: collabMetadata(item, type, parentThreadId, childThreadId),
         preferItemCorrelationKey: tool === "spawnAgent",
       });
     });

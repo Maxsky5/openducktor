@@ -87,6 +87,36 @@ class ChildThreadListTransport extends RecordingTransport {
   }
 }
 
+class ParentWithChildThreadListTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "parent-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            preview: "Parent session",
+            status: { type: "active", activeFlags: [] },
+          },
+          {
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_020,
+            preview: "Child subagent",
+            status: { type: "active", activeFlags: [] },
+            parentThreadId: "parent-thread",
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
@@ -1039,6 +1069,64 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
     unsubscribe();
     unsubscribeParent();
+  });
+
+  test("routes child server requests through routes learned from refreshed inventory", async () => {
+    const streamListeners: Array<
+      (event: {
+        runtimeId: string;
+        kind: "notification" | "server_request";
+        message: unknown;
+      }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const transport = new ParentWithChildThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications: mock(async () => [] as unknown[]),
+      drainServerRequests: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("parent-thread"),
+      (event) => events.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: 64,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "child-thread",
+          turnId: "turn-child",
+          questions: [
+            {
+              id: "question-item-1",
+              header: "Choose",
+              question: "Proceed?",
+              options: ["Yes", "No"],
+            },
+          ],
+        },
+      },
+    });
+
+    await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; externalSessionId?: unknown }).type === "question_required" &&
+        (event as { externalSessionId?: unknown }).externalSessionId === "parent-thread" &&
+        (event as { childExternalSessionId?: unknown }).childExternalSessionId === "child-thread",
+    );
+    unsubscribe();
   });
 
   test("does not resurrect an idle local session from stale active thread inventory", async () => {

@@ -47,6 +47,7 @@ import {
   unsupported,
 } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
+import type { CodexThreadInventory } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
@@ -154,6 +155,19 @@ export class CodexAppServerAdapter
 
   private clearThreadInventory(runtimeId: string): void {
     this.threadInventory.clearInventory(runtimeId);
+  }
+
+  private recordInventorySubagentRoutes(
+    inventory: CodexThreadInventory,
+    runtimeId: string,
+    workingDirectory: string,
+  ): void {
+    for (const thread of inventory.threadsById.values()) {
+      if (thread.cwd !== workingDirectory) {
+        continue;
+      }
+      this.subagents.recordThread(thread, runtimeId);
+    }
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -620,6 +634,7 @@ export class CodexAppServerAdapter
     );
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const inventory = await this.threadInventory.refresh(client, runtimeId);
+    this.recordInventorySubagentRoutes(inventory, runtimeId, input.workingDirectory);
     const thread = inventory.threadsById.get(input.externalSessionId);
     if (!thread) {
       if (this.subagents.routeForChild(input.externalSessionId, runtimeId)) {

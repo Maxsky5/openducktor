@@ -33,19 +33,30 @@ const subagentEvents = (
 };
 
 const shouldMapAsSubagentItem = (item: Record<string, unknown>): boolean => {
-  if (!codexItemTypeMatches(item, "collabAgentToolCall")) {
+  const isCollabToolCall =
+    codexItemTypeMatches(item, "collabAgentToolCall") ||
+    codexItemTypeMatches(item, "collabToolCall");
+  if (!isCollabToolCall) {
     return codexItemTypeMatches(item, "subAgentActivity");
   }
 
   const tool = item.tool;
   const receiverThreadIds = item.receiverThreadIds ?? item.receiver_thread_ids;
+  const receiverThreadId =
+    item.receiverThreadId ?? item.receiver_thread_id ?? item.newThreadId ?? item.new_thread_id;
   if (tool === "spawnAgent") {
     return true;
   }
-  if (receiverThreadIds !== undefined && !Array.isArray(receiverThreadIds)) {
+  if (Array.isArray(receiverThreadIds)) {
+    return receiverThreadIds.length > 0;
+  }
+  if (receiverThreadIds !== undefined && receiverThreadIds !== null) {
     return true;
   }
-  return Array.isArray(receiverThreadIds) && receiverThreadIds.length > 0;
+  if (typeof receiverThreadId === "string") {
+    return receiverThreadId.trim().length > 0;
+  }
+  return receiverThreadId !== undefined && receiverThreadId !== null;
 };
 
 export const createSubagentMapper = (linkState: CodexSubagentLinkState): CodexEventMapper => ({

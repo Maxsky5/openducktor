@@ -771,9 +771,13 @@ const codexCollabAgentToolCallStreamParts = (
 ): AgentStreamPart[] => {
   const tool = extractStringField(value, ["tool"]) ?? "collab_agent";
   const prompt = extractStringField(value, ["prompt"]);
-  const receivers = arrayFromUnknown(value.receiverThreadIds ?? value.receiver_thread_ids).filter(
-    (entry): entry is string => typeof entry === "string",
-  );
+  const receivers = [
+    ...arrayFromUnknown(value.receiverThreadIds ?? value.receiver_thread_ids).filter(
+      (entry): entry is string => typeof entry === "string",
+    ),
+    extractStringField(value, ["receiverThreadId", "receiver_thread_id"]),
+    extractStringField(value, ["newThreadId", "new_thread_id"]),
+  ].filter((entry): entry is string => Boolean(entry));
   return [
     syntheticToolPart({
       kind: "tool",
@@ -882,7 +886,10 @@ export const toStreamPart = (
   if (codexItemTypeMatches(value, "mcpToolCall")) {
     return codexMcpToolCallStreamParts(value, messageId, partId);
   }
-  if (codexItemTypeMatches(value, "collabAgentToolCall")) {
+  if (
+    codexItemTypeMatches(value, "collabAgentToolCall") ||
+    codexItemTypeMatches(value, "collabToolCall")
+  ) {
     return codexCollabAgentToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "dynamicToolCall")) {

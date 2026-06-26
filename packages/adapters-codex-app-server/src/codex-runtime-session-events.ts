@@ -270,6 +270,7 @@ export class CodexRuntimeSessionEvents {
         route.runtimeId,
         route.childExternalSessionId,
         parentSession.runtimeId,
+        parentSession.threadId,
       );
       return;
     }
@@ -327,6 +328,7 @@ export class CodexRuntimeSessionEvents {
         route.runtimeId,
         route.childExternalSessionId,
         session.runtimeId,
+        session.threadId,
       );
       return;
     }
@@ -376,34 +378,45 @@ export class CodexRuntimeSessionEvents {
     if (!session) {
       if (event.kind === "server_request") {
         const route = this.deps.subagents.routeForChild(threadId, event.runtimeId);
-        if (route?.runtimeId && route.runtimeId !== event.runtimeId) {
-          this.emitCrossRuntimeRouteError(event.runtimeId, threadId, route.runtimeId);
-          this.bufferRuntimeStreamEvent(threadId, event);
-          return;
-        }
         const parentSession = route
           ? this.deps.sessions.get(route.parentExternalSessionId)
           : undefined;
+        if (route?.runtimeId && route.runtimeId !== event.runtimeId) {
+          this.emitCrossRuntimeRouteError(
+            event.runtimeId,
+            threadId,
+            route.runtimeId,
+            parentSession?.threadId,
+          );
+          this.bufferRuntimeStreamEvent(threadId, event);
+          return;
+        }
         if (parentSession) {
           if (parentSession.runtimeId !== event.runtimeId) {
-            this.emitCrossRuntimeRouteError(event.runtimeId, threadId, parentSession.runtimeId);
+            this.emitCrossRuntimeRouteError(
+              event.runtimeId,
+              threadId,
+              parentSession.runtimeId,
+              parentSession.threadId,
+            );
             this.bufferRuntimeStreamEvent(threadId, event);
             return;
           }
           await this.processRuntimeStreamEventForSession(parentSession, event);
           return;
         }
-        this.emitUnroutableRuntimeServerRequest(
-          event.runtimeId,
-          `Cannot route Codex server request for thread '${threadId}' because there is no known session or subagent route for the request owner.`,
-        );
       }
       this.bufferRuntimeStreamEvent(threadId, event);
       return;
     }
     if (session.runtimeId !== event.runtimeId) {
       if (event.kind === "server_request") {
-        this.emitCrossRuntimeRouteError(event.runtimeId, threadId, session.runtimeId);
+        this.emitCrossRuntimeRouteError(
+          event.runtimeId,
+          threadId,
+          session.runtimeId,
+          session.threadId,
+        );
         this.bufferRuntimeStreamEvent(threadId, event);
       }
       return;
@@ -564,16 +577,19 @@ export class CodexRuntimeSessionEvents {
       this.emitSessionError(parentSession.threadId, error);
       return;
     }
-    this.emitUnroutableRuntimeServerRequest(event.runtimeId, this.errorMessage(error));
   }
 
   private emitCrossRuntimeRouteError(
     runtimeId: string,
     threadId: string,
     ownerRuntimeId: string,
+    targetExternalSessionId?: string,
   ): void {
-    this.emitUnroutableRuntimeServerRequest(
-      runtimeId,
+    if (!targetExternalSessionId) {
+      return;
+    }
+    this.emitSessionError(
+      targetExternalSessionId,
       `Cannot route Codex server request for thread '${threadId}' because the known session or subagent route belongs to runtime '${ownerRuntimeId}', not '${runtimeId}'.`,
     );
   }
