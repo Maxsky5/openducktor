@@ -24,7 +24,7 @@ type ElectronPreviewNet = {
 
 type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   net: ElectronPreviewNet;
-  resolveLocalAttachmentPath: (filePath: string) => Promise<string>;
+  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>;
   session: ElectronPreviewSession;
 };
 
@@ -138,7 +138,7 @@ const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 |
   });
 
 const resolveLocalAttachmentPathEffect = (
-  resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
+  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>,
   requestedPath: string,
 ): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
   Effect.tryPromise({

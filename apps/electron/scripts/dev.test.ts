@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Chunk, Effect, Exit, Fiber } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
@@ -240,7 +240,7 @@ describe("electron dev script", () => {
       },
     };
 
-    await closeRendererServer(rendererServer as never);
+    await closeRendererServer(rendererServer);
 
     expect(closeCalls).toBe(1);
     expect(closeIdleConnectionsCalls).toBe(1);
@@ -264,9 +264,7 @@ describe("electron dev script", () => {
       },
     };
 
-    await expect(closeRendererServer(rendererServer as never)).rejects.toThrow(
-      "renderer close failed",
-    );
+    await expect(closeRendererServer(rendererServer)).rejects.toThrow("renderer close failed");
     expect(closeIdleConnectionsCalls).toBe(1);
     expect(closeAllConnectionsCalls).toBe(1);
   });
@@ -277,7 +275,7 @@ describe("electron dev script", () => {
       close: () => new Promise<void>(() => {}),
     };
 
-    await closeRendererServer(rendererServer as never, async (durationMs) => {
+    await closeRendererServer(rendererServer, async (durationMs) => {
       timeoutMs = durationMs;
     });
 
@@ -294,7 +292,7 @@ describe("electron dev script", () => {
     };
 
     const error = await runElectronEffect(
-      stopElectronEffect(electron as never, async () => undefined),
+      stopElectronEffect(electron, async () => undefined),
     ).catch((caught: unknown) => caught);
 
     expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
@@ -337,13 +335,13 @@ describe("electron dev script", () => {
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer: rendererServer as never,
+        rendererServer,
         startElectronProcess: (rendererDevUrl, electronExecutablePath) => {
           startCalls.push({ executablePath: electronExecutablePath, rendererDevUrl });
           return {
             exited: Promise.resolve(0),
             kill() {},
-          } as never;
+          };
         },
       }),
     );
@@ -371,6 +369,65 @@ describe("electron dev script", () => {
     ]);
   });
 
+  test("cleans up Electron dev lifecycle resources when the Effect is interrupted", async () => {
+    const fakeProcessHandlers = createFakeProcessHandlers();
+    const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+    let closeCalls = 0;
+    let markStarted: () => void = () => {};
+    let resolveElectronExit: (exitCode: number) => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const electronExited = new Promise<number>((resolve) => {
+      resolveElectronExit = resolve;
+    });
+    const rendererServer = {
+      close: async () => {
+        closeCalls += 1;
+      },
+      config: { server: { port: 1430 } },
+      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
+      watcher: {
+        add() {},
+        on() {},
+      },
+    };
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const fiber = yield* Effect.fork(
+          runElectronDevLifecycleEffect({
+            buildBundles: () => Effect.void,
+            electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+            processHandlers: fakeProcessHandlers.processHandlers,
+            rendererDevUrl: "http://127.0.0.1:1430",
+            rendererServer,
+            startElectronProcess: () => {
+              markStarted();
+              return {
+                exited: electronExited,
+                kill(signal?: NodeJS.Signals | number) {
+                  killSignals.push(signal);
+                  resolveElectronExit(0);
+                },
+              };
+            },
+          }),
+        );
+        yield* Effect.promise(() => started);
+        yield* Fiber.interrupt(fiber);
+      }),
+    );
+
+    expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
+    expect(closeCalls).toBe(1);
+    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
+      "SIGTERM",
+      "SIGINT",
+      "exit",
+    ]);
+  });
+
   test("keeps initial lifecycle setup failures in the typed failure channel", async () => {
     const fakeProcessHandlers = createFakeProcessHandlers();
     const setupError = new ElectronOperationError({
@@ -393,7 +450,7 @@ describe("electron dev script", () => {
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer: rendererServer as never,
+        rendererServer,
         startElectronProcess: () => {
           throw new Error("Electron should not launch after setup failure.");
         },
@@ -452,13 +509,13 @@ describe("electron dev script", () => {
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
         rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer: rendererServer as never,
+        rendererServer,
         startElectronProcess: () => {
           startCalls += 1;
           return {
             exited: Promise.resolve(0),
             kill() {},
-          } as never;
+          };
         },
       }),
     );

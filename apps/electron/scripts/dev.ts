@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Exit } from "effect";
-import { createServer, type ViteDevServer } from "vite";
+import { createServer } from "vite";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   resolveRendererDevPortEffect,
@@ -21,14 +21,26 @@ import {
   resolveSqliteTaskStoreMigrationCopyPlan,
 } from "./build";
 
-type ManagedElectronProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+export type ManagedElectronProcess = {
+  readonly exited: Promise<number>;
+  kill(signal?: NodeJS.Signals | number): void;
+};
 type ForceCloseableHttpServer = {
   closeAllConnections?: () => void;
   closeIdleConnections?: () => void;
 };
-type ViteDevServerWithHttpConnections = ViteDevServer & {
-  httpServer?: ForceCloseableHttpServer | null;
+type ElectronDevRendererWatcher = {
+  add(paths: string | readonly string[]): unknown;
+  on(event: "add" | "change" | "unlink", listener: (filePath: string) => void): unknown;
 };
+export type ElectronDevRendererServer = {
+  close(): Promise<void>;
+  config: { server: { port?: number | null } };
+  httpServer?: object | null;
+  resolvedUrls?: { local: string[] } | null;
+  watcher: ElectronDevRendererWatcher;
+};
+type ElectronDevRendererServerHandle = Pick<ElectronDevRendererServer, "close" | "httpServer">;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -396,7 +408,7 @@ export const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperat
   });
 
 const resolveRendererDevUrlEffect = (
-  server: ViteDevServer,
+  server: ElectronDevRendererServer,
 ): Effect.Effect<string, ElectronOperationError> =>
   Effect.try({
     try: () => resolveRendererDevUrl(server),
@@ -418,7 +430,7 @@ const resolveElectronDevExecutablePathEffect = (): Effect.Effect<string, Electro
 
 const createRendererDevServerEffect = (
   port: number,
-): Effect.Effect<ViteDevServer, ElectronOperationError> =>
+): Effect.Effect<ElectronDevRendererServer, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {
       const server = await createServer({
@@ -443,7 +455,7 @@ const createRendererDevServerEffect = (
       }),
   });
 
-const resolveRendererDevUrl = (server: ViteDevServer): string => {
+const resolveRendererDevUrl = (server: ElectronDevRendererServer): string => {
   const localUrl = server.resolvedUrls?.local.find((url) => url.includes(RENDERER_DEV_HOST));
   if (localUrl) {
     return localUrl.replace(/\/$/u, "");
@@ -483,10 +495,23 @@ const startElectron = (
     },
   });
 
-const forceCloseRendererConnections = (server: ViteDevServer): void => {
-  const httpServer = (server as ViteDevServerWithHttpConnections).httpServer;
-  httpServer?.closeIdleConnections?.();
-  httpServer?.closeAllConnections?.();
+const callRendererConnectionCloseMethod = (
+  httpServer: object | null | undefined,
+  method: keyof ForceCloseableHttpServer,
+): void => {
+  if (!httpServer || !(method in httpServer)) {
+    return;
+  }
+
+  const close = Reflect.get(httpServer, method);
+  if (typeof close === "function") {
+    close.call(httpServer);
+  }
+};
+
+const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle): void => {
+  callRendererConnectionCloseMethod(server.httpServer, "closeIdleConnections");
+  callRendererConnectionCloseMethod(server.httpServer, "closeAllConnections");
 };
 
 export const stopElectronEffect = (
@@ -530,14 +555,14 @@ export const stopElectronEffect = (
   });
 
 export const closeRendererServer = async (
-  server: ViteDevServer | null,
+  server: ElectronDevRendererServerHandle | null,
   closeSleep: (durationMs: number) => Promise<unknown> = sleep,
 ): Promise<void> => {
   await runElectronEffect(closeRendererServerEffect(server, closeSleep));
 };
 
 export const closeRendererServerEffect = (
-  server: ViteDevServer | null,
+  server: ElectronDevRendererServerHandle | null,
   closeSleep: (durationMs: number) => Promise<unknown> = sleep,
 ): Effect.Effect<void, ElectronOperationError> => {
   if (!server) {
@@ -600,7 +625,7 @@ type ElectronDevLifecycleOptions = {
   electronExecutablePath: string;
   processHandlers?: ElectronDevProcessHandlers;
   rendererDevUrl: string;
-  rendererServer: ViteDevServer;
+  rendererServer: ElectronDevRendererServer;
   startElectronProcess?: StartElectronProcess;
 };
 
@@ -828,6 +853,44 @@ export const runElectronDevLifecycleEffect = ({
         });
       });
 
+    const interruptCleanupEffect = (): Effect.Effect<void, never> =>
+      Effect.gen(function* () {
+        if (settled || shutdownStarted) {
+          return;
+        }
+
+        shutdownStarted = true;
+        if (restartTimer) {
+          clearTimeout(restartTimer);
+          restartTimer = null;
+        }
+        removeRegisteredProcessHandlers({ keepExitHandler: true });
+
+        const stopExit = yield* Effect.exit(stopElectronEffect(electron));
+        if (Exit.isFailure(stopExit)) {
+          yield* Effect.sync(() => {
+            console.error(
+              "[electron:dev] Electron shutdown after lifecycle interruption failed.",
+              causeToElectronBoundaryError(stopExit.cause),
+            );
+          });
+        }
+
+        const closeExit = yield* Effect.exit(closeRendererServerEffect(rendererServer));
+        if (Exit.isFailure(closeExit)) {
+          yield* Effect.sync(() => {
+            console.error(
+              "[electron:dev] Renderer shutdown after lifecycle interruption failed.",
+              causeToElectronBoundaryError(closeExit.cause),
+            );
+          });
+        }
+
+        yield* Effect.sync(() => {
+          removeRegisteredProcessHandlers({ keepExitHandler: false });
+        });
+      });
+
     runLifecycleTask(
       Effect.gen(function* () {
         yield* registerWatcherEffect();
@@ -836,6 +899,8 @@ export const runElectronDevLifecycleEffect = ({
       }),
       completeFailure,
     );
+
+    return interruptCleanupEffect();
   });
 
 export const mainEffect = (): Effect.Effect<

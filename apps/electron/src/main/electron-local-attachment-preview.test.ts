@@ -219,7 +219,7 @@ describe("electron local attachment previews", () => {
         },
       },
       async resolveLocalAttachmentPath() {
-        return null as never;
+        return null;
       },
     });
 
