@@ -1,6 +1,7 @@
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
 import {
   allowsTransition,
+  canManuallyCloseTask,
   canResetImplementationFromStatus,
   canResetTaskFromStatus,
   canSetPlan,
@@ -61,6 +62,10 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
     canTransitionToClosed(task, allTasks)
   ) {
     actions.push("human_approve");
+  }
+
+  if (canManuallyCloseTask(task, allTasks)) {
+    actions.push("close_task");
   }
 
   return actions;

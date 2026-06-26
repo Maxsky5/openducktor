@@ -90,7 +90,7 @@ describe("TaskDetailsSheet", () => {
         applyDocumentUpdate: () => {},
       }),
     );
-    const taskDeleteImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock(() => ({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       impactError: null,
@@ -117,16 +117,142 @@ describe("TaskDetailsSheet", () => {
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
       onResetTask: undefined,
+      onCloseTask: undefined,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
-      taskDeleteImpactHook: taskDeleteImpactHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
     });
 
     try {
       await harness.mount();
       expect(taskDocumentsHookMock).toHaveBeenCalledWith("TASK-1", true, "/repo-a");
-      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
-      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("routes close_task to the confirmation dialog before invoking close", async () => {
+    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      availableActions: ["close_task"],
+    });
+    const onCloseTask = mock(async () => {});
+    const onOpenChange = mock(() => {});
+    const taskDocumentsHookMock = mock(() => ({
+      specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      ensureDocumentLoaded: () => false,
+      reloadDocument: () => false,
+      applyDocumentUpdate: () => {},
+    }));
+    const taskCleanupImpactHookMock = mock(() => ({
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      impactError: null,
+      isLoadingImpact: false,
+    }));
+
+    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      },
+      task,
+      allTasks: [task],
+      open: true,
+      onOpenChange,
+      onPlan: undefined,
+      onQaStart: undefined,
+      onQaOpen: undefined,
+      onBuild: undefined,
+      onOpenSession: undefined,
+      onDelegate: undefined,
+      onHumanApprove: undefined,
+      onHumanRequestChanges: undefined,
+      onResetImplementation: undefined,
+      onResetTask: undefined,
+      onCloseTask,
+      onDelete: undefined,
+      taskDocumentsHook: taskDocumentsHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((viewModel) => viewModel.runWorkflowAction("close_task"));
+
+      expect(harness.getLatest().isCloseDialogOpen).toBe(true);
+      expect(onCloseTask).not.toHaveBeenCalled();
+
+      await harness.run((viewModel) => viewModel.confirmClose());
+
+      expect(onCloseTask).toHaveBeenCalledWith("TASK-1");
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps close dialog open and surfaces close failures", async () => {
+    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const task = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
+    const onCloseTask = mock(async () => {
+      throw new Error("close failed");
+    });
+    const taskDocumentsHookMock = mock(() => ({
+      specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+      ensureDocumentLoaded: () => false,
+      reloadDocument: () => false,
+      applyDocumentUpdate: () => {},
+    }));
+    const taskCleanupImpactHookMock = mock(() => ({
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      impactError: null,
+      isLoadingImpact: false,
+    }));
+
+    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      },
+      task,
+      allTasks: [task],
+      open: true,
+      onOpenChange: () => {},
+      onPlan: undefined,
+      onQaStart: undefined,
+      onQaOpen: undefined,
+      onBuild: undefined,
+      onOpenSession: undefined,
+      onDelegate: undefined,
+      onHumanApprove: undefined,
+      onHumanRequestChanges: undefined,
+      onResetImplementation: undefined,
+      onResetTask: undefined,
+      onCloseTask,
+      onDelete: undefined,
+      taskDocumentsHook: taskDocumentsHookMock,
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((viewModel) => viewModel.openCloseDialog());
+      await harness.run((viewModel) => viewModel.confirmClose());
+
+      expect(harness.getLatest().isCloseDialogOpen).toBe(true);
+      expect(harness.getLatest().closeError).toBe("close failed");
     } finally {
       await harness.unmount();
     }

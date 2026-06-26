@@ -5,24 +5,31 @@ import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 
-type TaskDeleteImpact = {
+type TaskCleanupImpact = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   impactError: string | null;
   isLoadingImpact: boolean;
 };
 
-const EMPTY_DELETE_IMPACT: TaskDeleteImpact = {
+type TaskCleanupImpactQuerySnapshot = {
+  data: AgentSessionRecord[] | undefined;
+  error: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+};
+
+const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
   impactError: null,
   isLoadingImpact: false,
 };
 
-export const getManagedTaskDeleteImpact = (
+export const getManagedTaskCleanupImpact = (
   repoPath: string,
   sessions: AgentSessionRecord[],
-): TaskDeleteImpact => {
+): TaskCleanupImpact => {
   const normalizedRepoPath = normalizePathForComparison(repoPath);
   const managedWorktrees = new Set<string>();
 
@@ -50,14 +57,46 @@ export const getManagedTaskDeleteImpact = (
   };
 };
 
-export const getManagedTaskDeleteImpactFromTasks = (
+export const getManagedTaskCleanupImpactFromTasks = (
   repoPath: string,
   taskSessions: AgentSessionRecord[][],
-): TaskDeleteImpact => getManagedTaskDeleteImpact(repoPath, taskSessions.flat());
+): TaskCleanupImpact => getManagedTaskCleanupImpact(repoPath, taskSessions.flat());
 
-export const TASK_DELETE_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree cleanup impact.";
+export const TASK_CLEANUP_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree cleanup impact.";
 
-export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDeleteImpact {
+export const getTaskCleanupImpactFromSessionQueries = (
+  repoPath: string | null,
+  taskIds: string[],
+  taskSessionQueries: readonly TaskCleanupImpactQuerySnapshot[],
+): TaskCleanupImpact => {
+  if (taskIds.length === 0 || !repoPath) {
+    return EMPTY_CLEANUP_IMPACT;
+  }
+
+  const failedQuery = taskSessionQueries.find((query) => query.error != null);
+  if (failedQuery) {
+    return {
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      impactError: TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
+      isLoadingImpact: false,
+    };
+  }
+
+  if (taskSessionQueries.some((query) => query.isLoading || query.isFetching)) {
+    return {
+      ...EMPTY_CLEANUP_IMPACT,
+      isLoadingImpact: true,
+    };
+  }
+
+  return getManagedTaskCleanupImpactFromTasks(
+    repoPath,
+    taskSessionQueries.map((query) => query.data ?? []),
+  );
+};
+
+export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskCleanupImpact {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskSessionQueries = useQueries({
@@ -69,31 +108,11 @@ export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDelet
     })),
   });
 
-  return useMemo((): TaskDeleteImpact => {
-    if (taskIds.length === 0 || !open || !workspaceRepoPath) {
-      return EMPTY_DELETE_IMPACT;
-    }
-
-    const failedQuery = taskSessionQueries.find((query) => query.error != null);
-    if (failedQuery) {
-      return {
-        hasManagedSessionCleanup: false,
-        managedWorktreeCount: 0,
-        impactError: TASK_DELETE_IMPACT_ERROR_MESSAGE,
-        isLoadingImpact: false,
-      };
-    }
-
-    if (taskSessionQueries.some((query) => query.isLoading)) {
-      return {
-        ...EMPTY_DELETE_IMPACT,
-        isLoadingImpact: true,
-      };
-    }
-
-    return getManagedTaskDeleteImpactFromTasks(
-      workspaceRepoPath,
-      taskSessionQueries.map((query) => query.data ?? []),
+  return useMemo((): TaskCleanupImpact => {
+    return getTaskCleanupImpactFromSessionQueries(
+      open ? workspaceRepoPath : null,
+      taskIds,
+      taskSessionQueries,
     );
   }, [workspaceRepoPath, open, taskIds, taskSessionQueries]);
 }

@@ -54,6 +54,7 @@ export function useTaskOperations({
     updateTask: mutationCommands.updateTask,
     setTaskTargetBranch: mutationCommands.setTaskTargetBranch,
     deleteTask: mutationCommands.deleteTask,
+    closeTask: mutationCommands.closeTask,
     resetTaskImplementation: resetOperations.resetTaskImplementation,
     resetTask: resetOperations.resetTask,
     transitionTask: mutationCommands.transitionTask,

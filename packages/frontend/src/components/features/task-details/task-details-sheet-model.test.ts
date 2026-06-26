@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import {
   collectDeleteImpactTaskIds,
-  collectResetImpactTaskIds,
+  collectSingleTaskCleanupImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -75,9 +75,11 @@ describe("task-details-sheet-model", () => {
     expect(collectDeleteImpactTaskIds(null, byId)).toEqual([]);
   });
 
-  test("collects reset impact ids only for the selected task", () => {
-    expect(collectResetImpactTaskIds(makeTask("T-1", { subtaskIds: ["T-2"] }))).toEqual(["T-1"]);
-    expect(collectResetImpactTaskIds(null)).toEqual([]);
+  test("collects single-task cleanup impact ids only for the selected task", () => {
+    expect(collectSingleTaskCleanupImpactTaskIds(makeTask("T-1", { subtaskIds: ["T-2"] }))).toEqual(
+      ["T-1"],
+    );
+    expect(collectSingleTaskCleanupImpactTaskIds(null)).toEqual([]);
   });
 
   test("routes workflow actions to matching callbacks", () => {
@@ -90,6 +92,8 @@ describe("task-details-sheet-model", () => {
     const onHumanApprove = mock(() => {});
     const onHumanRequestChanges = mock(() => {});
     const onResetImplementation = mock(() => {});
+    const onResetTask = mock(() => {});
+    const onCloseTask = mock(() => {});
 
     runTaskWorkflowAction("set_spec", "T-1", {
       onPlan,
@@ -197,6 +201,12 @@ describe("task-details-sheet-model", () => {
     expect(onResetImplementation).toHaveBeenCalledWith("T-1", {
       closeDetailsAfterReset: true,
     });
+
+    runTaskWorkflowAction("reset_task", "T-1", makeWorkflowCallbacks({ onResetTask }));
+    runTaskWorkflowAction("close_task", "T-1", makeWorkflowCallbacks({ onCloseTask }));
+
+    expect(onResetTask).toHaveBeenCalledWith("T-1");
+    expect(onCloseTask).toHaveBeenCalledWith("T-1");
   });
 
   test("loads document sections only when summary reports content", () => {

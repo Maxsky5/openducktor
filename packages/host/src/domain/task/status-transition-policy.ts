@@ -101,18 +101,40 @@ export const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatu
   return false;
 };
 
-const canCloseEpic = (task: TaskCard, allTasks: TaskCard[]): boolean => {
+const findBlockingEpicCompletionSubtask = (
+  task: TaskCard,
+  allTasks: TaskCard[],
+): TaskCard | undefined => {
   if (task.issueType !== "epic") {
-    return true;
+    return undefined;
   }
 
-  return !allTasks.some(
+  return allTasks.find(
     (candidate) => candidate.parentId === task.id && candidate.status !== "closed",
   );
 };
 
+const canCloseEpic = (task: TaskCard, allTasks: TaskCard[]): boolean =>
+  findBlockingEpicCompletionSubtask(task, allTasks) === undefined;
+
 export const canTransitionToClosed = (task: TaskCard, allTasks: TaskCard[]): boolean =>
   allowsTransition(task, task.status, "closed") && canCloseEpic(task, allTasks);
+
+export const canManuallyCloseTask = (task: TaskCard, allTasks: TaskCard[]): boolean =>
+  task.status !== "closed" && canCloseEpic(task, allTasks);
+
+export const validateManualCloseTask = (task: TaskCard, allTasks: TaskCard[]): void => {
+  if (task.status === "closed") {
+    throw TaskPolicyError.policy(`Task ${task.id} is already closed.`);
+  }
+
+  const blockingSubtask = findBlockingEpicCompletionSubtask(task, allTasks);
+  if (blockingSubtask) {
+    throw TaskPolicyError.policy(
+      `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`,
+    );
+  }
+};
 
 export const validateTransition = (
   task: TaskCard,
@@ -130,9 +152,7 @@ export const validateTransition = (
     return;
   }
 
-  const blockingSubtask = allTasks.find(
-    (candidate) => candidate.parentId === task.id && candidate.status !== "closed",
-  );
+  const blockingSubtask = findBlockingEpicCompletionSubtask(task, allTasks);
   if (blockingSubtask) {
     throw TaskPolicyError.policy(
       `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`,

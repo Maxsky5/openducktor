@@ -7,13 +7,21 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  HostOperationError,
+  HostValidationError,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import type { DevServerService } from "../../dev-servers/dev-server-service";
+import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
-export const taskResetSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
+export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
-export const taskResetSessionRoles = new Set<string>(taskResetSessionRoleNames);
+export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
@@ -47,7 +55,11 @@ export const collectTaskDeleteTargets = (
   }
   return tasks.filter((task) => targetIds.has(task.id));
 };
-const relatedTaskBranch = (branchName: string, branchPrefix: string, taskId: string): boolean => {
+export const isRelatedTaskBranch = (
+  branchName: string,
+  branchPrefix: string,
+  taskId: string,
+): boolean => {
   const cleanPrefix = branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
@@ -65,7 +77,7 @@ export const collectRelatedTaskBranches = (
       if (branch.isRemote) {
         continue;
       }
-      if (taskIds.some((taskId) => relatedTaskBranch(branch.name, branchPrefix, taskId))) {
+      if (taskIds.some((taskId) => isRelatedTaskBranch(branch.name, branchPrefix, taskId))) {
         names.add(branch.name);
       }
     }
@@ -100,7 +112,7 @@ export const collectDeleteWorktreePaths = (
         if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
           const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
           const branchName = currentBranch.name?.trim();
-          if (!branchName || !relatedTaskBranch(branchName, branchPrefix, taskId)) {
+          if (!branchName || !isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
             continue;
           }
         }
@@ -152,7 +164,7 @@ export const collectResetWorktreePaths = (
             }),
           );
         }
-        if (!relatedTaskBranch(branchName, branchPrefix, taskId)) {
+        if (!isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
           continue;
         }
       }
@@ -163,50 +175,140 @@ export const collectResetWorktreePaths = (
     }
     return paths;
   });
-export const appendDeleteCleanupProgress = <E>(
-  error: E,
-  removedWorktrees: string[],
-  deletedBranches: string[],
-): E | HostOperationError => {
-  const progress: string[] = [];
-  if (removedWorktrees.length > 0) {
-    progress.push(`Delete cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
-  }
-  if (deletedBranches.length > 0) {
-    progress.push(`Delete cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
-  }
-  if (progress.length === 0) {
-    return error;
-  }
-  progress.push("Retry delete to finish cleanup safely.");
-  return new HostOperationError({
-    operation: "task_delete.cleanup",
-    message: `${errorMessage(error)}\n${progress.join("\n")}`,
-    cause: error,
-  });
+const taskCleanupProgressCopy = {
+  task_close: { label: "Close", retryVerb: "close" },
+  task_delete: { label: "Delete", retryVerb: "delete" },
+  task_reset: { label: "Reset", retryVerb: "reset" },
+  task_reset_implementation: {
+    label: "Reset implementation",
+    retryVerb: "reset implementation",
+  },
+} as const;
+
+type TaskCleanupProgressInput = {
+  operation: keyof typeof taskCleanupProgressCopy;
+  removedWorktrees: string[];
+  deletedBranches: string[];
+  completedSteps?: string[];
 };
-export const appendResetCleanupProgress = <E>(
+
+type TaskCleanupOperation = keyof typeof taskCleanupProgressCopy;
+
+type TaskWorktreeCleanupOperation = TaskCleanupOperation;
+
+export type TaskCleanupProgressState = {
+  removedWorktrees: string[];
+  deletedBranches: string[];
+  completedSteps: string[];
+};
+
+export const createTaskCleanupProgressState = (): TaskCleanupProgressState => ({
+  removedWorktrees: [],
+  deletedBranches: [],
+  completedSteps: [],
+});
+
+const requireTaskCleanupWorktreeFiles = (
+  worktreeFiles: WorktreeFilePort | undefined,
+  operation: TaskWorktreeCleanupOperation,
+): Effect.Effect<WorktreeFilePort, HostDependencyError> => {
+  if (!worktreeFiles) {
+    return Effect.fail(
+      new HostDependencyError({
+        dependency: "task dependency",
+        message: `Worktree file port is required for ${operation}.`,
+      }),
+    );
+  }
+
+  return Effect.succeed(worktreeFiles);
+};
+
+export const runTaskLocalCleanup = ({
+  branchNames,
+  devServerService,
+  gitPort,
+  managedWorktreeBasePath,
+  progress,
+  repoPath,
+  settingsConfig,
+  taskIds,
+  worktreeCleanupOperation,
+  worktreeFiles,
+  worktreePaths,
+}: {
+  branchNames: string[];
+  devServerService: DevServerService;
+  gitPort: GitPort;
+  managedWorktreeBasePath: string;
+  progress: TaskCleanupProgressState;
+  repoPath: string;
+  settingsConfig: SettingsConfigPort;
+  taskIds: string[];
+  worktreeCleanupOperation: TaskWorktreeCleanupOperation;
+  worktreeFiles: WorktreeFilePort | undefined;
+  worktreePaths: string[];
+}) =>
+  Effect.gen(function* () {
+    const cleanupFiles =
+      worktreePaths.length > 0
+        ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
+        : null;
+
+    for (const taskId of taskIds) {
+      yield* devServerService.stop({ repoPath, taskId });
+    }
+    progress.completedSteps.push("stopped task dev servers");
+
+    if (cleanupFiles) {
+      for (const worktreePath of worktreePaths) {
+        yield* removeWorktreeAndFilesystemPath(
+          {
+            gitPort,
+            settingsConfig,
+            worktreeFiles: cleanupFiles,
+          },
+          {
+            repoPath,
+            worktreePath,
+            force: true,
+            managedWorktreeBasePath,
+            missingOutsideManagedRootPathPolicy: "skip",
+          },
+        );
+        progress.removedWorktrees.push(worktreePath);
+      }
+    }
+
+    for (const branchName of branchNames) {
+      yield* gitPort.deleteLocalBranch(repoPath, branchName, true);
+      progress.deletedBranches.push(branchName);
+    }
+  });
+
+export const appendTaskCleanupProgress = <E>(
   error: E,
-  removedWorktrees: string[],
-  deletedBranches: string[],
-  completedSteps: string[] = [],
+  { operation, removedWorktrees, deletedBranches, completedSteps = [] }: TaskCleanupProgressInput,
 ): E | HostOperationError => {
+  const copy = taskCleanupProgressCopy[operation];
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
-    progress.push(`Reset cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
+    progress.push(
+      `${copy.label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`,
+    );
   }
   if (deletedBranches.length > 0) {
-    progress.push(`Reset cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
+    progress.push(`${copy.label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
   }
   if (completedSteps.length > 0) {
-    progress.push(`Reset cleanup already completed: ${completedSteps.join(", ")}.`);
+    progress.push(`${copy.label} cleanup already completed: ${completedSteps.join(", ")}.`);
   }
   if (progress.length === 0) {
     return error;
   }
-  progress.push("Retry reset to finish cleanup safely.");
+  progress.push(`Retry ${copy.retryVerb} to finish cleanup safely.`);
   return new HostOperationError({
-    operation: "task_reset.cleanup",
+    operation: `${operation}.cleanup`,
     message: `${errorMessage(error)}\n${progress.join("\n")}`,
     cause: error,
   });

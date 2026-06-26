@@ -26,6 +26,7 @@ export type TaskDetailsSheetProps = {
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
   onResetTask?: (taskId: string) => Promise<void>;
+  onCloseTask?: (taskId: string) => Promise<void>;
   onDetectPullRequest?: (taskId: string) => void;
   onUnlinkPullRequest?: (taskId: string) => void;
   detectingPullRequestTaskId?: string | null;

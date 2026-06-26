@@ -26,6 +26,7 @@ export type TaskMutationCommands = {
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  closeTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -103,6 +104,21 @@ export function useTaskMutationCommands({
     [runTaskMutation, tasks],
   );
 
+  const closeTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
+        run: async (repoPath) => {
+          await host.taskClose(repoPath, taskId);
+        },
+        successTitle: "Task closed",
+        successDescription: taskId,
+        failureTitle: "Failed to close task",
+      });
+    },
+    [runTaskMutation],
+  );
+
   const transitionTask = useCallback(
     async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
       await runTaskMutation({
@@ -152,6 +168,7 @@ export function useTaskMutationCommands({
     updateTask,
     setTaskTargetBranch,
     deleteTask,
+    closeTask,
     transitionTask,
     humanApproveTask,
     humanRequestChangesTask,

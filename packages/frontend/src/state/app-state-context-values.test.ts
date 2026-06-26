@@ -91,6 +91,7 @@ describe("app-state-context-values", () => {
       updateTask: async () => {},
       setTaskTargetBranch: async () => {},
       deleteTask: async () => {},
+      closeTask: async () => {},
       resetTaskImplementation: async () => {},
       resetTask: async () => {},
       transitionTask: async () => {},

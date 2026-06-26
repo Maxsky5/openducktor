@@ -14,7 +14,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog-model";
+} from "./task-cleanup-impact-model";
 
 type TaskDeleteConfirmDialogProps = {
   open: boolean;
@@ -67,7 +67,7 @@ export function TaskDeleteConfirmDialog({
               </p>
             ) : null}
             {impact.isLoading ? (
-              <p>{formatManagedSessionCleanupLoadingMessage()}</p>
+              <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (
               <p>{formatUnknownManagedSessionCleanupMessage()}</p>
             ) : impact.hasManagedSessionCleanup ? (

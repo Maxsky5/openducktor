@@ -3,7 +3,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog-model";
+} from "./task-cleanup-impact-model";
 
 describe("TaskDeleteConfirmDialog", () => {
   test("mentions worktree and related branch cleanup when managed sessions exist", () => {
@@ -29,8 +29,14 @@ describe("TaskDeleteConfirmDialog", () => {
   });
 
   test("uses explicit loading wording while cleanup impact is still resolving", () => {
-    const message = formatManagedSessionCleanupLoadingMessage();
+    const message = formatManagedSessionCleanupLoadingMessage("delete");
 
     expect(message).toContain("Checking linked task worktree cleanup impact");
+    expect(message).toContain("before deletion");
+  });
+
+  test("uses operation-specific loading wording", () => {
+    expect(formatManagedSessionCleanupLoadingMessage("close")).toContain("before closing");
+    expect(formatManagedSessionCleanupLoadingMessage("reset")).toContain("before reset");
   });
 });

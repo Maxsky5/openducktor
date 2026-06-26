@@ -306,6 +306,7 @@ const createTasksStateValue = (
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: renderState.pendingMergedPullRequest,
   deleteTask: deleteTaskMock,
+  closeTask: async () => {},
   resetTaskImplementation: resetTaskImplementationMock,
   resetTask: resetTaskMock,
   transitionTask: async () => {},

@@ -9,5 +9,15 @@ export const formatManagedSessionCleanupMessage = (managedWorktreeCount: number)
 export const formatUnknownManagedSessionCleanupMessage = (): string =>
   "Linked task worktrees and their related local branches may also be deleted. Any uncommitted changes in those worktrees will be lost.";
 
-export const formatManagedSessionCleanupLoadingMessage = (): string =>
-  "Checking linked task worktree cleanup impact before deletion.";
+const cleanupOperationLabels = {
+  close: "closing",
+  delete: "deletion",
+  reset: "reset",
+} as const;
+
+export type TaskCleanupOperationLabel = keyof typeof cleanupOperationLabels;
+
+export const formatManagedSessionCleanupLoadingMessage = (
+  operation: TaskCleanupOperationLabel,
+): string =>
+  `Checking linked task worktree cleanup impact before ${cleanupOperationLabels[operation]}.`;

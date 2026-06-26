@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { CircleCheckBig } from "lucide-react";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
+  TASK_ACTION_ICON,
   taskActionIsDestructive,
+  taskActionIsWarning,
   taskActionLabel,
+  taskMenuActionVariant,
   taskPrimaryActionVariant,
 } from "./task-action-ui";
 
@@ -25,6 +29,7 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
     expect(taskActionLabel("reset_implementation", task)).toBe("Reset Implementation");
     expect(taskActionLabel("reset_task", task)).toBe("Reset Task");
+    expect(taskActionLabel("close_task", task)).toBe("Close Task");
   });
 
   test("uses open wording for spec-ready follow-up actions", () => {
@@ -84,9 +89,19 @@ describe("taskActionLabel", () => {
     expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
     expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
     expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
+    expect(taskPrimaryActionVariant("close_task")).toBe("warning");
 
     expect(taskActionIsDestructive("human_request_changes")).toBe(false);
     expect(taskActionIsDestructive("reset_implementation")).toBe(true);
     expect(taskActionIsDestructive("reset_task")).toBe(true);
+    expect(taskActionIsDestructive("close_task")).toBe(false);
+    expect(taskActionIsWarning("close_task")).toBe(true);
+    expect(taskMenuActionVariant("close_task")).toBe("warningGhost");
+    expect(taskMenuActionVariant("reset_task")).toBe("destructiveGhost");
+    expect(taskMenuActionVariant("human_request_changes")).toBe("ghost");
+  });
+
+  test("uses the approval-style icon for manual close", () => {
+    expect(TASK_ACTION_ICON.close_task.type).toBe(CircleCheckBig);
   });
 });

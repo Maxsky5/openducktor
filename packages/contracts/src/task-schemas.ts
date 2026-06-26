@@ -31,6 +31,7 @@ export const taskActionSchema = z.enum([
   "open_qa",
   "reset_implementation",
   "reset_task",
+  "close_task",
   "human_request_changes",
   "human_approve",
 ]);

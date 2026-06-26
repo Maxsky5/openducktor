@@ -2,23 +2,23 @@ import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { canResetTaskFromStatus } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { requireDependencies } from "../support/required-task-dependencies";
-import {
-  appendResetCleanupProgress,
-  collectRelatedTaskBranches,
-  collectResetWorktreePaths,
-  managedWorktreeBaseForRepoConfig,
-  replaceTaskInList,
-  taskHasSessionsForRoles,
-  taskResetSessionRoleNames,
-  taskResetSessionRoles,
-} from "../support/reset-cleanup";
 import {
   requireTaskDeleteDependencies,
   requireTaskResetStoreDependencies,
-  requireTaskWorktreeCleanupFiles,
-} from "../support/task-reset-dependencies";
+} from "../support/task-cleanup-dependencies";
+import {
+  appendTaskCleanupProgress,
+  collectRelatedTaskBranches,
+  collectResetWorktreePaths,
+  createTaskCleanupProgressState,
+  managedWorktreeBaseForRepoConfig,
+  replaceTaskInList,
+  runTaskLocalCleanup,
+  taskHasSessionsForRoles,
+  workflowCleanupSessionRoleNames,
+  workflowCleanupSessionRoles,
+} from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -66,7 +66,7 @@ export const createTaskFullResetUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
-      if (taskHasSessionsForRoles(currentSessions, taskResetSessionRoles)) {
+      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -83,7 +83,7 @@ export const createTaskFullResetUseCase = ({
           taskId,
           sessions: currentSessions,
           operationLabel: "reset task",
-          sessionRoles: [...taskResetSessionRoleNames],
+          sessionRoles: [...workflowCleanupSessionRoleNames],
         });
       }
 
@@ -101,7 +101,7 @@ export const createTaskFullResetUseCase = ({
         branchPrefix,
         current.id,
         currentSessions,
-        taskResetSessionRoles,
+        workflowCleanupSessionRoles,
         "reset task",
       );
       const branchNames = yield* collectRelatedTaskBranches(
@@ -110,41 +110,30 @@ export const createTaskFullResetUseCase = ({
         branchPrefix,
         [taskId],
       );
-      const removedWorktrees: string[] = [];
-      const deletedBranches: string[] = [];
-      const completedSteps: string[] = [];
+      const cleanupProgress = createTaskCleanupProgressState();
 
       return yield* Effect.gen(function* () {
-        yield* dependencies.devServerService.stop({ repoPath: effectiveRepoPath, taskId });
-        for (const worktreePath of worktreePaths) {
-          yield* removeWorktreeAndFilesystemPath(
-            {
-              gitPort: dependencies.gitPort,
-              settingsConfig: dependencies.settingsConfig,
-              worktreeFiles: requireTaskWorktreeCleanupFiles(worktreeFiles, "task_reset"),
-            },
-            {
-              repoPath: effectiveRepoPath,
-              worktreePath,
-              force: true,
-              managedWorktreeBasePath,
-              missingOutsideManagedRootPathPolicy: "skip",
-            },
-          );
-          removedWorktrees.push(worktreePath);
-        }
-        for (const branchName of branchNames) {
-          yield* dependencies.gitPort.deleteLocalBranch(effectiveRepoPath, branchName, true);
-          deletedBranches.push(branchName);
-        }
+        yield* runTaskLocalCleanup({
+          branchNames,
+          devServerService: dependencies.devServerService,
+          gitPort: dependencies.gitPort,
+          managedWorktreeBasePath,
+          progress: cleanupProgress,
+          repoPath: effectiveRepoPath,
+          settingsConfig: dependencies.settingsConfig,
+          taskIds: [taskId],
+          worktreeCleanupOperation: "task_reset",
+          worktreeFiles,
+          worktreePaths,
+        });
         yield* storeDependencies.clearWorkflowDocuments({ repoPath: effectiveRepoPath, taskId });
-        completedSteps.push("cleared workflow documents");
+        cleanupProgress.completedSteps.push("cleared workflow documents");
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
-          roles: [...taskResetSessionRoleNames],
+          roles: [...workflowCleanupSessionRoleNames],
         });
-        completedSteps.push("cleared linked agent sessions");
+        cleanupProgress.completedSteps.push("cleared linked agent sessions");
         yield* storeDependencies.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId,
@@ -155,7 +144,7 @@ export const createTaskFullResetUseCase = ({
           taskId,
           directMerge: null,
         });
-        completedSteps.push("cleared linked delivery metadata");
+        cleanupProgress.completedSteps.push("cleared linked delivery metadata");
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,
@@ -165,7 +154,12 @@ export const createTaskFullResetUseCase = ({
       }).pipe(
         Effect.catchAll((error) =>
           Effect.fail(
-            appendResetCleanupProgress(error, removedWorktrees, deletedBranches, completedSteps),
+            appendTaskCleanupProgress(error, {
+              operation: "task_reset",
+              removedWorktrees: cleanupProgress.removedWorktrees,
+              deletedBranches: cleanupProgress.deletedBranches,
+              completedSteps: cleanupProgress.completedSteps,
+            }),
           ),
         ),
       );

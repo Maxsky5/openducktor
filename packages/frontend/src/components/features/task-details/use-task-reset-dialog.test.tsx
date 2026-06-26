@@ -195,4 +195,56 @@ describe("use-task-reset-dialog", () => {
 
     expect(latest?.isResetPending).toBe(false);
   });
+
+  test("resets dialog state and ignores stale completion when the task changes", async () => {
+    let rejectFirstReset: ((error: Error) => void) | null = null;
+    const onOpenChange = mock(() => {});
+    const onResetTask = mock((taskId: string) => {
+      if (taskId === "ODT-5") {
+        return new Promise<void>((_resolve, reject) => {
+          rejectFirstReset = reject;
+        });
+      }
+      return Promise.resolve();
+    });
+
+    await mount({
+      sheetOpen: true,
+      task: makeTask("ODT-5"),
+      onOpenChange,
+      onResetTask,
+    });
+
+    await run(() => latest?.openResetDialog());
+    await act(async () => {
+      latest?.confirmReset();
+      await Promise.resolve();
+    });
+    expect(latest?.isResetPending).toBe(true);
+
+    await harness?.update({
+      sheetOpen: true,
+      task: makeTask("ODT-6"),
+      onOpenChange,
+      onResetTask,
+    });
+
+    expect(latest?.isResetDialogOpen).toBe(false);
+    expect(latest?.isResetPending).toBe(false);
+    expect(latest?.resetError).toBeNull();
+
+    await act(async () => {
+      rejectFirstReset?.(new Error("stale reset failed"));
+      await Promise.resolve();
+    });
+
+    expect(latest?.resetError).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await run(() => latest?.openResetDialog());
+    await run(() => latest?.confirmReset());
+
+    expect(onResetTask).toHaveBeenLastCalledWith("ODT-6");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

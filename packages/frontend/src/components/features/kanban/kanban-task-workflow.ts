@@ -41,6 +41,7 @@ const SESSION_VIEW_ACTION_BY_ROLE: Record<AgentRole, SessionRoleViewAction> = {
 const SESSION_VIEW_ACTIONS = new Set<SessionRoleViewAction>(
   Object.values(SESSION_VIEW_ACTION_BY_ROLE),
 );
+const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task"]);
 
 const toRoleSessionViewAction = (role: AgentRole): SessionRoleViewAction =>
   SESSION_VIEW_ACTION_BY_ROLE[role];
@@ -128,6 +129,10 @@ const filterEnabledActions = (
     }, []),
   );
 
+  if (!includeSet || options.surface === "kanban") {
+    enabled = enabled.filter((action) => !DETAIL_ONLY_WORKFLOW_ACTIONS.has(action));
+  }
+
   if (options.hasActiveSession) {
     enabled = enabled.filter((action) => !SESSION_CREATING_ACTIONS.includes(action));
   }
@@ -176,6 +181,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "reset_implementation",
     "reset_task",
+    "close_task",
   ],
   feature: [
     "set_spec",
@@ -190,6 +196,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "reset_implementation",
     "reset_task",
+    "close_task",
   ],
   bug: [
     "build_start",
@@ -204,6 +211,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "reset_implementation",
     "reset_task",
+    "close_task",
   ],
   task: [
     "build_start",
@@ -218,6 +226,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "reset_implementation",
     "reset_task",
+    "close_task",
   ],
 };
 

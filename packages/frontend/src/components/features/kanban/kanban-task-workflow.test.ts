@@ -179,6 +179,52 @@ describe("resolveTaskCardActions", () => {
     expect(result.secondaryActions).toEqual(["reset_implementation", "reset_task"]);
   });
 
+  test("keeps close task after ordinary workflow actions when included in details", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["open_builder", "reset_implementation", "reset_task", "close_task"],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      include: ["open_builder", "reset_implementation", "reset_task", "close_task"],
+    });
+
+    expect(result.primaryAction).toBe("open_builder");
+    expect(result.secondaryActions).toEqual(["reset_implementation", "reset_task", "close_task"]);
+  });
+
+  test("excludes close_task from default kanban card actions", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["open_builder", "close_task"],
+    });
+
+    const defaultResult = resolveTaskCardActions(task);
+    const kanbanResult = resolveTaskCardActions(task, {
+      surface: "kanban",
+    });
+
+    expect(defaultResult.allActions).toEqual(["open_builder"]);
+    expect(kanbanResult.allActions).toEqual(["open_builder"]);
+  });
+
+  test("ignores close_task for Agent Studio quick actions", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["build_start", "close_task"],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      surface: "agent_studio_quick_actions",
+    });
+
+    expect(result.allActions).toContain("build_start");
+    expect(result.allActions).not.toContain("close_task");
+  });
+
   test("filters build_start from human review actions", () => {
     const task = createTaskCardFixture({
       status: "human_review",

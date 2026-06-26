@@ -1824,6 +1824,75 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("closeTask calls the host close route and refreshes the task", async () => {
+    let isClosed = false;
+    const taskClose = mock(async () => {
+      isClosed = true;
+      return makeTask("A", "closed");
+    });
+    const tasksList = mock(async () => [makeTask("A", isClosed ? "closed" : "in_progress")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskClose: host.taskClose,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+    };
+    host.taskClose = taskClose;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeWorkspace: createActiveWorkspace("/repo"),
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => latest?.tasks[0]?.status === "in_progress");
+      await harness.run(async () => {
+        if (!latest) {
+          throw new Error("Hook not mounted");
+        }
+
+        await latest.closeTask("A");
+      });
+
+      await harness.waitFor(
+        () =>
+          queryClient.getQueryData<{ tasks: TaskCard[]; runs: RunSummary[] }>(
+            taskQueryKeys.repoData("/repo", 1),
+          )?.tasks[0]?.status === "closed",
+        1000,
+      );
+
+      expect(taskClose).toHaveBeenCalledWith("/repo", "A");
+    } finally {
+      await harness.unmount();
+      host.taskClose = original.taskClose;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+    }
+  });
+
   test("completed ODT tool events refresh an active kanban query through the session listener", async () => {
     let currentStatus: TaskCard["status"] = "human_review";
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);

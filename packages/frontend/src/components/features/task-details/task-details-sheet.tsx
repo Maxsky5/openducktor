@@ -5,6 +5,7 @@ import {
   resolveHistoricalSessionRoles,
   resolveSessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
+import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
 import { TaskDetailsSheetFooter } from "@/components/features/task-details/task-details-sheet-footer";
@@ -34,11 +35,22 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "human_request_changes",
   "reset_implementation",
   "reset_task",
+  "close_task",
 ];
 
-const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
-  (action) => action !== "reset_task",
-);
+const detailActionsForHandlers = (handlers: {
+  onResetTask?: TaskDetailsSheetProps["onResetTask"];
+  onCloseTask?: TaskDetailsSheetProps["onCloseTask"];
+}): readonly TaskWorkflowAction[] =>
+  DETAIL_ACTIONS.filter((action) => {
+    if (action === "reset_task") {
+      return Boolean(handlers.onResetTask);
+    }
+    if (action === "close_task") {
+      return Boolean(handlers.onCloseTask);
+    }
+    return true;
+  });
 const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
 const EMPTY_HISTORICAL_SESSIONS: NonNullable<TaskDetailsSheetProps["historicalSessions"]> = [];
 
@@ -64,6 +76,7 @@ export function TaskDetailsSheet({
   onHumanRequestChanges,
   onResetImplementation,
   onResetTask,
+  onCloseTask,
   onDetectPullRequest,
   onUnlinkPullRequest,
   detectingPullRequestTaskId = null,
@@ -92,6 +105,7 @@ export function TaskDetailsSheet({
     onHumanRequestChanges,
     onResetImplementation,
     onResetTask,
+    onCloseTask,
     onDelete,
   });
 
@@ -116,7 +130,7 @@ export function TaskDetailsSheet({
   }
 
   const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
-  const detailActions = onResetTask ? DETAIL_ACTIONS : DETAIL_ACTIONS_WITHOUT_TASK_RESET;
+  const detailActions = detailActionsForHandlers({ onResetTask, onCloseTask });
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -224,6 +238,22 @@ export function TaskDetailsSheet({
           impactError={viewModel.resetImpactError}
           isResetPending={viewModel.isResetPending}
           resetError={viewModel.resetError}
+        />
+      ) : null}
+
+      {onCloseTask && viewModel.taskId ? (
+        <TaskCloseConfirmDialog
+          open={viewModel.isCloseDialogOpen}
+          onOpenChange={viewModel.handleCloseDialogOpenChange}
+          onCancel={viewModel.closeCloseDialog}
+          onConfirm={viewModel.confirmClose}
+          taskId={viewModel.taskId}
+          isLoadingImpact={viewModel.isLoadingCloseImpact}
+          hasManagedSessionCleanup={viewModel.hasManagedCloseSessionCleanup}
+          managedWorktreeCount={viewModel.closeManagedWorktreeCount}
+          impactError={viewModel.closeImpactError}
+          isClosePending={viewModel.isClosePending}
+          closeError={viewModel.closeError}
         />
       ) : null}
     </Sheet>

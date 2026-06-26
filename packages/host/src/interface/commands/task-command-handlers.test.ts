@@ -224,6 +224,20 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
+      closeTask(input: unknown) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ command: "task_close", input });
+            return {} as never;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
       resetImplementation(input: unknown) {
         return Effect.tryPromise({
           try: async () => {
@@ -531,6 +545,17 @@ describe("createTaskCommandHandlers", () => {
         ),
       ),
     ).resolves.toEqual({ ok: true });
+    await expect(
+      runHandler(
+        handlers.task_close?.(
+          { repoPath: "/repo", taskId: "task-1" },
+          {
+            command: "task_close",
+            args: { repoPath: "/repo", taskId: "task-1" },
+          },
+        ),
+      ),
+    ).resolves.toEqual({});
     await expect(
       runHandler(
         handlers.task_reset_implementation?.(
@@ -917,6 +942,10 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "task_delete",
         input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
+      },
+      {
+        command: "task_close",
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_reset_implementation",

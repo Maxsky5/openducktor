@@ -5,15 +5,16 @@ import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-tas
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import {
   collectDeleteImpactTaskIds,
-  collectResetImpactTaskIds,
+  collectSingleTaskCleanupImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
   toTaskLabels,
 } from "@/components/features/task-details/task-details-sheet-model";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
+import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
+import { useTaskCloseDialog } from "@/components/features/task-details/use-task-close-dialog";
 import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
-import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
@@ -54,6 +55,13 @@ type TaskDetailsSheetViewModel = {
   isResetDialogOpen: boolean;
   isResetPending: boolean;
   resetError: string | null;
+  isCloseDialogOpen: boolean;
+  isClosePending: boolean;
+  closeError: string | null;
+  isLoadingCloseImpact: boolean;
+  hasManagedCloseSessionCleanup: boolean;
+  closeManagedWorktreeCount: number;
+  closeImpactError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -62,6 +70,10 @@ type TaskDetailsSheetViewModel = {
   closeResetDialog: () => void;
   handleResetDialogOpenChange: (nextOpen: boolean) => void;
   confirmReset: () => void;
+  openCloseDialog: () => void;
+  closeCloseDialog: () => void;
+  handleCloseDialogOpenChange: (nextOpen: boolean) => void;
+  confirmClose: () => void;
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
@@ -81,9 +93,10 @@ type UseTaskDetailsSheetViewModelOptions = {
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
   onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
   onResetTask: TaskDetailsSheetProps["onResetTask"] | undefined;
+  onCloseTask: TaskDetailsSheetProps["onCloseTask"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
   taskDocumentsHook?: typeof useTaskDocuments;
-  taskDeleteImpactHook?: typeof useTaskDeleteImpact;
+  taskCleanupImpactHook?: typeof useTaskCleanupImpact;
 };
 
 export function useTaskDetailsSheetViewModel({
@@ -103,9 +116,10 @@ export function useTaskDetailsSheetViewModel({
   onHumanRequestChanges,
   onResetImplementation,
   onResetTask,
+  onCloseTask,
   onDelete,
   taskDocumentsHook = useTaskDocuments,
-  taskDeleteImpactHook = useTaskDeleteImpact,
+  taskCleanupImpactHook = useTaskCleanupImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskId = task?.id ?? null;
@@ -120,19 +134,22 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const resetImpactTaskIds = useMemo(() => collectResetImpactTaskIds(task), [task]);
+  const singleTaskCleanupImpactTaskIds = useMemo(
+    () => collectSingleTaskCleanupImpactTaskIds(task),
+    [task],
+  );
   const {
     hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
     managedWorktreeCount: deleteManagedWorktreeCount,
     impactError: deleteImpactError,
     isLoadingImpact: isLoadingDeleteImpact,
-  } = taskDeleteImpactHook(deleteImpactTaskIds, open);
+  } = taskCleanupImpactHook(deleteImpactTaskIds, open);
   const {
-    hasManagedSessionCleanup: hasManagedResetSessionCleanup,
-    managedWorktreeCount: resetManagedWorktreeCount,
-    impactError: resetImpactError,
-    isLoadingImpact: isLoadingResetImpact,
-  } = taskDeleteImpactHook(resetImpactTaskIds, open);
+    hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
+    managedWorktreeCount: singleTaskCleanupWorktreeCount,
+    impactError: singleTaskCleanupImpactError,
+    isLoadingImpact: isLoadingSingleTaskCleanupImpact,
+  } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -167,14 +184,23 @@ export function useTaskDetailsSheetViewModel({
     onOpenChange,
     onResetTask,
   });
+  const {
+    isCloseDialogOpen,
+    isClosePending,
+    closeError,
+    openCloseDialog,
+    closeCloseDialog,
+    handleCloseDialogOpenChange,
+    confirmClose,
+  } = useTaskCloseDialog({
+    sheetOpen: open,
+    task,
+    onOpenChange,
+    onCloseTask,
+  });
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
-      if (action === "reset_task") {
-        openResetDialog();
-        return;
-      }
-
       runTaskWorkflowAction(
         action,
         taskId,
@@ -188,6 +214,8 @@ export function useTaskDetailsSheetViewModel({
           onHumanApprove,
           onHumanRequestChanges,
           onResetImplementation,
+          onResetTask: openResetDialog,
+          onCloseTask: openCloseDialog,
         },
         {
           resolveSessionOptions: resolveSessionOptionsByRole,
@@ -206,6 +234,7 @@ export function useTaskDetailsSheetViewModel({
       onQaStart,
       onResetImplementation,
       openResetDialog,
+      openCloseDialog,
       taskId,
     ],
   );
@@ -261,13 +290,21 @@ export function useTaskDetailsSheetViewModel({
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
-    isLoadingResetImpact,
-    hasManagedResetSessionCleanup,
-    resetManagedWorktreeCount,
-    resetImpactError,
+    // Reset and close both use the selected task's own build/QA session cleanup impact.
+    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
+    hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
+    resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
+    resetImpactError: singleTaskCleanupImpactError,
     isResetDialogOpen,
     isResetPending,
     resetError,
+    isCloseDialogOpen,
+    isClosePending,
+    closeError,
+    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact,
+    hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
+    closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
+    closeImpactError: singleTaskCleanupImpactError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,
@@ -276,5 +313,9 @@ export function useTaskDetailsSheetViewModel({
     closeResetDialog,
     handleResetDialogOpenChange,
     confirmReset,
+    openCloseDialog,
+    closeCloseDialog,
+    handleCloseDialogOpenChange,
+    confirmClose,
   };
 }

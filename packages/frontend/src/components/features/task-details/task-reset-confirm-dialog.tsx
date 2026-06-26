@@ -14,7 +14,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog-model";
+} from "./task-cleanup-impact-model";
 
 type TaskResetConfirmDialogProps = {
   open: boolean;
@@ -62,7 +62,7 @@ export function TaskResetConfirmDialog({
             <p>Linked spec, planner, builder, and QA sessions will be removed.</p>
             <p>Linked pull request and direct-merge metadata will be cleared.</p>
             {isLoadingImpact ? (
-              <p>{formatManagedSessionCleanupLoadingMessage()}</p>
+              <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
             ) : impactError ? (
               <p>{formatUnknownManagedSessionCleanupMessage()}</p>
             ) : hasManagedSessionCleanup ? (

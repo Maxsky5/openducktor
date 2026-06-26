@@ -234,6 +234,7 @@ describe("HostClient", () => {
       "taskCreate",
       "taskUpdate",
       "taskDelete",
+      "taskClose",
       "taskResetImplementation",
       "taskReset",
       "taskTransition",
@@ -877,6 +878,51 @@ describe("HostClient", () => {
           taskId: "task-1",
         },
       },
+    ]);
+  });
+
+  test("taskClose uses the dedicated IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_close") {
+        return { ...makeTaskCardPayload(), status: "closed" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const task = await client.taskClose("/repo", "task-1");
+
+    expect(task.status).toBe("closed");
+    expect(calls).toEqual([
+      {
+        command: "task_close",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  test("taskClose invalidates cached task metadata", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
+      }
+      if (command === "task_close") {
+        return { ...makeTaskCardPayload(), status: "closed" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    await client.taskClose("/repo", "task-1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "task_metadata_get",
+      "task_close",
+      "task_metadata_get",
     ]);
   });
 

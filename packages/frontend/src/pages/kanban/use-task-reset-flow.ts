@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
+import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -57,7 +57,7 @@ export function useTaskResetFlow({
   );
   const open = task !== null;
   const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
-    useTaskDeleteImpact(taskId ? [taskId] : [], open);
+    useTaskCleanupImpact(taskId ? [taskId] : [], open);
 
   const closeModal = useCallback((): void => {
     if (isSubmitting) {

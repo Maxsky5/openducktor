@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   createTaskCardFixture,
@@ -85,6 +85,28 @@ describe("TaskDetailsSheetFooter", () => {
       .map((button) => button.textContent?.trim());
 
     expect(buttons).toEqual(["Reset Implementation", "Reset Task", "Delete task"]);
+
+    unmount();
+  });
+
+  test("renders Close Task as a destructive detail workflow action when included", () => {
+    const onWorkflowAction = mock(() => {});
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({
+          status: "in_progress",
+          availableActions: ["open_builder", "close_task"],
+        })}
+        onOpenChange={() => {}}
+        includeActions={["open_builder", "close_task"]}
+        onWorkflowAction={onWorkflowAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("More"));
+    fireEvent.click(screen.getByText("Close Task"));
+
+    expect(onWorkflowAction).toHaveBeenCalledWith("close_task");
 
     unmount();
   });
