@@ -33,20 +33,26 @@ const createRequestContext = ({
   respondServerRequest = mock(async () => {}),
   subagents = new CodexSubagentLinkState(),
   sessions = new Map<string, CodexSessionState>(),
+  activeTurnsBySessionId = new Map(),
+  bindActiveTurnId = () => false,
+  flushQueuedUserMessagesLater = () => {},
 }: {
   events: unknown[];
   pendingInput?: CodexPendingInputState;
   respondServerRequest?: CodexServerRequestHandlerContext["respondServerRequest"];
   subagents?: CodexSubagentLinkState;
   sessions?: Map<string, CodexSessionState>;
+  activeTurnsBySessionId?: CodexServerRequestHandlerContext["activeTurnsBySessionId"];
+  bindActiveTurnId?: CodexServerRequestHandlerContext["bindActiveTurnId"];
+  flushQueuedUserMessagesLater?: CodexServerRequestHandlerContext["flushQueuedUserMessagesLater"];
 }): CodexServerRequestHandlerContext => ({
   respondServerRequest,
   pendingInput,
-  activeTurnsBySessionId: new Map(),
+  activeTurnsBySessionId,
   subagents,
   sessionForThreadId: (threadId) => sessions.get(threadId),
-  bindActiveTurnId: () => false,
-  flushQueuedUserMessagesLater: () => {},
+  bindActiveTurnId,
+  flushQueuedUserMessagesLater,
   emitSessionEvent: (externalSessionId: string, event: unknown) =>
     events.push({
       ...(event as Record<string, unknown>),
@@ -310,10 +316,21 @@ describe("handleCodexServerRequest", () => {
     });
     const pendingInput = new CodexPendingInputState();
     const events: unknown[] = [];
+    const parentActiveTurn = { session: parentSession };
+    const bindActiveTurnId = mock(() => true);
+    const flushQueuedUserMessagesLater = mock(() => undefined);
 
     await expect(
       handleCodexServerRequest(
-        createRequestContext({ events, pendingInput, sessions, subagents }),
+        createRequestContext({
+          events,
+          pendingInput,
+          sessions,
+          subagents,
+          activeTurnsBySessionId: new Map([[parentSession.threadId, parentActiveTurn as never]]),
+          bindActiveTurnId,
+          flushQueuedUserMessagesLater,
+        }),
         parentSession,
         {
           id: 41,
@@ -357,5 +374,7 @@ describe("handleCodexServerRequest", () => {
         type: "question_required",
       }),
     );
+    expect(bindActiveTurnId).not.toHaveBeenCalled();
+    expect(flushQueuedUserMessagesLater).not.toHaveBeenCalled();
   });
 });

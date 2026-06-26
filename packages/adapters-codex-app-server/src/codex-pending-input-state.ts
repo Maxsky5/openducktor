@@ -189,8 +189,6 @@ export class CodexPendingInputState {
     const approvalEntries = this.pendingApprovalEntriesForIndex(
       this.pendingApprovalIdsBySessionId,
       externalSessionId,
-    ).concat(
-      this.pendingApprovalEntriesForIndex(this.mirroredApprovalIdsBySessionId, externalSessionId),
     );
     for (const approval of approvalEntries) {
       this.activeTurnsByApprovalRequestId.set(approval.request.requestId, activeTurn);
@@ -199,8 +197,6 @@ export class CodexPendingInputState {
     const questionEntries = this.pendingQuestionEntriesForIndex(
       this.pendingQuestionIdsBySessionId,
       externalSessionId,
-    ).concat(
-      this.pendingQuestionEntriesForIndex(this.mirroredQuestionIdsBySessionId, externalSessionId),
     );
     for (const question of questionEntries) {
       this.activeTurnsByQuestionRequestId.set(question.request.requestId, activeTurn);

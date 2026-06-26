@@ -175,15 +175,15 @@ export class CodexRuntimeSessionEvents {
     this.latestTodosBySessionId.set(externalSessionId, todos);
   }
 
-  clearSession(externalSessionId: string): void {
-    this.runtimeEventBuffer.clearSession(externalSessionId);
+  clearSession(externalSessionId: string, runtimeId?: string): void {
+    this.runtimeEventBuffer.clearSession(externalSessionId, runtimeId);
     this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.tokenUsageByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.modelByTurnKey, externalSessionId);
-    this.bufferedResolvedServerRequestIdsByThreadId.delete(externalSessionId);
+    this.clearBufferedResolvedServerRequests(externalSessionId, runtimeId);
   }
 
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
@@ -534,6 +534,18 @@ export class CodexRuntimeSessionEvents {
     if (requestIds.size === 0) {
       requestIdsByRuntimeId?.delete(runtimeId);
     }
+    if (requestIdsByRuntimeId?.size === 0) {
+      this.bufferedResolvedServerRequestIdsByThreadId.delete(threadId);
+    }
+  }
+
+  private clearBufferedResolvedServerRequests(threadId: string, runtimeId?: string): void {
+    if (!runtimeId) {
+      this.bufferedResolvedServerRequestIdsByThreadId.delete(threadId);
+      return;
+    }
+    const requestIdsByRuntimeId = this.bufferedResolvedServerRequestIdsByThreadId.get(threadId);
+    requestIdsByRuntimeId?.delete(runtimeId);
     if (requestIdsByRuntimeId?.size === 0) {
       this.bufferedResolvedServerRequestIdsByThreadId.delete(threadId);
     }

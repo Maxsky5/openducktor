@@ -176,7 +176,7 @@ describe("CodexPendingInputState", () => {
     ]);
   });
 
-  test("binds parent active turns to mirrored child pending input", () => {
+  test("does not bind parent active turns to mirrored child pending input", () => {
     const pendingInput = new CodexPendingInputState();
     const route = {
       parentExternalSessionId: "parent-thread",
@@ -197,6 +197,32 @@ describe("CodexPendingInputState", () => {
     });
 
     pendingInput.bindActiveTurn("parent-thread", activeTurn);
+
+    expect(pendingInput.resolveQuestion("question-1")).toBeUndefined();
+  });
+
+  test("clearing a parent mirror preserves child pending input turn ownership", () => {
+    const pendingInput = new CodexPendingInputState();
+    const route = {
+      parentExternalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
+    };
+    const activeTurn = {
+      session: { threadId: "child-thread" },
+    } as unknown as ActiveCodexTurn;
+
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+      route,
+    });
+
+    pendingInput.bindActiveTurn("child-thread", activeTurn);
+    pendingInput.clearSession("parent-thread");
 
     expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
   });

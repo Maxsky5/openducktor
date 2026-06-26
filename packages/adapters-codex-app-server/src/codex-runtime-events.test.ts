@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { CodexRuntimeEventSubscriptions } from "./codex-runtime-events";
+import { CodexRuntimeEventBuffer, CodexRuntimeEventSubscriptions } from "./codex-runtime-events";
+
+const request = (id: number, threadId: string) => ({
+  id,
+  method: "item/tool/requestUserInput",
+  params: { threadId, turnId: `turn-${id}` },
+});
 
 describe("CodexRuntimeEventSubscriptions", () => {
   test("removes a failed synchronous subscription so the runtime can retry", async () => {
@@ -15,5 +21,49 @@ describe("CodexRuntimeEventSubscriptions", () => {
     expect(() => subscriptions.ensure("runtime-1", () => undefined)).toThrow("subscribe failed");
     await expect(subscriptions.ensure("runtime-1", () => undefined)).resolves.toBeUndefined();
     expect(subscribeAttempts).toBe(2);
+  });
+});
+
+describe("CodexRuntimeEventBuffer", () => {
+  test("keeps buffered server requests isolated by runtime", () => {
+    const buffer = new CodexRuntimeEventBuffer();
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: request(1, "child-thread"),
+    });
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: request(2, "child-thread"),
+    });
+
+    expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([
+      request(1, "child-thread"),
+    ]);
+    expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
+      request(2, "child-thread"),
+    ]);
+  });
+
+  test("clears buffered server requests for one runtime only", () => {
+    const buffer = new CodexRuntimeEventBuffer();
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: request(1, "child-thread"),
+    });
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: request(2, "child-thread"),
+    });
+
+    buffer.clearSession("child-thread", "runtime-1");
+
+    expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([]);
+    expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
+      request(2, "child-thread"),
+    ]);
   });
 });

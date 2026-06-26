@@ -23,8 +23,8 @@ const session = (threadId: string, runtimeId = "runtime-1"): CodexSessionState =
 const createStore = () => {
   const clearedSessionEvents: string[] = [];
   const clearedPendingInput: string[] = [];
-  const clearedRuntimeEvents: string[] = [];
-  const clearedSubagents: string[] = [];
+  const clearedRuntimeEvents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
+  const clearedSubagents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
   const drainedRuntimeEvents: string[] = [];
   const stoppedRuntimeSubscriptions: string[] = [];
@@ -38,13 +38,15 @@ const createStore = () => {
       clearSession: (externalSessionId) => clearedPendingInput.push(externalSessionId),
     },
     subagents: {
-      clearSession: (externalSessionId) => clearedSubagents.push(externalSessionId),
+      clearSession: (externalSessionId, runtimeId) =>
+        clearedSubagents.push({ externalSessionId, runtimeId }),
     },
     threadStatusOverrides: {
       clear: (runtimeId, threadId) => clearedThreadStatusOverrides.push({ runtimeId, threadId }),
     },
     runtimeEvents: {
-      clearSession: (externalSessionId) => clearedRuntimeEvents.push(externalSessionId),
+      clearSession: (externalSessionId, runtimeId) =>
+        clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
       drainBufferedStreamEvents: async (externalSessionId) => {
         drainedRuntimeEvents.push(externalSessionId);
       },
@@ -102,8 +104,10 @@ describe("CodexLocalSessionState", () => {
     expect(activeTurnsBySessionId.has("thread-2")).toBe(true);
     expect(clearedSessionEvents).toEqual(["thread-1"]);
     expect(clearedPendingInput).toEqual(["thread-1"]);
-    expect(clearedRuntimeEvents).toEqual(["thread-1"]);
-    expect(clearedSubagents).toEqual(["thread-1"]);
+    expect(clearedRuntimeEvents).toEqual([
+      { externalSessionId: "thread-1", runtimeId: "runtime-1" },
+    ]);
+    expect(clearedSubagents).toEqual([{ externalSessionId: "thread-1", runtimeId: "runtime-1" }]);
     expect(clearedThreadStatusOverrides).toEqual([
       { runtimeId: "runtime-1", threadId: "thread-1" },
     ]);

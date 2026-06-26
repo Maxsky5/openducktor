@@ -586,11 +586,8 @@ export class CodexAppServerAdapter
     }
 
     const session = this.localSessions.get(externalSessionId);
-    if (!session) {
-      return this.sessionEvents.subscribe(input, listener);
-    }
-    const registeredSessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+    const registeredSessionRef = session ? codexSessionRef(session) : input;
+    if (session && !agentSessionRefsEqual(registeredSessionRef, input)) {
       throw new Error(
         `Cannot subscribe Codex session events for '${externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );

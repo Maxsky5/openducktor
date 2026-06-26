@@ -120,9 +120,7 @@ const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
   };
 };
 
-export const codexSubAgentSourceMetadata = (
-  source: unknown,
-): CodexSubAgentSourceMetadata | null => {
+const codexSubAgentSourceMetadata = (source: unknown): CodexSubAgentSourceMetadata | null => {
   if (!isPlainObject(source)) {
     return null;
   }

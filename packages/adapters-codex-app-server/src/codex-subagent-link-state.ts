@@ -91,7 +91,7 @@ const preferredAgentLabel = (thread: CodexThreadSnapshot): string | undefined =>
   thread.subAgentSource?.agentRole ??
   undefined;
 
-export class CodexSubagentLinkError extends Error {
+class CodexSubagentLinkError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CodexSubagentLinkError";
@@ -273,10 +273,13 @@ export class CodexSubagentLinkState {
     return routes;
   }
 
-  clearSession(externalSessionId: string): void {
+  clearSession(externalSessionId: string, runtimeId?: string): void {
     const linksToClear = new Set<CodexStoredSubagentLink>();
     for (const link of this.linksByCorrelationKey.values()) {
-      if (link.parentThreadId === externalSessionId || link.childThreadId === externalSessionId) {
+      if (
+        (runtimeId === undefined || link.runtimeId === runtimeId) &&
+        (link.parentThreadId === externalSessionId || link.childThreadId === externalSessionId)
+      ) {
         linksToClear.add(link);
       }
     }

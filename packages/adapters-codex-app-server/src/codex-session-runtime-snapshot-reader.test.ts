@@ -4,7 +4,6 @@ import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSessionRuntimeSnapshotReaderDeps } from "./codex-session-runtime-snapshot-reader";
 import { readCodexSessionRuntimeSnapshot } from "./codex-session-runtime-snapshot-reader";
-import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 
 const createChildThread = (): CodexThreadSnapshot => ({
   id: "child-thread",
@@ -45,12 +44,6 @@ const createDeps = (inventory: CodexThreadInventory): CodexSessionRuntimeSnapsho
 
 describe("Codex session runtime snapshot reader", () => {
   test("reads child parent metadata without learning a live route", async () => {
-    const subagents = new CodexSubagentLinkState();
-    let learnedRoutes = 0;
-    subagents.onRouteLearned(() => {
-      learnedRoutes += 1;
-    });
-
     await expect(
       readCodexSessionRuntimeSnapshot(createDeps(createInventory(createChildThread())), {
         repoPath: "/repo",
@@ -62,6 +55,5 @@ describe("Codex session runtime snapshot reader", () => {
       availability: "runtime",
       parentExternalSessionId: "parent-thread",
     });
-    expect(learnedRoutes).toBe(0);
   });
 });

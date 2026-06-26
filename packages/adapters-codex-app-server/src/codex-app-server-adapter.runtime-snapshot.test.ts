@@ -9,6 +9,7 @@ import {
   RecordingTransport,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
+import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexAppServerAdapter, CodexJsonRpcRequest } from "./index";
 
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
@@ -107,6 +108,28 @@ class ParentWithChildThreadListTransport extends RecordingTransport {
             preview: "Child subagent",
             status: { type: "active", activeFlags: [] },
             parentThreadId: "parent-thread",
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
+class IdleParentThreadListTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "parent-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            preview: "Idle parent session",
+            status: { type: "idle" },
           },
         ],
         nextCursor: null,
@@ -1127,6 +1150,54 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         (event as { childExternalSessionId?: unknown }).childExternalSessionId === "child-thread",
     );
     unsubscribe();
+  });
+
+  test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {
+    const { adapter } = createHarness({
+      transportFactory: mock(() => new IdleParentThreadListTransport("runtime-live", false)),
+    });
+    const adapterState = adapter as unknown as { pendingInput: CodexPendingInputState };
+    adapterState.pendingInput.addQuestion({
+      runtimeId: "runtime-live",
+      threadId: "child-thread",
+      request: {
+        requestId: "question-1",
+        questions: [
+          {
+            id: "question-item-1",
+            header: "Choose",
+            question: "Proceed?",
+            options: ["Yes", "No"],
+          },
+        ],
+      },
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+      route: {
+        runtimeId: "runtime-live",
+        parentExternalSessionId: "parent-thread",
+        childExternalSessionId: "child-thread",
+        subagentCorrelationKey: "codex-subagent:parent-thread:spawn-1",
+      },
+    });
+    const events: unknown[] = [];
+
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("parent-thread"),
+      (event) => events.push(event),
+    );
+
+    try {
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "question_required",
+          externalSessionId: "parent-thread",
+          childExternalSessionId: "child-thread",
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("does not resurrect an idle local session from stale active thread inventory", async () => {

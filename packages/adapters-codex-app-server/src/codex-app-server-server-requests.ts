@@ -164,8 +164,10 @@ export const handleCodexServerRequest = async (
   }
   const requestTurnId = extractTurnId(rawRequest.params);
   const activeTurn =
-    context.activeTurnsBySessionId.get(routeContext.policySession.threadId) ??
-    context.activeTurnsBySessionId.get(routeContext.ownerThreadId);
+    context.activeTurnsBySessionId.get(routeContext.ownerThreadId) ??
+    (routeContext.ownerThreadId === routeContext.policySession.threadId
+      ? context.activeTurnsBySessionId.get(routeContext.policySession.threadId)
+      : undefined);
   if (requestTurnId && activeTurn && context.bindActiveTurnId(activeTurn, requestTurnId)) {
     context.flushQueuedUserMessagesLater(activeTurn);
   }

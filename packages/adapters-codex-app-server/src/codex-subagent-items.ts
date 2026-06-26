@@ -22,7 +22,7 @@ type StatusMapping = {
 
 type CodexCollabItemType = "collabAgentToolCall" | "collabToolCall";
 
-export class CodexSubagentItemError extends Error {
+class CodexSubagentItemError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CodexSubagentItemError";
