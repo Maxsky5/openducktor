@@ -2,6 +2,8 @@ import { cp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanDirectory, runCommand } from "@openducktor/build-tools";
+import { Effect } from "effect";
+import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
@@ -23,37 +25,71 @@ export const resolveWebSqliteTaskStoreMigrationCopyPlan = ({
   targetDirectory: join(packageRoot, "dist", "drizzle"),
 });
 
-export const copyWebSqliteTaskStoreMigrations = ({
+export const copyWebSqliteTaskStoreMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
-}: WebSqliteTaskStoreMigrationCopyPlan): Promise<void> =>
-  cp(sourceDirectory, targetDirectory, { force: true, recursive: true });
+}: WebSqliteTaskStoreMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
+  Effect.tryPromise({
+    try: () => cp(sourceDirectory, targetDirectory, { force: true, recursive: true }),
+    catch: (cause) =>
+      new WebDependencyError({
+        dependency: "filesystem",
+        operation: "copy-web-sqlite-task-store-migrations",
+        message: errorMessage(cause),
+        cause,
+        details: { sourceDirectory, targetDirectory },
+      }),
+  });
 
-export const buildWebPackage = async (): Promise<void> => {
-  await cleanDirectory(join(packageRoot, "dist"));
-  await runCommand({
-    command: ["bun", "run", "build:web-shell"],
-    cwd: packageRoot,
-    label: "Web shell build",
+export const copyWebSqliteTaskStoreMigrations = (
+  input: WebSqliteTaskStoreMigrationCopyPlan,
+): Promise<void> => runWebBoundary(copyWebSqliteTaskStoreMigrationsEffect(input));
+
+const runBuildCommandEffect = (
+  label: string,
+  command: readonly [string, ...string[]],
+): Effect.Effect<void, WebDependencyError> =>
+  Effect.tryPromise({
+    try: () => runCommand({ command, cwd: packageRoot, label }),
+    catch: (cause) =>
+      new WebDependencyError({
+        dependency: "build-command",
+        operation: label,
+        message: errorMessage(cause),
+        cause,
+        details: { command, cwd: packageRoot },
+      }),
   });
-  await runCommand({
-    command: ["bun", "run", "build:cli"],
-    cwd: packageRoot,
-    label: "Web CLI build",
+
+export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise({
+      try: () => cleanDirectory(join(packageRoot, "dist")),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "filesystem",
+          operation: "clean-web-dist",
+          message: errorMessage(cause),
+          cause,
+          details: { path: join(packageRoot, "dist") },
+        }),
+    });
+    yield* runBuildCommandEffect("Web shell build", ["bun", "run", "build:web-shell"]);
+    yield* runBuildCommandEffect("Web CLI build", ["bun", "run", "build:cli"]);
+    yield* runBuildCommandEffect("Web MCP entrypoint build", ["bun", "run", "build:mcp"]);
+    yield* copyWebSqliteTaskStoreMigrationsEffect(
+      resolveWebSqliteTaskStoreMigrationCopyPlan({
+        packageRoot,
+        workspaceRoot,
+      }),
+    );
   });
-  await runCommand({
-    command: ["bun", "run", "build:mcp"],
-    cwd: packageRoot,
-    label: "Web MCP entrypoint build",
-  });
-  await copyWebSqliteTaskStoreMigrations(
-    resolveWebSqliteTaskStoreMigrationCopyPlan({
-      packageRoot,
-      workspaceRoot,
-    }),
-  );
-};
+
+export const buildWebPackage = (): Promise<void> => runWebBoundary(buildWebPackageEffect());
 
 if (import.meta.main) {
-  await buildWebPackage();
+  await buildWebPackage().catch((error: unknown) => {
+    console.error(errorMessage(error));
+    process.exit(1);
+  });
 }

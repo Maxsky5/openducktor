@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { validateExternalBrowserUrl } from "./browser-url-validation";
 
 describe("browser shell bridge", () => {
@@ -27,5 +28,27 @@ describe("browser shell bridge", () => {
     expect(() => validateExternalBrowserUrl("not a url")).toThrow(
       "OpenDucktor web can only open absolute http or https URLs.",
     );
+  });
+
+  test("does not treat noopener window.open null results as blocked popups", async () => {
+    const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        open: () => null,
+      },
+    });
+
+    try {
+      await expect(
+        createBrowserShellBridge().openExternalUrl("https://example.com/docs"),
+      ).resolves.toBeUndefined();
+    } finally {
+      if (originalWindowDescriptor) {
+        Object.defineProperty(globalThis, "window", originalWindowDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
   });
 });

@@ -1,6 +1,7 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { failureKindSchema } from "@openducktor/contracts";
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
@@ -8,7 +9,14 @@ import {
   type HostRuntimeDistribution,
   type ToolDiscoveryId,
 } from "@openducktor/host";
-import { Cause, Data, Effect } from "effect";
+import { Cause, Effect } from "effect";
+import {
+  errorMessage,
+  runWebBoundary,
+  toWebOperationError,
+  WebHostRequestError,
+  WebOperationError,
+} from "./effect/web-errors";
 import { logError, logInfo } from "./logger";
 import {
   allowedOriginsForFrontendOrigin,
@@ -17,7 +25,7 @@ import {
   type BufferedHostEventStream,
   STREAM_PATH_TO_CHANNEL,
   stopTypescriptHostBackendServices,
-  validateWebFrontendOrigin,
+  validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
 
 export type TypescriptHostBackendOptions = {
@@ -38,6 +46,7 @@ export type TypescriptHostBackend = {
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
 };
+type TypescriptHostBackendServer = ReturnType<typeof Bun.serve>;
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -121,19 +130,76 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readUnknownProperty = (value: unknown, property: string): unknown =>
+  isRecord(value) ? value[property] : undefined;
+
+const readValidFailureKind = (value: unknown): string | undefined => {
+  const parsed = failureKindSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const readStructuredDetails = (value: unknown): Record<string, unknown> | undefined => {
+  const details = readUnknownProperty(value, "details");
+  return isRecord(details) ? details : undefined;
+};
+
+const extractHostCommandFailureKind = (
+  value: unknown,
+  visited = new Set<object>(),
+): string | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (visited.has(value)) {
+    return undefined;
+  }
+  visited.add(value);
+
+  const direct = readValidFailureKind(readUnknownProperty(value, "failureKind"));
+  if (direct) {
+    return direct;
+  }
+
+  const details = readStructuredDetails(value);
+  const detailsFailureKind = readValidFailureKind(readUnknownProperty(details, "failureKind"));
+  if (detailsFailureKind) {
+    return detailsFailureKind;
+  }
+
+  return extractHostCommandFailureKind(readUnknownProperty(value, "cause"), visited);
+};
+
+const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
+  const failureKind = extractHostCommandFailureKind(error);
+  const details = readStructuredDetails(error);
+  return new WebHostRequestError({
+    message: errorMessage(error),
+    status: 500,
+    cause: error,
+    details: {
+      command,
+      ...(details ? { hostDetails: details } : {}),
+    },
+    ...(failureKind ? { failureKind } : {}),
+  });
+};
+
 const validateExpectedToken = (
   receivedToken: string | null,
   expectedToken: string,
   missingMessage: string,
   invalidMessage: string,
-): Response | null => {
+): Effect.Effect<void, WebHostRequestError> => {
   if (receivedToken === null) {
-    return errorResponse(missingMessage, 401);
+    return Effect.fail(new WebHostRequestError({ message: missingMessage, status: 401 }));
   }
   if (receivedToken !== expectedToken) {
-    return errorResponse(invalidMessage, 403);
+    return Effect.fail(new WebHostRequestError({ message: invalidMessage, status: 403 }));
   }
-  return null;
+  return Effect.void;
 };
 
 const readCookie = (request: Request, name: string): string | null => {
@@ -151,7 +217,10 @@ const readCookie = (request: Request, name: string): string | null => {
   return null;
 };
 
-const validateControlToken = (request: Request, expectedToken: string): Response | null =>
+const validateControlToken = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     request.headers.get(CONTROL_TOKEN_HEADER),
     expectedToken,
@@ -159,7 +228,10 @@ const validateControlToken = (request: Request, expectedToken: string): Response
     "Invalid OpenDucktor web host control token.",
   );
 
-const validateAppTokenHeader = (request: Request, expectedToken: string): Response | null =>
+const validateAppTokenHeader = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     request.headers.get(APP_TOKEN_HEADER),
     expectedToken,
@@ -167,7 +239,10 @@ const validateAppTokenHeader = (request: Request, expectedToken: string): Respon
     "Invalid OpenDucktor web host app token.",
   );
 
-const validateAppSessionCookie = (request: Request, expectedToken: string): Response | null =>
+const validateAppSessionCookie = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     readCookie(request, APP_SESSION_COOKIE_NAME),
     expectedToken,
@@ -175,7 +250,10 @@ const validateAppSessionCookie = (request: Request, expectedToken: string): Resp
     "Invalid OpenDucktor web host app token.",
   );
 
-const validateAppCookieOrHeader = (request: Request, expectedToken: string): Response | null =>
+const validateAppCookieOrHeader = (
+  request: Request,
+  expectedToken: string,
+): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
     readCookie(request, APP_SESSION_COOKIE_NAME) ?? request.headers.get(APP_TOKEN_HEADER),
     expectedToken,
@@ -224,47 +302,30 @@ const isWithinDirectory = (directory: string, candidate: string): boolean => {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-class WebHostRequestRejection extends Data.TaggedError("WebHostRequestRejection")<{
-  message: string;
-  status: number;
-  failureKind?: string | undefined;
-}> {}
-
-class WebHostStartupError extends Data.TaggedError("WebHostStartupError")<{
-  message: string;
-  cause?: unknown | undefined;
-}> {}
-
 const rejectWebHostRequest = (
   message: string,
   status: number,
   failureKind?: string,
-): Effect.Effect<never, WebHostRequestRejection> =>
+): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(
-    new WebHostRequestRejection(
-      failureKind ? { failureKind, message, status } : { message, status },
-    ),
+    new WebHostRequestError(failureKind ? { failureKind, message, status } : { message, status }),
   );
 
 const webHostRequestErrorResponse = (
-  error: WebHostRequestRejection,
+  error: WebHostRequestError,
   corsHeaders: HeadersInit,
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
 
 const parseJsonObjectBody = (
   request: Request,
-): Effect.Effect<Record<string, unknown>, WebHostRequestRejection> =>
+): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed: unknown = yield* Effect.tryPromise({
       try: () => request.json(),
       catch: (error) =>
-        new WebHostRequestRejection({
+        new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",
           status: 400,
         }),
@@ -275,9 +336,7 @@ const parseJsonObjectBody = (
     return parsed;
   });
 
-const parseLastEventId = (
-  request: Request,
-): Effect.Effect<number | null, WebHostRequestRejection> =>
+const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>
   Effect.gen(function* () {
     const raw = request.headers.get(LAST_EVENT_ID_HEADER);
     if (raw === null) {
@@ -292,11 +351,11 @@ const parseLastEventId = (
 
 const statLocalAttachmentPreview = (
   requestedPath: string,
-): Effect.Effect<Stats, WebHostRequestRejection> =>
+): Effect.Effect<Stats, WebHostRequestError> =>
   Effect.tryPromise({
     try: () => stat(requestedPath),
     catch: (error) =>
-      new WebHostRequestRejection({
+      new WebHostRequestError({
         message: `Failed to stat local attachment preview: ${errorMessage(error)}`,
         status: 404,
       }),
@@ -306,7 +365,7 @@ const localAttachmentPreviewResponse = (
   request: Request,
   localAttachmentPort: ReturnType<typeof createLocalAttachmentAdapter>,
   corsHeaders: HeadersInit,
-): Effect.Effect<Response, WebHostRequestRejection> =>
+): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
     const requestedPath = requestUrl.searchParams.get("path");
@@ -327,7 +386,7 @@ const localAttachmentPreviewResponse = (
       .pipe(
         Effect.mapError(
           (error) =>
-            new WebHostRequestRejection({
+            new WebHostRequestError({
               message: `Failed to resolve local attachment preview directory: ${errorMessage(error)}`,
               status: 500,
             }),
@@ -336,7 +395,7 @@ const localAttachmentPreviewResponse = (
     const canonicalPath = yield* localAttachmentPort.canonicalizePath(requestedPath).pipe(
       Effect.mapError(
         (error) =>
-          new WebHostRequestRejection({
+          new WebHostRequestError({
             message: `Failed to resolve local attachment preview path: ${errorMessage(error)}`,
             status: 500,
           }),
@@ -369,6 +428,7 @@ const routeCorsRequest = ({
   request,
   requestTimeouts,
   shutdownStarted,
+  beginShutdown,
   stop,
 }: {
   appToken: string;
@@ -380,8 +440,9 @@ const routeCorsRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
+  beginShutdown: () => void;
   stop: () => Promise<void>;
-}): Effect.Effect<Response, WebHostRequestRejection> =>
+}): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
     if (requestUrl.pathname === "/health" && request.method === "GET") {
@@ -389,10 +450,7 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/session" && request.method === "POST") {
-      const tokenError = validateAppTokenHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppTokenHeader(request, appToken);
       return jsonResponse(
         { ok: true },
         {
@@ -405,13 +463,13 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/shutdown" && request.method === "POST") {
-      const tokenError = validateControlToken(request, controlToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateControlToken(request, controlToken);
       yield* Effect.sync(() => {
+        beginShutdown();
         setTimeout(() => {
-          void stop();
+          void stop().catch((error: unknown) => {
+            logError(errorMessage(error));
+          });
         }, 10);
       });
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
@@ -419,10 +477,7 @@ const routeCorsRequest = ({
 
     const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
     if (streamChannel && request.method === "GET") {
-      const tokenError = validateAppCookieOrHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
           "Browser backend is shutting down and is no longer accepting new work.",
@@ -438,19 +493,13 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
-      const tokenError = validateAppSessionCookie(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppSessionCookie(request, appToken);
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
     if (invokeMatch && request.method === "POST") {
-      const tokenError = validateAppTokenHeader(request, appToken);
-      if (tokenError) {
-        return tokenError;
-      }
+      yield* validateAppTokenHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
           "Browser backend is shutting down and is no longer accepting new work.",
@@ -462,22 +511,25 @@ const routeCorsRequest = ({
       if (!command) {
         return yield* rejectWebHostRequest("Host command is required.", 400);
       }
-      const result = yield* hostCommandRouter.invoke(decodeURIComponent(command), args).pipe(
-        Effect.mapError(
-          (error) =>
-            new WebHostRequestRejection({
-              message: errorMessage(error),
-              status: 500,
-            }),
-        ),
-      );
+      const decodedCommand = yield* Effect.try({
+        try: () => decodeURIComponent(command),
+        catch: (cause) =>
+          new WebHostRequestError({
+            message: `Invalid command URI component: ${command}`,
+            status: 400,
+            cause,
+          }),
+      });
+      const result = yield* hostCommandRouter
+        .invoke(decodedCommand, args)
+        .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
       return jsonResponse(result, undefined, corsHeaders);
     }
 
-    return errorResponse("Not found", 404, corsHeaders);
+    return yield* rejectWebHostRequest("Not found", 404);
   });
 
-const handleTypescriptHostBackendRequest = ({
+export const handleTypescriptHostBackendRequest = ({
   allowedOrigins,
   appToken,
   controlToken,
@@ -487,6 +539,7 @@ const handleTypescriptHostBackendRequest = ({
   request,
   requestTimeouts,
   shutdownStarted,
+  beginShutdown,
   stop,
 }: {
   allowedOrigins: Set<string>;
@@ -498,6 +551,7 @@ const handleTypescriptHostBackendRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
+  beginShutdown: () => void;
   stop: () => Promise<void>;
 }): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -520,28 +574,25 @@ const handleTypescriptHostBackendRequest = ({
       request,
       requestTimeouts,
       shutdownStarted,
+      beginShutdown,
       stop,
     }).pipe(
       Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
     );
   });
 
-const toWebHostStartupError = (message: string, cause?: unknown): WebHostStartupError =>
-  new WebHostStartupError(cause === undefined ? { message } : { cause, message });
-
-const startTypescriptHostBackendEffect = ({
+export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,
   appToken,
   providedToolPaths,
   runtimeDistribution,
-}: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebHostStartupError> =>
+}: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
-    const validatedFrontendOrigin = yield* Effect.try({
-      try: () => validateWebFrontendOrigin(frontendOrigin),
-      catch: (error) => toWebHostStartupError(errorMessage(error), error),
-    });
+    const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
+      Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
+    );
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
     const eventBus = new BufferedHostEventBus();
     const localAttachments = createLocalAttachmentAdapter();
@@ -556,8 +607,12 @@ const startTypescriptHostBackendEffect = ({
       runtimeDistribution,
     });
     let shutdownStarted = false;
+    const beginShutdown = (): void => {
+      shutdownStarted = true;
+    };
     let stopPromise: Promise<void> | null = null;
     let resolveExited: (exitCode: number) => void = () => {};
+    let server: TypescriptHostBackendServer;
     const exited = new Promise<number>((resolve) => {
       resolveExited = resolve;
     });
@@ -566,7 +621,7 @@ const startTypescriptHostBackendEffect = ({
       if (stopPromise) {
         return stopPromise;
       }
-      shutdownStarted = true;
+      beginShutdown();
       stopPromise = stopTypescriptHostBackendServices({
         disposeHost: () => hostCommandRouter.dispose(),
         resolveExited,
@@ -575,63 +630,82 @@ const startTypescriptHostBackendEffect = ({
       return stopPromise;
     };
 
-    const server = Bun.serve({
-      hostname: LOCALHOST,
-      idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
-      port,
-      fetch(request, server) {
-        return Effect.runPromise(
-          handleTypescriptHostBackendRequest({
-            allowedOrigins,
-            appToken,
-            controlToken,
-            eventBus,
-            hostCommandRouter,
-            localAttachments,
-            request,
-            requestTimeouts: server,
-            shutdownStarted,
-            stop,
-          }),
+    const cleanupStartedServerEffect = (): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+        yield* Effect.sync(() => server.stop(true));
+        if (disposeExit._tag === "Failure") {
+          logError(
+            `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
+              disposeExit.cause,
+            )}`,
+          );
+        }
+      });
+
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        server = yield* Effect.try({
+          try: () =>
+            Bun.serve({
+              hostname: LOCALHOST,
+              idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
+              port,
+              fetch(request, server) {
+                return Effect.runPromise(
+                  handleTypescriptHostBackendRequest({
+                    allowedOrigins,
+                    appToken,
+                    controlToken,
+                    eventBus,
+                    hostCommandRouter,
+                    localAttachments,
+                    request,
+                    requestTimeouts: server,
+                    shutdownStarted,
+                    beginShutdown,
+                    stop,
+                  }),
+                );
+              },
+            }),
+          catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
+        });
+
+        if (server.port === undefined) {
+          yield* cleanupStartedServerEffect();
+          return yield* new WebOperationError({
+            operation: "web.host.start-server",
+            message: "OpenDucktor TypeScript host did not expose a listening port.",
+            details: { port },
+          });
+        }
+
+        yield* restore(hostCommandRouter.initialize()).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              yield* cleanupStartedServerEffect();
+              return yield* new WebOperationError({
+                operation: "web.host.initialize",
+                message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${errorMessage(
+                  error,
+                )}`,
+                cause: error,
+              });
+            }),
+          ),
+          Effect.onInterrupt(cleanupStartedServerEffect),
         );
-      },
-    });
 
-    if (server.port === undefined) {
-      server.stop(true);
-      return yield* Effect.fail(
-        toWebHostStartupError("OpenDucktor TypeScript host did not expose a listening port."),
-      );
-    }
-
-    const initializeExit = yield* Effect.exit(hostCommandRouter.initialize());
-    if (initializeExit._tag === "Failure") {
-      const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
-      yield* Effect.sync(() => server.stop(true));
-      if (disposeExit._tag === "Failure") {
-        logError(
-          `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
-            disposeExit.cause,
-          )}`,
-        );
-      }
-      return yield* Effect.fail(
-        toWebHostStartupError(
-          `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${Cause.pretty(
-            initializeExit.cause,
-          )}`,
-          initializeExit.cause,
-        ),
-      );
-    }
-
-    return {
-      exited,
-      port: server.port,
-      stop,
-    };
+        return {
+          exited,
+          port: server.port,
+          stop,
+        };
+      }),
+    );
   });
 
 export const startTypescriptHostBackend = (
   options: TypescriptHostBackendOptions,
-): Promise<TypescriptHostBackend> => Effect.runPromise(startTypescriptHostBackendEffect(options));
+): Promise<TypescriptHostBackend> => runWebBoundary(startTypescriptHostBackendEffect(options));

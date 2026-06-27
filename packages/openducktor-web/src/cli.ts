@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runLauncher } from "./launcher";
+import { Effect } from "effect";
+import {
+  errorMessage,
+  runWebBoundary,
+  runWebSyncBoundary,
+  type WebError,
+  WebValidationError,
+} from "./effect/web-errors";
+import { runLauncherEffect } from "./launcher";
 import { logError } from "./logger";
 
 type CliOptions = {
@@ -19,61 +27,101 @@ const printHelp = (): void => {
   );
 };
 
-const parsePort = (raw: string | undefined, flag: string): number => {
-  if (!raw) {
-    throw new Error(`Missing value for ${flag}.`);
-  }
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`);
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
-    throw new Error(`Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`);
-  }
-  return parsed;
-};
+const invalidPortError = (raw: string, flag: string): WebValidationError =>
+  new WebValidationError({
+    message: `Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`,
+    field: flag,
+    details: { raw },
+  });
 
-export const parseCliArgs = (args: string[]): CliOptions => {
-  const options: CliOptions = {
-    workspaceMode: false,
-    frontendPort: DEFAULT_FRONTEND_PORT,
-    backendPort: DEFAULT_BACKEND_PORT,
-  };
+const isKnownCliFlag = (value: string | undefined): boolean =>
+  value === "--workspace" ||
+  value === "--port" ||
+  value === "--backend-port" ||
+  value === "-h" ||
+  value === "--help";
 
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--workspace") {
-      options.workspaceMode = true;
-      continue;
+const parsePortEffect = (
+  raw: string | undefined,
+  flag: string,
+): Effect.Effect<number, WebValidationError> =>
+  Effect.gen(function* () {
+    if (!raw) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
     }
-    if (arg === "--port") {
-      options.frontendPort = parsePort(args[index + 1], "--port");
-      index += 1;
-      continue;
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return yield* invalidPortError(raw, flag);
     }
-    if (arg === "--backend-port") {
-      options.backendPort = parsePort(args[index + 1], "--backend-port");
-      index += 1;
-      continue;
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
+      return yield* invalidPortError(raw, flag);
     }
-    if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
+    return parsed;
+  });
+
+export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, WebValidationError> =>
+  Effect.gen(function* () {
+    const options: CliOptions = {
+      workspaceMode: false,
+      frontendPort: DEFAULT_FRONTEND_PORT,
+      backendPort: DEFAULT_BACKEND_PORT,
+    };
+
+    for (let index = 0; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === "--workspace") {
+        options.workspaceMode = true;
+        continue;
+      }
+      if (arg === "--port") {
+        const value = args[index + 1];
+        if (isKnownCliFlag(value)) {
+          return yield* new WebValidationError({
+            message: "Missing value for --port.",
+            field: "--port",
+          });
+        }
+        options.frontendPort = yield* parsePortEffect(value, "--port");
+        index += 1;
+        continue;
+      }
+      if (arg === "--backend-port") {
+        const value = args[index + 1];
+        if (isKnownCliFlag(value)) {
+          return yield* new WebValidationError({
+            message: "Missing value for --backend-port.",
+            field: "--backend-port",
+          });
+        }
+        options.backendPort = yield* parsePortEffect(value, "--backend-port");
+        index += 1;
+        continue;
+      }
+      if (arg === "-h" || arg === "--help") {
+        yield* Effect.sync(printHelp);
+        yield* Effect.sync(() => process.exit(0));
+        return options;
+      }
+
+      return yield* new WebValidationError({
+        message: `Unknown option: ${arg}`,
+        field: "option",
+        details: { option: arg },
+      });
     }
 
-    throw new Error(`Unknown option: ${arg}`);
-  }
+    return options;
+  });
 
-  return options;
-};
-
-const runCli = async (): Promise<void> => {
-  const __filename = fileURLToPath(import.meta.url);
-  const packageRoot = path.resolve(path.dirname(__filename), "..");
-
-  try {
-    const cliOptions = parseCliArgs(process.argv.slice(2));
+const runCliEffect = (): Effect.Effect<number, WebError> =>
+  Effect.gen(function* () {
+    const __filename = fileURLToPath(import.meta.url);
+    const packageRoot = path.resolve(path.dirname(__filename), "..");
+    const cliOptions = yield* parseCliArgsEffect(process.argv.slice(2));
     const launcherOptions = {
       packageRoot,
       ...(cliOptions.workspaceMode ? { workspaceRoot: path.resolve(packageRoot, "../..") } : {}),
@@ -81,13 +129,19 @@ const runCli = async (): Promise<void> => {
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
     };
-    const exitCode = await runLauncher(launcherOptions);
-    process.exit(exitCode);
-  } catch (error) {
-    logError(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+    return yield* runLauncherEffect(launcherOptions);
+  });
+
+const runCli = async (): Promise<void> => {
+  const exitCode = await runWebBoundary(runCliEffect()).catch((error: unknown) => {
+    logError(errorMessage(error));
+    return 1;
+  });
+  process.exit(exitCode);
 };
+
+export const parseCliArgs = (args: string[]): CliOptions =>
+  runWebSyncBoundary(parseCliArgsEffect(args));
 
 if (import.meta.main) {
   await runCli();

@@ -1,15 +1,61 @@
 import type { ShellBridge } from "@openducktor/frontend";
-import { getBrowserBackendUrl } from "./browser-config";
-import { validateExternalBrowserUrl } from "./browser-url-validation";
+import { Effect } from "effect";
+import { getBrowserBackendUrlEffect } from "./browser-config";
+import { validateExternalBrowserUrlEffect } from "./browser-url-validation";
+import {
+  errorMessage,
+  isWebError,
+  runWebBoundary,
+  WebDependencyError,
+  type WebError,
+} from "./effect/web-errors";
 import {
   buildLocalAttachmentPreviewUrl,
   createLocalHostClient,
-  ensureLocalHostSession,
+  ensureLocalHostSessionDedupedEffect,
   subscribeLocalHostCodexAppServerEvents,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
   subscribeLocalHostTaskEvents,
 } from "./local-host-transport";
+
+const openExternalUrlEffect = (url: string): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    const validatedUrl = yield* validateExternalBrowserUrlEffect(url);
+    yield* Effect.try({
+      try: () => window.open(validatedUrl, "_blank", "noopener,noreferrer"),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "browser-window",
+          operation: "open-external-url",
+          message: errorMessage(cause),
+          cause,
+          details: { url: validatedUrl },
+        }),
+    });
+  });
+
+const resolveLocalAttachmentPreviewSrcEffect = (
+  client: ReturnType<typeof createLocalHostClient>,
+  path: string,
+): Effect.Effect<string, WebError> =>
+  Effect.gen(function* () {
+    const resolvedPath = yield* Effect.tryPromise({
+      try: () => client.workspaceResolveLocalAttachmentPath({ path }),
+      catch: (cause) =>
+        isWebError(cause)
+          ? cause
+          : new WebDependencyError({
+              dependency: "local-web-host",
+              operation: "resolve-local-attachment-path",
+              message: errorMessage(cause),
+              cause,
+              details: { path },
+            }),
+    });
+    yield* ensureLocalHostSessionDedupedEffect();
+    return buildLocalAttachmentPreviewUrl(yield* getBrowserBackendUrlEffect(), resolvedPath.path);
+  });
 
 export const createBrowserShellBridge = (): ShellBridge => {
   const client = createLocalHostClient();
@@ -24,18 +70,8 @@ export const createBrowserShellBridge = (): ShellBridge => {
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
     subscribeTaskEvents: subscribeLocalHostTaskEvents,
     subscribeCodexAppServerEvents: subscribeLocalHostCodexAppServerEvents,
-    openExternalUrl: async (url) => {
-      const opened = window.open(validateExternalBrowserUrl(url), "_blank", "noopener,noreferrer");
-      if (!opened) {
-        throw new Error(
-          "Browser blocked the external URL window. Allow popups for OpenDucktor web.",
-        );
-      }
-    },
-    resolveLocalAttachmentPreviewSrc: async (path) => {
-      const resolvedPath = (await client.workspaceResolveLocalAttachmentPath({ path })).path;
-      await ensureLocalHostSession();
-      return buildLocalAttachmentPreviewUrl(getBrowserBackendUrl(), resolvedPath);
-    },
+    openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
+    resolveLocalAttachmentPreviewSrc: (path) =>
+      runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),
   };
 };

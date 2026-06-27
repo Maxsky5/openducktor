@@ -5,6 +5,14 @@ import type {
   HostEventUnsubscribe,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
+import {
+  errorMessage,
+  runWebBoundary,
+  runWebSyncBoundary,
+  WebOperationError,
+  WebResourceError,
+  WebValidationError,
+} from "./effect/web-errors";
 import { logError } from "./logger";
 
 export type BufferedHostEvent = {
@@ -109,41 +117,79 @@ export class BufferedHostEventBus implements HostEventBusPort {
         return knownChannel;
       }
     }
-    throw new Error(`Unknown OpenDucktor host event channel: ${channel}`);
+    throw new WebResourceError({
+      resource: "host-event-channel",
+      operation: "host-event-bus.require-channel",
+      message: `Unknown OpenDucktor host event channel: ${channel}`,
+      details: { channel },
+    });
   }
 }
 
-export const validateWebFrontendOrigin = (origin: string): string => {
-  const trimmed = origin.trim();
-  if (!trimmed) {
-    throw new Error("browser frontend origin cannot be empty");
-  }
+export const validateWebFrontendOriginEffect = (
+  origin: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    const trimmed = origin.trim();
+    if (!trimmed) {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin cannot be empty",
+      });
+    }
 
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch (error) {
-    throw new Error(`invalid browser frontend origin configured: ${trimmed}`, { cause: error });
-  }
+    const parsed = yield* Effect.try({
+      try: () => new URL(trimmed),
+      catch: (cause) =>
+        new WebValidationError({
+          field: "frontendOrigin",
+          message: `invalid browser frontend origin configured: ${trimmed}`,
+          cause,
+          details: { origin },
+        }),
+    });
 
-  if (parsed.protocol !== "http:") {
-    throw new Error("browser frontend origin must use http");
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error("browser frontend origin must not include credentials");
-  }
-  if (parsed.port.length === 0) {
-    throw new Error("browser frontend origin must include an explicit port");
-  }
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
-    throw new Error("browser frontend origin must not include a path, query string, or fragment");
-  }
-  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
-    throw new Error("browser frontend origin must target 127.0.0.1, localhost, or [::1]");
-  }
+    if (parsed.protocol !== "http:") {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin must use http",
+        details: { origin },
+      });
+    }
+    if (parsed.username || parsed.password) {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin must not include credentials",
+        details: { origin },
+      });
+    }
+    if (parsed.port.length === 0) {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin must include an explicit port",
+        details: { origin },
+      });
+    }
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin must not include a path, query string, or fragment",
+        details: { origin },
+      });
+    }
+    if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
+      return yield* new WebValidationError({
+        field: "frontendOrigin",
+        message: "browser frontend origin must target 127.0.0.1, localhost, or [::1]",
+        details: { origin },
+      });
+    }
 
-  return parsed.origin;
-};
+    return parsed.origin;
+  });
+
+export const validateWebFrontendOrigin = (origin: string): string =>
+  runWebSyncBoundary(validateWebFrontendOriginEffect(origin));
 
 export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<string> => {
   const parsed = new URL(frontendOrigin);
@@ -154,20 +200,48 @@ export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<str
   ]);
 };
 
-export const stopTypescriptHostBackendServices = ({
+export const stopTypescriptHostBackendServicesEffect = ({
   disposeHost,
   resolveExited,
   stopServer,
-}: StopTypescriptHostBackendServicesInput): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      let exitCode = 0;
-      const disposeExit = yield* Effect.exit(disposeHost());
-      if (disposeExit._tag === "Failure") {
-        exitCode = 1;
-        logError(Cause.pretty(disposeExit.cause));
-      }
-      yield* Effect.sync(stopServer);
-      resolveExited(exitCode);
-    }),
-  );
+}: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebOperationError> =>
+  Effect.gen(function* () {
+    let exitCode = 0;
+    const disposeExit = yield* Effect.exit(disposeHost());
+    if (disposeExit._tag === "Failure") {
+      exitCode = 1;
+      logError(Cause.pretty(disposeExit.cause));
+    }
+    const stopServerExit = yield* Effect.exit(
+      Effect.try({
+        try: stopServer,
+        catch: (cause) =>
+          new WebOperationError({
+            operation: "web.host.stop-server",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    );
+    let stopServerError: WebOperationError | null = null;
+    if (stopServerExit._tag === "Failure") {
+      stopServerError =
+        Array.from(Cause.failures(stopServerExit.cause))[0] ??
+        new WebOperationError({
+          operation: "web.host.stop-server",
+          message: Cause.pretty(stopServerExit.cause),
+          cause: stopServerExit.cause,
+        });
+    }
+    if (stopServerError) {
+      exitCode = 1;
+    }
+    resolveExited(exitCode);
+    if (stopServerError) {
+      return yield* stopServerError;
+    }
+  });
+
+export const stopTypescriptHostBackendServices = (
+  input: StopTypescriptHostBackendServicesInput,
+): Promise<void> => runWebBoundary(stopTypescriptHostBackendServicesEffect(input));

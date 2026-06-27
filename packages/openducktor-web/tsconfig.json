@@ -8,6 +8,7 @@
     "types": ["vite/client", "node", "bun-types"],
     "paths": {
       "@/*": ["../frontend/src/*", "./src/*"],
+      "@openducktor/contracts": ["../contracts/src/index.ts"],
       "@openducktor/frontend": ["../frontend/src/index.ts"],
       "@openducktor/frontend/styles.css": ["../frontend/src/styles.css"],
       "@openducktor/frontend/lib/*": ["../frontend/src/lib/*"],

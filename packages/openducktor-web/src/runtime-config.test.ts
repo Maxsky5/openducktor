@@ -40,6 +40,9 @@ describe("runtime config loader", () => {
     await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toThrow(
       `OpenDucktor web failed to load runtime config from ${RUNTIME_CONFIG_PATH}: HTTP 503.`,
     );
+    await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+    });
   });
 
   test("rejects malformed runtime config payloads", async () => {
@@ -51,5 +54,8 @@ describe("runtime config loader", () => {
     await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toThrow(
       `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is missing backendUrl or appToken.`,
     );
+    await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toMatchObject({
+      _tag: "WebValidationError",
+    });
   });
 });
