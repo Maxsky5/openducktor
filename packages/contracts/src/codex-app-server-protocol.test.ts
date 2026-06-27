@@ -6,6 +6,9 @@ import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
   type CodexAppServerClientRequest,
+  type CodexAppServerCollabAgentToolCallThreadItem,
+  type CodexAppServerSubAgentActivityThreadItem,
+  type CodexAppServerThread,
   isCodexAppServerCommandRequestMethod,
   isCodexAppServerFileMutationRequestMethod,
   isCodexAppServerJsonValue,
@@ -151,5 +154,78 @@ describe("Codex app-server protocol", () => {
         requestedSchema: { type: "object", properties: {} },
       }),
     ).toBe(false);
+  });
+
+  test("represents Codex subagent thread metadata from the app-server protocol", () => {
+    const thread = {
+      id: "child-thread",
+      sessionId: "session-tree",
+      forkedFromId: null,
+      parentThreadId: "parent-thread",
+      preview: "Review the code",
+      ephemeral: false,
+      modelProvider: "openai",
+      createdAt: 1,
+      updatedAt: 2,
+      status: { type: "idle" },
+      path: null,
+      cwd: "/repo",
+      cliVersion: "0.0.0",
+      source: {
+        subAgent: {
+          thread_spawn: {
+            parent_thread_id: "parent-thread",
+            depth: 1,
+            agent_path: null,
+            agent_nickname: "reviewer",
+            agent_role: "review",
+          },
+        },
+      },
+      threadSource: "subagent",
+      agentNickname: "reviewer",
+      agentRole: "review",
+      gitInfo: null,
+      name: null,
+      turns: [],
+    } satisfies CodexAppServerThread;
+
+    expect(thread.parentThreadId).toBe("parent-thread");
+    expect(thread.source).toEqual({
+      subAgent: {
+        thread_spawn: {
+          parent_thread_id: "parent-thread",
+          depth: 1,
+          agent_path: null,
+          agent_nickname: "reviewer",
+          agent_role: "review",
+        },
+      },
+    });
+  });
+
+  test("represents Codex collab and subagent activity thread items", () => {
+    const collabItem = {
+      type: "collabToolCall",
+      id: "collab-1",
+      tool: "wait",
+      status: "failed",
+      senderThreadId: "parent-thread",
+      receiverThreadId: "child-failed",
+      prompt: null,
+      model: null,
+      reasoningEffort: null,
+      agentStatus: "errored",
+    } satisfies CodexAppServerCollabAgentToolCallThreadItem;
+    const activityItem = {
+      type: "subAgentActivity",
+      id: "activity-1",
+      kind: "interrupted",
+      agentThreadId: "child-failed",
+      agentPath: "/root/worker",
+    } satisfies CodexAppServerSubAgentActivityThreadItem;
+
+    expect(collabItem.agentStatus).toBe("errored");
+    expect(activityItem.agentThreadId).toBe("child-failed");
   });
 });

@@ -92,6 +92,7 @@ export type CodexCanonicalEvent =
 
 export type CodexMappingContext = {
   source: CodexCanonicalSource;
+  runtimeId?: string;
   threadId: string;
   turnId?: string;
   timestamp?: string;

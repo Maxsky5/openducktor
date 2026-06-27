@@ -50,6 +50,7 @@ const toRuntimeSnapshot = (
   session: CodexSessionState,
   pendingApprovals: AgentPendingApprovalRequest[],
   pendingQuestions: AgentPendingQuestionRequest[],
+  parentExternalSessionId?: string,
 ): AgentSessionRuntimeSnapshot => {
   const classification = classifyAgentSessionActivity({
     runtimeActivity: session.liveStatus?.classification ?? "idle",
@@ -65,6 +66,7 @@ const toRuntimeSnapshot = (
       runtimeKind: "codex",
       workingDirectory: session.workingDirectory,
     },
+    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
     title: session.summary.title ?? (session.role ? `Codex ${session.role}` : "Codex"),
     startedAt: session.summary.startedAt,
     pendingApprovals,
@@ -75,20 +77,34 @@ const toRuntimeSnapshot = (
 export const toRuntimeSnapshotFromThread = (
   thread: CodexThreadSnapshot,
   ref: { repoPath: string; externalSessionId?: string },
-): AgentSessionRuntimeSnapshot => ({
-  availability: "runtime",
-  classification: thread.status.classification,
-  ref: {
-    externalSessionId: ref.externalSessionId ?? thread.id,
-    repoPath: ref.repoPath,
-    runtimeKind: "codex",
-    workingDirectory: thread.cwd,
-  },
-  title: thread.title,
-  startedAt: thread.startedAt,
-  pendingApprovals: [],
-  pendingQuestions: [],
-});
+  pendingInput: {
+    pendingApprovals?: AgentPendingApprovalRequest[];
+    pendingQuestions?: AgentPendingQuestionRequest[];
+  } = {},
+): AgentSessionRuntimeSnapshot => {
+  const parentExternalSessionId = thread.parentThreadId ?? thread.subAgentSource?.parentThreadId;
+  const pendingApprovals = pendingInput.pendingApprovals ?? [];
+  const pendingQuestions = pendingInput.pendingQuestions ?? [];
+  return {
+    availability: "runtime",
+    classification: classifyAgentSessionActivity({
+      runtimeActivity: thread.status.classification,
+      pendingApprovals,
+      pendingQuestions,
+    }),
+    ref: {
+      externalSessionId: ref.externalSessionId ?? thread.id,
+      repoPath: ref.repoPath,
+      runtimeKind: "codex",
+      workingDirectory: thread.cwd,
+    },
+    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+    title: thread.title,
+    startedAt: thread.startedAt,
+    pendingApprovals,
+    pendingQuestions,
+  };
+};
 
 const codexRuntimeSnapshotRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({
   externalSessionId: session.threadId,
@@ -96,6 +112,16 @@ const codexRuntimeSnapshotRef = (session: CodexSessionState): ReadSessionRuntime
   runtimeKind: "codex",
   workingDirectory: session.workingDirectory,
 });
+
+const parentExternalSessionIdFromThread = (
+  session: CodexSessionState,
+  thread: CodexThreadSnapshot | null,
+): string | undefined => {
+  if (!thread || thread.cwd !== session.workingDirectory) {
+    return undefined;
+  }
+  return thread.parentThreadId ?? thread.subAgentSource?.parentThreadId ?? undefined;
+};
 
 export const toRefreshedRuntimeSnapshot = ({
   session,
@@ -124,7 +150,12 @@ export const toRefreshedRuntimeSnapshot = ({
   });
 
   if (runtimeSnapshotSource.type === "local") {
-    return toRuntimeSnapshot(session, pendingApprovals, pendingQuestions);
+    return toRuntimeSnapshot(
+      session,
+      pendingApprovals,
+      pendingQuestions,
+      parentExternalSessionIdFromThread(session, thread),
+    );
   }
   if (runtimeSnapshotSource.type === "missing") {
     return missingRuntimeSnapshot(ref);

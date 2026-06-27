@@ -95,7 +95,12 @@ export const listCodexSessionRuntimeSnapshots = async (
     .filter((thread) => inventory.loadedIds.has(thread.id))
     .filter((thread) => !localThreadIds.has(thread.id))
     .filter((thread) => threadMatchesDirectories(thread, directories))
-    .map((thread) => toRuntimeSnapshotFromThread(thread, input));
+    .map((thread) =>
+      toRuntimeSnapshotFromThread(thread, input, {
+        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(thread.id),
+        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(thread.id),
+      }),
+    );
   return [...localSnapshots, ...remoteSnapshots];
 };
 
@@ -120,5 +125,8 @@ export const readCodexSessionRuntimeSnapshot = async (
   if (!snapshot || snapshot.cwd !== input.workingDirectory) {
     return missingRuntimeSnapshot(input);
   }
-  return toRuntimeSnapshotFromThread(snapshot, input);
+  return toRuntimeSnapshotFromThread(snapshot, input, {
+    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id),
+    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id),
+  });
 };

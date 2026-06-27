@@ -69,6 +69,83 @@ const findMatchingCurrentToolMessages = ({
   return matches;
 };
 
+const isUserMessage = (
+  message: AgentChatMessage,
+): message is AgentChatMessage & {
+  role: "user";
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
+} => message.role === "user" && message.meta?.kind === "user";
+
+const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 2_000;
+
+const timestampMs = (timestamp: string): number | null => {
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const confirmsLocalAcceptedUserMessage = (
+  loadedMessage: AgentChatMessage,
+  currentMessage: AgentChatMessage,
+): number | null => {
+  if (
+    !isUserMessage(loadedMessage) ||
+    !isUserMessage(currentMessage) ||
+    loadedMessage.meta.state !== "read" ||
+    currentMessage.meta.state !== "read" ||
+    loadedMessage.content !== currentMessage.content
+  ) {
+    return null;
+  }
+
+  const loadedTimestampMs = timestampMs(loadedMessage.timestamp);
+  const currentTimestampMs = timestampMs(currentMessage.timestamp);
+  if (loadedTimestampMs === null || currentTimestampMs === null) {
+    return null;
+  }
+
+  const distanceMs = Math.abs(loadedTimestampMs - currentTimestampMs);
+  return distanceMs <= LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS ? distanceMs : null;
+};
+
+const findConfirmedLocalAcceptedUserMessage = ({
+  currentOwner,
+  loadedMessage,
+  sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
+}: {
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  loadedMessage: AgentChatMessage;
+  sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
+}): AgentChatMessage[] => {
+  const matches = sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
+  if (matches.length > 0) {
+    return matches;
+  }
+
+  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+  let nearestMatch: { message: AgentChatMessage; distanceMs: number } | null = null;
+  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
+    const candidate = currentSlice[index];
+    if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
+      continue;
+    }
+    const distanceMs = confirmsLocalAcceptedUserMessage(loadedMessage, candidate);
+    if (distanceMs === null) {
+      continue;
+    }
+    if (!nearestMatch || distanceMs < nearestMatch.distanceMs) {
+      nearestMatch = { message: candidate, distanceMs };
+    }
+  }
+
+  if (nearestMatch) {
+    return [nearestMatch.message];
+  }
+
+  return [];
+};
+
 const findMatchingCurrentMessages = ({
   currentOwner,
   loadedMessage,
@@ -82,6 +159,15 @@ const findMatchingCurrentMessages = ({
 }): AgentChatMessage[] => {
   if (isSubagentMessage(loadedMessage)) {
     return findCurrentSubagentMessagesForLoadedHistory({
+      currentOwner,
+      loadedMessage,
+      sameIdCurrentMessage,
+      absorbedCurrentMessageIds,
+    });
+  }
+
+  if (isUserMessage(loadedMessage)) {
+    return findConfirmedLocalAcceptedUserMessage({
       currentOwner,
       loadedMessage,
       sameIdCurrentMessage,

@@ -471,6 +471,71 @@ describe("session history loader", () => {
     ]);
   });
 
+  test("reconciles a local accepted user send when baseline history confirms it", async () => {
+    let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
+    const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
+      resolveHistory = resolve;
+    });
+    const harness = createHistoryLoadHarness();
+
+    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => historyPromise,
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loading");
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "accepted-user-message",
+          role: "user",
+          content: "Hi",
+          timestamp: "2026-06-12T08:00:01.123Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Hi" }],
+          },
+        },
+      ]),
+    }));
+
+    resolveHistory([
+      {
+        messageId: "runtime-user-confirmed",
+        role: "user",
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Hi",
+        displayParts: [{ kind: "text", text: "Hi" }],
+        state: "read",
+        parts: [],
+      },
+    ]);
+
+    const loadedSession = await loadPromise;
+    const userMessages = sessionMessagesToArray(harness.session).filter(
+      (message) => message.role === "user",
+    );
+
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toEqual(
+      expect.objectContaining({
+        id: "accepted-user-message",
+        role: "user",
+        content: "Hi",
+      }),
+    );
+  });
+
   test("does not wait for selected session observation before loading baseline history", async () => {
     const observedSessions: AgentSessionRef[] = [];
     const harness = createHistoryLoadHarness();

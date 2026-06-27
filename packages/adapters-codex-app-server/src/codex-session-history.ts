@@ -93,6 +93,7 @@ const projectCodexThreadReadToHistory = ({
   eventMapperPipeline,
   modelByTurnKey,
   tokenUsageByTurnKey,
+  runtimeId,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
@@ -101,6 +102,7 @@ const projectCodexThreadReadToHistory = ({
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
   tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
+  runtimeId: string;
 }): AgentSessionHistoryMessage[] => {
   const projectedHistory = codexTurnItemsFromThreadRead(response)
     .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
@@ -123,6 +125,7 @@ const projectCodexThreadReadToHistory = ({
         },
         {
           source: "thread_read",
+          runtimeId,
           threadId: input.externalSessionId,
           ...(timestamp ? { timestamp } : {}),
         },
@@ -188,5 +191,6 @@ export const loadCodexSessionHistory = async ({
     eventMapperPipeline,
     modelByTurnKey,
     tokenUsageByTurnKey,
+    runtimeId,
   });
 };

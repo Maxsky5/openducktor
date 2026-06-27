@@ -38,6 +38,7 @@ describe("createCodexAppServerTransportRegistry", () => {
                 id: "session-1",
                 sessionId: "session-1",
                 forkedFromId: null,
+                parentThreadId: null,
                 preview: "Preview",
                 ephemeral: false,
                 modelProvider: "openai",
@@ -131,9 +132,32 @@ describe("createCodexAppServerTransportRegistry", () => {
   });
   test("fails fast when a runtime transport is missing or duplicated", async () => {
     const port = createCodexAppServerTransportRegistry();
+    await expect(
+      Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
+    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
     await expect(Effect.runPromise(port.drainNotifications("runtime-1"))).rejects.toThrow(
       "Codex app-server transport not found for runtime runtime-1",
     );
+    await expect(
+      Effect.runPromise(
+        port.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
+      ),
+    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
+    await expect(
+      Effect.runPromise(port.listThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 })),
+    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
+    await expect(Effect.runPromise(port.drainServerRequests("runtime-1"))).rejects.toThrow(
+      "Codex app-server transport not found for runtime runtime-1",
+    );
+    await expect(
+      Effect.runPromise(
+        port.respond({
+          runtimeId: "runtime-1",
+          requestId: 7,
+          result: { decision: "approved" },
+        }),
+      ),
+    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
     const transport = {
       request() {
         return Effect.succeed({ data: [], nextCursor: null });

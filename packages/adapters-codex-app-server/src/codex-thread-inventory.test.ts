@@ -9,6 +9,7 @@ const threadListResponse = (
   preview: string,
   cwd = "/repo",
   status: Record<string, unknown> = { type: "idle" },
+  extra: Record<string, unknown> = {},
 ): unknown => ({
   data: [
     {
@@ -17,6 +18,7 @@ const threadListResponse = (
       createdAt: 1,
       preview,
       status,
+      ...extra,
     },
   ],
   nextCursor: null,
@@ -27,6 +29,7 @@ const threadReadResponse = (
   cwd = "/repo",
   status: Record<string, unknown> = { type: "idle" },
   turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
+  extra: Record<string, unknown> = {},
 ): unknown => ({
   thread: {
     id,
@@ -35,6 +38,7 @@ const threadReadResponse = (
     preview: "Stored thread",
     status,
     turns,
+    ...extra,
   },
 });
 
@@ -124,6 +128,51 @@ describe("CodexThreadInventoryReader", () => {
 
     const cached = await reader.read(client, "runtime-1");
     expect(cached.threadsById.get("thread-1")?.status).toEqual({ classification: "idle" });
+  });
+
+  test("extracts Codex subagent parent and label metadata from thread list", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: ["child-thread"], nextCursor: null }),
+      threadList: async () =>
+        threadListResponse(
+          "child-thread",
+          "Child inventory",
+          "/repo",
+          { type: "idle" },
+          {
+            parentThreadId: "parent-thread",
+            agentNickname: "reviewer",
+            agentRole: "review",
+            source: {
+              subAgent: {
+                thread_spawn: {
+                  parent_thread_id: "parent-thread",
+                  depth: 1,
+                  agent_path: "/root/reviewer",
+                  agent_nickname: "reviewer",
+                  agent_role: "review",
+                },
+              },
+            },
+          },
+        ),
+    } as unknown as CodexAppServerClient;
+
+    const inventory = await reader.refresh(client, "runtime-1");
+
+    expect(inventory.threadsById.get("child-thread")).toMatchObject({
+      parentThreadId: "parent-thread",
+      agentNickname: "reviewer",
+      agentRole: "review",
+      subAgentSource: {
+        parentThreadId: "parent-thread",
+        depth: 1,
+        agentPath: "/root/reviewer",
+        agentNickname: "reviewer",
+        agentRole: "review",
+      },
+    });
   });
 
   test("clears a runtime status override without refetching inventory", async () => {

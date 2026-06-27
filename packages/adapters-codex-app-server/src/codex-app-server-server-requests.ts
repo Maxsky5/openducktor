@@ -6,6 +6,7 @@ import {
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
+  extractThreadIdFromParams,
   extractTurnId,
   parseQuestionRequest,
   toApprovalRequest,
@@ -14,6 +15,11 @@ import {
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import { READ_ONLY_ROLES } from "./codex-session-policy";
+import {
+  type CodexSubagentLinkState,
+  type CodexSubagentRoute,
+  codexSubagentRouteEventFields,
+} from "./codex-subagent-link-state";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
@@ -52,9 +58,82 @@ export type CodexServerRequestHandlerContext = {
   respondServerRequest: CodexServerRequestResponder;
   pendingInput: CodexPendingInputState;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
+  subagents: CodexSubagentLinkState;
+  sessionForThreadId(threadId: string): CodexSessionState | undefined;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
+};
+
+type RequestRouteContext = {
+  ownerThreadId: string;
+  ownerSession?: CodexSessionState;
+  policySession: CodexSessionState;
+  runtimeId: string;
+  route: CodexSubagentRoute | null;
+};
+
+const resolveRequestRouteContext = (
+  context: CodexServerRequestHandlerContext,
+  session: CodexSessionState,
+  rawRequest: CodexServerRequestRecord,
+): RequestRouteContext => {
+  const ownerThreadId = extractThreadIdFromParams(rawRequest.params) ?? session.threadId;
+  const ownerSession =
+    context.sessionForThreadId(ownerThreadId) ??
+    (ownerThreadId === session.threadId ? session : undefined);
+  const route = context.subagents.routeForChild(ownerThreadId, session.runtimeId);
+  if (route?.runtimeId && route.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because its subagent route belongs to runtime '${route.runtimeId}'.`,
+    );
+  }
+  const parentSession = route
+    ? (context.sessionForThreadId(route.parentExternalSessionId) ??
+      (route.parentExternalSessionId === session.threadId ? session : undefined))
+    : undefined;
+  if (ownerSession && ownerSession.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because the owner session belongs to runtime '${ownerSession.runtimeId}'.`,
+    );
+  }
+  if (parentSession && parentSession.runtimeId !== session.runtimeId) {
+    throw new Error(
+      `Cannot handle Codex server request for thread '${ownerThreadId}' from runtime '${session.runtimeId}' because the parent session belongs to runtime '${parentSession.runtimeId}'.`,
+    );
+  }
+  const policySession = parentSession ?? ownerSession ?? session;
+  return {
+    ownerThreadId,
+    ...(ownerSession ? { ownerSession } : {}),
+    policySession,
+    runtimeId: ownerSession?.runtimeId ?? policySession.runtimeId,
+    route,
+  };
+};
+
+const emitPendingEvent = (
+  context: CodexServerRequestHandlerContext,
+  routeContext: RequestRouteContext,
+  event: AgentEvent,
+): void => {
+  if (routeContext.ownerSession) {
+    context.emitSessionEvent(routeContext.ownerThreadId, {
+      ...event,
+      externalSessionId: routeContext.ownerThreadId,
+      ...codexSubagentRouteEventFields(routeContext.route),
+    });
+  }
+  if (
+    routeContext.route &&
+    context.sessionForThreadId(routeContext.route.parentExternalSessionId)
+  ) {
+    context.emitSessionEvent(routeContext.route.parentExternalSessionId, {
+      ...event,
+      externalSessionId: routeContext.route.parentExternalSessionId,
+      ...codexSubagentRouteEventFields(routeContext.route),
+    });
+  }
 };
 
 export const handleCodexServerRequest = async (
@@ -77,8 +156,18 @@ export const handleCodexServerRequest = async (
     throw new Error("Codex app-server server request is missing method.");
   }
 
+  const routeContext = resolveRequestRouteContext(context, session, rawRequest);
+  if (!routeContext.ownerSession && !routeContext.route) {
+    throw new Error(
+      `Cannot handle Codex server request '${rawRequest.method}' for thread '${routeContext.ownerThreadId}' from session '${session.threadId}' because there is no known session or subagent route for the request owner.`,
+    );
+  }
   const requestTurnId = extractTurnId(rawRequest.params);
-  const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
+  const activeTurn =
+    context.activeTurnsBySessionId.get(routeContext.ownerThreadId) ??
+    (routeContext.ownerThreadId === routeContext.policySession.threadId
+      ? context.activeTurnsBySessionId.get(routeContext.policySession.threadId)
+      : undefined);
   if (requestTurnId && activeTurn && context.bindActiveTurnId(activeTurn, requestTurnId)) {
     context.flushQueuedUserMessagesLater(activeTurn);
   }
@@ -90,13 +179,13 @@ export const handleCodexServerRequest = async (
     }
 
     const roleRejection = odtWorkflowToolRoleRejection(
-      session,
+      routeContext.policySession,
       mcpElicitationApproval.metadata?.serverName,
       mcpElicitationApproval.tool?.name,
     );
     if (roleRejection) {
       await context.respondServerRequest(
-        session.runtimeId,
+        routeContext.runtimeId,
         requestId,
         codexApprovalResponseForRequest({
           outcome: "reject",
@@ -105,9 +194,9 @@ export const handleCodexServerRequest = async (
         }),
         undefined,
       );
-      context.emitSessionEvent(session.threadId, {
+      context.emitSessionEvent(routeContext.policySession.threadId, {
         type: "session_error",
-        externalSessionId: session.threadId,
+        externalSessionId: routeContext.policySession.threadId,
         timestamp: new Date().toISOString(),
         message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${roleRejection}.`,
       });
@@ -115,14 +204,15 @@ export const handleCodexServerRequest = async (
     }
 
     context.pendingInput.addApproval({
-      runtimeId: session.runtimeId,
-      threadId: session.threadId,
+      runtimeId: routeContext.runtimeId,
+      threadId: routeContext.ownerThreadId,
       request: mcpElicitationApproval,
+      ...(routeContext.route ? { route: routeContext.route } : {}),
     });
-    context.emitSessionEvent(session.threadId, {
+    emitPendingEvent(context, routeContext, {
       ...mcpElicitationApproval,
       type: "approval_required",
-      externalSessionId: session.threadId,
+      externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
     });
     return true;
@@ -130,9 +220,9 @@ export const handleCodexServerRequest = async (
 
   if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
     const parsed = parseQuestionRequest(rawRequest);
-    if (parsed.threadId !== session.threadId) {
+    if (parsed.threadId !== routeContext.ownerThreadId) {
       throw new Error(
-        `Codex question request thread '${parsed.threadId}' does not match active session '${session.threadId}'.`,
+        `Codex question request thread '${parsed.threadId}' does not match request owner '${routeContext.ownerThreadId}'.`,
       );
     }
     if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId)) {
@@ -143,21 +233,22 @@ export const handleCodexServerRequest = async (
       questions: parsed.request.questions,
     };
     context.pendingInput.addQuestion({
-      runtimeId: session.runtimeId,
-      threadId: session.threadId,
+      runtimeId: routeContext.runtimeId,
+      threadId: routeContext.ownerThreadId,
       request: parsed.request,
       questionIds: parsed.questionIds,
       input: questionInput,
+      ...(routeContext.route ? { route: routeContext.route } : {}),
     });
-    context.emitSessionEvent(session.threadId, {
+    emitPendingEvent(context, routeContext, {
       ...parsed.request,
       type: "question_required",
-      externalSessionId: session.threadId,
+      externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
     });
-    context.emitSessionEvent(session.threadId, {
+    emitPendingEvent(context, routeContext, {
       type: "assistant_part",
-      externalSessionId: session.threadId,
+      externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
       part: requireNormalizedCodexToolInvocation({
         messageId: `codex-question-${parsed.request.requestId}`,
@@ -184,9 +275,13 @@ export const handleCodexServerRequest = async (
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
     const requestMutation = classifyCodexRequestMutation(rawRequest);
-    if (session.role && READ_ONLY_ROLES.has(session.role) && requestMutation === "read_only") {
+    if (
+      routeContext.policySession.role &&
+      READ_ONLY_ROLES.has(routeContext.policySession.role) &&
+      requestMutation === "read_only"
+    ) {
       await context.respondServerRequest(
-        session.runtimeId,
+        routeContext.runtimeId,
         requestId,
         codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
         undefined,
@@ -196,13 +291,14 @@ export const handleCodexServerRequest = async (
 
     const isMutatingRequest = requestMutation === "mutating";
     const shouldRejectForRole =
-      !session.role || (isMutatingRequest && READ_ONLY_ROLES.has(session.role));
+      !routeContext.policySession.role ||
+      (isMutatingRequest && READ_ONLY_ROLES.has(routeContext.policySession.role));
     if (shouldRejectForRole) {
-      const roleReason = session.role
-        ? `role '${session.role}' is read-only`
+      const roleReason = routeContext.policySession.role
+        ? `role '${routeContext.policySession.role}' is read-only`
         : "the session role is unknown";
       await context.respondServerRequest(
-        session.runtimeId,
+        routeContext.runtimeId,
         requestId,
         codexApprovalResponseForRequest({
           outcome: "reject",
@@ -211,29 +307,30 @@ export const handleCodexServerRequest = async (
         }),
         undefined,
       );
-      context.emitSessionEvent(session.threadId, {
+      context.emitSessionEvent(routeContext.policySession.threadId, {
         type: "session_error",
-        externalSessionId: session.threadId,
+        externalSessionId: routeContext.policySession.threadId,
         timestamp: new Date().toISOString(),
         message: `Rejected ${isMutatingRequest ? "mutating " : ""}Codex request '${rawRequest.method}' because ${roleReason}.`,
       });
       return false;
     }
 
-    const role = session.role;
+    const role = routeContext.policySession.role;
     if (!role) {
       throw new Error("Codex approval request cannot be created without a session role.");
     }
     const approval = toApprovalRequest(rawRequest, role);
     context.pendingInput.addApproval({
-      runtimeId: session.runtimeId,
-      threadId: session.threadId,
+      runtimeId: routeContext.runtimeId,
+      threadId: routeContext.ownerThreadId,
       request: approval,
+      ...(routeContext.route ? { route: routeContext.route } : {}),
     });
-    context.emitSessionEvent(session.threadId, {
+    emitPendingEvent(context, routeContext, {
       ...approval,
       type: "approval_required",
-      externalSessionId: session.threadId,
+      externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
     });
     return true;
@@ -246,7 +343,7 @@ export const handleCodexServerRequest = async (
   // Dynamic Codex tool calls are never approved here; OpenDucktor workflow tools are exposed
   // through MCP so role-specific approval handling is intentionally bypassed for this method.
   await context.respondServerRequest(
-    session.runtimeId,
+    routeContext.runtimeId,
     requestId,
     {
       contentItems: [
@@ -259,9 +356,9 @@ export const handleCodexServerRequest = async (
     },
     undefined,
   );
-  context.emitSessionEvent(session.threadId, {
+  context.emitSessionEvent(routeContext.policySession.threadId, {
     type: "session_error",
-    externalSessionId: session.threadId,
+    externalSessionId: routeContext.policySession.threadId,
     timestamp: new Date().toISOString(),
     message: "Rejected Codex dynamic tool request because OpenDucktor workflow tools must use MCP.",
   });

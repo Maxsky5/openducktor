@@ -47,6 +47,7 @@ import {
   unsupported,
 } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
+import type { CodexThreadInventory } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
@@ -61,6 +62,7 @@ import {
   sessionStateFromExistingThread,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
+  sessionStateFromThreadSnapshot,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
 import {
@@ -72,6 +74,7 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
+import { CodexSubagentLinkState, codexSubagentRouteEventFields } from "./codex-subagent-link-state";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -102,6 +105,7 @@ export class CodexAppServerAdapter
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
@@ -117,6 +121,7 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
+      subagents: this.subagents,
       updateThreadStatus: (runtimeId, threadId, status) =>
         this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
@@ -124,6 +129,7 @@ export class CodexAppServerAdapter
     this.localSessions = new CodexLocalSessionState({
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
+      subagents: this.subagents,
       threadStatusOverrides: {
         clear: (runtimeId, threadId) => this.threadInventory.clearThreadStatus(runtimeId, threadId),
       },
@@ -149,6 +155,19 @@ export class CodexAppServerAdapter
 
   private clearThreadInventory(runtimeId: string): void {
     this.threadInventory.clearInventory(runtimeId);
+  }
+
+  private recordInventorySubagentRoutes(
+    inventory: CodexThreadInventory,
+    runtimeId: string,
+    workingDirectory: string,
+  ): void {
+    for (const thread of inventory.threadsById.values()) {
+      if (thread.cwd !== workingDirectory) {
+        continue;
+      }
+      this.subagents.recordThread(thread, runtimeId);
+    }
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -567,34 +586,37 @@ export class CodexAppServerAdapter
     }
 
     const session = this.localSessions.get(externalSessionId);
-    if (!session) {
-      return this.sessionEvents.subscribe(input, listener);
-    }
-    const registeredSessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+    const registeredSessionRef = session ? codexSessionRef(session) : input;
+    if (session && !agentSessionRefsEqual(registeredSessionRef, input)) {
       throw new Error(
         `Cannot subscribe Codex session events for '${externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );
     }
 
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
-    for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
+    for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
+      externalSessionId,
+    )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
           ...approval,
           type: "approval_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
+          ...codexSubagentRouteEventFields(route),
         }),
       );
     }
-    for (const question of this.pendingInput.pendingQuestionsForSession(externalSessionId)) {
+    for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
+      externalSessionId,
+    )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
           ...question,
           type: "question_required",
           externalSessionId,
           timestamp: new Date().toISOString(),
+          ...codexSubagentRouteEventFields(route),
         }),
       );
     }
@@ -609,11 +631,30 @@ export class CodexAppServerAdapter
     );
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const inventory = await this.threadInventory.refresh(client, runtimeId);
+    this.recordInventorySubagentRoutes(inventory, runtimeId, input.workingDirectory);
     const thread = inventory.threadsById.get(input.externalSessionId);
     if (!thread) {
+      if (this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
+        await this.ensureSessionState(input);
+        this.clearThreadInventory(runtimeId);
+      }
       return;
     }
-    if (thread.cwd !== input.workingDirectory || thread.status.classification === "idle") {
+    if (thread.cwd !== input.workingDirectory) {
+      return;
+    }
+    this.subagents.recordThread(thread, runtimeId);
+    if (thread.status.classification === "idle") {
+      if (!this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
+        return;
+      }
+      const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);
+      this.localSessions.remember(
+        preserveRuntimeContextForExistingThread(
+          session,
+          this.localSessions.get(session.summary.externalSessionId),
+        ),
+      );
       return;
     }
 

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
-import { toRefreshedRuntimeSnapshot } from "./codex-app-server-runtime-snapshot";
+import {
+  toRefreshedRuntimeSnapshot,
+  toRuntimeSnapshotFromThread,
+} from "./codex-app-server-runtime-snapshot";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
@@ -31,6 +34,10 @@ const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot
   cwd: "/repo",
   startedAt: "2026-05-07T00:00:00.000Z",
   status: codexThreadStatusSnapshot(status),
+  parentThreadId: null,
+  agentNickname: null,
+  agentRole: null,
+  subAgentSource: null,
 });
 
 const createInventory = ({
@@ -103,6 +110,59 @@ describe("toRuntimeSnapshot", () => {
       classification: "waiting_for_question",
     });
   });
+
+  test("adds parent linkage for Codex child threads only when thread metadata proves it", () => {
+    expect(
+      toRuntimeSnapshotFromThread(
+        {
+          ...createThread("active"),
+          id: "child-thread",
+          parentThreadId: "parent-thread",
+        },
+        { repoPath: "/repo" },
+      ),
+    ).toMatchObject({
+      availability: "runtime",
+      parentExternalSessionId: "parent-thread",
+      ref: {
+        externalSessionId: "child-thread",
+      },
+    });
+    expect(
+      toRuntimeSnapshotFromThread(createThread("active"), { repoPath: "/repo" }),
+    ).not.toHaveProperty("parentExternalSessionId");
+  });
+
+  test("includes pending input owned by a Codex child thread snapshot", () => {
+    expect(
+      toRuntimeSnapshotFromThread(
+        {
+          ...createThread("active"),
+          id: "child-thread",
+          parentThreadId: "parent-thread",
+        },
+        { repoPath: "/repo" },
+        {
+          pendingApprovals: [
+            {
+              requestId: "approval-1",
+              requestType: "permission_grant",
+              title: "Approve write",
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({
+      classification: "waiting_for_permission",
+      parentExternalSessionId: "parent-thread",
+      pendingApprovals: [
+        {
+          requestId: "approval-1",
+          requestType: "permission_grant",
+        },
+      ],
+    });
+  });
 });
 
 describe("resolveCodexRuntimeSnapshotSource", () => {
@@ -151,6 +211,37 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
       availability: "runtime",
       classification: "idle",
       title: "Codex",
+    });
+  });
+
+  test("keeps proven parent linkage when pending input uses the local snapshot path", () => {
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session: {
+          ...createSession(),
+          threadId: "child-thread",
+          summary: {
+            ...createSession().summary,
+            externalSessionId: "child-thread",
+          },
+        },
+        inventory: createInventory({
+          thread: {
+            ...createThread("active"),
+            id: "child-thread",
+            parentThreadId: "parent-thread",
+          },
+        }),
+        pendingApprovals: [],
+        pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({
+      availability: "runtime",
+      parentExternalSessionId: "parent-thread",
+      ref: {
+        externalSessionId: "child-thread",
+      },
     });
   });
 

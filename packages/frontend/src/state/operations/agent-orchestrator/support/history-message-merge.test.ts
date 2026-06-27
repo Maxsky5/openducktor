@@ -927,6 +927,94 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     );
   });
 
+  test("reconciles a local accepted user send when history confirms it with a nearby timestamp", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "runtime-user-confirmed",
+          role: "user",
+          content: "Hi",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Hi" }],
+          },
+        },
+      ],
+      [
+        {
+          id: "codex-user-1772355601123-1",
+          role: "user",
+          content: "Hi",
+          timestamp: "2026-03-01T09:00:01.123Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Hi" }],
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(
+      expect.objectContaining({
+        id: "codex-user-1772355601123-1",
+        role: "user",
+        content: "Hi",
+        timestamp: "2026-03-01T09:00:01.123Z",
+      }),
+    );
+  });
+
+  test("matches the nearest local accepted user send when repeated text exists", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "runtime-user-confirmed",
+          role: "user",
+          content: "ok",
+          timestamp: "2026-03-01T09:00:00.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "ok" }],
+          },
+        },
+      ],
+      [
+        {
+          id: "codex-user-1772355600120-1",
+          role: "user",
+          content: "ok",
+          timestamp: "2026-03-01T09:00:00.120Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "ok" }],
+          },
+        },
+        {
+          id: "codex-user-1772355600900-1",
+          role: "user",
+          content: "ok",
+          timestamp: "2026-03-01T09:00:00.900Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "ok" }],
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "codex-user-1772355600120-1",
+      "codex-user-1772355600900-1",
+    ]);
+  });
+
   test("keeps different runtime user message ids distinct even when text matches", () => {
     const merged = mergedMessages(
       [

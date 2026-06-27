@@ -150,6 +150,13 @@ describe("runtime schemas", () => {
     });
   });
 
+  test("Codex descriptor advertises subagent support without execution modes", () => {
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces).toMatchObject({
+      supportsSubagents: true,
+      supportedSubagentExecutionModes: [],
+    });
+  });
+
   test("Codex descriptor enables file search with structured file and folder references", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsFileSearch).toBe(true);
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toEqual(
@@ -1156,22 +1163,7 @@ describe("runtime schemas", () => {
     ).toThrow();
   });
 
-  test("runtime capabilities require execution modes only when subagents are supported", () => {
-    expect(() =>
-      runtimeDescriptorSchema.parse({
-        ...OPENCODE_RUNTIME_DESCRIPTOR,
-        capabilities: withRuntimeCapabilities({
-          optionalSurfaces: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
-            supportsSubagents: true,
-            supportedSubagentExecutionModes: [],
-          },
-        }),
-      }),
-    ).toThrow(
-      "Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
-    );
-
+  test("runtime capabilities reject execution modes when subagents are unsupported", () => {
     expect(() =>
       runtimeDescriptorSchema.parse({
         ...OPENCODE_RUNTIME_DESCRIPTOR,
