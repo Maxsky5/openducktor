@@ -7,6 +7,7 @@ import { subscribeCodexAppServerEvents } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { host } from "../operations/shared/host";
 import { runtimeCatalogQueryKeys } from "../queries/runtime-catalog";
+import { loadSettingsSnapshotFromQuery } from "../queries/workspace";
 import type { AgentRuntimeAdapter } from "./agent-runtime-adapter";
 import { hostRepoRuntimeResolver } from "./host-repo-runtime-resolver";
 
@@ -69,5 +70,9 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
     },
     respondServerRequest: async (runtimeId: string, requestId: number, result, error) => {
       await host.codexAppServerRespond(runtimeId, requestId, result, error);
+    },
+    loadCodexRuntimeConfig: async () => {
+      const snapshot = await loadSettingsSnapshotFromQuery(appQueryClient);
+      return snapshot.agentRuntimes.codex;
     },
   });

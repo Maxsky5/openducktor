@@ -18,6 +18,8 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
       validationSummary: {
         promptPlaceholderErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
+        runtimeAvailabilityErrorCount: 0,
+        hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 0,
       },
       errors: { saveError: null, catalogError: null },
@@ -35,6 +37,8 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         promptPlaceholderErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
+        runtimeAvailabilityErrorCount: 0,
+        hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 2,
       },
     });
@@ -53,6 +57,8 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         promptPlaceholderErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
+        runtimeAvailabilityErrorCount: 0,
+        hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 2,
       },
     });
@@ -69,6 +75,8 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         promptPlaceholderErrorCount: 0,
         reusablePromptFieldErrorCount: 1,
+        runtimeAvailabilityErrorCount: 0,
+        hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 0,
       },
     });
@@ -78,6 +86,48 @@ describe("SettingsModalFooter", () => {
         true,
       );
       expect(screen.getByText(/1 reusable prompt field error\./i)).toBeTruthy();
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("disables save and shows runtime availability count", () => {
+    const renderer = renderFooter({
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        reusablePromptFieldErrorCount: 0,
+        runtimeAvailabilityErrorCount: 2,
+        hasUnacknowledgedCodexDangerousSettings: false,
+        repoScriptFieldErrorCount: 0,
+      },
+    });
+
+    try {
+      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(screen.getByText(/2 disabled runtime selections\./i)).toBeTruthy();
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("disables save when dangerous Codex settings are unacknowledged", () => {
+    const renderer = renderFooter({
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        reusablePromptFieldErrorCount: 0,
+        runtimeAvailabilityErrorCount: 0,
+        hasUnacknowledgedCodexDangerousSettings: true,
+        repoScriptFieldErrorCount: 0,
+      },
+    });
+
+    try {
+      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(screen.getByText(/Codex acknowledgement required\./i)).toBeTruthy();
     } finally {
       renderer.unmount();
     }

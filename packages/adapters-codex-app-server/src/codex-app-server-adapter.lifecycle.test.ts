@@ -1,19 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
+  defaultCodexRuntimeConfig,
   flushCodexAdapterWork,
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
-import {
-  codexWorkspaceWriteSandboxPolicy,
-  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
-  OPENDUCKTOR_CODEX_SANDBOX_MODE,
-} from "./codex-session-policy";
+import { codexWorkspaceWriteSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
 
 class NameFailingTransport extends RecordingTransport {
@@ -34,12 +32,14 @@ const localSessions = (
   (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
     .localSessions;
 const expectedThreadPolicy = {
-  approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
-  sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
+  approvalPolicy: "on-request",
+  approvalsReviewer: "user",
+  sandbox: "workspace-write",
 };
 const expectedTurnPolicy = (workingDirectory: string) => ({
-  approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
-  sandboxPolicy: codexWorkspaceWriteSandboxPolicy(workingDirectory),
+  approvalPolicy: "on-request",
+  approvalsReviewer: "user",
+  sandboxPolicy: codexWorkspaceWriteSandboxPolicy(workingDirectory, false),
 });
 
 describe("CodexAppServerAdapter lifecycle", () => {
@@ -250,6 +250,194 @@ describe("CodexAppServerAdapter lifecycle", () => {
         effort: "medium",
       },
     });
+  });
+
+  test("applies Codex role overrides to thread/start and turn/start", async () => {
+    const { adapter, transports } = createHarness({
+      loadCodexRuntimeConfig: async () => ({
+        enabled: true,
+        defaults: {
+          sandboxMode: "read-only",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          workspaceWriteNetworkAccess: false,
+        },
+        roleOverrides: {
+          build: {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "untrusted",
+            approvalsReviewer: "auto_review",
+            workspaceWriteNetworkAccess: true,
+          },
+        },
+      }),
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        role: "build",
+        parts: [{ kind: "text", text: "Build it" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      sandbox: "workspace-write",
+      cwd: "/repo",
+      developerInstructions: "Use the repo rules.",
+      model: "gpt-5",
+      effort: "medium",
+    });
+    expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      sandboxPolicy: codexWorkspaceWriteSandboxPolicy("/repo", true),
+      threadId: "thread/start-runtime-live",
+      input: [{ type: "text", text: "Build it" }],
+      model: "gpt-5",
+      effort: "medium",
+    });
+  });
+
+  test("sends the configured reviewer even when approval policy never makes it display-only", async () => {
+    const config = {
+      ...defaultCodexRuntimeConfig(),
+      defaults: {
+        ...defaultCodexRuntimeConfig().defaults,
+        approvalPolicy: "never" as const,
+        approvalsReviewer: "auto_review" as const,
+      },
+    };
+    const { adapter, transports } = createHarness({
+      loadCodexRuntimeConfig: async () => config,
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      systemPrompt: "Spec it.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, "spec").approvalsReviewerApplies).toBe(false);
+    expect(transports.get("runtime-live")?.calls[1]?.params).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewer: "auto_review",
+    });
+  });
+
+  test("adjusts inherited build read-only defaults to workspace-write", async () => {
+    const { adapter, transports } = createHarness({
+      loadCodexRuntimeConfig: async () => ({
+        enabled: true,
+        defaults: {
+          sandboxMode: "read-only",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          workspaceWriteNetworkAccess: false,
+        },
+        roleOverrides: {},
+      }),
+    });
+
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Resume build.",
+      externalSessionId: "thread-9",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-9",
+        role: "build",
+        parts: [{ kind: "text", text: "Continue build" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    expect(transports.get("runtime-live")?.calls[1]?.params).toMatchObject({
+      sandbox: "workspace-write",
+    });
+    expect(transports.get("runtime-live")?.calls[2]?.params).toMatchObject({
+      sandboxPolicy: codexWorkspaceWriteSandboxPolicy("/repo", false),
+    });
+  });
+
+  test("maps explicit spec read-only policy to no writable roots for turns", async () => {
+    const { adapter, transports } = createHarness({
+      loadCodexRuntimeConfig: async () => ({
+        enabled: true,
+        defaults: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          workspaceWriteNetworkAccess: true,
+        },
+        roleOverrides: {
+          spec: { sandboxMode: "read-only" },
+        },
+      }),
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      systemPrompt: "Spec it.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        role: "spec",
+        parts: [{ kind: "text", text: "Continue spec" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    expect(transports.get("runtime-live")?.calls[1]?.params).toMatchObject({
+      sandbox: "read-only",
+    });
+    expect(transports.get("runtime-live")?.calls[3]?.params).toMatchObject({
+      sandboxPolicy: { type: "readOnly", networkAccess: false },
+    });
+  });
+
+  test("fails roleless existing-session hydration without defaulting policy", async () => {
+    const { adapter } = createHarness();
+
+    await expect(
+      adapter.sendUserMessage({
+        ...codexUserMessageInput({
+          externalSessionId: "thread-roleless",
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+        role: null,
+      }),
+    ).rejects.toThrow(
+      "Cannot load Codex runtime policy for session 'thread-roleless' because no agent role was provided or registered locally.",
+    );
   });
 
   test("updates the session model used for subsequent turns", async () => {
@@ -508,6 +696,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => new RecordingTransport("runtime-live", false),
       drainServerRequests: async () => [],
       respondServerRequest: async () => {},
+      loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     });
 
     await expect(
@@ -527,6 +716,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => transport,
       drainServerRequests: async () => [],
       respondServerRequest: async () => {},
+      loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     });
 
     await expect(

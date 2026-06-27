@@ -1,5 +1,10 @@
 import { mock } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  type CodexRuntimeConfig,
+  DEFAULT_CODEX_RUNTIME_POLICY,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import type {
   AgentSessionRef,
   AgentSessionRuntimeRef,
@@ -384,6 +389,12 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   }
 }
 
+export const defaultCodexRuntimeConfig = (): CodexRuntimeConfig => ({
+  enabled: true,
+  defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+  roleOverrides: {},
+});
+
 const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
   const threadId = (request.params as { threadId: string }).threadId;
   return {
@@ -426,6 +437,7 @@ export const createAdapterWithTransport = (
     drainServerRequests: async () => [],
     drainNotifications: async () => [],
     respondServerRequest: async () => {},
+    loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     ...overrides,
   });
 
@@ -461,6 +473,7 @@ export const createHarness = (
     drainServerRequests,
     drainNotifications,
     respondServerRequest,
+    loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     ...overrides,
   });
 

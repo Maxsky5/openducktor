@@ -15,6 +15,7 @@ import {
 } from "./codex-app-server-transcript";
 import type { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import type { CodexTransportPolicy } from "./codex-session-policy";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
@@ -39,6 +40,7 @@ type CodexSessionHistoryInput = {
     threadId: string,
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
   rememberTodos: (externalSessionId: string, todos: AgentSessionTodoItem[]) => void;
+  threadResumePolicy?: CodexTransportPolicy;
 };
 
 const codexSystemPromptHistoryMessage = ({
@@ -167,11 +169,22 @@ export const loadCodexSessionHistory = async ({
   tokenUsageByTurnKey,
   drainThreadReadTokenUsage,
   rememberTodos,
+  threadResumePolicy,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   let response: unknown | null;
   if (session) {
-    const isThreadReadable = await threadInventory.ensureThreadReadable(client, runtimeId, input);
+    if (!threadResumePolicy) {
+      throw new Error(
+        `Cannot resume Codex thread '${input.externalSessionId}' without runtime policy.`,
+      );
+    }
+    const isThreadReadable = await threadInventory.ensureThreadReadable(
+      client,
+      runtimeId,
+      input,
+      threadResumePolicy,
+    );
     response = isThreadReadable
       ? await threadInventory.readThreadWithTurns(client, input.externalSessionId)
       : null;

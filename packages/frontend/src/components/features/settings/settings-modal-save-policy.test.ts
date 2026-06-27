@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
+  buildCodexDangerousSettingsSaveError,
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
@@ -62,6 +63,9 @@ describe("settings-modal-save-policy", () => {
     );
     expect(buildRuntimeAvailabilitySaveError(2)).toBe(
       "Fix 2 disabled runtime selections before saving.",
+    );
+    expect(buildCodexDangerousSettingsSaveError()).toBe(
+      "Acknowledge the dangerous Codex runtime settings before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({

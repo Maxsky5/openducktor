@@ -50,6 +50,7 @@ const createArgs = (
   reusablePromptValidationErrorCount: 0,
   hasRuntimeAvailabilityErrors: false,
   runtimeAvailabilityErrorCount: 0,
+  hasUnacknowledgedCodexDangerousSettings: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   invalidRepoPathsWithDevServerErrors: [],
@@ -137,6 +138,31 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe("Fix 2 disabled runtime selections before saving.");
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("blocks unacknowledged dangerous Codex settings before persistence", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs({
+        hasUnacknowledgedCodexDangerousSettings: true,
+        saveSettingsSnapshot,
+      }),
+    );
+
+    await harness.mount();
+
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Acknowledge the dangerous Codex runtime settings before saving.",
+    );
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();

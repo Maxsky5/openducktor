@@ -1,3 +1,4 @@
+import type { CodexEffectivePolicy } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -11,10 +12,7 @@ import {
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
-import {
-  codexWorkspaceWriteSandboxPolicy,
-  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
-} from "./codex-session-policy";
+import { codexApprovalsReviewer, codexSandboxPolicy } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
@@ -43,6 +41,7 @@ export type CodexTurnLifecycleContext = {
     sourceParts: AgentUserMessagePart[],
   ): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
+  effectivePolicy(role: NonNullable<CodexSessionState["role"]>): Promise<CodexEffectivePolicy>;
 };
 
 const flushQueuedUserMessages = async (
@@ -185,6 +184,21 @@ export const startCodexTurnForSession = async (
   });
 
   const client = context.clientForRuntime(session.runtimeId);
+  if (!session.role) {
+    turnSettled = true;
+    context.activeTurnsBySessionId.delete(session.threadId);
+    throw new Error(
+      `Cannot load Codex runtime policy for session '${externalSessionId}' because no agent role is registered locally.`,
+    );
+  }
+  let policy: CodexEffectivePolicy;
+  try {
+    policy = await context.effectivePolicy(session.role);
+  } catch (error) {
+    turnSettled = true;
+    context.activeTurnsBySessionId.delete(session.threadId);
+    throw error;
+  }
   try {
     await context.validateModel(client, session.runtimeId, model);
   } catch (error) {
@@ -195,10 +209,11 @@ export const startCodexTurnForSession = async (
 
   const turnStartPromise = client
     .turnStart({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      approvalPolicy: policy.approvalPolicy,
+      approvalsReviewer: codexApprovalsReviewer(policy),
       threadId: session.threadId,
       input,
-      sandboxPolicy: codexWorkspaceWriteSandboxPolicy(session.workingDirectory),
+      sandboxPolicy: codexSandboxPolicy(policy, session.workingDirectory),
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     })

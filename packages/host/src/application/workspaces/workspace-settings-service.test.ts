@@ -1,4 +1,9 @@
-import { DEFAULT_CHAT_SETTINGS, type GlobalConfig, type RepoConfig } from "@openducktor/contracts";
+import {
+  DEFAULT_CHAT_SETTINGS,
+  DEFAULT_CODEX_RUNTIME_POLICY,
+  type GlobalConfig,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -43,7 +48,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   },
   agentRuntimes: {
     opencode: { enabled: true },
-    codex: { enabled: false },
+    codex: { enabled: false, defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY }, roleOverrides: {} },
   },
   workspaces: {},
   workspaceOrder: [],
@@ -131,7 +136,29 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.theme).toBe("light");
     expect(snapshot.agentRuntimes?.opencode?.enabled).toBe(true);
     expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
+    expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
+    expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.workspaces).toEqual({});
+  });
+  test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          agentRuntimes: {
+            opencode: { enabled: true },
+            codex: { enabled: true },
+          },
+        } as unknown as Partial<GlobalConfig>),
+      }),
+    );
+
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    expect(snapshot.agentRuntimes.codex).toEqual({
+      enabled: true,
+      defaults: DEFAULT_CODEX_RUNTIME_POLICY,
+      roleOverrides: {},
+    });
   });
   test("lists workspaces in effective order with worktree paths", async () => {
     const service = createWorkspaceSettingsService(
@@ -329,7 +356,24 @@ describe("createWorkspaceSettingsService", () => {
         theme: "dark",
         agentRuntimes: {
           ...snapshot.agentRuntimes,
-          codex: { enabled: true },
+          codex: {
+            enabled: true,
+            defaults: {
+              sandboxMode: "danger-full-access",
+              approvalPolicy: "never",
+              approvalsReviewer: "auto_review",
+              workspaceWriteNetworkAccess: true,
+            },
+            roleOverrides: {
+              spec: { sandboxMode: "read-only" },
+              build: {
+                sandboxMode: "workspace-write",
+                approvalPolicy: "untrusted",
+                workspaceWriteNetworkAccess: true,
+              },
+              qa: { approvalsReviewer: "user" },
+            },
+          },
         },
         workspaces: {
           repo: {
@@ -352,7 +396,48 @@ describe("createWorkspaceSettingsService", () => {
         },
       },
     });
-    expect(settingsConfig.writtenConfigs[0]?.agentRuntimes?.codex?.enabled).toBe(true);
+    expect(settingsConfig.writtenConfigs[0]?.agentRuntimes?.codex).toEqual({
+      enabled: true,
+      defaults: {
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        approvalsReviewer: "auto_review",
+        workspaceWriteNetworkAccess: true,
+      },
+      roleOverrides: {
+        spec: { sandboxMode: "read-only" },
+        build: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "untrusted",
+          workspaceWriteNetworkAccess: true,
+        },
+        qa: { approvalsReviewer: "user" },
+      },
+    });
+  });
+  test("rejects invalid Codex snapshot settings without writing config", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig(),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await expect(
+      Effect.runPromise(
+        service.saveSettingsSnapshot({
+          ...snapshot,
+          agentRuntimes: {
+            ...snapshot.agentRuntimes,
+            codex: {
+              enabled: true,
+              defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+              roleOverrides: { build: { sandboxMode: "read-only" } },
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow("Codex build role sandboxMode cannot be read-only");
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
   test("rejects unknown snapshot workspaces", async () => {
     const service = createWorkspaceSettingsService(

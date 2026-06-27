@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
@@ -364,7 +365,7 @@ const checksStateValue = (): ChecksStateContextValue => ({
 const runtimeDefinitionsValue = () => ({
   runtimeDefinitions: [],
   availableRuntimeDefinitions: [],
-  agentRuntimes: {},
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
   refreshRuntimeDefinitions: async () => [],

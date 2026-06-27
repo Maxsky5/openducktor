@@ -148,6 +148,10 @@ export function SettingsModal({
           validationSummary={{
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
             reusablePromptFieldErrorCount: controller.reusablePromptValidationState.totalErrorCount,
+            runtimeAvailabilityErrorCount:
+              controller.runtimeAvailabilityValidationState.totalErrorCount,
+            hasUnacknowledgedCodexDangerousSettings:
+              controller.hasUnacknowledgedCodexDangerousSettings,
             repoScriptFieldErrorCount: controller.repoScriptValidationErrorCount,
           }}
           errors={{

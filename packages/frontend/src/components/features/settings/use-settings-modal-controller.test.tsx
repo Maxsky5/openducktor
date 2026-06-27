@@ -283,7 +283,7 @@ describe("useSettingsModalController", () => {
     await harness.run((state) => {
       state.updateAgentRuntimes((agentRuntimes) => ({
         ...agentRuntimes,
-        codex: { enabled: true },
+        codex: { ...agentRuntimes.codex, enabled: true },
       }));
     });
 
@@ -292,6 +292,55 @@ describe("useSettingsModalController", () => {
     ).toEqual(["opencode", "codex"]);
 
     await harness.unmount();
+  });
+
+  test("resets Codex danger acknowledgement when dangerous selections are removed", async () => {
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "never",
+            },
+          },
+        }));
+      });
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(true);
+
+      await harness.run((state) => {
+        state.setCodexDangerAcknowledged(true);
+      });
+
+      expect(harness.getLatest().isCodexDangerAcknowledged).toBe(true);
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "on-request",
+            },
+          },
+        }));
+      });
+      await harness.waitFor((state) => !state.isCodexDangerAcknowledged);
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("recalculates catalog runtime kinds when the selected repo changes", async () => {

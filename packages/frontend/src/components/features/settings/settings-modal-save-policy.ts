@@ -47,6 +47,9 @@ export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): stri
   return `Fix ${totalErrorCount} disabled runtime selection${suffix} before saving.`;
 };
 
+export const buildCodexDangerousSettingsSaveError = (): string =>
+  "Acknowledge the dangerous Codex runtime settings before saving.";
+
 export const buildRepoScriptValidationSaveError = ({
   invalidRepoPathsWithDevServerErrors,
   repoScriptValidationErrorCount,

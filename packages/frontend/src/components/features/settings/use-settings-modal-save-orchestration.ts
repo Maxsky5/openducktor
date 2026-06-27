@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import {
+  buildCodexDangerousSettingsSaveError,
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
@@ -27,6 +28,7 @@ type UseSettingsModalSaveOrchestrationArgs = {
   reusablePromptValidationErrorCount: number;
   hasRuntimeAvailabilityErrors: boolean;
   runtimeAvailabilityErrorCount: number;
+  hasUnacknowledgedCodexDangerousSettings: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   invalidRepoPathsWithDevServerErrors: string[];
@@ -55,6 +57,7 @@ export const useSettingsModalSaveOrchestration = ({
   reusablePromptValidationErrorCount,
   hasRuntimeAvailabilityErrors,
   runtimeAvailabilityErrorCount,
+  hasUnacknowledgedCodexDangerousSettings,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
   invalidRepoPathsWithDevServerErrors,
@@ -137,6 +140,15 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
+    if (hasUnacknowledgedCodexDangerousSettings) {
+      const reason = buildCodexDangerousSettingsSaveError();
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     if (hasRepoScriptValidationErrors) {
       setHasAttemptedRepoScriptSubmit(true);
       const reason = buildRepoScriptValidationSaveError({
@@ -193,6 +205,7 @@ export const useSettingsModalSaveOrchestration = ({
     hasPromptValidationErrors,
     hasReusablePromptValidationErrors,
     hasRuntimeAvailabilityErrors,
+    hasUnacknowledgedCodexDangerousSettings,
     hasRepoScriptValidationErrors,
     invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,

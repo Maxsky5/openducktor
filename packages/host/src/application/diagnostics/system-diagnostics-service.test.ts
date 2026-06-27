@@ -1,8 +1,9 @@
-import type {
-  GlobalConfig,
-  RepoStoreHealth,
-  RuntimeDescriptor,
-  RuntimeHealth,
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type GlobalConfig,
+  type RepoStoreHealth,
+  type RuntimeDescriptor,
+  type RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
@@ -196,8 +197,8 @@ describe("createSystemDiagnosticsService", () => {
       settingsConfig: createSettingsConfig({
         ...createDefaultGlobalConfig(),
         agentRuntimes: {
-          opencode: { enabled: true },
-          codex: { enabled: false },
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
         },
       }),
       systemCommands: createSystemCommandPort(),

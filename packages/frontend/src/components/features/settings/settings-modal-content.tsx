@@ -56,7 +56,9 @@ export function SettingsModalContent({
     snapshotDraft,
     runtimeDefinitions,
     availableRuntimeDefinitions,
+    isCodexDangerAcknowledged,
     updateAgentRuntimes,
+    setCodexDangerAcknowledged,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
@@ -159,6 +161,8 @@ export function SettingsModalContent({
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
         disabled={isInteractionDisabled}
+        isCodexDangerAcknowledged={isCodexDangerAcknowledged}
+        onCodexDangerAcknowledgedChange={setCodexDangerAcknowledged}
         onUpdateAgentRuntimes={updateAgentRuntimes}
       />
     );

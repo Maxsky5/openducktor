@@ -1,9 +1,11 @@
 import type {
+  CodexAppServerApprovalsReviewer,
   CodexAppServerAskForApproval,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
+  CodexRuntimeConfig,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type {
@@ -159,6 +161,7 @@ export type CodexInitializeParams = {
 
 export type CodexThreadStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
   cwd: string;
   developerInstructions: string;
   sandbox: CodexAppServerSandboxMode;
@@ -168,6 +171,7 @@ export type CodexThreadStartParams = {
 
 export type CodexThreadResumeParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions?: string;
@@ -179,6 +183,7 @@ export type CodexThreadResumeParams = {
 
 export type CodexThreadForkParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions: string;
@@ -194,6 +199,7 @@ export type CodexThreadSetNameParams = {
 
 export type CodexTurnStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   input: CodexUserInput[];
   sandboxPolicy: CodexAppServerSandboxPolicy;
@@ -303,6 +309,7 @@ export type CodexAppServerAdapterOptions = {
     listener: (event: CodexAppServerStreamEvent) => void,
   ) => Promise<() => void> | (() => void);
   respondServerRequest: CodexServerRequestResponder;
+  loadCodexRuntimeConfig: () => Promise<CodexRuntimeConfig>;
 };
 
 export type {

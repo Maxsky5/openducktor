@@ -1,5 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ChatSettings, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  type ChatSettings,
+  DEFAULT_AGENT_RUNTIMES,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -190,7 +194,7 @@ function runtimeDefinitionsValue() {
   return {
     runtimeDefinitions: [],
     availableRuntimeDefinitions: [],
-    agentRuntimes: {},
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => [],
