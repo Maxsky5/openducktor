@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useReducer, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
+  findFirstChangedSessionMessageIndex,
   getSessionMessageCount,
   getSessionMessagesRevision,
 } from "@/state/operations/agent-orchestrator/support/messages";
@@ -9,11 +10,13 @@ import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
   type AgentChatWindowRow,
   type AgentChatWindowTurn,
+  buildAgentChatWindowRowsStateFromPrefix,
   createAgentChatWindowRowsStateBuilder,
 } from "./agent-chat-thread-windowing";
 import {
   createTranscriptRowsCache,
   peekReusableTranscriptRowsState,
+  peekTranscriptRowsCacheEntry,
   type TranscriptRowsCache,
   writeTranscriptRowsCacheEntry,
 } from "./agent-chat-transcript-rows-cache";
@@ -287,6 +290,61 @@ export const useAgentChatTranscriptRows = ({
           dispatchResolvedTranscriptState(nextTranscriptState);
         }
       });
+      return;
+    }
+
+    const previousCacheEntry = peekTranscriptRowsCacheEntry({
+      session: currentSession,
+      showThinkingMessages,
+      cache: rowsCache,
+    });
+    const firstChangedMessageIndex = previousCacheEntry
+      ? findFirstChangedSessionMessageIndex(previousCacheEntry.messages, currentSession)
+      : 0;
+    const changedMessageCount = getSessionMessageCount(currentSession) - firstChangedMessageIndex;
+    const previousMessageCount = previousCacheEntry?.messages.items.length ?? 0;
+    const currentMessageCount = getSessionMessageCount(currentSession);
+    const isNoShrink = currentMessageCount >= previousMessageCount;
+    const previousChangedMessage = previousCacheEntry?.messages.items[firstChangedMessageIndex];
+    const currentChangedMessage = currentSession.messages.items[firstChangedMessageIndex];
+    const isTailAppend = Boolean(
+      previousCacheEntry && firstChangedMessageIndex >= previousMessageCount,
+    );
+    const isAssistantTailEdit = Boolean(
+      previousChangedMessage &&
+        currentChangedMessage &&
+        firstChangedMessageIndex === previousMessageCount - 1 &&
+        previousChangedMessage.id === currentChangedMessage.id &&
+        previousChangedMessage.role === "assistant" &&
+        currentChangedMessage.role === "assistant",
+    );
+    if (
+      previousCacheEntry &&
+      firstChangedMessageIndex >= 0 &&
+      isNoShrink &&
+      changedMessageCount >= 0 &&
+      changedMessageCount <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT &&
+      (isTailAppend || isAssistantTailEdit)
+    ) {
+      const rowsState = buildAgentChatWindowRowsStateFromPrefix({
+        session: currentSession,
+        showThinkingMessages,
+        previousRowsState: previousCacheEntry,
+        startMessageIndex: firstChangedMessageIndex,
+      });
+      writeTranscriptRowsCacheEntry({
+        session: currentSession,
+        showThinkingMessages,
+        rowsState,
+        cache: rowsCache,
+      });
+      dispatchResolvedTranscriptState(
+        toTranscriptRowsState({
+          session: currentSession,
+          revision: currentRevision,
+          rowsState,
+        }),
+      );
       return;
     }
 

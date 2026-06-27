@@ -1,6 +1,7 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
+  forEachSessionMessageFrom,
   getSessionMessageAt,
   getSessionMessageCount,
   isFinalAssistantChatMessage,
@@ -175,6 +176,108 @@ export function buildAgentChatWindowRowsState(
   { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
 ): AgentChatWindowRowsState {
   return createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages }).complete();
+}
+
+const findRowIndexForMessage = (rows: AgentChatWindowRow[], messageId: string): number => {
+  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+    const row = rows[rowIndex];
+    if (row?.kind === "message" && row.message.id === messageId) {
+      return rowIndex;
+    }
+  }
+
+  return -1;
+};
+
+const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): string | null => {
+  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+    const row = rows[rowIndex];
+    if (
+      row?.kind === "message" &&
+      row.message.role === "assistant" &&
+      row.message.meta?.kind === "assistant" &&
+      row.message.meta.isFinal === false
+    ) {
+      return row.message.id;
+    }
+  }
+
+  return null;
+};
+
+export function buildAgentChatWindowRowsStateFromPrefix({
+  session,
+  showThinkingMessages,
+  previousRowsState,
+  startMessageIndex,
+}: {
+  session: AgentChatThreadSession;
+  showThinkingMessages: boolean;
+  previousRowsState: AgentChatWindowRowsState;
+  startMessageIndex: number;
+}): AgentChatWindowRowsState {
+  const sessionKey = agentSessionIdentityKey(session);
+  const messageCount = getSessionMessageCount(session);
+  let firstTailRowIndex = previousRowsState.rows.length;
+
+  for (let messageIndex = startMessageIndex; messageIndex < messageCount; messageIndex += 1) {
+    const message = getSessionMessageAt(session, messageIndex);
+    if (!message || (message.role === "thinking" && !showThinkingMessages)) {
+      continue;
+    }
+
+    const messageRowIndex = findRowIndexForMessage(previousRowsState.rows, message.id);
+    if (messageRowIndex >= 0) {
+      const maybeDurationRowIndex = messageRowIndex - 1;
+      const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
+      firstTailRowIndex =
+        maybeDurationRow?.kind === "turn_duration" &&
+        maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
+          ? maybeDurationRowIndex
+          : messageRowIndex;
+    }
+    break;
+  }
+
+  const rows = previousRowsState.rows.slice(0, firstTailRowIndex);
+  let hasAttachmentMessages = previousRowsState.hasAttachmentMessages;
+  let lastUserMessageId = previousRowsState.lastUserMessageId;
+  let activeStreamingAssistantMessageId = isAgentSessionActivityWorking(session.activityState)
+    ? findActiveStreamingAssistantMessageId(rows)
+    : null;
+
+  forEachSessionMessageFrom(session, startMessageIndex, (message) => {
+    if (
+      !hasAttachmentMessages &&
+      message.meta?.kind === "user" &&
+      message.meta.parts?.some((part) => part.kind === "attachment")
+    ) {
+      hasAttachmentMessages = true;
+    }
+
+    if (message.role === "user") {
+      lastUserMessageId = message.id;
+    }
+
+    if (
+      isAgentSessionActivityWorking(session.activityState) &&
+      message.role === "assistant" &&
+      message.meta?.kind === "assistant" &&
+      message.meta.isFinal === false
+    ) {
+      activeStreamingAssistantMessageId = message.id;
+    }
+
+    appendMessageRows(rows, sessionKey, message, showThinkingMessages);
+  });
+
+  return {
+    rows,
+    turns: buildAgentChatWindowTurns(rows),
+    hasAttachmentMessages,
+    lastUserMessageId,
+    activeStreamingAssistantMessageId,
+  };
 }
 
 export function buildAgentChatWindowRows(

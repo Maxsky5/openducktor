@@ -15,7 +15,7 @@ export type TranscriptRowsCacheValue = Pick<
   | "activeStreamingAssistantMessageId"
 >;
 
-type TranscriptRowsCacheEntry = AgentChatWindowRowsState & {
+export type TranscriptRowsCacheEntry = AgentChatWindowRowsState & {
   messages: AgentChatThreadSession["messages"];
 };
 
@@ -127,4 +127,17 @@ export const peekReusableTranscriptRowsState = ({
     touchTranscriptRowsCacheEntry(cache, cacheKey, cacheEntry);
   }
   return toTranscriptRowsCacheValue(cacheEntry, session.activityState);
+};
+
+export const peekTranscriptRowsCacheEntry = ({
+  session,
+  showThinkingMessages,
+  cache,
+}: {
+  session: AgentChatThreadSession;
+  showThinkingMessages: boolean;
+  cache: TranscriptRowsCache;
+}): TranscriptRowsCacheEntry | null => {
+  const cacheKey = toTranscriptRowsCacheKey(agentSessionIdentityKey(session), showThinkingMessages);
+  return cache.get(cacheKey) ?? null;
 };

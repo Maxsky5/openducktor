@@ -126,7 +126,166 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.unmount();
   });
 
-  test("keeps active-session rows visible while an updated transcript revision is deriving", async () => {
+  test("updates a large running session tail append immediately without waiting for derivation", async () => {
+    const session = createLargeSession("session-tail-append");
+    const harness = await mountHarness({
+      session,
+      showThinkingMessages: true,
+    });
+    await flushTranscriptDerivation();
+    const prefixRow = harness.getLatest().transcriptState.rows[0];
+
+    const nextSession = buildSession({
+      ...session,
+      messages: createSessionMessagesState(
+        "session-tail-append",
+        [
+          ...session.messages.items,
+          buildMessage("assistant", "Follow-up", { id: "assistant-new" }),
+        ],
+        session.messages.version + 1,
+      ),
+    });
+    await harness.update({
+      session: nextSession,
+      showThinkingMessages: true,
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+    expect(latest.transcriptState.rows[0]).toBe(prefixRow);
+    expect(
+      latest.transcriptState.rows.some(
+        (row) => row.kind === "message" && row.message.id === "assistant-new",
+      ),
+    ).toBe(true);
+    await harness.unmount();
+  });
+
+  test("finalizes a large running session streaming assistant tail update immediately", async () => {
+    const baseSession = createLargeSession("session-tail-finalize");
+    const streamingAssistant = buildMessage("assistant", "Streaming", {
+      id: "assistant-streaming",
+      meta: { kind: "assistant", isFinal: false, agentRole: "build" },
+    });
+    const session = buildSession({
+      ...baseSession,
+      messages: createSessionMessagesState(
+        "session-tail-finalize",
+        [...baseSession.messages.items, streamingAssistant],
+        2,
+      ),
+    });
+    const harness = await mountHarness({
+      session,
+      showThinkingMessages: true,
+    });
+    await flushTranscriptDerivation();
+    const prefixRow = harness.getLatest().transcriptState.rows[0];
+    expect(harness.getLatest().transcriptState.activeStreamingAssistantMessageId).toBe(
+      "assistant-streaming",
+    );
+
+    const finalizedAssistant = buildMessage("assistant", "Done", {
+      id: "assistant-streaming",
+      meta: { kind: "assistant", isFinal: true, agentRole: "build", durationMs: 4_000 },
+    });
+    await harness.update({
+      session: buildSession({
+        ...session,
+        messages: createSessionMessagesState(
+          "session-tail-finalize",
+          [...baseSession.messages.items, finalizedAssistant],
+          3,
+        ),
+      }),
+      showThinkingMessages: true,
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+    expect(latest.transcriptState.rows[0]).toBe(prefixRow);
+    expect(latest.transcriptState.activeStreamingAssistantMessageId).toBeNull();
+    expect(
+      latest.transcriptState.rows.some(
+        (row) => row.kind === "turn_duration" && row.durationMs === 4_000,
+      ),
+    ).toBe(true);
+    await harness.unmount();
+  });
+
+  test("does not use stale prefix metadata for a shrinking assistant replacement", async () => {
+    const firstUserMessage = buildMessage("user", "Attached context", {
+      id: "user-with-attachment",
+      meta: {
+        kind: "user",
+        state: "read",
+        parts: [
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-1",
+              kind: "pdf",
+              mime: "text/plain",
+              name: "context.txt",
+              path: "/tmp/context.txt",
+            },
+          },
+        ],
+      },
+    });
+    const previousMessages = [
+      firstUserMessage,
+      ...Array.from({ length: 499 }, (_, index) =>
+        buildMessage("assistant", `Previous ${index + 1}`, {
+          id: `assistant-${index + 1}`,
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ),
+    ];
+    const session = buildSession({
+      externalSessionId: "session-shrink-assistant-replacement",
+      messages: createSessionMessagesState(
+        "session-shrink-assistant-replacement",
+        previousMessages,
+        1,
+      ),
+    });
+    const harness = await mountHarness({
+      session,
+      showThinkingMessages: true,
+    });
+    await flushTranscriptDerivation();
+    expect(harness.getLatest().transcriptState.hasAttachmentMessages).toBe(true);
+    expect(harness.getLatest().transcriptState.lastUserMessageId).toBe("user-with-attachment");
+
+    const nextMessages = Array.from({ length: 50 }, (_, index) =>
+      buildMessage("assistant", `Current ${index + 1}`, {
+        id: `current-assistant-${index + 1}`,
+        meta: { kind: "assistant", isFinal: false },
+      }),
+    );
+    await harness.update({
+      session: buildSession({
+        ...session,
+        messages: createSessionMessagesState(
+          "session-shrink-assistant-replacement",
+          nextMessages,
+          2,
+        ),
+      }),
+      showThinkingMessages: true,
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+    expect(latest.transcriptState.hasAttachmentMessages).toBe(false);
+    expect(latest.transcriptState.lastUserMessageId).toBeNull();
+    expect(latest.transcriptState.rows).toHaveLength(50);
+    await harness.unmount();
+  });
+
+  test("keeps active-session rows visible while a non-tail transcript revision is deriving", async () => {
     const messages = Array.from({ length: 500 }, (_, index) =>
       buildMessage("user", `Message ${index + 1}`, { id: `message-${index + 1}` }),
     );
@@ -146,7 +305,10 @@ describe("useAgentChatTranscriptRows", () => {
         ...session,
         messages: createSessionMessagesState(
           "session-active-update",
-          [...messages, buildMessage("assistant", "Follow-up", { id: "assistant-follow-up" })],
+          [
+            buildMessage("user", "Changed first message", { id: "message-1" }),
+            ...messages.slice(1),
+          ],
           2,
         ),
       }),
