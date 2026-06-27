@@ -129,6 +129,8 @@ export const peekReusableTranscriptRowsState = ({
   return toTranscriptRowsCacheValue(cacheEntry, session.activityState);
 };
 
+// Intentionally returns the latest entry for this session key without revision validation.
+// Callers must apply strict safety gates before reusing any prefix rows from it.
 export const peekTranscriptRowsCacheEntry = ({
   session,
   showThinkingMessages,

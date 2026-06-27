@@ -3,6 +3,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatWindowRowsState,
+  buildAgentChatWindowRowsStateFromPrefix,
   buildAgentChatWindowTurns,
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
@@ -150,6 +151,95 @@ describe("agent-chat-thread windowing helpers", () => {
     const rows = buildAgentChatWindowRowsState(session, { showThinkingMessages: true }).rows;
 
     expect(rows).toEqual([]);
+  });
+
+  test("buildAgentChatWindowRowsStateFromPrefix preserves visible prefix rows while hiding appended thinking messages", () => {
+    const previousSession = buildSession({
+      externalSessionId: "session-prefix-hidden-append",
+      messages: [
+        buildMessage("user", "Question", { id: "user-1" }),
+        buildMessage("thinking", "Hidden reasoning", { id: "thinking-1" }),
+        buildMessage("assistant", "Answer", { id: "assistant-1" }),
+      ],
+    });
+    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+      showThinkingMessages: false,
+    });
+    const prefixRow = previousRowsState.rows[0];
+    const nextSession = buildSession({
+      ...previousSession,
+      messages: [
+        ...previousSession.messages.items,
+        buildMessage("thinking", "Still hidden", { id: "thinking-2" }),
+        buildMessage("assistant", "Next answer", { id: "assistant-2" }),
+      ],
+    });
+
+    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+      session: nextSession,
+      showThinkingMessages: false,
+      previousRowsState,
+      startMessageIndex: previousSession.messages.items.length,
+    });
+
+    expect(nextRowsState.rows[0]).toBe(prefixRow);
+    expect(nextRowsState.rows.map((row) => row.key)).toEqual([
+      `${agentSessionIdentityKey(nextSession)}:user-1`,
+      `${agentSessionIdentityKey(nextSession)}:assistant-1:duration`,
+      `${agentSessionIdentityKey(nextSession)}:assistant-1`,
+      `${agentSessionIdentityKey(nextSession)}:assistant-2:duration`,
+      `${agentSessionIdentityKey(nextSession)}:assistant-2`,
+    ]);
+    expect(
+      nextRowsState.rows.some((row) => row.kind === "message" && row.message.role === "thinking"),
+    ).toBe(false);
+  });
+
+  test("buildAgentChatWindowRowsStateFromPrefix replaces a tail after hidden thinking without duplicating rows", () => {
+    const previousSession = buildSession({
+      externalSessionId: "session-prefix-hidden-edit",
+      status: "running",
+      messages: [
+        buildMessage("user", "Question", { id: "user-1" }),
+        buildMessage("thinking", "Hidden reasoning", { id: "thinking-1" }),
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ],
+    });
+    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+      showThinkingMessages: false,
+    });
+    const prefixRow = previousRowsState.rows[0];
+    const nextSession = buildSession({
+      ...previousSession,
+      messages: [
+        buildMessage("user", "Question", { id: "user-1" }),
+        buildMessage("thinking", "Updated hidden reasoning", { id: "thinking-1" }),
+        buildMessage("assistant", "Still working", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ],
+    });
+
+    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+      session: nextSession,
+      showThinkingMessages: false,
+      previousRowsState,
+      startMessageIndex: 1,
+    });
+
+    expect(nextRowsState.rows[0]).toBe(prefixRow);
+    expect(nextRowsState.rows.map((row) => row.key)).toEqual([
+      `${agentSessionIdentityKey(nextSession)}:user-1`,
+      `${agentSessionIdentityKey(nextSession)}:assistant-live`,
+    ]);
+    expect(nextRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(
+      nextRowsState.rows.some((row) => row.kind === "message" && row.message.role === "thinking"),
+    ).toBe(false);
   });
 
   test("buildAgentChatWindowRowsState skips turn duration rows for non-final assistant messages", () => {

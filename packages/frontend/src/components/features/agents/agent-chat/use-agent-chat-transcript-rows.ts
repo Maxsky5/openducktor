@@ -18,6 +18,7 @@ import {
   peekReusableTranscriptRowsState,
   peekTranscriptRowsCacheEntry,
   type TranscriptRowsCache,
+  type TranscriptRowsCacheEntry,
   writeTranscriptRowsCacheEntry,
 } from "./agent-chat-transcript-rows-cache";
 
@@ -169,6 +170,52 @@ const now = (): number => {
     : Date.now();
 };
 
+const getIncrementalTranscriptRowsStartIndex = ({
+  previousCacheEntry,
+  currentSession,
+}: {
+  previousCacheEntry: TranscriptRowsCacheEntry | null;
+  currentSession: AgentChatThreadSession;
+}): number | null => {
+  if (!previousCacheEntry) {
+    return null;
+  }
+
+  const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
+    previousCacheEntry.messages,
+    currentSession,
+  );
+  if (firstChangedMessageIndex < 0) {
+    return null;
+  }
+
+  const previousMessageCount = previousCacheEntry.messages.items.length;
+  const currentMessageCount = getSessionMessageCount(currentSession);
+  const changedMessageCount = currentMessageCount - firstChangedMessageIndex;
+  const previousChangedMessage = previousCacheEntry.messages.items[firstChangedMessageIndex];
+  const currentChangedMessage = currentSession.messages.items[firstChangedMessageIndex];
+  const isTailAppend = firstChangedMessageIndex >= previousMessageCount;
+  const isAssistantTailEdit = Boolean(
+    previousChangedMessage &&
+      currentChangedMessage &&
+      firstChangedMessageIndex === previousMessageCount - 1 &&
+      previousChangedMessage.id === currentChangedMessage.id &&
+      previousChangedMessage.role === "assistant" &&
+      currentChangedMessage.role === "assistant",
+  );
+
+  if (
+    currentMessageCount < previousMessageCount ||
+    changedMessageCount < 0 ||
+    changedMessageCount > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT ||
+    (!isTailAppend && !isAssistantTailEdit)
+  ) {
+    return null;
+  }
+
+  return firstChangedMessageIndex;
+};
+
 export const useAgentChatTranscriptRows = ({
   session,
   showThinkingMessages,
@@ -298,39 +345,16 @@ export const useAgentChatTranscriptRows = ({
       showThinkingMessages,
       cache: rowsCache,
     });
-    const firstChangedMessageIndex = previousCacheEntry
-      ? findFirstChangedSessionMessageIndex(previousCacheEntry.messages, currentSession)
-      : 0;
-    const changedMessageCount = getSessionMessageCount(currentSession) - firstChangedMessageIndex;
-    const previousMessageCount = previousCacheEntry?.messages.items.length ?? 0;
-    const currentMessageCount = getSessionMessageCount(currentSession);
-    const isNoShrink = currentMessageCount >= previousMessageCount;
-    const previousChangedMessage = previousCacheEntry?.messages.items[firstChangedMessageIndex];
-    const currentChangedMessage = currentSession.messages.items[firstChangedMessageIndex];
-    const isTailAppend = Boolean(
-      previousCacheEntry && firstChangedMessageIndex >= previousMessageCount,
-    );
-    const isAssistantTailEdit = Boolean(
-      previousChangedMessage &&
-        currentChangedMessage &&
-        firstChangedMessageIndex === previousMessageCount - 1 &&
-        previousChangedMessage.id === currentChangedMessage.id &&
-        previousChangedMessage.role === "assistant" &&
-        currentChangedMessage.role === "assistant",
-    );
-    if (
-      previousCacheEntry &&
-      firstChangedMessageIndex >= 0 &&
-      isNoShrink &&
-      changedMessageCount >= 0 &&
-      changedMessageCount <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT &&
-      (isTailAppend || isAssistantTailEdit)
-    ) {
+    const incrementalStartMessageIndex = getIncrementalTranscriptRowsStartIndex({
+      previousCacheEntry,
+      currentSession,
+    });
+    if (previousCacheEntry && incrementalStartMessageIndex !== null) {
       const rowsState = buildAgentChatWindowRowsStateFromPrefix({
         session: currentSession,
         showThinkingMessages,
         previousRowsState: previousCacheEntry,
-        startMessageIndex: firstChangedMessageIndex,
+        startMessageIndex: incrementalStartMessageIndex,
       });
       writeTranscriptRowsCacheEntry({
         session: currentSession,

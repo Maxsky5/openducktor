@@ -20,6 +20,22 @@ export type AgentChatRenderedTurn = {
   key: string;
   rows: AgentChatWindowRow[];
   isActive: boolean;
+  activeStreamingAssistantMessageId: string | null;
+};
+
+const getTurnActiveStreamingAssistantMessageId = (
+  rows: AgentChatWindowRow[],
+  activeStreamingAssistantMessageId: string | null,
+): string | null => {
+  if (!activeStreamingAssistantMessageId) {
+    return null;
+  }
+
+  return rows.some(
+    (row) => row.kind === "message" && row.message.id === activeStreamingAssistantMessageId,
+  )
+    ? activeStreamingAssistantMessageId
+    : null;
 };
 
 type UseAgentChatRenderedTranscriptArgs = {
@@ -36,7 +52,6 @@ type UseAgentChatRenderedTranscriptArgs = {
 type UseAgentChatRenderedTranscriptResult = {
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
-  activeStreamingAssistantMessageId: string | null;
   allowTurnContainment: boolean;
   transcriptNotice: AgentChatThreadModel["transcriptNotice"];
   isNearBottom: boolean;
@@ -268,12 +283,26 @@ export function useAgentChatRenderedTranscript({
       return [];
     }
 
-    return stagedTranscript.turns.map((turn) => ({
-      key: turn.key,
-      rows: stagedTranscript.rows.slice(turn.start, turn.end + 1),
-      isActive: turn.key === latestUserTurnKey,
-    }));
-  }, [latestUserTurnKey, stagedTranscript.rows, stagedTranscript.turns]);
+    return stagedTranscript.turns.map((turn) => {
+      const rows = stagedTranscript.rows.slice(turn.start, turn.end + 1);
+      const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
+        rows,
+        transcriptRowsState.activeStreamingAssistantMessageId,
+      );
+
+      return {
+        key: turn.key,
+        rows,
+        isActive: turn.key === latestUserTurnKey,
+        activeStreamingAssistantMessageId,
+      };
+    });
+  }, [
+    latestUserTurnKey,
+    stagedTranscript.rows,
+    stagedTranscript.turns,
+    transcriptRowsState.activeStreamingAssistantMessageId,
+  ]);
 
   useLayoutEffect(() => {
     scrollToBottomOnSendRef.current = scrollToBottomOnSend;
@@ -282,7 +311,6 @@ export function useAgentChatRenderedTranscript({
   return {
     messagesContentRef,
     renderedTurns,
-    activeStreamingAssistantMessageId: transcriptRowsState.activeStreamingAssistantMessageId,
     allowTurnContainment: !transcriptRowsState.hasAttachmentMessages,
     transcriptNotice: effectiveTranscriptNotice,
     isNearBottom,
