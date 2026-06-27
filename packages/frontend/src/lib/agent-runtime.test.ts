@@ -219,20 +219,6 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
-  test("classifies subagent execution mode schema issues as optional enhancements", () => {
-    const descriptor = withCapabilities({
-      optionalSurfaces: {
-        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
-        supportsSubagents: true,
-        supportedSubagentExecutionModes: [],
-      },
-    });
-
-    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "[optional_enhancement] runtime descriptor schema violation at capabilities.optionalSurfaces.supportedSubagentExecutionModes: Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
-    ]);
-  });
-
   test("reports runtimes that only cover a partial role-specific workflow scope set", () => {
     const workspaceOnly = withCapabilities({
       workflow: {

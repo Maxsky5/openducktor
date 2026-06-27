@@ -161,7 +161,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsFileStatus: false,
     supportsMcpStatus: true,
     supportsSubagents: true,
-    supportedSubagentExecutionModes: ["background"],
+    supportedSubagentExecutionModes: [],
   },
 } as const satisfies RuntimeCapabilities;
 

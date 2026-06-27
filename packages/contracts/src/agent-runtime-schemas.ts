@@ -502,16 +502,6 @@ export const runtimeCapabilitiesSchema = z
     }
 
     if (
-      capabilities.optionalSurfaces.supportsSubagents &&
-      capabilities.optionalSurfaces.supportedSubagentExecutionModes.length === 0
-    ) {
-      addIssue(
-        ["optionalSurfaces", "supportedSubagentExecutionModes"],
-        "Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
-      );
-    }
-
-    if (
       !capabilities.optionalSurfaces.supportsSubagents &&
       capabilities.optionalSurfaces.supportedSubagentExecutionModes.length > 0
     ) {

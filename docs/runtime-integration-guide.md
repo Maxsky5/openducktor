@@ -150,7 +150,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `optionalSurfaces.supportsProfiles` / `supportsVariants` | Optional enhancement | Runtime supports named profiles or model variants | Session start flow and repo settings | Profile and variant selectors should read these before showing choices |
 | `optionalSurfaces.supportsTodos` / `supportsDiff` / `supportsFileStatus` | Optional enhancement | Runtime can list session todos, diff, and file-status data | Session warmup and inspection views | Runtime-adapter consumers should gate these calls on descriptor support; current Agent Studio git diff/file-status views primarily use host git worktree queries rather than these adapter surfaces |
 | `optionalSurfaces.supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
-| `optionalSurfaces.supportsSubagents` / `supportedSubagentExecutionModes` | Optional enhancement | Runtime can run subagents and declares supported execution modes | Agent orchestration surfaces | Subagent support must include at least one execution mode; disabled support must leave the mode list empty |
+| `optionalSurfaces.supportsSubagents` / `supportedSubagentExecutionModes` | Optional enhancement | Runtime can surface subagents and may declare supported execution modes when it has real mode controls | Agent orchestration surfaces | Runtimes with subagent support may leave the mode list empty when no mode choice exists; disabled support must leave the mode list empty |
 
 The current codebase treats runtime integration in these categories:
 
