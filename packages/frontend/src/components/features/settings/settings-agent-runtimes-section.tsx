@@ -242,6 +242,7 @@ function CodexSettings({
       <div className="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground space-y-1">
         <p>danger-full-access removes sandbox boundaries.</p>
         <p>never disables approval prompts.</p>
+        <p>user routes approval prompts to the user.</p>
         <p>
           auto_review routes eligible prompts through Codex automatic review; it does not weaken the
           sandbox.

@@ -15,7 +15,7 @@ import {
   runtimeCatalogQueryKeys,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
@@ -24,7 +24,7 @@ import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-r
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
-  selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionIdentity: (AgentSessionIdentity | AgentSessionState) | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
@@ -54,13 +54,17 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const sessionForRuntimeData =
+    selectedSessionIdentity && "role" in selectedSessionIdentity
+      ? selectedSessionIdentity
+      : stableSelectedSessionIdentity;
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,
-      selectedSessionIdentity: stableSelectedSessionIdentity,
+      selectedSessionIdentity: sessionForRuntimeData,
       runtimeDefinitions,
     });
-  }, [repoPath, runtimeDefinitions, stableSelectedSessionIdentity]);
+  }, [repoPath, runtimeDefinitions, sessionForRuntimeData]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;

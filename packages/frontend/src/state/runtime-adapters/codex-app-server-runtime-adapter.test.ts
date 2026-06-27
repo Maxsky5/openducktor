@@ -7,6 +7,7 @@ import {
   createUnavailableShellBridge,
   type ShellBridge,
 } from "@/lib/shell-bridge";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../operations/shared/host";
 import { runtimeCatalogQueryKeys } from "../queries/runtime-catalog";
 import { createCodexAppServerRuntimeAdapter } from "./codex-app-server-runtime-adapter";
@@ -85,9 +86,11 @@ const waitForCodexEventListener = async (
 
 describe("createCodexAppServerRuntimeAdapter", () => {
   test("resolves host-managed runtime ids through the host bridge", async () => {
+    await clearAppQueryClient();
     const originalRuntimeEnsure = host.runtimeEnsure;
     const originalRuntimeRequire = host.runtimeRequire;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     const runtimeEnsureCalls: unknown[][] = [];
     const runtimeRequireCalls: unknown[][] = [];
     const codexRequestCalls: unknown[][] = [];
@@ -114,6 +117,9 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       }
       throw new Error(`Unexpected Codex app-server request method: ${method}`);
     }) as typeof host.codexAppServerRequest;
+    host.workspaceGetSettingsSnapshot = mock(async () =>
+      createSettingsSnapshotFixture(),
+    ) as typeof host.workspaceGetSettingsSnapshot;
     configureCodexTestShellBridge();
 
     try {
@@ -156,6 +162,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       host.runtimeEnsure = originalRuntimeEnsure;
       host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
       configureShellBridge(createUnavailableShellBridge());
     }
   });
@@ -164,6 +171,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
     await clearAppQueryClient();
     const originalRuntimeRequire = host.runtimeRequire;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     const codexEventBridge: { listener?: (payload: unknown) => void } = {};
 
     host.runtimeRequire = mock(async () =>
@@ -206,6 +214,9 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       }
       throw new Error(`Unexpected Codex request '${method}'.`);
     }) as typeof host.codexAppServerRequest;
+    host.workspaceGetSettingsSnapshot = mock(async () =>
+      createSettingsSnapshotFixture(),
+    ) as typeof host.workspaceGetSettingsSnapshot;
     configureCodexTestShellBridge({
       subscribeCodexAppServerEvents: async (listener) => {
         codexEventBridge.listener = listener;
@@ -224,6 +235,8 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           runtimeKind: "codex",
           workingDirectory: "/repo",
           externalSessionId: "thread-live",
+          taskId: "task-1",
+          role: "build",
         },
         (event) => events.push(event),
       );
@@ -266,6 +279,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
     } finally {
       host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
       await clearAppQueryClient();
       configureShellBridge(createUnavailableShellBridge());
     }

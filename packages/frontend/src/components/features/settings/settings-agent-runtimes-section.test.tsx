@@ -97,6 +97,7 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("commands spawned by Codex while using workspace-write");
     expect(html).toContain("danger-full-access removes sandbox boundaries");
     expect(html).toContain("never disables approval prompts");
+    expect(html).toContain("user routes approval prompts to the user");
     expect(html).toContain("auto_review routes eligible prompts through Codex automatic review");
     expect(html).toContain("Acknowledgement required");
     expect(html).toContain("I understand these Codex settings reduce safety protections.");

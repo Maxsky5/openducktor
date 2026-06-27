@@ -12,6 +12,7 @@ import type {
   AgentModelCatalog,
   AgentRole,
   AgentSessionHistoryMessage,
+  AgentSessionHydrationRef,
   AgentSessionPort,
   AgentSessionRef,
   AgentSessionRuntimeRef,
@@ -592,7 +593,7 @@ export class CodexAppServerAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRef,
+    input: AgentSessionHydrationRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
@@ -639,7 +640,7 @@ export class CodexAppServerAdapter
     return unsubscribe;
   }
 
-  private async prepareLiveSessionSubscription(input: AgentSessionRef): Promise<void> {
+  private async prepareLiveSessionSubscription(input: AgentSessionHydrationRef): Promise<void> {
     const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
       "subscribe session events",
@@ -748,7 +749,7 @@ export class CodexAppServerAdapter
     return resolveCodexEffectivePolicy(config, role);
   }
 
-  private roleForHydration(input: AgentSessionRef | AgentSessionRuntimeRef): AgentRole {
+  private roleForHydration(input: AgentSessionHydrationRef | AgentSessionRuntimeRef): AgentRole {
     if ("role" in input && input.role) {
       return input.role;
     }

@@ -2,7 +2,7 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentSessionHistorySystemPromptContext,
-  AgentSessionRef,
+  AgentSessionHydrationRef,
 } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -11,7 +11,10 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import {
+  type ObserveAgentSession,
+  toRuntimeSessionContextRef,
+} from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
@@ -160,7 +163,7 @@ type LoadSessionHistoryIntoStoreArgs = {
 
 const observeSelectedSessionWithoutBlockingHistory = (
   observeAgentSession: ObserveAgentSession | undefined,
-  sessionRef: AgentSessionRef,
+  sessionRef: AgentSessionHydrationRef,
 ): void => {
   if (!observeAgentSession) {
     return;
@@ -224,7 +227,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       if (!sessionForHistory) {
         return finishStaleHistoryLoad();
       }
-      const sessionRef = toRuntimeSessionRef(repoPath, sessionForHistory);
+      const sessionRef = toRuntimeSessionContextRef(repoPath, sessionForHistory);
       observeSelectedSessionWithoutBlockingHistory(observeAgentSession, sessionRef);
       if (isStaleRepoOperation()) {
         return finishStaleHistoryLoad();

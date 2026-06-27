@@ -460,6 +460,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
+      role: "build",
     });
     expect(transport.calls.some((call) => call.method === "thread/read")).toBe(true);
     await flushCodexAdapterWork();
@@ -510,6 +511,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
+      role: "build",
     });
     await flushCodexAdapterWork();
     await waitForTransportCall(
@@ -582,6 +584,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
+      role: "build",
     });
     await flushCodexAdapterWork();
 
@@ -628,6 +631,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
+      role: "build",
     });
     await flushCodexAdapterWork();
 

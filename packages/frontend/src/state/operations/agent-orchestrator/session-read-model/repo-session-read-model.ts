@@ -1,4 +1,4 @@
-import type { AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionHydrationRef } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
@@ -12,7 +12,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { projectRuntimeChildPendingInputToSession } from "../pending-input-projection";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { toRuntimeSessionContextRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import {
   applyRuntimeSnapshotToSession,
@@ -22,8 +22,8 @@ import type { TaskSessionRecords } from "./task-session-records";
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
-  liveSessionRefs: AgentSessionRef[];
-  unlistedSessionRefs: AgentSessionRef[];
+  liveSessionRefs: AgentSessionHydrationRef[];
+  unlistedSessionRefs: AgentSessionHydrationRef[];
 };
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
@@ -46,7 +46,7 @@ export const buildRepoSessionReadModel = ({
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   const carriedSessions: AgentSessionState[] = [];
-  const unlistedSessionRefs: AgentSessionRef[] = [];
+  const unlistedSessionRefs: AgentSessionHydrationRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
 
   for (const session of listAgentSessions(currentSessions)) {
@@ -60,12 +60,12 @@ export const buildRepoSessionReadModel = ({
     }
 
     if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
-      unlistedSessionRefs.push(toRuntimeSessionRef(repoPath, session));
+      unlistedSessionRefs.push(toRuntimeSessionContextRef(repoPath, session));
     }
   }
 
   let sessionCollection = createAgentSessionCollection(carriedSessions);
-  const liveSessionRefs: AgentSessionRef[] = [];
+  const liveSessionRefs: AgentSessionHydrationRef[] = [];
 
   for (const { taskId, record } of tasks.records) {
     const identity = toPersistedSessionIdentity(record);
@@ -91,7 +91,7 @@ export const buildRepoSessionReadModel = ({
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
       projectedPendingInput.hasProjectedChildPendingInput
     ) {
-      liveSessionRefs.push(toRuntimeSessionRef(repoPath, session));
+      liveSessionRefs.push(toRuntimeSessionContextRef(repoPath, session));
     }
   }
 

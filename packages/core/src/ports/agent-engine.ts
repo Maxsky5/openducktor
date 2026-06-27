@@ -36,6 +36,12 @@ export type AgentSessionRuntimeRef = AgentSessionRef & {
   systemPrompt?: string;
 };
 
+export type AgentSessionHydrationRef = AgentSessionRef & {
+  taskId?: string;
+  role?: AgentRole | null;
+  model?: AgentModelSelection;
+};
+
 export type StartAgentSessionInput = AgentSessionContext;
 
 export type ResumeAgentSessionInput = AgentSessionRuntimeRef;
@@ -61,15 +67,12 @@ export type AgentSessionHistorySystemPromptContext = {
   startedAt: string;
 };
 
-export type LoadAgentSessionHistoryInput = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
+export type LoadAgentSessionHistoryInput = AgentSessionHydrationRef & {
   systemPromptContext?: AgentSessionHistorySystemPromptContext;
   limit?: number;
 };
 
-export type LoadAgentSessionTodosInput = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
-};
+export type LoadAgentSessionTodosInput = AgentSessionHydrationRef;
 
 export type ListAgentModelsInput = RepoRuntimeRef;
 
@@ -217,7 +220,7 @@ export interface AgentSessionPort {
   replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(
-    input: AgentSessionRef,
+    input: AgentSessionHydrationRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe>;
   stopSession(input: AgentSessionRef): Promise<void>;

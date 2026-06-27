@@ -6,7 +6,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type {
-  AgentSessionRef,
+  AgentSessionHydrationRef,
   AgentSessionRuntimeRef,
   SendAgentUserMessageInput,
 } from "@openducktor/core";
@@ -31,11 +31,13 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
 
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
-): AgentSessionRef => ({
+): AgentSessionHydrationRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "build",
 });
 
 export const codexSessionRuntimeRef = (

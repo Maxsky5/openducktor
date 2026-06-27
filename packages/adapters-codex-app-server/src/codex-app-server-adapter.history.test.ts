@@ -43,6 +43,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
+      role: "build",
     });
 
     expect(history).toEqual([
@@ -256,6 +257,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
+      role: "build",
     });
 
     expect(history[0]).toEqual({
@@ -276,6 +278,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-saved",
+      role: "build",
       systemPromptContext: {
         startedAt: "2026-05-07T00:00:00.000Z",
         systemPrompt: "Use the hydrated task context.",
@@ -368,6 +371,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-search",
+      role: "build",
     });
 
     expect(history).toEqual([
@@ -459,6 +463,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-skill",
+      role: "build",
     });
 
     expect(calls.some((call) => call.method === "skills/list")).toBe(false);
@@ -508,6 +513,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
+      role: "build",
     });
 
     expect(
@@ -605,6 +611,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-unloaded-idle",
+      role: "build",
     });
 
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
@@ -697,6 +704,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-unloaded",
+      role: "build",
     });
 
     expect(history).toContainEqual(
@@ -798,6 +806,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-contract",
+      role: "build",
     });
 
     expect(history).toHaveLength(4);
@@ -942,6 +951,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-command-actions",
+      role: "build",
     });
 
     expect(history).toContainEqual(
@@ -1021,6 +1031,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "missing-thread",
+        role: "build",
       }),
     ).resolves.toEqual([]);
 
@@ -1087,6 +1098,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "Inspect docs", status: "completed" }),
@@ -1161,6 +1173,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-history-todos",
+      role: "build",
     });
 
     expect(history).toContainEqual(
@@ -1185,6 +1198,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-history-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "Load transcript once", status: "completed" }),
@@ -1253,6 +1267,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-empty-todos",
+      role: "build",
     });
     calls.length = 0;
 
@@ -1262,6 +1277,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-empty-todos",
+        role: "build",
       }),
     ).resolves.toEqual([]);
     expect(calls).toEqual([]);
@@ -1323,6 +1339,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-final-message",
+      role: "build",
     });
 
     expect(history).toEqual([
@@ -1390,6 +1407,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-plan-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "Inspect", status: "completed" }),
@@ -1463,6 +1481,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-plan-text-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "First item", status: "completed" }),
@@ -1533,6 +1552,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-named-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "Inspect", status: "completed" }),
@@ -1602,6 +1622,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-json-todos",
+        role: "build",
       }),
     ).resolves.toEqual([
       expect.objectContaining({ content: "Map thread/read", status: "completed" }),
@@ -1674,6 +1695,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-bad-todos",
+        role: "build",
       }),
     ).resolves.toEqual([]);
   });
