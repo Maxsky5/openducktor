@@ -53,6 +53,44 @@ export type AgentChatWindowRowsStateBuilder = {
   complete: () => AgentChatWindowRowsState;
 };
 
+export type AgentChatWindowRowsPrefixMode = "append" | "replace-tail";
+
+export const isStreamingAssistantMessage = (message: AgentChatMessage): boolean =>
+  message.role === "assistant" &&
+  message.meta?.kind === "assistant" &&
+  message.meta.isFinal === false;
+
+const isVisibleTranscriptMessage = (
+  message: AgentChatMessage,
+  showThinkingMessages: boolean,
+): boolean => message.role !== "thinking" || showThinkingMessages;
+
+const updateAggregateMetadataForMessage = ({
+  message,
+  isSessionWorking,
+  metadata,
+}: {
+  message: AgentChatMessage;
+  isSessionWorking: boolean;
+  metadata: AgentChatWindowAggregateMetadata;
+}): void => {
+  if (
+    !metadata.hasAttachmentMessages &&
+    message.meta?.kind === "user" &&
+    message.meta.parts?.some((part) => part.kind === "attachment")
+  ) {
+    metadata.hasAttachmentMessages = true;
+  }
+
+  if (message.role === "user") {
+    metadata.lastUserMessageId = message.id;
+  }
+
+  if (isSessionWorking && isStreamingAssistantMessage(message)) {
+    metadata.activeStreamingAssistantMessageId = message.id;
+  }
+};
+
 const appendMessageRows = (
   rows: AgentChatWindowRow[],
   sessionKey: string,
@@ -94,36 +132,17 @@ export function createAgentChatWindowRowsStateBuilder(
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
-  let hasAttachmentMessages = false;
-  let lastUserMessageId: string | null = null;
-  let activeStreamingAssistantMessageId: string | null = null;
+  const metadata: AgentChatWindowAggregateMetadata = {
+    hasAttachmentMessages: false,
+    lastUserMessageId: null,
+    activeStreamingAssistantMessageId: null,
+  };
   let nextMessageIndex = 0;
 
   const processMessage = (message: AgentChatMessage): void => {
-    const isVisibleMessage = !(message.role === "thinking" && !showThinkingMessages);
+    updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
 
-    if (
-      !hasAttachmentMessages &&
-      message.meta?.kind === "user" &&
-      message.meta.parts?.some((part) => part.kind === "attachment")
-    ) {
-      hasAttachmentMessages = true;
-    }
-
-    if (message.role === "user") {
-      lastUserMessageId = message.id;
-    }
-
-    if (
-      isSessionWorking &&
-      message.role === "assistant" &&
-      message.meta?.kind === "assistant" &&
-      message.meta.isFinal === false
-    ) {
-      activeStreamingAssistantMessageId = message.id;
-    }
-
-    if (!isVisibleMessage) {
+    if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }
 
@@ -163,9 +182,7 @@ export function createAgentChatWindowRowsStateBuilder(
           start,
           end: (turnRowStartIndexes[index + 1] ?? rows.length) - 1,
         })),
-        hasAttachmentMessages,
-        lastUserMessageId,
-        activeStreamingAssistantMessageId,
+        ...metadata,
       };
     },
   };
@@ -189,15 +206,12 @@ const findRowIndexForMessage = (rows: AgentChatWindowRow[], messageId: string): 
   return -1;
 };
 
-const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): string | null => {
+export const findActiveStreamingAssistantMessageId = (
+  rows: AgentChatWindowRow[],
+): string | null => {
   for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
     const row = rows[rowIndex];
-    if (
-      row?.kind === "message" &&
-      row.message.role === "assistant" &&
-      row.message.meta?.kind === "assistant" &&
-      row.message.meta.isFinal === false
-    ) {
+    if (row?.kind === "message" && isStreamingAssistantMessage(row.message)) {
       return row.message.id;
     }
   }
@@ -205,78 +219,65 @@ const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): stri
   return null;
 };
 
+// This helper intentionally trusts the caller's incremental safety plan. Use append mode only
+// for true tail appends; replace-tail is the only mode allowed to cut by message id.
 export function buildAgentChatWindowRowsStateFromPrefix({
   session,
   showThinkingMessages,
   previousRowsState,
   startMessageIndex,
+  mode,
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
   previousRowsState: AgentChatWindowRowsState;
   startMessageIndex: number;
+  mode: AgentChatWindowRowsPrefixMode;
 }): AgentChatWindowRowsState {
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   let firstTailRowIndex = previousRowsState.rows.length;
 
-  for (let messageIndex = startMessageIndex; messageIndex < messageCount; messageIndex += 1) {
-    const message = getSessionMessageAt(session, messageIndex);
-    if (!message || (message.role === "thinking" && !showThinkingMessages)) {
-      continue;
-    }
+  if (mode === "replace-tail") {
+    for (let messageIndex = startMessageIndex; messageIndex < messageCount; messageIndex += 1) {
+      const message = getSessionMessageAt(session, messageIndex);
+      if (!message || !isVisibleTranscriptMessage(message, showThinkingMessages)) {
+        continue;
+      }
 
-    const messageRowIndex = findRowIndexForMessage(previousRowsState.rows, message.id);
-    if (messageRowIndex >= 0) {
-      const maybeDurationRowIndex = messageRowIndex - 1;
-      const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
-      firstTailRowIndex =
-        maybeDurationRow?.kind === "turn_duration" &&
-        maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
-          ? maybeDurationRowIndex
-          : messageRowIndex;
+      const messageRowIndex = findRowIndexForMessage(previousRowsState.rows, message.id);
+      if (messageRowIndex >= 0) {
+        const maybeDurationRowIndex = messageRowIndex - 1;
+        const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
+        firstTailRowIndex =
+          maybeDurationRow?.kind === "turn_duration" &&
+          maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
+            ? maybeDurationRowIndex
+            : messageRowIndex;
+      }
+      break;
     }
-    break;
   }
 
   const rows = previousRowsState.rows.slice(0, firstTailRowIndex);
-  let hasAttachmentMessages = previousRowsState.hasAttachmentMessages;
-  let lastUserMessageId = previousRowsState.lastUserMessageId;
-  let activeStreamingAssistantMessageId = isAgentSessionActivityWorking(session.activityState)
-    ? findActiveStreamingAssistantMessageId(rows)
-    : null;
+  const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
+  const metadata: AgentChatWindowAggregateMetadata = {
+    hasAttachmentMessages: previousRowsState.hasAttachmentMessages,
+    lastUserMessageId: previousRowsState.lastUserMessageId,
+    activeStreamingAssistantMessageId: isSessionWorking
+      ? findActiveStreamingAssistantMessageId(rows)
+      : null,
+  };
 
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
-    if (
-      !hasAttachmentMessages &&
-      message.meta?.kind === "user" &&
-      message.meta.parts?.some((part) => part.kind === "attachment")
-    ) {
-      hasAttachmentMessages = true;
-    }
-
-    if (message.role === "user") {
-      lastUserMessageId = message.id;
-    }
-
-    if (
-      isAgentSessionActivityWorking(session.activityState) &&
-      message.role === "assistant" &&
-      message.meta?.kind === "assistant" &&
-      message.meta.isFinal === false
-    ) {
-      activeStreamingAssistantMessageId = message.id;
-    }
-
+    updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
     appendMessageRows(rows, sessionKey, message, showThinkingMessages);
   });
 
   return {
     rows,
     turns: buildAgentChatWindowTurns(rows),
-    hasAttachmentMessages,
-    lastUserMessageId,
-    activeStreamingAssistantMessageId,
+    ...metadata,
   };
 }
 

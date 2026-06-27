@@ -1,6 +1,7 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { findLastSessionMessageByRole } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatThreadSession } from "./agent-chat.types";
+import { isStreamingAssistantMessage } from "./agent-chat-thread-windowing";
 
 export const resolveActiveStreamingAssistantMessageId = (
   session: Pick<AgentChatThreadSession, "activityState" | "externalSessionId" | "messages"> | null,
@@ -12,7 +13,7 @@ export const resolveActiveStreamingAssistantMessageId = (
   const lastStreamingAssistantMessage = findLastSessionMessageByRole(
     session,
     "assistant",
-    (message) => message.meta?.kind === "assistant" && message.meta.isFinal === false,
+    isStreamingAssistantMessage,
   );
 
   return lastStreamingAssistantMessage?.id ?? null;

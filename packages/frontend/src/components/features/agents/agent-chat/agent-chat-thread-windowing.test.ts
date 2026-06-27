@@ -180,6 +180,7 @@ describe("agent-chat-thread windowing helpers", () => {
       showThinkingMessages: false,
       previousRowsState,
       startMessageIndex: previousSession.messages.items.length,
+      mode: "append",
     });
 
     expect(nextRowsState.rows[0]).toBe(prefixRow);
@@ -229,6 +230,7 @@ describe("agent-chat-thread windowing helpers", () => {
       showThinkingMessages: false,
       previousRowsState,
       startMessageIndex: 1,
+      mode: "replace-tail",
     });
 
     expect(nextRowsState.rows[0]).toBe(prefixRow);

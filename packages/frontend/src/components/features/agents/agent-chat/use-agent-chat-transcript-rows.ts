@@ -170,13 +170,18 @@ const now = (): number => {
     : Date.now();
 };
 
-const getIncrementalTranscriptRowsStartIndex = ({
+type IncrementalTranscriptRowsPlan = {
+  mode: "append" | "replace-tail";
+  startMessageIndex: number;
+};
+
+const getIncrementalTranscriptRowsPlan = ({
   previousCacheEntry,
   currentSession,
 }: {
   previousCacheEntry: TranscriptRowsCacheEntry | null;
   currentSession: AgentChatThreadSession;
-}): number | null => {
+}): IncrementalTranscriptRowsPlan | null => {
   if (!previousCacheEntry) {
     return null;
   }
@@ -213,7 +218,10 @@ const getIncrementalTranscriptRowsStartIndex = ({
     return null;
   }
 
-  return firstChangedMessageIndex;
+  return {
+    mode: isTailAppend ? "append" : "replace-tail",
+    startMessageIndex: firstChangedMessageIndex,
+  };
 };
 
 export const useAgentChatTranscriptRows = ({
@@ -345,16 +353,17 @@ export const useAgentChatTranscriptRows = ({
       showThinkingMessages,
       cache: rowsCache,
     });
-    const incrementalStartMessageIndex = getIncrementalTranscriptRowsStartIndex({
+    const incrementalPlan = getIncrementalTranscriptRowsPlan({
       previousCacheEntry,
       currentSession,
     });
-    if (previousCacheEntry && incrementalStartMessageIndex !== null) {
+    if (previousCacheEntry && incrementalPlan) {
       const rowsState = buildAgentChatWindowRowsStateFromPrefix({
         session: currentSession,
         showThinkingMessages,
         previousRowsState: previousCacheEntry,
-        startMessageIndex: incrementalStartMessageIndex,
+        startMessageIndex: incrementalPlan.startMessageIndex,
+        mode: incrementalPlan.mode,
       });
       writeTranscriptRowsCacheEntry({
         session: currentSession,

@@ -2,7 +2,10 @@ import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-stat
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatThreadSession } from "./agent-chat.types";
-import type { AgentChatWindowRow, AgentChatWindowRowsState } from "./agent-chat-thread-windowing";
+import {
+  type AgentChatWindowRowsState,
+  findActiveStreamingAssistantMessageId,
+} from "./agent-chat-thread-windowing";
 
 const TRANSCRIPT_ROWS_CACHE_LIMIT = 6;
 
@@ -42,22 +45,6 @@ const touchTranscriptRowsCacheEntry = (
     }
     cache.delete(oldestKey);
   }
-};
-
-const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): string | null => {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    const row = rows[index];
-    if (
-      row?.kind === "message" &&
-      row.message.role === "assistant" &&
-      row.message.meta?.kind === "assistant" &&
-      row.message.meta.isFinal === false
-    ) {
-      return row.message.id;
-    }
-  }
-
-  return null;
 };
 
 const toTranscriptRowsCacheValue = (

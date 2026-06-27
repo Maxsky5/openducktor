@@ -162,6 +162,44 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.unmount();
   });
 
+  test("tail append with a duplicate message id preserves the existing prefix", async () => {
+    const session = createLargeSession("session-tail-append-duplicate-id");
+    const harness = await mountHarness({
+      session,
+      showThinkingMessages: true,
+    });
+    await flushTranscriptDerivation();
+    const previousRows = harness.getLatest().transcriptState.rows;
+    const prefixRow = previousRows[0];
+    const previousRowCount = previousRows.length;
+
+    await harness.update({
+      session: buildSession({
+        ...session,
+        messages: createSessionMessagesState(
+          "session-tail-append-duplicate-id",
+          [
+            ...session.messages.items,
+            buildMessage("assistant", "Duplicate id tail", {
+              id: "assistant-0",
+              meta: { kind: "assistant", isFinal: false },
+            }),
+          ],
+          session.messages.version + 1,
+        ),
+      }),
+      showThinkingMessages: true,
+    });
+
+    const latestRows = harness.getLatest().transcriptState.rows;
+    expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
+    expect(latestRows[0]).toBe(prefixRow);
+    expect(latestRows).toHaveLength(previousRowCount + 1);
+    const tailRow = latestRows.at(-1);
+    expect(tailRow?.kind === "message" ? tailRow.message.content : null).toBe("Duplicate id tail");
+    await harness.unmount();
+  });
+
   test("finalizes a large running session streaming assistant tail update immediately", async () => {
     const baseSession = createLargeSession("session-tail-finalize");
     const streamingAssistant = buildMessage("assistant", "Streaming", {
