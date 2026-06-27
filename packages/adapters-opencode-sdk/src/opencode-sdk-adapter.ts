@@ -60,7 +60,7 @@ import {
   listOpencodeLocalRuntimeSnapshots,
   listOpencodeRuntimeSnapshotSources,
 } from "./live-session-snapshots";
-import { sendUserMessage } from "./message-execution";
+import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import {
@@ -405,7 +405,7 @@ export class OpencodeSdkAdapter
       ...(input.directories ? { directories: input.directories } : {}),
       existingExternalSessionIds,
     });
-    return [...snapshots, ...localSnapshots].map((snapshot) =>
+    const liveSnapshots = snapshots.map((snapshot) =>
       toAgentSessionRuntimeSnapshot({
         ref: {
           repoPath: input.repoPath,
@@ -420,6 +420,18 @@ export class OpencodeSdkAdapter
         }),
       }),
     );
+    const localRuntimeSnapshots = localSnapshots.map((snapshot) =>
+      toAgentSessionRuntimeSnapshot({
+        ref: {
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
+          workingDirectory: snapshot.workingDirectory,
+          externalSessionId: snapshot.externalSessionId,
+        },
+        snapshot,
+      }),
+    );
+    return [...liveSnapshots, ...localRuntimeSnapshots];
   }
 
   async readSessionRuntimeSnapshot(
@@ -446,7 +458,13 @@ export class OpencodeSdkAdapter
       workingDirectory: input.workingDirectory,
       externalSessionId: input.externalSessionId,
     });
-    const snapshot = scannedSnapshot ?? localSnapshot;
+    const snapshot = scannedSnapshot
+      ? applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
+          sessions: this.sessions,
+          runtimeId: runtimeClientInput.runtimeId,
+          snapshot: scannedSnapshot,
+        })
+      : localSnapshot;
     if (!snapshot) {
       return toAgentSessionRuntimeSnapshot({
         ref: input,
@@ -463,11 +481,7 @@ export class OpencodeSdkAdapter
         ...input,
         workingDirectory: canonicalWorkingDirectory,
       },
-      snapshot: applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
-        sessions: this.sessions,
-        runtimeId: runtimeClientInput.runtimeId,
-        snapshot,
-      }),
+      snapshot,
     });
   }
 
@@ -573,7 +587,8 @@ export class OpencodeSdkAdapter
     const session = requireSession(this.sessions, input.externalSessionId);
     applyRuntimeContextToSession(session, input);
     startUserMessageSend(session, {
-      expectRuntimeTurnStart: session.activeAssistantMessageId === null,
+      expectRuntimeTurnStart:
+        session.activeAssistantMessageId === null && usesPromptAsyncTransport(input.parts),
     });
     this.emit(input.externalSessionId, {
       type: "session_status",

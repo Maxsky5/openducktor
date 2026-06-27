@@ -26,7 +26,9 @@ export const startUserMessageSend = (
   options: { expectRuntimeTurnStart?: boolean } = {},
 ): void => {
   session.isSendingUserMessage = true;
-  session.isAwaitingRuntimeTurnStart = options.expectRuntimeTurnStart !== false;
+  if (options.expectRuntimeTurnStart === true) {
+    session.isAwaitingRuntimeTurnStart = true;
+  }
 };
 
 export const finishUserMessageSend = (session: SessionRecord): void => {

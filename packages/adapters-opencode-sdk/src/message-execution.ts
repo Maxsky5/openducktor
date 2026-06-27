@@ -185,6 +185,9 @@ const toSlashCommandExecutionRequest = (
   };
 };
 
+export const usesPromptAsyncTransport = (parts: SendAgentUserMessageInput["parts"]): boolean =>
+  !normalizeAgentUserMessageParts(parts).some((part) => part.kind === "slash_command");
+
 const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend => {
   return {
     execute: async ({ session, messageId, modelInput, tools }) => {

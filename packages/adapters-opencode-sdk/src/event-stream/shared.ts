@@ -189,6 +189,7 @@ const emitIdleForSession = (
     if (!isAwaitingRuntimeTurnStart(session)) {
       return false;
     }
+    // Covers terminal completion after early idle suppression or seeded/local idle state.
     clearAwaitingRuntimeTurnStart(session);
     emitter.emit(emitter.externalSessionId, {
       type: "session_idle",
