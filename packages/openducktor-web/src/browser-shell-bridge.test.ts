@@ -31,7 +31,7 @@ describe("browser shell bridge", () => {
   });
 
   test("does not treat noopener window.open null results as blocked popups", async () => {
-    const originalWindow = globalThis.window;
+    const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -44,10 +44,11 @@ describe("browser shell bridge", () => {
         createBrowserShellBridge().openExternalUrl("https://example.com/docs"),
       ).resolves.toBeUndefined();
     } finally {
-      Object.defineProperty(globalThis, "window", {
-        configurable: true,
-        value: originalWindow,
-      });
+      if (originalWindowDescriptor) {
+        Object.defineProperty(globalThis, "window", originalWindowDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
     }
   });
 });
