@@ -54,6 +54,8 @@ const createRuntimeSnapshot = ({
 }: {
   runtimeKind: RuntimeKind;
   externalSessionId: string;
+  taskId: "task-1";
+  role: "build";
   parentExternalSessionId?: string;
   pendingApprovals?: AgentPendingApprovalRequest[];
   pendingQuestions?: AgentPendingQuestionRequest[];
@@ -92,6 +94,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind,
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           pendingQuestions: [pendingQuestion],
           runtimeActivity: "idle",
         }),
@@ -112,6 +116,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind,
         workingDirectory: record.workingDirectory,
       },
@@ -128,12 +134,16 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           workingDirectory: record.workingDirectory,
           runtimeActivity: "running",
         }),
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           workingDirectory: "/repo/other-worktree",
           runtimeActivity: "idle",
         }),
@@ -174,6 +184,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "running",
         }),
       ],
@@ -190,6 +202,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
       },
@@ -240,11 +254,15 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: firstRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "running",
         }),
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: secondRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "running",
         }),
       ],
@@ -309,6 +327,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: removedSession.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind: removedSession.runtimeKind,
         workingDirectory: removedSession.workingDirectory,
       },
@@ -325,6 +345,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "idle",
         }),
       ],
@@ -349,6 +371,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "running",
         }),
       ],
@@ -524,6 +548,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: currentSession.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind: currentSession.runtimeKind,
         workingDirectory: currentSession.workingDirectory,
       },
@@ -647,6 +673,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "running",
           pendingQuestions: [],
         }),
@@ -691,6 +719,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "idle",
           pendingQuestions: [],
         }),
@@ -777,6 +807,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: currentSession.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind: currentSession.runtimeKind,
         workingDirectory: currentSession.workingDirectory,
       },
@@ -823,6 +855,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           pendingQuestions: [pendingQuestion],
           runtimeActivity: "idle",
         }),
@@ -869,11 +903,15 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: parentRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "idle",
         }),
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: "child-session",
+          taskId: "task-1",
+          role: "build",
           parentExternalSessionId: parentRecord.externalSessionId,
           runtimeActivity: "idle",
           pendingApprovals: [childApproval],
@@ -919,6 +957,8 @@ describe("repo session read model", () => {
       {
         repoPath: "/repo",
         externalSessionId: parentRecord.externalSessionId,
+        taskId: "task-1",
+        role: "build",
         runtimeKind: "opencode",
         workingDirectory: parentRecord.workingDirectory,
       },
@@ -940,11 +980,15 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: parentRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           runtimeActivity: "idle",
         }),
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: childRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           parentExternalSessionId: parentRecord.externalSessionId,
           runtimeActivity: "idle",
           pendingQuestions: [childQuestion],
@@ -987,6 +1031,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           pendingQuestions: [secondQuestion, firstQuestion],
         }),
       ],
@@ -1024,6 +1070,8 @@ describe("repo session read model", () => {
         createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          role: "build",
           pendingQuestions: [question],
         }),
       ],

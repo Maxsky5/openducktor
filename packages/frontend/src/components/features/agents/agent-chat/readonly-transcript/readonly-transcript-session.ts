@@ -2,13 +2,11 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import type {
-  AgentChatMessage,
-  AgentSessionIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
-type ReadonlyTranscriptSessionInput = AgentSessionIdentity & {
+type ReadonlyTranscriptSessionInput = AgentSessionTranscriptTarget & {
   history: AgentSessionHistoryMessage[];
 };
 
@@ -33,6 +31,23 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
   }
   return hash;
 };
+
+export const createReadonlyTranscriptSession = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+  history,
+}: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
+  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+  activityState: null,
+  messages: createSessionMessagesState(
+    externalSessionId,
+    historyToChatMessages(history, {
+      role: null,
+    }),
+    transcriptHistoryVersion(history),
+  ),
+});
 
 export const createReadonlyRuntimeSessionState = ({
   externalSessionId,
@@ -63,7 +78,7 @@ export const createEmptyReadonlyRuntimeSessionState = ({
   externalSessionId,
   runtimeKind,
   workingDirectory,
-}: AgentSessionIdentity): AgentSessionState => ({
+}: AgentSessionTranscriptTarget): AgentSessionState => ({
   ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
   taskId: "",
   role: null,

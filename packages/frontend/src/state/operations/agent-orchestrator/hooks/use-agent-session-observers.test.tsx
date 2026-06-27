@@ -45,6 +45,8 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
@@ -91,6 +93,8 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",

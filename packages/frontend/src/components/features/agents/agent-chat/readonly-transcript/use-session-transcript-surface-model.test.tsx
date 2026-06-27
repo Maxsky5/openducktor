@@ -4,7 +4,11 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
-import type { AgentEvent, AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentSessionHistoryMessage,
+  AgentSessionRuntimeRef,
+} from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -24,10 +28,11 @@ import {
   createDeferred,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue, ChecksStateContextValue } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
+import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
 type RepoRuntimeReadinessArgs = Parameters<
   typeof import("@/lib/use-repo-runtime-readiness").useRepoRuntimeReadiness
@@ -49,7 +54,8 @@ const readSessionHistory = mock(
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
 const subscribeSessionEvents = mock(
-  async (_sessionRef: AgentSessionRef, _listener: (event: AgentEvent) => void) => () => undefined,
+  async (_sessionRef: AgentSessionRuntimeRef, _listener: (event: AgentEvent) => void) => () =>
+    undefined,
 );
 let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
@@ -65,11 +71,15 @@ let runtimeReadiness: RepoRuntimeReadiness = {
 };
 let runtimeReadinessCalls: RepoRuntimeReadinessArgs[] = [];
 
-function makeTranscriptTarget(overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity {
+function makeTranscriptTarget(
+  overrides: Partial<AgentSessionTranscriptTarget> = {},
+): AgentSessionTranscriptTarget {
   return {
     externalSessionId: "session-subagent-1",
     runtimeKind: "opencode",
     workingDirectory: "/repo-a",
+    taskId: "task-a",
+    role: "build",
     ...overrides,
   };
 }
@@ -255,7 +265,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     answerAgentQuestion.mockClear();
     subscribeSessionEvents.mockClear();
     subscribeSessionEvents.mockImplementation(
-      async (_sessionRef: AgentSessionRef, _listener: (event: AgentEvent) => void) => () =>
+      async (_sessionRef: AgentSessionRuntimeRef, _listener: (event: AgentEvent) => void) => () =>
         undefined,
     );
     sessionStore = createAgentSessionsStore("/repo-a");
@@ -319,6 +329,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-subagent-1",
+        taskId: "task-a",
+        role: "build",
       });
       const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.externalSessionId).toBe("session-subagent-1");
@@ -379,6 +391,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-requested",
+        taskId: "task-a",
+        role: "build",
       });
     } finally {
       await harness.unmount();
@@ -564,6 +578,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-subagent-1",
+        taskId: "task-a",
+        role: "build",
       });
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
@@ -580,7 +596,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const pendingQuestion = makePendingQuestion();
     let subscribedListener: ((event: AgentEvent) => void) | null = null;
     subscribeSessionEvents.mockImplementationOnce(
-      async (_sessionRef: AgentSessionRef, listener: (event: AgentEvent) => void) => {
+      async (_sessionRef: AgentSessionRuntimeRef, listener: (event: AgentEvent) => void) => {
         subscribedListener = listener;
         return () => undefined;
       },
@@ -727,7 +743,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
-        makeTranscriptTarget(),
+        {
+          externalSessionId: "session-subagent-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        },
         makePendingApproval(),
         "approve_once",
         undefined,
@@ -763,7 +783,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
       });
 
       expect(answerAgentQuestion).toHaveBeenCalledWith(
-        makeTranscriptTarget(),
+        {
+          externalSessionId: "session-subagent-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        },
         makePendingQuestion(),
         [["A"]],
       );

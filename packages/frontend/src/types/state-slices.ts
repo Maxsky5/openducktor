@@ -21,7 +21,7 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionHistoryMessage,
-  AgentSessionHydrationRef,
+  AgentSessionRuntimeRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
   EventUnsubscribe,
@@ -180,12 +180,12 @@ export type AgentSessionHistoryLoadContextValue = {
 };
 
 export type AgentOperationsContextValue = {
-  readSessionTodos: (session: AgentSessionHydrationRef) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: AgentSessionRuntimeRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
   subscribeSessionEvents: (
-    session: AgentSessionHydrationRef,
+    session: AgentSessionRuntimeRef,
     listener: (event: AgentEvent) => void,
   ) => Promise<EventUnsubscribe>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;

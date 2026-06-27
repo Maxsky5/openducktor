@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "./messages";
 import { resolveSessionRuntimeDataRefs } from "./session-runtime-data-refs";
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor =>
@@ -16,6 +17,20 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
   externalSessionId: "external-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
+  ...overrides,
+});
+const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  ...sessionIdentity(),
+  taskId: "task-1",
+  role: "build",
+  title: "BUILD task-1",
+  status: "idle",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  historyLoadState: "not_requested",
+  messages: createSessionMessagesState("external-1"),
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
   ...overrides,
 });
 
@@ -36,7 +51,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: null,
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSessionIdentity: sessionState(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -49,7 +64,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSessionIdentity: sessionState(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -63,6 +78,8 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
       },
     });
   });
@@ -84,11 +101,37 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
+  test("requires role and task context for supported runtime todos", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionIdentity(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "unavailable",
+      error: "Session 'external-1' requires role and task context to read runtime todos.",
+    });
+  });
+
+  test("requires a known role for supported runtime todos", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState({ role: null }),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "unavailable",
+      error: "Session 'external-1' requires role and task context to read runtime todos.",
+    });
+  });
+
   test("fails fast on invalid selected-session runtime context", () => {
     expect(() =>
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity({ workingDirectory: "" }),
+        selectedSessionIdentity: sessionState({ workingDirectory: "" }),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toThrow("Session workingDirectory is required to reach session 'external-1'.");

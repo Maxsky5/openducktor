@@ -203,6 +203,8 @@ export const listenToAgentSessionEvents = (
     repoPath: repoPath ?? "/tmp/repo",
     runtimeKind: session.runtimeKind,
     workingDirectory: session.workingDirectory,
+    taskId: session.taskId,
+    role: session.role,
   };
 
   return listenToAgentSessionEventsImpl({

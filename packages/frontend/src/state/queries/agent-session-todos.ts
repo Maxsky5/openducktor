@@ -1,4 +1,8 @@
-import type { AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentSessionRef,
+  AgentSessionTodoItem,
+  LoadAgentSessionTodosInput,
+} from "@openducktor/core";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -18,8 +22,8 @@ export const agentSessionTodosQueryKeys = {
 };
 
 export const sessionTodosQueryOptions = (
-  session: AgentSessionRef,
-  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>,
+  session: LoadAgentSessionTodosInput,
+  readSessionTodos: (session: LoadAgentSessionTodosInput) => Promise<AgentSessionTodoItem[]>,
 ) =>
   queryOptions<AgentSessionTodoItem[], Error, AgentSessionTodoItem[], QueryKey>({
     queryKey: agentSessionTodosQueryKeys.todos(session),

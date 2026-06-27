@@ -5,11 +5,7 @@ import {
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type {
-  AgentSessionHydrationRef,
-  AgentSessionRuntimeRef,
-  SendAgentUserMessageInput,
-} from "@openducktor/core";
+import type { AgentSessionRuntimeRef, SendAgentUserMessageInput } from "@openducktor/core";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -31,7 +27,7 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
 
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
-): AgentSessionHydrationRef => ({
+): AgentSessionRuntimeRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",

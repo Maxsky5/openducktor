@@ -1,8 +1,8 @@
 import { createContext, use } from "react";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type OpenAgentSessionTranscriptRequest = {
-  target: AgentSessionIdentity;
+  target: AgentSessionTranscriptTarget;
   title?: string;
   description?: string;
 };

@@ -1,9 +1,10 @@
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type ParentSessionRuntimeIdentity = Pick<
-  AgentSessionIdentity,
-  "runtimeKind" | "workingDirectory"
+  AgentSessionTranscriptTarget,
+  "runtimeKind" | "workingDirectory" | "taskId" | "role"
 >;
 
 export const toSubagentSessionIdentity = ({
@@ -24,6 +25,25 @@ export const toSubagentSessionIdentity = ({
     runtimeKind: parentSession.runtimeKind,
     workingDirectory,
   });
+};
+
+export const toSubagentTranscriptTarget = ({
+  externalSessionId,
+  parentSession,
+}: {
+  externalSessionId: string | null | undefined;
+  parentSession: ParentSessionRuntimeIdentity | null | undefined;
+}): AgentSessionTranscriptTarget | null => {
+  const identity = toSubagentSessionIdentity({ externalSessionId, parentSession });
+  if (!identity || !parentSession) {
+    return null;
+  }
+
+  return {
+    ...identity,
+    taskId: parentSession.taskId,
+    role: parentSession.role,
+  };
 };
 
 export const getSubagentMessageSessionIdentity = ({

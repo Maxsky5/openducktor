@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionRuntimeRef } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionObserversRefFixture,
@@ -24,7 +24,7 @@ const buildWorkflowSession = (
 const createPrepareSend = (
   overrides: Partial<Parameters<typeof createPrepareSessionSend>[0]> = {},
 ) => {
-  const observedRefs: AgentSessionRef[] = [];
+  const observedRefs: AgentSessionRuntimeRef[] = [];
   const ensureRuntimeCalls: unknown[] = [];
   const sessionObserversRef = overrides.sessionObserversRef ?? createSessionObserversRefFixture();
 
@@ -95,6 +95,8 @@ describe("prepare session send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "session-1",
+        taskId: "task-1",
+        role: "build",
       },
     ]);
     expect(

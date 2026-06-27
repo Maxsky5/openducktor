@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
-  AgentSessionHydrationRef,
   AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import {
@@ -82,7 +82,7 @@ const createLoaderHarness = ({
 } = {}) => {
   const queryClient = new QueryClient();
   const collection = createCommitSessionCollection(initialSessionCollection);
-  const observedSessions: AgentSessionHydrationRef[] = [];
+  const observedSessions: AgentSessionRuntimeRef[] = [];
   const runtimeSnapshotReads: AgentSessionRef[] = [];
   const persistedSessionReads: string[] = [];
 

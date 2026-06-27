@@ -4,7 +4,7 @@ import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -104,7 +104,14 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
-      ...toRuntimeSessionRef(ctx.repoPath, summary),
+      ...toRuntimeSessionContextRef(ctx.repoPath, {
+        externalSessionId: summary.externalSessionId,
+        runtimeKind: summary.runtimeKind,
+        workingDirectory: summary.workingDirectory,
+        taskId: ctx.taskId,
+        role: ctx.role,
+        selectedModel: null,
+      }),
       limit: FORK_START_HISTORY_LIMIT,
     })
     .catch((error) =>

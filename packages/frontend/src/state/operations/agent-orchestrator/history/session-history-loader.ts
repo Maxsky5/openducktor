@@ -2,7 +2,7 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentSessionHistorySystemPromptContext,
-  AgentSessionHydrationRef,
+  AgentSessionRuntimeRef,
 } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -163,7 +163,7 @@ type LoadSessionHistoryIntoStoreArgs = {
 
 const observeSelectedSessionWithoutBlockingHistory = (
   observeAgentSession: ObserveAgentSession | undefined,
-  sessionRef: AgentSessionHydrationRef,
+  sessionRef: AgentSessionRuntimeRef,
 ): void => {
   if (!observeAgentSession) {
     return;

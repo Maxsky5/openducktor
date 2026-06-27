@@ -6,7 +6,10 @@ import { throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionObservers } from "../support/session-observers";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import {
+  type ObserveAgentSession,
+  toRuntimeSessionContextRef,
+} from "../support/session-runtime-ref";
 
 type PrepareSessionSendDependencies = {
   workspaceRepoPath: string | null;
@@ -78,7 +81,7 @@ export const createPrepareSessionSend = ({
 
     assertNotStale();
     const task = findSessionTask(taskRef.current, session);
-    const sessionRef = toRuntimeSessionRef(repoPath, session);
+    const sessionRef = toRuntimeSessionContextRef(repoPath, session);
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,

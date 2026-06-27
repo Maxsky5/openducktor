@@ -1,12 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
+import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const runtimeKind = "opencode" as const;
-const parentSession = {
+const parentSession: ParentSessionRuntimeIdentity = {
   runtimeKind,
   workingDirectory: "/repo-a",
+  taskId: "task-a",
+  role: "build",
 };
 
 const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
@@ -43,6 +46,8 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
+        taskId: "task-a",
+        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",
@@ -67,6 +72,8 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
+        taskId: "task-a",
+        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",
@@ -91,6 +98,8 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
+        taskId: "task-a",
+        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",
@@ -145,7 +154,7 @@ describe("SubagentTranscriptButton", () => {
 
     rerender(
       <SubagentTranscriptButton
-        parentSession={{ runtimeKind, workingDirectory: "   " }}
+        parentSession={{ ...parentSession, workingDirectory: "   " }}
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSessionEventRouter } from "./session-event-router";
 import {
@@ -18,11 +22,13 @@ import {
   type SessionUpdateFn,
 } from "./session-events-test-harness";
 
-const routeRef = (overrides: Partial<AgentSessionRef> = {}): AgentSessionRef => ({
+const routeRef = (overrides: Partial<AgentSessionRuntimeRef> = {}): AgentSessionRuntimeRef => ({
   externalSessionId: "session-1",
   repoPath: "/tmp/repo",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo",
+  taskId: "task-1",
+  role: "spec",
   ...overrides,
 });
 
@@ -95,7 +101,7 @@ const createRoutingHarness = async ({
 }: {
   eventBatchWindowMs?: number;
   repoPath?: string;
-  sessionRef?: AgentSessionRef;
+  sessionRef?: AgentSessionRuntimeRef;
   sessions?: AgentSessionState[];
   updateSessionTodos?: (
     session: AgentSessionRef,
@@ -159,7 +165,7 @@ const createDirectRouterContext = ({
   sessions,
   onUpdateSession,
 }: {
-  sessionRef: AgentSessionRef;
+  sessionRef: AgentSessionRuntimeRef;
   sessions: AgentSessionState[];
   onUpdateSession?: Parameters<typeof createSessionEventRouter>[0]["context"]["updateSession"];
 }) => {

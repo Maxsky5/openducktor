@@ -12,7 +12,6 @@ import type {
   AgentModelCatalog,
   AgentRole,
   AgentSessionHistoryMessage,
-  AgentSessionHydrationRef,
   AgentSessionPort,
   AgentSessionRef,
   AgentSessionRuntimeRef,
@@ -436,9 +435,7 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
-  private async ensureSessionState(
-    input: AgentSessionRef | AgentSessionRuntimeRef,
-  ): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: AgentSessionRuntimeRef): Promise<AgentSessionSummary> {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? (input.model ?? undefined) : undefined;
@@ -593,7 +590,7 @@ export class CodexAppServerAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionHydrationRef,
+    input: AgentSessionRuntimeRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
@@ -640,7 +637,7 @@ export class CodexAppServerAdapter
     return unsubscribe;
   }
 
-  private async prepareLiveSessionSubscription(input: AgentSessionHydrationRef): Promise<void> {
+  private async prepareLiveSessionSubscription(input: AgentSessionRuntimeRef): Promise<void> {
     const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
       "subscribe session events",
@@ -749,8 +746,8 @@ export class CodexAppServerAdapter
     return resolveCodexEffectivePolicy(config, role);
   }
 
-  private roleForHydration(input: AgentSessionHydrationRef | AgentSessionRuntimeRef): AgentRole {
-    if ("role" in input && input.role) {
+  private roleForHydration(input: AgentSessionRuntimeRef): AgentRole {
+    if (input.role) {
       return input.role;
     }
     const existing = this.localSessions.get(input.externalSessionId);

@@ -1,15 +1,16 @@
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
+import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
   sessionAgentColors?: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: ParentSessionRuntimeIdentity | null;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };

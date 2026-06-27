@@ -106,6 +106,8 @@ const toSelectedSessionThreadSession = ({
 
   return {
     ...identity,
+    taskId: loadedSession.taskId,
+    role: loadedSession.role,
     ...(loadedSession.title ? { title: loadedSession.title } : {}),
     activityState,
     messages: toSessionMessagesState(loadedSession),

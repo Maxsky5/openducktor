@@ -91,6 +91,8 @@ describe("agent runtime services", () => {
         repoPath: "/repo",
         workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
       });
 
       await readSessionRuntimeSnapshots({
@@ -158,6 +160,8 @@ describe("agent runtime services", () => {
     try {
       const sessionRef = {
         externalSessionId: "external-pending",
+        taskId: "task-1",
+        role: "build",
         repoPath: "/repo",
         workingDirectory: "/repo/worktree",
         runtimeKind: "opencode",

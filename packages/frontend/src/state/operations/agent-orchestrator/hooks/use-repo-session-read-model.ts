@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +30,7 @@ type UseRepoSessionReadModelArgs = {
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
-  loadLiveSessionHistory: (session: AgentSessionRef) => Promise<unknown>;
+  loadLiveSessionHistory: (session: AgentSessionRuntimeRef) => Promise<unknown>;
   queryClient: QueryClient;
 };
 

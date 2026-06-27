@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionRuntimeRef } from "@openducktor/core";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type {
   AgentApprovalRequest,
@@ -15,7 +15,7 @@ export type ApplyTransientSessionEvent = (
 ) => AgentSessionState;
 
 export type ObserveTransientAgentSessionEventsParams = {
-  sessionRef: AgentSessionRef;
+  sessionRef: AgentSessionRuntimeRef;
   subscribeEvents: SessionEventAdapter["subscribeEvents"];
   replyApproval: (
     session: AgentSessionIdentity,

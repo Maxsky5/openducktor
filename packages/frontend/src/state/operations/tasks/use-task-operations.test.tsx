@@ -1947,6 +1947,8 @@ describe("use-task-operations", () => {
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo",
+          taskId: "task-1",
+          role: "spec",
         },
         turnMetadata: createSessionTurnMetadata(),
         readSession: (identity) => getAgentSession(sessionsRef.current, identity),

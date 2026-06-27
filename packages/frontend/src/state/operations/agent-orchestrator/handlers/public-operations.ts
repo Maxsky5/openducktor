@@ -3,7 +3,7 @@ import type {
   AgentEnginePort,
   AgentModelSelection,
   AgentSessionHistoryMessage,
-  AgentSessionHydrationRef,
+  AgentSessionRuntimeRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
@@ -62,7 +62,7 @@ export const createOrchestratorPublicOperations = ({
   sessionActions,
   loadAgentSessionHistory,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  readSessionTodos: (session: AgentSessionHydrationRef): Promise<AgentSessionTodoItem[]> =>
+  readSessionTodos: (session: AgentSessionRuntimeRef): Promise<AgentSessionTodoItem[]> =>
     agentEngine.loadSessionTodos(session),
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,

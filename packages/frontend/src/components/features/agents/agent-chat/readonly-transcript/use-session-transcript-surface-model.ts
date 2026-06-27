@@ -9,7 +9,7 @@ import {
   useAgentSessionVisiblePendingInput,
 } from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
@@ -43,7 +43,7 @@ const mergePendingRequests = <Entry extends { requestId: string }>(
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
   workspaceRepoPath: string | null;
-  target: AgentSessionIdentity | null;
+  target: AgentSessionTranscriptTarget | null;
 };
 
 export function useSessionTranscriptSurfaceModel({

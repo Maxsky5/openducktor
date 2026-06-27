@@ -275,6 +275,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
+        taskId: "task-1",
+        role: "spec",
       },
       turnMetadata: createSessionTurnMetadata(),
       readSession: (identity) => getAgentSession(sessionsRef.current, identity),

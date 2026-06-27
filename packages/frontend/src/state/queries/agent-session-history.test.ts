@@ -1,13 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionHistoryQueryKeys, sessionHistoryQueryOptions } from "./agent-session-history";
 
-const sessionRefFixture: AgentSessionRef = {
+const sessionRefFixture: LoadAgentSessionHistoryInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
+  taskId: "task-1",
+  role: "build",
 };
 
 const historyMessageFixture: AgentSessionHistoryMessage = {

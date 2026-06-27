@@ -1,17 +1,24 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionHydrationRef } from "@openducktor/core";
+import type { AgentSessionRuntimeRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { toRuntimeSessionContextRef, toRuntimeSessionRef } from "./session-runtime-ref";
+import { toRuntimeSessionContextRef } from "./session-runtime-ref";
+
+type SessionRuntimeDataSource =
+  | AgentSessionIdentity
+  | Pick<
+      AgentSessionState,
+      "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"
+    >;
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
   | { kind: "unavailable"; error: string }
-  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: AgentSessionHydrationRef | null };
+  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: AgentSessionRuntimeRef | null };
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
-  selectedSessionIdentity: (AgentSessionIdentity | AgentSessionState) | null;
+  selectedSessionIdentity: SessionRuntimeDataSource | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
 
@@ -61,12 +68,16 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
+  if (!("role" in selectedSessionIdentity) || selectedSessionIdentity.role === null) {
+    return {
+      kind: "unavailable",
+      error: `Session '${selectedSessionIdentity.externalSessionId}' requires role and task context to read runtime todos.`,
+    };
+  }
+
   return {
     kind: "available",
     catalogRef,
-    todosRef:
-      "role" in selectedSessionIdentity
-        ? toRuntimeSessionContextRef(repoPath, selectedSessionIdentity)
-        : toRuntimeSessionRef(repoPath, selectedSessionIdentity),
+    todosRef: toRuntimeSessionContextRef(repoPath, selectedSessionIdentity),
   };
 };

@@ -1,5 +1,9 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentSessionRuntimeRef,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
@@ -28,10 +32,10 @@ type UseSessionRuntimeDataArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: AgentSessionRuntimeRef) => Promise<AgentSessionTodoItem[]>;
 };
 
-const skippedSessionTodosQueryOptions = (session: AgentSessionRef | null) =>
+const skippedSessionTodosQueryOptions = (session: AgentSessionRuntimeRef | null) =>
   skippedQueryOptions<AgentSessionTodoItem[]>({
     queryKey: session ? agentSessionTodosQueryKeys.todos(session) : agentSessionTodosQueryKeys.all,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
@@ -54,10 +58,45 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const selectedRuntimeContext =
+    selectedSessionIdentity && "role" in selectedSessionIdentity ? selectedSessionIdentity : null;
+  const hasSelectedRuntimeContext = selectedRuntimeContext !== null;
+  const selectedExternalSessionId = selectedSessionIdentity?.externalSessionId ?? null;
+  const selectedRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
+  const selectedWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
+  const selectedTaskId = selectedRuntimeContext?.taskId ?? null;
+  const selectedRole = selectedRuntimeContext?.role ?? null;
+  const selectedModel = selectedRuntimeContext?.selectedModel ?? null;
+  const stableSelectedSessionRuntimeContext = useMemo(() => {
+    if (
+      !hasSelectedRuntimeContext ||
+      selectedExternalSessionId === null ||
+      selectedRuntimeKind === null ||
+      selectedWorkingDirectory === null ||
+      selectedTaskId === null
+    ) {
+      return null;
+    }
+
+    return {
+      externalSessionId: selectedExternalSessionId,
+      runtimeKind: selectedRuntimeKind,
+      workingDirectory: selectedWorkingDirectory,
+      taskId: selectedTaskId,
+      role: selectedRole,
+      selectedModel,
+    };
+  }, [
+    hasSelectedRuntimeContext,
+    selectedExternalSessionId,
+    selectedRuntimeKind,
+    selectedWorkingDirectory,
+    selectedTaskId,
+    selectedRole,
+    selectedModel,
+  ]);
   const sessionForRuntimeData =
-    selectedSessionIdentity && "role" in selectedSessionIdentity
-      ? selectedSessionIdentity
-      : stableSelectedSessionIdentity;
+    stableSelectedSessionRuntimeContext ?? stableSelectedSessionIdentity;
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,

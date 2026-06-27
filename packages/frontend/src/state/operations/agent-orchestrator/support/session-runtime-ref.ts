@@ -1,5 +1,4 @@
 import type {
-  AgentSessionHydrationRef,
   AgentSessionRef,
   AgentSessionRuntimeRef,
   RuntimeWorkingDirectoryRef,
@@ -7,7 +6,7 @@ import type {
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type ObserveAgentSession = (session: AgentSessionHydrationRef) => Promise<void>;
+export type ObserveAgentSession = (session: AgentSessionRuntimeRef) => Promise<void>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"

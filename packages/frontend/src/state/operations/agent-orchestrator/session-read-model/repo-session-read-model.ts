@@ -1,4 +1,4 @@
-import type { AgentSessionHydrationRef } from "@openducktor/core";
+import type { AgentSessionRuntimeRef } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
@@ -22,8 +22,8 @@ import type { TaskSessionRecords } from "./task-session-records";
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
-  liveSessionRefs: AgentSessionHydrationRef[];
-  unlistedSessionRefs: AgentSessionHydrationRef[];
+  liveSessionRefs: AgentSessionRuntimeRef[];
+  unlistedSessionRefs: AgentSessionRuntimeRef[];
 };
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
@@ -46,7 +46,7 @@ export const buildRepoSessionReadModel = ({
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   const carriedSessions: AgentSessionState[] = [];
-  const unlistedSessionRefs: AgentSessionHydrationRef[] = [];
+  const unlistedSessionRefs: AgentSessionRuntimeRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
 
   for (const session of listAgentSessions(currentSessions)) {
@@ -65,7 +65,7 @@ export const buildRepoSessionReadModel = ({
   }
 
   let sessionCollection = createAgentSessionCollection(carriedSessions);
-  const liveSessionRefs: AgentSessionHydrationRef[] = [];
+  const liveSessionRefs: AgentSessionRuntimeRef[] = [];
 
   for (const { taskId, record } of tasks.records) {
     const identity = toPersistedSessionIdentity(record);

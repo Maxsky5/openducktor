@@ -6,14 +6,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {
   workspaceRepoPath: string | null;
-  target: AgentSessionIdentity | null;
+  target: AgentSessionTranscriptTarget | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;

@@ -1,13 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentSessionRuntimeRef, AgentSessionTodoItem } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionTodosQueryKeys, sessionTodosQueryOptions } from "./agent-session-todos";
 
-const sessionRefFixture: AgentSessionRef = {
+const sessionRefFixture: AgentSessionRuntimeRef = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
+  taskId: "task-1",
+  role: "build",
 };
 
 const todoFixture: AgentSessionTodoItem = {

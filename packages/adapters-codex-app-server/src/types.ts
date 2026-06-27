@@ -161,7 +161,7 @@ export type CodexInitializeParams = {
 
 export type CodexThreadStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   cwd: string;
   developerInstructions: string;
   sandbox: CodexAppServerSandboxMode;
@@ -171,7 +171,7 @@ export type CodexThreadStartParams = {
 
 export type CodexThreadResumeParams = {
   approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions?: string;
@@ -183,7 +183,7 @@ export type CodexThreadResumeParams = {
 
 export type CodexThreadForkParams = {
   approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions: string;
@@ -199,7 +199,7 @@ export type CodexThreadSetNameParams = {
 
 export type CodexTurnStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   input: CodexUserInput[];
   sandboxPolicy: CodexAppServerSandboxPolicy;
