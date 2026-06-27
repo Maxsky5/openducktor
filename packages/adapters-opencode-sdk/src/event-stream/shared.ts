@@ -1,7 +1,13 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
-import { isStreamTurnIdle, markStreamTurnActive, markStreamTurnIdle } from "../session-activity";
+import {
+  clearAwaitingRuntimeTurnStart,
+  isAwaitingRuntimeTurnStart,
+  isStreamTurnIdle,
+  markStreamTurnActive,
+  markStreamTurnIdle,
+} from "../session-activity";
 import type { SessionInput, SessionRecord } from "../types";
 import { readEventProperties } from "./schemas";
 
@@ -176,8 +182,21 @@ const emitIdleForSession = (
   session: SessionRecord | undefined,
   emitter: SessionIdleEmitter,
 ): boolean => {
-  if (!session || isStreamTurnIdle(session)) {
+  if (!session) {
     return false;
+  }
+  if (isStreamTurnIdle(session)) {
+    if (!isAwaitingRuntimeTurnStart(session)) {
+      return false;
+    }
+    // Covers terminal completion after early idle suppression or seeded/local idle state.
+    clearAwaitingRuntimeTurnStart(session);
+    emitter.emit(emitter.externalSessionId, {
+      type: "session_idle",
+      externalSessionId: emitter.externalSessionId,
+      timestamp: emitter.now(),
+    });
+    return true;
   }
   markStreamTurnIdle(session);
   emitter.emit(emitter.externalSessionId, {
@@ -204,6 +223,12 @@ export const markSessionIdle = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): void => {
   markStreamTurnIdle(getSessionRecord(context));
+};
+
+export const isSessionAwaitingRuntimeTurnStart = (
+  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
+): boolean => {
+  return isAwaitingRuntimeTurnStart(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (

@@ -37,6 +37,7 @@ describe("types", () => {
       runtimeId: "runtime-opencode-1",
       streamTurnStatus: "active",
       isSendingUserMessage: false,
+      isAwaitingRuntimeTurnStart: false,
       activeAssistantMessageId: null,
       completedAssistantMessageIds: new Set<string>(),
       emittedAssistantMessageIds: new Set<string>(),

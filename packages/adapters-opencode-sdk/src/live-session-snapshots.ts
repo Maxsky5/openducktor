@@ -8,7 +8,11 @@ import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { readStringProp } from "./guards";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
-import { isLocalSessionBusy, isUserMessageSendInFlight } from "./session-activity";
+import {
+  clearAwaitingRuntimeTurnStart,
+  isAwaitingRuntimeTurnStart,
+  isLocalSessionBusy,
+} from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, SessionRecord } from "./types";
 
@@ -36,7 +40,7 @@ export type ReadOpencodeLocalRuntimeSnapshotInput = OpencodeLocalRuntimeSnapshot
   externalSessionId: string;
 };
 
-export type ApplyOpencodeInFlightSendToRuntimeSnapshotInput = {
+export type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
   sessions: ReadonlyMap<string, SessionRecord>;
   runtimeId: string;
   snapshot: OpencodeRuntimeSnapshotSource;
@@ -116,18 +120,26 @@ const toOpencodeLocalRuntimeSnapshot = (session: SessionRecord): OpencodeRuntime
   pendingQuestions: [],
 });
 
-export const applyOpencodeInFlightSendToRuntimeSnapshot = ({
+export const applyOpencodeAwaitingTurnStartToRuntimeSnapshot = ({
   sessions,
   runtimeId,
   snapshot,
-}: ApplyOpencodeInFlightSendToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
+}: ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
   const localSession = sessions.get(snapshot.externalSessionId);
-  if (
-    !localSession ||
-    localSession.runtimeId !== runtimeId ||
-    !isUserMessageSendInFlight(localSession) ||
-    snapshot.runtimeActivity !== "idle"
-  ) {
+  if (!localSession || localSession.runtimeId !== runtimeId) {
+    return snapshot;
+  }
+
+  const hasRuntimeTurnStartEvidence =
+    snapshot.runtimeActivity !== "idle" ||
+    snapshot.pendingApprovals.length > 0 ||
+    snapshot.pendingQuestions.length > 0;
+  if (hasRuntimeTurnStartEvidence) {
+    clearAwaitingRuntimeTurnStart(localSession);
+    return snapshot;
+  }
+
+  if (!isAwaitingRuntimeTurnStart(localSession)) {
     return snapshot;
   }
 

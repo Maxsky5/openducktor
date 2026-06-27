@@ -71,6 +71,7 @@ const createSession = (overrides?: {
     pendingQueuedUserMessages: [],
     streamTurnStatus: "idle",
     isSendingUserMessage: false,
+    isAwaitingRuntimeTurnStart: false,
   } as unknown as SessionRecord;
 
   return { session, command, promptAsync };
