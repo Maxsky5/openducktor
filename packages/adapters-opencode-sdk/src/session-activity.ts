@@ -21,24 +21,23 @@ export const markStreamTurnIdle = (session: SessionRecord | undefined): void => 
   session.activeAssistantMessageId = null;
 };
 
-export const startUserMessageSend = (session: SessionRecord): void => {
+export const startUserMessageSend = (
+  session: SessionRecord,
+  options: { expectRuntimeTurnStart?: boolean } = {},
+): void => {
   session.isSendingUserMessage = true;
-  session.isAwaitingRuntimeTurnStart = true;
+  session.isAwaitingRuntimeTurnStart = options.expectRuntimeTurnStart !== false;
 };
 
 export const finishUserMessageSend = (session: SessionRecord): void => {
   session.isSendingUserMessage = false;
 };
 
-export const isUserMessageSendInFlight = (session: SessionRecord | undefined): boolean => {
-  return session?.isSendingUserMessage === true;
+export const isAwaitingRuntimeTurnStart = (session: SessionRecord | undefined): boolean => {
+  return session?.isAwaitingRuntimeTurnStart === true;
 };
 
-export const isUserMessageTurnStartPending = (session: SessionRecord | undefined): boolean => {
-  return session?.isSendingUserMessage === true || session?.isAwaitingRuntimeTurnStart === true;
-};
-
-export const clearUserMessageTurnStartPending = (session: SessionRecord | undefined): void => {
+export const clearAwaitingRuntimeTurnStart = (session: SessionRecord | undefined): void => {
   if (!session) {
     return;
   }

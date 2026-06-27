@@ -2,9 +2,9 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
 import {
-  clearUserMessageTurnStartPending,
+  clearAwaitingRuntimeTurnStart,
+  isAwaitingRuntimeTurnStart,
   isStreamTurnIdle,
-  isUserMessageTurnStartPending,
   markStreamTurnActive,
   markStreamTurnIdle,
 } from "../session-activity";
@@ -186,10 +186,10 @@ const emitIdleForSession = (
     return false;
   }
   if (isStreamTurnIdle(session)) {
-    if (!isUserMessageTurnStartPending(session)) {
+    if (!isAwaitingRuntimeTurnStart(session)) {
       return false;
     }
-    clearUserMessageTurnStartPending(session);
+    clearAwaitingRuntimeTurnStart(session);
     emitter.emit(emitter.externalSessionId, {
       type: "session_idle",
       externalSessionId: emitter.externalSessionId,
@@ -224,10 +224,10 @@ export const markSessionIdle = (
   markStreamTurnIdle(getSessionRecord(context));
 };
 
-export const isSessionUserMessageTurnStartPending = (
+export const isSessionAwaitingRuntimeTurnStart = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): boolean => {
-  return isUserMessageTurnStartPending(getSessionRecord(context));
+  return isAwaitingRuntimeTurnStart(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (

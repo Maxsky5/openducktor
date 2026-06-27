@@ -1506,17 +1506,48 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(0);
   });
 
-  test("ignores session.status idle while a user message send is still in flight", async () => {
+  test("ignores session.status idle while waiting for runtime turn start", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [makeSessionStatusIdleEvent()],
       (session) => {
         session.isSendingUserMessage = true;
+        session.isAwaitingRuntimeTurnStart = true;
       },
     );
 
     expect(emitted.filter((event) => event.type === "session_status")).toHaveLength(0);
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
     expect(sessionRecord.streamTurnStatus).toBe("active");
+  });
+
+  test("honors session.status idle after runtime turn start while a send is still in flight", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [makeSessionStatusIdleEvent()],
+      (session) => {
+        session.isSendingUserMessage = true;
+        session.isAwaitingRuntimeTurnStart = false;
+      },
+    );
+
+    const statusEvents = emitted.filter((event) => event.type === "session_status");
+    expect(statusEvents).toHaveLength(1);
+    expect(statusEvents[0]).toMatchObject({ status: { type: "idle" } });
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
+    expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
+  test("honors session.idle after runtime turn start while a send is still in flight", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [makeSessionIdleEvent()],
+      (session) => {
+        session.isSendingUserMessage = true;
+        session.isAwaitingRuntimeTurnStart = false;
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_status")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(sessionRecord.streamTurnStatus).toBe("idle");
   });
 
   test("ignores OpenCode idle events while waiting for runtime turn start", async () => {

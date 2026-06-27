@@ -1292,6 +1292,181 @@ describe("opencode-sdk-adapter", () => {
     expect(promptAsyncCalls).toHaveLength(1);
   });
 
+  test("sendUserMessage trusts runtime idle after turn start evidence while prompt async is still settling", async () => {
+    const mock = makeMockClient();
+    const promptAsyncStarted = createDeferred<void>();
+    const promptAsyncDeferred = createDeferred<{ data: undefined; error: undefined }>();
+    let runtimeStatus: "idle" | "busy" = "idle";
+    const promptPendingClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "external-session-1": { type: runtimeStatus },
+            },
+            error: undefined,
+          };
+        },
+        promptAsync: async () => {
+          promptAsyncStarted.resolve(undefined);
+          return promptAsyncDeferred.promise;
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      mcp: {
+        status: async () => ({ data: { openducktor: { status: "connected" } }, error: undefined }),
+        connect: async () => ({ data: true, error: undefined }),
+      },
+      tool: {
+        ids: async () => ({ data: ["odt_read_task"], error: undefined }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => promptPendingClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const sendPromise = adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-1"),
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+    await promptAsyncStarted.promise;
+
+    const readSnapshot = () =>
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+        workingDirectory: defaultWorkingDirectory,
+        externalSessionId: "external-session-1",
+      });
+
+    runtimeStatus = "busy";
+    const busySnapshot = await readSnapshot();
+    expect(busySnapshot).toMatchObject({
+      availability: "runtime",
+      classification: "running",
+    });
+
+    runtimeStatus = "idle";
+    const idleSnapshot = await readSnapshot();
+    expect(idleSnapshot).toMatchObject({
+      availability: "runtime",
+      classification: "idle",
+    });
+
+    promptAsyncDeferred.resolve({ data: undefined, error: undefined });
+    await sendPromise;
+  });
+
+  test("sendUserMessage queued behind an active assistant does not hold idle snapshots awaiting a new turn", async () => {
+    const mock = makeMockClient();
+    const promptAsyncCalls: unknown[] = [];
+    const queuedSendClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "external-session-1": { type: "idle" },
+            },
+            error: undefined,
+          };
+        },
+        promptAsync: async (input: unknown) => {
+          promptAsyncCalls.push(input);
+          return { data: undefined, error: undefined };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      mcp: {
+        status: async () => ({ data: { openducktor: { status: "connected" } }, error: undefined }),
+        connect: async () => ({ data: true, error: undefined }),
+      },
+      tool: {
+        ids: async () => ({ data: ["odt_read_task"], error: undefined }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => queuedSendClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    if (!session) {
+      throw new Error("Expected test session to be registered.");
+    }
+    session.activeAssistantMessageId = "assistant-active";
+    session.streamTurnStatus = "active";
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-1"),
+      parts: [{ kind: "text", text: "Queue behind current answer" }],
+    });
+
+    const snapshot = await adapter.readSessionRuntimeSnapshot({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      externalSessionId: "external-session-1",
+    });
+
+    expect(snapshot).toMatchObject({
+      availability: "runtime",
+      classification: "idle",
+    });
+    expect(session.isAwaitingRuntimeTurnStart).toBe(false);
+    expect(promptAsyncCalls).toHaveLength(1);
+  });
+
   test("readSessionRuntimeSnapshot does not synthesize local runtime snapshot for another working directory", async () => {
     const mock = makeMockClient();
     const emptyListClient = {

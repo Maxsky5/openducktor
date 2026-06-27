@@ -55,7 +55,7 @@ import {
 } from "./event-stream/message-events/user-emitter";
 import type { EventStreamRuntime } from "./event-stream/shared";
 import {
-  applyOpencodeInFlightSendToRuntimeSnapshot,
+  applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
   findOpencodeLocalRuntimeSnapshot,
   listOpencodeLocalRuntimeSnapshots,
   listOpencodeRuntimeSnapshotSources,
@@ -413,7 +413,7 @@ export class OpencodeSdkAdapter
           workingDirectory: snapshot.workingDirectory,
           externalSessionId: snapshot.externalSessionId,
         },
-        snapshot: applyOpencodeInFlightSendToRuntimeSnapshot({
+        snapshot: applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
           sessions: this.sessions,
           runtimeId: runtimeClientInput.runtimeId,
           snapshot,
@@ -463,7 +463,7 @@ export class OpencodeSdkAdapter
         ...input,
         workingDirectory: canonicalWorkingDirectory,
       },
-      snapshot: applyOpencodeInFlightSendToRuntimeSnapshot({
+      snapshot: applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
         sessions: this.sessions,
         runtimeId: runtimeClientInput.runtimeId,
         snapshot,
@@ -572,7 +572,9 @@ export class OpencodeSdkAdapter
     }
     const session = requireSession(this.sessions, input.externalSessionId);
     applyRuntimeContextToSession(session, input);
-    startUserMessageSend(session);
+    startUserMessageSend(session, {
+      expectRuntimeTurnStart: session.activeAssistantMessageId === null,
+    });
     this.emit(input.externalSessionId, {
       type: "session_status",
       externalSessionId: input.externalSessionId,

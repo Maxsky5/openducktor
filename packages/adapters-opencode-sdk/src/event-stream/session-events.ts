@@ -18,7 +18,7 @@ import {
   bindSubagentExternalSession,
   emitSessionIdle,
   flushPendingSubagentInputEventsForSession,
-  isSessionUserMessageTurnStartPending,
+  isSessionAwaitingRuntimeTurnStart,
   markSessionActive,
   markSessionIdle,
   readEventDirectory,
@@ -233,7 +233,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
     if (status.type === "busy") {
       markSessionActive(runtime);
     } else {
-      if (isSessionUserMessageTurnStartPending(runtime)) {
+      if (isSessionAwaitingRuntimeTurnStart(runtime)) {
         return true;
       }
       markSessionIdle(runtime);
@@ -377,7 +377,7 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
     return false;
   }
 
-  if (isSessionUserMessageTurnStartPending(runtime)) {
+  if (isSessionAwaitingRuntimeTurnStart(runtime)) {
     return true;
   }
   emitSessionIdle(runtime);
