@@ -6,6 +6,9 @@ changelog:
     - title: 🐛 Fixes
       labels:
         - bug
+    - title: 🏗️ Refactoring
+      labels:
+        - refactoring
     - title: 📝 Documentation
       labels:
         - documentation
