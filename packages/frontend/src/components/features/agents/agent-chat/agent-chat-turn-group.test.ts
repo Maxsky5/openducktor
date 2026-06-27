@@ -3,42 +3,45 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { buildMessage } from "./agent-chat-test-fixtures";
 import {
+  type AgentChatThreadMotionRowProps,
   type AgentChatTurnGroupProps,
+  areAgentChatThreadMotionRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
-} from "./agent-chat-turn-group";
+} from "./agent-chat-turn-group-comparator";
 
-const sessionIdentity: AgentSessionIdentity = {
+const createSessionIdentity = (): AgentSessionIdentity => ({
   externalSessionId: "parent-session",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-};
-const sessionAgentColors: Record<string, string> = {};
+});
 const resolveRowRef = () => () => {};
-const subagentSessionKey = agentSessionIdentityKey({
-  ...sessionIdentity,
-  externalSessionId: "child-session",
-});
-const message = buildMessage("assistant", "Answer", { id: "assistant-1" });
-const subagentMessage = buildMessage("system", "Subagent", {
-  id: "subagent-1",
-  meta: {
-    kind: "subagent",
-    partId: "part-subagent-1",
-    correlationKey: "part:subagent-1",
-    status: "running",
+const createSubagentSessionKey = (): string =>
+  agentSessionIdentityKey({
+    ...createSessionIdentity(),
     externalSessionId: "child-session",
-  },
-});
+  });
+const createMessage = () => buildMessage("assistant", "Answer", { id: "assistant-1" });
+const createSubagentMessage = () =>
+  buildMessage("system", "Subagent", {
+    id: "subagent-1",
+    meta: {
+      kind: "subagent",
+      partId: "part-subagent-1",
+      correlationKey: "part:subagent-1",
+      status: "running",
+      externalSessionId: "child-session",
+    },
+  });
 
 const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatTurnGroupProps => ({
   turn: {
     key: "turn-1",
-    rows: [{ kind: "message", key: "parent-session:assistant-1", message }],
+    rows: [{ kind: "message", key: "parent-session:assistant-1", message: createMessage() }],
     isActive: false,
     activeStreamingAssistantMessageId: null,
   },
-  sessionAgentColors,
-  sessionIdentity,
+  sessionAgentColors: {},
+  sessionIdentity: createSessionIdentity(),
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
   resolveRowRef,
@@ -46,11 +49,24 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   ...overrides,
 });
 
+const baseMotionRowProps = (
+  overrides: Partial<AgentChatThreadMotionRowProps> = {},
+): AgentChatThreadMotionRowProps => ({
+  row: { kind: "message", key: "parent-session:assistant-1", message: createMessage() },
+  isStreamingAssistantMessage: false,
+  sessionAgentColors: { build: "text-sky-700" },
+  sessionIdentity: createSessionIdentity(),
+  subagentPendingApprovalCount: 0,
+  subagentPendingQuestionCount: 0,
+  resolveRowRef,
+  ...overrides,
+});
+
 describe("areAgentChatTurnGroupPropsEqual", () => {
   test("skips rerender for unchanged row identities and equivalent rows", () => {
     const previousProps = baseProps();
 
-    expect(areAgentChatTurnGroupPropsEqual(previousProps, baseProps())).toBe(true);
+    expect(areAgentChatTurnGroupPropsEqual(previousProps, { ...previousProps })).toBe(true);
     expect(
       areAgentChatTurnGroupPropsEqual(
         baseProps({
@@ -85,12 +101,10 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
       ),
     ).toBe(false);
     expect(
-      areAgentChatTurnGroupPropsEqual(
-        previousProps,
-        baseProps({
-          turn: { ...previousProps.turn, activeStreamingAssistantMessageId: null },
-        }),
-      ),
+      areAgentChatTurnGroupPropsEqual(previousProps, {
+        ...previousProps,
+        turn: { ...previousProps.turn, activeStreamingAssistantMessageId: null },
+      }),
     ).toBe(true);
   });
 
@@ -98,12 +112,14 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     const props = baseProps({
       turn: {
         key: "turn-subagent",
-        rows: [{ kind: "message", key: "parent-session:subagent-1", message: subagentMessage }],
+        rows: [
+          { kind: "message", key: "parent-session:subagent-1", message: createSubagentMessage() },
+        ],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
-      subagentPendingApprovalCountBySessionKey: { [subagentSessionKey]: 2 },
-      subagentPendingQuestionCountBySessionKey: { [subagentSessionKey]: 1 },
+      subagentPendingApprovalCountBySessionKey: { [createSubagentSessionKey()]: 2 },
+      subagentPendingQuestionCountBySessionKey: { [createSubagentSessionKey()]: 1 },
     });
 
     expect(
@@ -111,8 +127,8 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         props,
         baseProps({
           ...props,
-          subagentPendingApprovalCountBySessionKey: { [subagentSessionKey]: 2 },
-          subagentPendingQuestionCountBySessionKey: { [subagentSessionKey]: 1 },
+          subagentPendingApprovalCountBySessionKey: { [createSubagentSessionKey()]: 2 },
+          subagentPendingQuestionCountBySessionKey: { [createSubagentSessionKey()]: 1 },
         }),
       ),
     ).toBe(true);
@@ -122,11 +138,13 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     const props = baseProps({
       turn: {
         key: "turn-subagent",
-        rows: [{ kind: "message", key: "parent-session:subagent-1", message: subagentMessage }],
+        rows: [
+          { kind: "message", key: "parent-session:subagent-1", message: createSubagentMessage() },
+        ],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
-      subagentPendingApprovalCountBySessionKey: { [subagentSessionKey]: 2 },
+      subagentPendingApprovalCountBySessionKey: { [createSubagentSessionKey()]: 2 },
     });
 
     expect(
@@ -134,8 +152,60 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         props,
         baseProps({
           ...props,
-          subagentPendingApprovalCountBySessionKey: { [subagentSessionKey]: 3 },
+          subagentPendingApprovalCountBySessionKey: { [createSubagentSessionKey()]: 3 },
         }),
+      ),
+    ).toBe(false);
+  });
+
+  test("rebuilt equal colors and identities do not invalidate turn groups", () => {
+    const props = baseProps({ sessionAgentColors: { build: "text-sky-700" } });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          sessionAgentColors: { build: "text-sky-700" },
+          sessionIdentity: createSessionIdentity(),
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("changed color values invalidate turn groups", () => {
+    const props = baseProps({ sessionAgentColors: { build: "text-sky-700" } });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
+      ),
+    ).toBe(false);
+  });
+
+  test("motion row comparator accepts rebuilt equal colors and identities", () => {
+    const props = baseMotionRowProps();
+
+    expect(
+      areAgentChatThreadMotionRowPropsEqual(
+        props,
+        baseMotionRowProps({
+          ...props,
+          sessionAgentColors: { build: "text-sky-700" },
+          sessionIdentity: createSessionIdentity(),
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("motion row comparator rejects changed color values", () => {
+    const props = baseMotionRowProps();
+
+    expect(
+      areAgentChatThreadMotionRowPropsEqual(
+        props,
+        baseMotionRowProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
       ),
     ).toBe(false);
   });

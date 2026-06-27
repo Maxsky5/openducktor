@@ -196,14 +196,37 @@ export function buildAgentChatWindowRowsState(
 }
 
 const findRowIndexForMessage = (rows: AgentChatWindowRow[], messageId: string): number => {
+  let matchingRowIndex = -1;
   for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
     const row = rows[rowIndex];
     if (row?.kind === "message" && row.message.id === messageId) {
-      return rowIndex;
+      if (matchingRowIndex >= 0) {
+        return -1;
+      }
+      matchingRowIndex = rowIndex;
     }
   }
 
-  return -1;
+  return matchingRowIndex;
+};
+
+const buildMetadataFromRows = (
+  rows: AgentChatWindowRow[],
+  isSessionWorking: boolean,
+): AgentChatWindowAggregateMetadata => {
+  const metadata: AgentChatWindowAggregateMetadata = {
+    hasAttachmentMessages: false,
+    lastUserMessageId: null,
+    activeStreamingAssistantMessageId: null,
+  };
+
+  for (const row of rows) {
+    if (row.kind === "message") {
+      updateAggregateMetadataForMessage({ message: row.message, isSessionWorking, metadata });
+    }
+  }
+
+  return metadata;
 };
 
 export const findActiveStreamingAssistantMessageId = (
@@ -233,7 +256,7 @@ export function buildAgentChatWindowRowsStateFromPrefix({
   previousRowsState: AgentChatWindowRowsState;
   startMessageIndex: number;
   mode: AgentChatWindowRowsPrefixMode;
-}): AgentChatWindowRowsState {
+}): AgentChatWindowRowsState | null {
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   let firstTailRowIndex = previousRowsState.rows.length;
@@ -246,31 +269,29 @@ export function buildAgentChatWindowRowsStateFromPrefix({
       }
 
       const messageRowIndex = findRowIndexForMessage(previousRowsState.rows, message.id);
-      if (messageRowIndex >= 0) {
-        const maybeDurationRowIndex = messageRowIndex - 1;
-        const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
-        firstTailRowIndex =
-          maybeDurationRow?.kind === "turn_duration" &&
-          maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
-            ? maybeDurationRowIndex
-            : messageRowIndex;
+      if (messageRowIndex < 0) {
+        return null;
       }
+      const maybeDurationRowIndex = messageRowIndex - 1;
+      const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
+      firstTailRowIndex =
+        maybeDurationRow?.kind === "turn_duration" &&
+        maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
+          ? maybeDurationRowIndex
+          : messageRowIndex;
       break;
     }
   }
 
   const rows = previousRowsState.rows.slice(0, firstTailRowIndex);
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
-  const metadata: AgentChatWindowAggregateMetadata = {
-    hasAttachmentMessages: previousRowsState.hasAttachmentMessages,
-    lastUserMessageId: previousRowsState.lastUserMessageId,
-    activeStreamingAssistantMessageId: isSessionWorking
-      ? findActiveStreamingAssistantMessageId(rows)
-      : null,
-  };
+  const metadata = buildMetadataFromRows(rows, isSessionWorking);
 
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
     updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
+    if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
+      return;
+    }
     appendMessageRows(rows, sessionKey, message, showThinkingMessages);
   });
 

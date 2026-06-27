@@ -183,6 +183,10 @@ describe("agent-chat-thread windowing helpers", () => {
       mode: "append",
     });
 
+    expect(nextRowsState).not.toBeNull();
+    if (!nextRowsState) {
+      return;
+    }
     expect(nextRowsState.rows[0]).toBe(prefixRow);
     expect(nextRowsState.rows.map((row) => row.key)).toEqual([
       `${agentSessionIdentityKey(nextSession)}:user-1`,
@@ -233,6 +237,10 @@ describe("agent-chat-thread windowing helpers", () => {
       mode: "replace-tail",
     });
 
+    expect(nextRowsState).not.toBeNull();
+    if (!nextRowsState) {
+      return;
+    }
     expect(nextRowsState.rows[0]).toBe(prefixRow);
     expect(nextRowsState.rows.map((row) => row.key)).toEqual([
       `${agentSessionIdentityKey(nextSession)}:user-1`,
@@ -242,6 +250,121 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(
       nextRowsState.rows.some((row) => row.kind === "message" && row.message.role === "thinking"),
     ).toBe(false);
+  });
+
+  test("buildAgentChatWindowRowsStateFromPrefix returns null for ambiguous replace-tail anchors", () => {
+    const previousSession = buildSession({
+      externalSessionId: "session-prefix-ambiguous-tail",
+      messages: [
+        buildMessage("assistant", "Earlier duplicate", { id: "assistant-dup" }),
+        buildMessage("user", "Question", { id: "user-1" }),
+        buildMessage("assistant", "Tail duplicate", { id: "assistant-dup" }),
+      ],
+    });
+    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+      showThinkingMessages: true,
+    });
+    const nextSession = buildSession({
+      ...previousSession,
+      messages: [
+        ...previousSession.messages.items.slice(0, 2),
+        buildMessage("assistant", "Updated duplicate", { id: "assistant-dup" }),
+      ],
+    });
+
+    expect(
+      buildAgentChatWindowRowsStateFromPrefix({
+        session: nextSession,
+        showThinkingMessages: true,
+        previousRowsState,
+        startMessageIndex: 2,
+        mode: "replace-tail",
+      }),
+    ).toBeNull();
+  });
+
+  test("buildAgentChatWindowRowsStateFromPrefix returns null for missing replace-tail anchors", () => {
+    const previousSession = buildSession({
+      externalSessionId: "session-prefix-missing-tail",
+      messages: [buildMessage("assistant", "Tail", { id: "assistant-tail" })],
+    });
+    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+      showThinkingMessages: true,
+    });
+    const nextSession = buildSession({
+      ...previousSession,
+      messages: [buildMessage("assistant", "Updated", { id: "assistant-missing" })],
+    });
+
+    expect(
+      buildAgentChatWindowRowsStateFromPrefix({
+        session: nextSession,
+        showThinkingMessages: true,
+        previousRowsState,
+        startMessageIndex: 0,
+        mode: "replace-tail",
+      }),
+    ).toBeNull();
+  });
+
+  test("buildAgentChatWindowRowsStateFromPrefix rebuilds metadata from retained rows after trimming", () => {
+    const previousSession = buildSession({
+      externalSessionId: "session-prefix-trimmed-metadata",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Attached tail", {
+          id: "user-tail",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-1",
+                  kind: "pdf",
+                  mime: "application/pdf",
+                  name: "tail.pdf",
+                  path: "/tmp/tail.pdf",
+                },
+              },
+            ],
+          },
+        }),
+        buildMessage("assistant", "Working", {
+          id: "assistant-tail",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ],
+    });
+    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+      showThinkingMessages: true,
+    });
+    const nextSession = buildSession({
+      ...previousSession,
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Tail without attachment", {
+          id: "user-tail",
+          meta: { kind: "user", state: "read", parts: [] },
+        }),
+        buildMessage("assistant", "Still working", {
+          id: "assistant-tail",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ],
+    });
+
+    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+      session: nextSession,
+      showThinkingMessages: true,
+      previousRowsState,
+      startMessageIndex: 1,
+      mode: "replace-tail",
+    });
+
+    expect(nextRowsState?.hasAttachmentMessages).toBe(false);
+    expect(nextRowsState?.lastUserMessageId).toBe("user-tail");
   });
 
   test("buildAgentChatWindowRowsState skips turn duration rows for non-final assistant messages", () => {

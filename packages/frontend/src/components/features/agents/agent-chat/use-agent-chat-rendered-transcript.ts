@@ -23,7 +23,7 @@ export type AgentChatRenderedTurn = {
   activeStreamingAssistantMessageId: string | null;
 };
 
-const getTurnActiveStreamingAssistantMessageId = (
+export const getTurnActiveStreamingAssistantMessageId = (
   rows: AgentChatWindowRow[],
   activeStreamingAssistantMessageId: string | null,
 ): string | null => {
@@ -31,6 +31,7 @@ const getTurnActiveStreamingAssistantMessageId = (
     return null;
   }
 
+  // Turn selection trusts the transcript-row layer to validate the active streaming assistant id.
   return rows.some(
     (row) => row.kind === "message" && row.message.id === activeStreamingAssistantMessageId,
   )

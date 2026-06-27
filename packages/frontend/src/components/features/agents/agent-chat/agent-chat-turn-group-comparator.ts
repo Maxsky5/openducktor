@@ -1,0 +1,207 @@
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import { getSubagentMessageSessionKey } from "./subagent-session-key";
+import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
+
+export type AgentChatThreadMotionRowProps = {
+  row: AgentChatWindowRow;
+  isStreamingAssistantMessage: boolean;
+  sessionAgentColors: Record<string, string>;
+  sessionIdentity: AgentSessionIdentity | null;
+  subagentPendingApprovalCount: number;
+  subagentPendingQuestionCount: number;
+  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
+};
+
+export type AgentChatTurnGroupProps = {
+  turn: AgentChatRenderedTurn;
+  sessionAgentColors: Record<string, string>;
+  sessionIdentity: AgentSessionIdentity | null;
+  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
+  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
+  allowTurnContainment: boolean;
+};
+
+export const areAgentColorsEqual = (
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => left[key] === right[key]);
+};
+
+export const areAgentSessionIdentitiesEqual = (
+  left: AgentSessionIdentity | null,
+  right: AgentSessionIdentity | null,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.externalSessionId === right.externalSessionId &&
+    left.runtimeKind === right.runtimeKind &&
+    left.workingDirectory === right.workingDirectory
+  );
+};
+
+export const areChatRowsEquivalent = (
+  left: AgentChatWindowRow,
+  right: AgentChatWindowRow,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (left.kind !== right.kind || left.key !== right.key) {
+    return false;
+  }
+  if (left.kind === "turn_duration" && right.kind === "turn_duration") {
+    return left.durationMs === right.durationMs;
+  }
+  return left.kind === "message" && right.kind === "message" && left.message === right.message;
+};
+
+export const readSubagentPendingApprovalCount = (
+  row: AgentChatWindowRow,
+  countsBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"],
+  sessionIdentity: AgentSessionIdentity | null,
+): number => {
+  if (row.kind !== "message") {
+    return 0;
+  }
+
+  const sessionKey = getSubagentMessageSessionKey({
+    message: row.message,
+    parentSession: sessionIdentity,
+  });
+  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
+};
+
+export const readSubagentPendingQuestionCount = (
+  row: AgentChatWindowRow,
+  countsBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"],
+  sessionIdentity: AgentSessionIdentity | null,
+): number => {
+  if (row.kind !== "message") {
+    return 0;
+  }
+
+  const sessionKey = getSubagentMessageSessionKey({
+    message: row.message,
+    parentSession: sessionIdentity,
+  });
+  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
+};
+
+const areTurnRowsEquivalent = (
+  previousRows: AgentChatWindowRow[],
+  nextRows: AgentChatWindowRow[],
+): boolean => {
+  if (previousRows.length !== nextRows.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousRows.length; index += 1) {
+    const row = previousRows[index];
+    const nextRow = nextRows[index];
+    if (!row || !nextRow || !areChatRowsEquivalent(row, nextRow)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const areTurnSubagentPendingCountsEquivalent = ({
+  rows,
+  previousApprovalCounts,
+  nextApprovalCounts,
+  previousQuestionCounts,
+  nextQuestionCounts,
+  sessionIdentity,
+}: {
+  rows: AgentChatWindowRow[];
+  previousApprovalCounts: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  nextApprovalCounts: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  previousQuestionCounts: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
+  nextQuestionCounts: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
+  sessionIdentity: AgentSessionIdentity | null;
+}): boolean => {
+  if (
+    previousApprovalCounts === nextApprovalCounts &&
+    previousQuestionCounts === nextQuestionCounts
+  ) {
+    return true;
+  }
+
+  for (const row of rows) {
+    if (
+      readSubagentPendingApprovalCount(row, previousApprovalCounts, sessionIdentity) ===
+        readSubagentPendingApprovalCount(row, nextApprovalCounts, sessionIdentity) &&
+      readSubagentPendingQuestionCount(row, previousQuestionCounts, sessionIdentity) ===
+        readSubagentPendingQuestionCount(row, nextQuestionCounts, sessionIdentity)
+    ) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+};
+
+export const areAgentChatThreadMotionRowPropsEqual = (
+  previousProps: AgentChatThreadMotionRowProps,
+  nextProps: AgentChatThreadMotionRowProps,
+): boolean => {
+  return (
+    areAgentSessionIdentitiesEqual(previousProps.sessionIdentity, nextProps.sessionIdentity) &&
+    previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
+    previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
+    previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
+    areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
+    previousProps.resolveRowRef === nextProps.resolveRowRef &&
+    areChatRowsEquivalent(previousProps.row, nextProps.row)
+  );
+};
+
+export const areAgentChatTurnGroupPropsEqual = (
+  previousProps: AgentChatTurnGroupProps,
+  nextProps: AgentChatTurnGroupProps,
+): boolean => {
+  // Pending input maps can be rebuilt as active sessions stream. Compare the counts that affect
+  // this turn instead of invalidating every visible subagent row on map identity alone.
+  return (
+    previousProps.turn.key === nextProps.turn.key &&
+    previousProps.turn.isActive === nextProps.turn.isActive &&
+    previousProps.turn.activeStreamingAssistantMessageId ===
+      nextProps.turn.activeStreamingAssistantMessageId &&
+    areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
+    areAgentSessionIdentitiesEqual(previousProps.sessionIdentity, nextProps.sessionIdentity) &&
+    previousProps.resolveRowRef === nextProps.resolveRowRef &&
+    previousProps.allowTurnContainment === nextProps.allowTurnContainment &&
+    areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
+    areTurnSubagentPendingCountsEquivalent({
+      rows: nextProps.turn.rows,
+      previousApprovalCounts: previousProps.subagentPendingApprovalCountBySessionKey,
+      nextApprovalCounts: nextProps.subagentPendingApprovalCountBySessionKey,
+      previousQuestionCounts: previousProps.subagentPendingQuestionCountBySessionKey,
+      nextQuestionCounts: nextProps.subagentPendingQuestionCountBySessionKey,
+      sessionIdentity: nextProps.sessionIdentity,
+    })
+  );
+};

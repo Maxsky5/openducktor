@@ -3,6 +3,7 @@ import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-stat
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   findFirstChangedSessionMessageIndex,
+  getSessionMessageAt,
   getSessionMessageCount,
   getSessionMessagesRevision,
 } from "@/state/operations/agent-orchestrator/support/messages";
@@ -175,6 +176,36 @@ type IncrementalTranscriptRowsPlan = {
   startMessageIndex: number;
 };
 
+const isMessageIdInPrefix = (
+  messages: AgentChatThreadSession["messages"],
+  messageId: string,
+  endIndex: number,
+): boolean => {
+  for (let index = 0; index < endIndex; index += 1) {
+    if (messages.items[index]?.id === messageId) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const arePrefixMessagesUnchanged = ({
+  previousCacheEntry,
+  currentSession,
+  endIndex,
+}: {
+  previousCacheEntry: TranscriptRowsCacheEntry;
+  currentSession: AgentChatThreadSession;
+  endIndex: number;
+}): boolean => {
+  for (let index = 0; index < endIndex; index += 1) {
+    if (previousCacheEntry.messages.items[index] !== getSessionMessageAt(currentSession, index)) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const getIncrementalTranscriptRowsPlan = ({
   previousCacheEntry,
   currentSession,
@@ -208,6 +239,24 @@ const getIncrementalTranscriptRowsPlan = ({
       previousChangedMessage.role === "assistant" &&
       currentChangedMessage.role === "assistant",
   );
+
+  if (isAssistantTailEdit) {
+    if (
+      !arePrefixMessagesUnchanged({
+        previousCacheEntry,
+        currentSession,
+        endIndex: firstChangedMessageIndex,
+      }) ||
+      (currentChangedMessage &&
+        isMessageIdInPrefix(
+          previousCacheEntry.messages,
+          currentChangedMessage.id,
+          firstChangedMessageIndex,
+        ))
+    ) {
+      return null;
+    }
+  }
 
   if (
     currentMessageCount < previousMessageCount ||
@@ -365,20 +414,26 @@ export const useAgentChatTranscriptRows = ({
         startMessageIndex: incrementalPlan.startMessageIndex,
         mode: incrementalPlan.mode,
       });
-      writeTranscriptRowsCacheEntry({
-        session: currentSession,
-        showThinkingMessages,
-        rowsState,
-        cache: rowsCache,
-      });
-      dispatchResolvedTranscriptState(
-        toTranscriptRowsState({
+      if (rowsState) {
+        writeTranscriptRowsCacheEntry({
           session: currentSession,
-          revision: currentRevision,
+          showThinkingMessages,
           rowsState,
-        }),
-      );
-      return;
+          cache: rowsCache,
+        });
+        if (derivationTokenRef.current === derivationToken) {
+          // Bounded incremental derivation intentionally publishes current selected rows immediately
+          // so large running sessions stay responsive as new tail messages stream in.
+          dispatchResolvedTranscriptState(
+            toTranscriptRowsState({
+              session: currentSession,
+              revision: currentRevision,
+              rowsState,
+            }),
+          );
+        }
+        return;
+      }
     }
 
     const builder = createAgentChatWindowRowsStateBuilder(currentSession, { showThinkingMessages });
