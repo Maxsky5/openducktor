@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_CODEX_RUNTIME_POLICY,
+} from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
@@ -173,11 +177,14 @@ describe("createCodexAppServerRuntimeAdapter", () => {
     const originalCodexAppServerRequest = host.codexAppServerRequest;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     const codexEventBridge: { listener?: (payload: unknown) => void } = {};
+    const codexRequestCalls: unknown[][] = [];
 
     host.runtimeRequire = mock(async () =>
       createCodexRuntime("runtime-codex-live"),
     ) as typeof host.runtimeRequire;
-    host.codexAppServerRequest = mock(async (_runtimeId, method) => {
+    host.codexAppServerRequest = mock(async (...args: unknown[]) => {
+      codexRequestCalls.push(args);
+      const [, method] = args as [string, string, unknown?];
       if (method === "model/list") {
         return codexModelListResponse;
       }
@@ -215,7 +222,22 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       throw new Error(`Unexpected Codex request '${method}'.`);
     }) as typeof host.codexAppServerRequest;
     host.workspaceGetSettingsSnapshot = mock(async () =>
-      createSettingsSnapshotFixture(),
+      createSettingsSnapshotFixture({
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: {
+            enabled: true,
+            defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+            roleOverrides: {
+              qa: {
+                approvalPolicy: "untrusted",
+                sandboxMode: "read-only",
+                approvalsReviewer: "auto_review",
+              },
+            },
+          },
+        },
+      }),
     ) as typeof host.workspaceGetSettingsSnapshot;
     configureCodexTestShellBridge({
       subscribeCodexAppServerEvents: async (listener) => {
@@ -236,9 +258,18 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           workingDirectory: "/repo",
           externalSessionId: "thread-live",
           taskId: "task-1",
-          role: "build",
+          role: "qa",
         },
         (event) => events.push(event),
+      );
+
+      expect(codexRequestCalls.find(([, method]) => method === "thread/resume")?.[2]).toEqual(
+        expect.objectContaining({
+          threadId: "thread-live",
+          approvalPolicy: "untrusted",
+          approvalsReviewer: "auto_review",
+          sandbox: "read-only",
+        }),
       );
 
       const emitCodexEvent = await waitForCodexEventListener(codexEventBridge);

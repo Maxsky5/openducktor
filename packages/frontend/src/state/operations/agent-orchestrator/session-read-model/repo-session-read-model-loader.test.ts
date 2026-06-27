@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionHydrationRef } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import {
   type AgentSessionCollection,
@@ -68,9 +68,9 @@ const loadReadModel = async ({
   listSessionRuntimeSnapshots: () => Promise<
     Awaited<ReturnType<typeof toAgentSessionRuntimeSnapshot>>[]
   >;
-  observeAgentSession?: (session: AgentSessionRef) => Promise<void>;
-  clearSessionObservationState?: (sessions: readonly AgentSessionRef[]) => void;
-  loadLiveSessionHistory?: (session: AgentSessionRef) => Promise<unknown>;
+  observeAgentSession?: (session: AgentSessionHydrationRef) => Promise<void>;
+  clearSessionObservationState?: (sessions: readonly AgentSessionHydrationRef[]) => void;
+  loadLiveSessionHistory?: (session: AgentSessionHydrationRef) => Promise<unknown>;
   records?: TaskSessionRecords;
 }) => {
   const collection = createCommitSessionCollection(initialSessionCollection);
@@ -93,7 +93,7 @@ const loadReadModel = async ({
 describe("repo session read model loader", () => {
   test("commits persisted sessions with one runtime snapshot scan", async () => {
     let runtimeSnapshotReads = 0;
-    const observedSessions: AgentSessionRef[] = [];
+    const observedSessions: AgentSessionHydrationRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => {
         runtimeSnapshotReads += 1;
@@ -136,13 +136,15 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
+        taskId: "task-1",
+        role: "build",
       },
     ]);
   });
 
   test("preloads detected live session histories after observation", async () => {
     const events: string[] = [];
-    const loadedSessionHistories: AgentSessionRef[] = [];
+    const loadedSessionHistories: AgentSessionHydrationRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => [
         toAgentSessionRuntimeSnapshot({
@@ -178,12 +180,14 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
+        taskId: "task-1",
+        role: "build",
       },
     ]);
   });
 
   test("clears observations for mounted sessions no longer listed by persistence", async () => {
-    const cleanedSessions: AgentSessionRef[] = [];
+    const cleanedSessions: AgentSessionHydrationRef[] = [];
     const removedSession = createAgentSessionFixture({
       externalSessionId: "removed-session",
       taskId: "task-1",
@@ -207,12 +211,14 @@ describe("repo session read model loader", () => {
         externalSessionId: "removed-session",
         runtimeKind: "opencode",
         workingDirectory: "/repo/old-worktree",
+        taskId: "task-1",
+        role: "build",
       },
     ]);
   });
 
   test("commits the read model when one live session observer fails", async () => {
-    const observedSessions: AgentSessionRef[] = [];
+    const observedSessions: AgentSessionHydrationRef[] = [];
     const records: TaskSessionRecords = {
       taskIds: ["task-1", "task-2"],
       records: [

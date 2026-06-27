@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentSessionRef, AgentSessionRuntimeSnapshot } from "@openducktor/core";
+import type {
+  AgentSessionHydrationRef,
+  AgentSessionRef,
+  AgentSessionRuntimeSnapshot,
+} from "@openducktor/core";
 import {
   toAgentSessionRuntimeSnapshot,
   toMissingAgentSessionRuntimeSnapshot,
@@ -78,7 +82,7 @@ const createLoaderHarness = ({
 } = {}) => {
   const queryClient = new QueryClient();
   const collection = createCommitSessionCollection(initialSessionCollection);
-  const observedSessions: AgentSessionRef[] = [];
+  const observedSessions: AgentSessionHydrationRef[] = [];
   const runtimeSnapshotReads: AgentSessionRef[] = [];
   const persistedSessionReads: string[] = [];
 
@@ -157,7 +161,16 @@ describe("source session loader", () => {
       },
     ]);
     expect(harness.getSession(record.externalSessionId)).toBe(session);
-    expect(harness.observedSessions).toEqual(harness.runtimeSnapshotReads);
+    expect(harness.observedSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+        taskId: "task-1",
+        role: record.role,
+      },
+    ]);
   });
 
   test("returns null when the persisted record does not match the source identity and role", async () => {
