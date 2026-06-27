@@ -1,7 +1,11 @@
 import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
-import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
+import {
+  type AgentChatWindowRow,
+  type AgentChatWindowTurn,
+  isStreamingAssistantMessage,
+} from "./agent-chat-thread-windowing";
 import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
@@ -31,9 +35,13 @@ export const getTurnActiveStreamingAssistantMessageId = (
     return null;
   }
 
-  // Turn selection trusts the transcript-row layer to validate the active streaming assistant id.
+  // Duplicate message ids can exist in recovered transcripts; only the still-streaming assistant row
+  // should make its containing turn active.
   return rows.some(
-    (row) => row.kind === "message" && row.message.id === activeStreamingAssistantMessageId,
+    (row) =>
+      row.kind === "message" &&
+      row.message.id === activeStreamingAssistantMessageId &&
+      isStreamingAssistantMessage(row.message),
   )
     ? activeStreamingAssistantMessageId
     : null;

@@ -32,12 +32,45 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
       {
         kind: "message" as const,
         key: "session:assistant-live",
-        message: buildMessage("assistant", "Working", { id: "assistant-live" }),
+        message: buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: false },
+        }),
       },
     ];
 
     expect(getTurnActiveStreamingAssistantMessageId(firstTurnRows, "assistant-live")).toBeNull();
     expect(getTurnActiveStreamingAssistantMessageId(secondTurnRows, "assistant-live")).toBe(
+      "assistant-live",
+    );
+  });
+
+  test("ignores finalized duplicate assistant ids when selecting the streaming turn", () => {
+    const finalizedDuplicateRows = [
+      {
+        kind: "message" as const,
+        key: "session:assistant-live:older",
+        message: buildMessage("assistant", "Earlier answer", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: true },
+        }),
+      },
+    ];
+    const streamingRows = [
+      {
+        kind: "message" as const,
+        key: "session:assistant-live:current",
+        message: buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      },
+    ];
+
+    expect(
+      getTurnActiveStreamingAssistantMessageId(finalizedDuplicateRows, "assistant-live"),
+    ).toBeNull();
+    expect(getTurnActiveStreamingAssistantMessageId(streamingRows, "assistant-live")).toBe(
       "assistant-live",
     );
   });
@@ -49,6 +82,54 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
       messages: [
         buildMessage("user", "First question", { id: "user-1" }),
         buildMessage("assistant", "First answer", { id: "assistant-1" }),
+        buildMessage("user", "Second question", { id: "user-2" }),
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: false },
+        }),
+      ],
+    });
+    const displayedSessionKey = agentSessionIdentityKey(session);
+    const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
+    const syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null> = {
+      current: null,
+    };
+    const harness = createHookHarness(
+      () =>
+        useAgentChatRenderedTranscript({
+          session,
+          displayedSessionKey,
+          isSessionWorking: true,
+          shouldResetTranscriptWindow: false,
+          transcriptNotice: null,
+          messagesContainerRef: createRef<HTMLDivElement>(),
+          scrollToBottomOnSendRef,
+          syncBottomAfterComposerLayoutRef,
+        }),
+      {},
+      { wrapper: settingsWrapper },
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().renderedTurns).toHaveLength(2);
+    expect(harness.getLatest().renderedTurns[0]?.activeStreamingAssistantMessageId).toBeNull();
+    expect(harness.getLatest().renderedTurns[1]?.activeStreamingAssistantMessageId).toBe(
+      "assistant-live",
+    );
+    await harness.unmount();
+  });
+
+  test("rendered transcript ignores finalized duplicate ids in older turns", async () => {
+    const session = buildSession({
+      externalSessionId: "session-rendered-streaming-duplicate-id",
+      status: "running",
+      messages: [
+        buildMessage("user", "First question", { id: "user-1" }),
+        buildMessage("assistant", "First answer", {
+          id: "assistant-live",
+          meta: { kind: "assistant", isFinal: true },
+        }),
         buildMessage("user", "Second question", { id: "user-2" }),
         buildMessage("assistant", "Working", {
           id: "assistant-live",
