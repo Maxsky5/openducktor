@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
 export type PersistSessionUpdateOptions = { persist: true };
@@ -63,6 +64,7 @@ export type ObserveAgentSessionParams = {
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
+  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   readOnlyApprovalAutoRejectSafe: boolean;
   refreshTaskData: (
     repoPath: string,
@@ -103,7 +105,10 @@ export type SessionTurnContext = Pick<
 
 export type SessionApprovalContext = Pick<
   ObserveAgentSessionParams,
-  "adapter" | "readOnlyApprovalAutoRejectSafe" | "buildReadOnlyApprovalRejectionMessage"
+  | "adapter"
+  | "readOnlyApprovalAutoRejectSafe"
+  | "buildReadOnlyApprovalRejectionMessage"
+  | "loadSettingsSnapshot"
 >;
 
 export type SessionRefreshContext = Pick<
@@ -171,6 +176,9 @@ export const createSessionEventContext = (
       adapter: context.adapter,
       buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
       readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
+      ...(context.loadSettingsSnapshot
+        ? { loadSettingsSnapshot: context.loadSettingsSnapshot }
+        : {}),
     },
     refresh: {
       refreshTaskData: context.refreshTaskData,

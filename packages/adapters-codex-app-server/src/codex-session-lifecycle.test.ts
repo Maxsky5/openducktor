@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRuntimeRef, ResumeAgentSessionInput } from "@openducktor/core";
+import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
 import {
   sessionStateFromExistingThread,
   sessionStateFromThreadResume,
@@ -22,8 +23,8 @@ describe("codex session lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "planner",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Follow the plan.",
       externalSessionId: "thread-1",
     } satisfies ResumeAgentSessionInput;
@@ -85,8 +86,8 @@ describe("codex session lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "qa",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Review the work.",
       externalSessionId: "thread-1",
     } satisfies AgentSessionRuntimeRef;

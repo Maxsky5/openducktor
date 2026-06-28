@@ -3,6 +3,7 @@ import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexUserMessageInput,
   createDeferred,
   createHarness,
@@ -20,15 +21,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -68,15 +61,11 @@ describe("CodexAppServerAdapter approvals", () => {
       subscribeEvents,
     });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(
+      codexStartSessionInput({
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      }),
+    );
 
     const request = {
       id: 17,
@@ -135,15 +124,7 @@ describe("CodexAppServerAdapter approvals", () => {
       { deferTurnStart: true },
     );
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const transport = transports.get("runtime-live");
     drainServerRequests.mockImplementationOnce(async () => [
@@ -188,6 +169,7 @@ describe("CodexAppServerAdapter approvals", () => {
       }),
     );
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "19",
       outcome: "reject",
@@ -207,15 +189,7 @@ describe("CodexAppServerAdapter approvals", () => {
       { deferTurnStart: true },
     );
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     drainServerRequests.mockImplementationOnce(async () => [
       {
@@ -264,15 +238,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -329,15 +295,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -400,6 +358,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await adapter.replyQuestion({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "32",
       answers: [["Safe"]],
@@ -461,15 +420,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
@@ -496,6 +447,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "37",
       outcome: "approve_session",
@@ -524,15 +476,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -582,15 +526,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -620,6 +556,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyApproval({
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
         requestId: "not-a-number",
         outcome: "approve_once",
@@ -634,6 +571,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyQuestion({
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
         requestId: "32.5",
         answers: [["yes"]],
@@ -684,15 +622,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     };
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -719,6 +649,7 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "41",
       outcome: "approve_once",
@@ -775,15 +706,12 @@ describe("CodexAppServerAdapter approvals", () => {
       subscribeEvents,
     });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "qa",
-      systemPrompt: "Review only.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(
+      codexStartSessionInput({
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+        systemPrompt: "Review only.",
+      }),
+    );
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),

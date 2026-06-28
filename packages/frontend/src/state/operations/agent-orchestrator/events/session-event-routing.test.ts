@@ -4,6 +4,7 @@ import type {
   AgentSessionRuntimeRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSessionEventRouter } from "./session-event-router";
 import {
@@ -22,13 +23,15 @@ import {
   type SessionUpdateFn,
 } from "./session-events-test-harness";
 
-const routeRef = (overrides: Partial<AgentSessionRuntimeRef> = {}): AgentSessionRuntimeRef => ({
+const routeRef = (
+  overrides: Partial<Omit<AgentSessionRuntimeRef, "runtimeKind" | "runtimePolicy">> = {},
+): AgentSessionRuntimeRef => ({
   externalSessionId: "session-1",
   repoPath: "/tmp/repo",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo",
-  taskId: "task-1",
-  role: "spec",
+  sessionScope: workflowAgentSessionScope("task-1", "spec"),
+  runtimePolicy: { kind: "opencode" },
   ...overrides,
 });
 

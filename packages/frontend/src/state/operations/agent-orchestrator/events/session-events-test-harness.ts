@@ -1,7 +1,9 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
+  type AgentSessionRuntimeRef,
   type AgentSessionTodoItem,
   buildReadOnlyPermissionRejectionMessage,
+  workflowAgentSessionScope,
 } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
@@ -19,6 +21,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentChatMessage,
   AgentSessionIdentity,
@@ -125,6 +128,51 @@ export const createSessionUpdater = (sessionsRef: { current: AgentSessionCollect
   };
 };
 
+const runtimeRefForSession = ({
+  session,
+  externalSessionId,
+  repoPath,
+}: {
+  session: AgentSessionState;
+  externalSessionId: string;
+  repoPath: string;
+}): AgentSessionRuntimeRef => {
+  if (!session.role) {
+    throw new Error(`Session '${session.externalSessionId}' is missing a role.`);
+  }
+  const sessionScope = workflowAgentSessionScope(session.taskId, session.role);
+  const baseRef = {
+    externalSessionId,
+    repoPath,
+    workingDirectory: session.workingDirectory,
+    sessionScope,
+  };
+
+  if (session.runtimeKind === "opencode") {
+    return {
+      ...baseRef,
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+    };
+  }
+
+  if (session.runtimeKind === "codex") {
+    return {
+      ...baseRef,
+      runtimeKind: "codex",
+      runtimePolicy: {
+        kind: "codex",
+        policy: resolveCodexEffectivePolicy(
+          createSettingsSnapshotFixture().agentRuntimes.codex,
+          session.role,
+        ),
+      },
+    };
+  }
+
+  throw new Error(`Unsupported runtime kind '${session.runtimeKind}' in session event test.`);
+};
+
 export const getSessionMessages = (
   sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
@@ -198,14 +246,16 @@ export const listenToAgentSessionEvents = (
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const session = getSession(sessionsRef, targetExternalSessionId);
-  const sessionRef = providedSessionRef ?? {
-    externalSessionId: targetExternalSessionId,
-    repoPath: repoPath ?? "/tmp/repo",
-    runtimeKind: session.runtimeKind,
-    workingDirectory: session.workingDirectory,
-    taskId: session.taskId,
-    role: session.role,
-  };
+  if (!session.role) {
+    throw new Error(`Session '${session.externalSessionId}' is missing a role.`);
+  }
+  const sessionRef =
+    providedSessionRef ??
+    runtimeRefForSession({
+      externalSessionId: targetExternalSessionId,
+      repoPath: repoPath ?? "/tmp/repo",
+      session,
+    });
 
   return listenToAgentSessionEventsImpl({
     ...eventParams,

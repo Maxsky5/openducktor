@@ -41,7 +41,7 @@ export type CodexTurnLifecycleContext = {
     sourceParts: AgentUserMessagePart[],
   ): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
-  effectivePolicy(role: NonNullable<CodexSessionState["role"]>): Promise<CodexEffectivePolicy>;
+  codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
 };
 
 const flushQueuedUserMessages = async (
@@ -184,16 +184,9 @@ export const startCodexTurnForSession = async (
   });
 
   const client = context.clientForRuntime(session.runtimeId);
-  if (!session.role) {
-    turnSettled = true;
-    context.activeTurnsBySessionId.delete(session.threadId);
-    throw new Error(
-      `Cannot load Codex runtime policy for session '${externalSessionId}' because no agent role is registered locally.`,
-    );
-  }
   let policy: CodexEffectivePolicy;
   try {
-    policy = await context.effectivePolicy(session.role);
+    policy = context.codexPolicyForSession(session);
   } catch (error) {
     turnSettled = true;
     context.activeTurnsBySessionId.delete(session.threadId);

@@ -6,14 +6,12 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import {
-  type ObserveAgentSession,
-  toRuntimeSessionContextRef,
-  toRuntimeSessionRef,
-} from "../support/session-runtime-ref";
+import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
+import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
@@ -105,7 +103,11 @@ export const createLoadSourceSession = ({
     });
 
     if (shouldObserveAgentSessionRuntimeSnapshot(runtimeSnapshot) && !isStaleRepoOperation()) {
-      await observeAgentSession(toRuntimeSessionContextRef(repoPath, loadedSession));
+      await observeAgentSession(
+        await resolveRuntimeSessionContextRef(repoPath, loadedSession, () =>
+          loadSettingsSnapshotFromQuery(queryClient),
+        ),
+      );
     }
 
     return isStaleRepoOperation() ? null : loadedSession;

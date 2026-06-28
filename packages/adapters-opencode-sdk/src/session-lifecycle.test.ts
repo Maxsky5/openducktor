@@ -69,7 +69,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     });
 
     await expect(
-      adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {}),
+      adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), () => {}),
     ).rejects.toThrow("client.global.event()");
     expect(localSessions(adapter).has("session-opencode-1")).toBe(false);
   });
@@ -81,12 +81,15 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const unsubscribe = await adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {});
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1"),
+      () => {},
+    );
 
     await expect(
       adapter.subscribeEvents(
         {
-          ...sessionRef("session-opencode-1"),
+          ...sessionRuntimeRef("session-opencode-1"),
           workingDirectory: "/repo/worktrees/session-opencode-1",
         },
         () => {},
@@ -155,7 +158,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {});
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), () => {});
 
     const session = localSessions(adapter).get("session-opencode-1");
     if (!session) {

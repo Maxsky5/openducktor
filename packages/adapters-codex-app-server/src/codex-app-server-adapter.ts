@@ -1,16 +1,10 @@
-import {
-  CODEX_RUNTIME_DESCRIPTOR,
-  type CodexEffectivePolicy,
-  type RuntimeDescriptor,
-  resolveCodexEffectivePolicy,
-} from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
   AgentEvent,
   AgentFileSearchResult,
   AgentModelCatalog,
-  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRef,
@@ -42,6 +36,7 @@ import type {
 import {
   agentSessionRefsEqual,
   formatWorkflowAgentSessionTitle,
+  requireWorkflowAgentSessionScope,
   withAgentSessionRef,
 } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
@@ -71,7 +66,7 @@ import {
   sessionStateFromThreadSnapshot,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
-import { codexTransportPolicy } from "./codex-session-policy";
+import { codexTransportPolicy, requireCodexRuntimePolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
 import {
   listCodexSessionRuntimeSnapshots,
@@ -179,7 +174,7 @@ export class CodexAppServerAdapter
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
     const transportModel = toTransportModelSelection(model);
-    const policy = await this.effectivePolicy(input.role);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "start Codex session");
 
     const response = await client.threadStart({
       ...codexTransportPolicy(policy),
@@ -189,7 +184,8 @@ export class CodexAppServerAdapter
       effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start Codex session");
+    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -206,9 +202,7 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
-    const policy = await this.effectivePolicy(
-      this.requireRole(input.role, input.externalSessionId),
-    );
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "resume Codex session");
 
     const response = await client.threadResume({
       ...codexTransportPolicy(policy),
@@ -231,7 +225,7 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
-    const policy = await this.effectivePolicy(input.role);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "fork Codex session");
 
     const response = await client.threadFork({
       ...codexTransportPolicy(policy),
@@ -242,7 +236,8 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork Codex session");
+    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -321,7 +316,7 @@ export class CodexAppServerAdapter
       ...(session
         ? {
             threadResumePolicy: codexTransportPolicy(
-              await this.effectivePolicy(this.roleForHydration(input)),
+              requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session history"),
             ),
           }
         : {}),
@@ -380,8 +375,7 @@ export class CodexAppServerAdapter
     }
 
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtime.runtimeId);
-    const role = this.roleForHydration(input);
-    const policy = await this.effectivePolicy(role);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "restore Codex context usage");
     await this.runtimeEvents.captureRestoredContextUsage(input, runtime.runtimeId, async () => {
       await runtime.client.threadResume({
         ...codexTransportPolicy(policy),
@@ -409,7 +403,9 @@ export class CodexAppServerAdapter
       client,
       runtimeId,
       input,
-      codexTransportPolicy(await this.effectivePolicy(this.roleForHydration(input))),
+      codexTransportPolicy(
+        requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session todos"),
+      ),
     );
     if (!isThreadReadable) {
       return [];
@@ -443,8 +439,7 @@ export class CodexAppServerAdapter
       await this.models.validate(client, runtimeId, model);
     }
 
-    const role = this.roleForHydration(input);
-    const policy = await this.effectivePolicy(role);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "ensure Codex session state");
     const response = await client.threadResume({
       ...codexTransportPolicy(policy),
       threadId: input.externalSessionId,
@@ -737,35 +732,9 @@ export class CodexAppServerAdapter
         this.runtimeEvents.emitUserMessage(event, sourceParts),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
-      effectivePolicy: (role) => this.effectivePolicy(role),
+      codexPolicyForSession: (session) =>
+        requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
     };
-  }
-
-  private async effectivePolicy(role: AgentRole): Promise<CodexEffectivePolicy> {
-    const config = await this.options.loadCodexRuntimeConfig();
-    return resolveCodexEffectivePolicy(config, role);
-  }
-
-  private roleForHydration(input: AgentSessionRuntimeRef): AgentRole {
-    if (input.role) {
-      return input.role;
-    }
-    const existing = this.localSessions.get(input.externalSessionId);
-    if (existing?.role) {
-      return existing.role;
-    }
-    throw new Error(
-      `Cannot load Codex runtime policy for session '${input.externalSessionId}' because no agent role was provided or registered locally.`,
-    );
-  }
-
-  private requireRole(role: AgentRole | null | undefined, externalSessionId: string): AgentRole {
-    if (role) {
-      return role;
-    }
-    throw new Error(
-      `Cannot load Codex runtime policy for session '${externalSessionId}' because no agent role was provided.`,
-    );
   }
 
   async loadSessionDiff(

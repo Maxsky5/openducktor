@@ -1,13 +1,20 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
+  AgentSessionRuntimePolicy,
   AgentSessionRuntimeRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
+import { workflowAgentSessionScope } from "@openducktor/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import {
+  AGENT_SESSION_RUNTIME_POLICY_STALE_TIME_MS,
+  agentSessionRuntimePolicyQueryKeys,
+  agentSessionRuntimePolicyQueryOptions,
+} from "@/state/queries/agent-session-runtime-policy";
 import {
   agentSessionTodosQueryKeys,
   SESSION_TODOS_STALE_TIME_MS,
@@ -19,6 +26,7 @@ import {
   runtimeCatalogQueryKeys,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
@@ -49,6 +57,11 @@ const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
+const skippedRuntimePolicyQueryOptions = skippedQueryOptions<AgentSessionRuntimePolicy>({
+  queryKey: agentSessionRuntimePolicyQueryKeys.all,
+  staleTime: AGENT_SESSION_RUNTIME_POLICY_STALE_TIME_MS,
+});
+
 export const useSessionRuntimeData = ({
   repoPath,
   selectedSessionIdentity,
@@ -57,6 +70,7 @@ export const useSessionRuntimeData = ({
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
+  const queryClient = useQueryClient();
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
   const selectedRuntimeContext =
     selectedSessionIdentity && "role" in selectedSessionIdentity ? selectedSessionIdentity : null;
@@ -97,13 +111,37 @@ export const useSessionRuntimeData = ({
   ]);
   const sessionForRuntimeData =
     stableSelectedSessionRuntimeContext ?? stableSelectedSessionIdentity;
+  const runtimePolicyTarget = useMemo(() => {
+    if (
+      stableSelectedSessionRuntimeContext === null ||
+      stableSelectedSessionRuntimeContext.role === null
+    ) {
+      return null;
+    }
+    return {
+      runtimeKind: stableSelectedSessionRuntimeContext.runtimeKind,
+      sessionScope: workflowAgentSessionScope(
+        stableSelectedSessionRuntimeContext.taskId,
+        stableSelectedSessionRuntimeContext.role,
+      ),
+    };
+  }, [stableSelectedSessionRuntimeContext]);
+  const runtimePolicyQuery = useQuery(
+    runtimePolicyTarget
+      ? agentSessionRuntimePolicyQueryOptions({
+          ...runtimePolicyTarget,
+          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+        })
+      : skippedRuntimePolicyQueryOptions,
+  );
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,
       selectedSessionIdentity: sessionForRuntimeData,
+      runtimePolicy: runtimePolicyQuery.data ?? null,
       runtimeDefinitions,
     });
-  }, [repoPath, runtimeDefinitions, sessionForRuntimeData]);
+  }, [repoPath, runtimeDefinitions, runtimePolicyQuery.data, sessionForRuntimeData]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
@@ -129,8 +167,12 @@ export const useSessionRuntimeData = ({
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
+    const runtimePolicyQueryError =
+      runtimePolicyQuery.error instanceof Error ? runtimePolicyQuery.error.message : null;
     const error =
-      runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : runtimeDataQueryError;
+      runtimeDataRefs.kind === "unavailable"
+        ? runtimeDataRefs.error
+        : (runtimePolicyQueryError ?? runtimeDataQueryError);
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const canShowModelCatalogLoading =
@@ -150,6 +192,7 @@ export const useSessionRuntimeData = ({
     catalogQuery.isPending,
     isRuntimeReady,
     runtimeDataRefs,
+    runtimePolicyQuery.error,
     todosQuery.data,
     todosQuery.error,
   ]);

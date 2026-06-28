@@ -84,6 +84,9 @@ const loadReadModel = async ({
     observeAgentSession,
     clearSessionObservationState,
     loadLiveSessionHistory,
+    loadSettingsSnapshot: async () => {
+      throw new Error("Unexpected settings snapshot load in repo session read model loader test.");
+    },
     isStaleRepoOperation: () => false,
   });
 
@@ -136,8 +139,8 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
   });
@@ -180,8 +183,8 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
   });
@@ -211,8 +214,8 @@ describe("repo session read model loader", () => {
         externalSessionId: "removed-session",
         runtimeKind: "opencode",
         workingDirectory: "/repo/old-worktree",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
   });

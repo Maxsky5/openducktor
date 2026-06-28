@@ -1,16 +1,24 @@
 import type {
   AgentSessionRef,
+  AgentSessionRuntimePolicy,
   AgentSessionRuntimeRef,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import {
+  requireRepoRuntimeRef,
+  requireSessionWorkingDirectory,
+  toAgentRuntimePolicyBinding,
+  workflowAgentSessionScope,
+} from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
 export type ObserveAgentSession = (session: AgentSessionRuntimeRef) => Promise<void>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"
->;
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
+> & {
+  selectedModel?: AgentSessionState["selectedModel"];
+};
 
 export const toRuntimeWorkingDirectoryRef = ({
   repoPath,
@@ -54,9 +62,15 @@ export const toRuntimeSessionRef = (
 export const toRuntimeSessionContextRef = (
   repoPath: string,
   session: RuntimeSessionContextSource,
-): AgentSessionRuntimeRef => ({
-  ...toRuntimeSessionRef(repoPath, session),
-  taskId: session.taskId,
-  role: session.role,
-  ...(session.selectedModel ? { model: session.selectedModel } : {}),
-});
+  runtimePolicy: AgentSessionRuntimePolicy,
+): AgentSessionRuntimeRef => {
+  if (!session.role) {
+    throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
+  }
+  return {
+    ...toRuntimeSessionRef(repoPath, session),
+    ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
+    sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+    ...(session.selectedModel ? { model: session.selectedModel } : {}),
+  };
+};

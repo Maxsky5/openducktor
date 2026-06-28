@@ -1,4 +1,5 @@
 import type {
+  CodexEffectivePolicy,
   FileDiff,
   FileStatus,
   RuntimeApprovalReplyOutcome,
@@ -12,7 +13,6 @@ import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentRole,
-  AgentSessionContext,
   AgentSessionRef,
   AgentSessionTodoItem,
   AgentSkillCatalog,
@@ -29,18 +29,67 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "../types/agent-orchestrator";
 
-export type AgentSessionRuntimeRef = AgentSessionRef & {
-  taskId: string;
-  role: AgentRole | null;
-  model?: AgentModelSelection;
-  systemPrompt?: string;
+export type AgentSessionWorkflowScope = { kind: "workflow"; taskId: string; role: AgentRole };
+export type AgentSessionScope = AgentSessionWorkflowScope;
+export type AgentSessionRuntimePolicy =
+  | { kind: "opencode" }
+  | { kind: "codex"; policy: CodexEffectivePolicy };
+export type AgentRuntimePolicyBinding =
+  | {
+      runtimeKind: "opencode";
+      runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "opencode" }>;
+    }
+  | { runtimeKind: "codex"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "codex" }> };
+
+export const workflowAgentSessionScope = (
+  taskId: string,
+  role: AgentRole,
+): AgentSessionWorkflowScope => ({ kind: "workflow", taskId, role });
+
+export const sessionScopeRole = (scope: AgentSessionScope): AgentRole => scope.role;
+export const requireWorkflowAgentSessionScope = (
+  scope: AgentSessionScope,
+  _action: string,
+): AgentSessionWorkflowScope => {
+  return scope;
 };
 
-export type StartAgentSessionInput = AgentSessionContext;
+export const assertAgentRuntimePolicyBinding = (
+  input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
+  action: string,
+): void => {
+  if (input.runtimeKind !== input.runtimePolicy.kind) {
+    throw new Error(
+      `Cannot ${action} with runtime '${input.runtimeKind}' and '${input.runtimePolicy.kind}' runtime policy.`,
+    );
+  }
+};
+
+export const toAgentRuntimePolicyBinding = (input: {
+  runtimeKind: RuntimeKind;
+  runtimePolicy: AgentSessionRuntimePolicy;
+}): AgentRuntimePolicyBinding => {
+  assertAgentRuntimePolicyBinding(input, "bind runtime policy");
+  return input as AgentRuntimePolicyBinding;
+};
+
+export type AgentSessionRuntimeRef = AgentSessionRef &
+  AgentRuntimePolicyBinding & {
+    sessionScope: AgentSessionScope;
+    model?: AgentModelSelection;
+    systemPrompt?: string;
+  };
+
+export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
+  AgentRuntimePolicyBinding & {
+    sessionScope: AgentSessionScope;
+    systemPrompt: string;
+    model?: AgentModelSelection;
+  };
 
 export type ResumeAgentSessionInput = AgentSessionRuntimeRef;
 
-export type ForkAgentSessionInput = AgentSessionContext & {
+export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };

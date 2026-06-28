@@ -224,8 +224,8 @@ describe("useSessionRuntimeData", () => {
         externalSessionId: "external-1",
         repoPath: "/repo",
         runtimeKind: "opencode",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
         workingDirectory: "/repo",
       });
       expect(harness.getLatest().todos).toEqual([todoFixture]);
@@ -346,7 +346,7 @@ describe("useSessionRuntimeData", () => {
     await expect(harness.mount()).rejects.toThrow(
       "Session workingDirectory is required to reach session 'external-1'.",
     );
-    expect(loadRuntimeCatalog).not.toHaveBeenCalled();
+    expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(readSessionTodos).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,17 @@
 import { mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
+  type CodexEffectivePolicy,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { AgentSessionRuntimeRef, SendAgentUserMessageInput } from "@openducktor/core";
+import type {
+  AgentSessionRuntimeRef,
+  SendAgentUserMessageInput,
+  StartAgentSessionInput,
+} from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -32,8 +38,8 @@ export const codexSessionRef = (
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "build",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
 });
 
 export const codexSessionRuntimeRef = (
@@ -44,8 +50,21 @@ export const codexSessionRuntimeRef = (
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "build",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+  systemPrompt: "Use the repo rules.",
+  model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+  ...overrides,
+});
+
+export const codexStartSessionInput = (
+  overrides: Partial<StartAgentSessionInput> = {},
+): StartAgentSessionInput => ({
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
   systemPrompt: "Use the repo rules.",
   model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
   ...overrides,
@@ -393,6 +412,11 @@ export const defaultCodexRuntimeConfig = (): CodexRuntimeConfig => ({
   roleOverrides: {},
 });
 
+export const defaultCodexEffectivePolicy = (): CodexEffectivePolicy => ({
+  ...DEFAULT_CODEX_RUNTIME_POLICY,
+  approvalsReviewerApplies: true,
+});
+
 const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
   const threadId = (request.params as { threadId: string }).threadId;
   return {
@@ -435,7 +459,6 @@ export const createAdapterWithTransport = (
     drainServerRequests: async () => [],
     drainNotifications: async () => [],
     respondServerRequest: async () => {},
-    loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     ...overrides,
   });
 
@@ -471,7 +494,6 @@ export const createHarness = (
     drainServerRequests,
     drainNotifications,
     respondServerRequest,
-    loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     ...overrides,
   });
 

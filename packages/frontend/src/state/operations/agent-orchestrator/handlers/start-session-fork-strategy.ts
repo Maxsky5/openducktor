@@ -1,9 +1,11 @@
+import { toAgentRuntimePolicyBinding, workflowAgentSessionScope } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
+import { resolveAgentSessionRuntimePolicy } from "../support/session-runtime-policy";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import type {
   StartAgentSessionInput,
@@ -77,13 +79,19 @@ export const executeForkStart = async ({
   });
 
   const runtimeKind = sourceRuntimeKind;
+  const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
+  const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
+  const runtimePolicy = await resolveAgentSessionRuntimePolicy({
+    runtimeKind,
+    sessionScope,
+    loadSettingsSnapshot,
+  });
 
   const summary = await deps.runtime.adapter.forkSession({
     repoPath: ctx.repoPath,
-    runtimeKind,
+    ...toAgentRuntimePolicyBinding({ runtimeKind, runtimePolicy }),
     workingDirectory,
-    taskId: ctx.taskId,
-    role: ctx.role,
+    sessionScope,
     systemPrompt,
     ...(selectedModel ? { model: selectedModel } : {}),
     parentExternalSessionId: sourceSession.externalSessionId,
@@ -104,14 +112,18 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
-      ...toRuntimeSessionContextRef(ctx.repoPath, {
-        externalSessionId: summary.externalSessionId,
-        runtimeKind: summary.runtimeKind,
-        workingDirectory: summary.workingDirectory,
-        taskId: ctx.taskId,
-        role: ctx.role,
-        selectedModel: null,
-      }),
+      ...toRuntimeSessionContextRef(
+        ctx.repoPath,
+        {
+          externalSessionId: summary.externalSessionId,
+          runtimeKind: summary.runtimeKind,
+          workingDirectory: summary.workingDirectory,
+          taskId: ctx.taskId,
+          role: ctx.role,
+          selectedModel: null,
+        },
+        runtimePolicy,
+      ),
       limit: FORK_START_HISTORY_LIMIT,
     })
     .catch((error) =>
@@ -155,6 +167,7 @@ export const executeForkStart = async ({
     ctx,
     startedCtx,
     runtimeInfo: forkedRuntime,
+    runtimePolicy,
     systemPrompt,
     selectedModel,
     initialMessages,

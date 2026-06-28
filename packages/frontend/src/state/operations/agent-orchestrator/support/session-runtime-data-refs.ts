@@ -1,5 +1,5 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentSessionRuntimePolicy, AgentSessionRuntimeRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionContextRef } from "./session-runtime-ref";
@@ -19,6 +19,7 @@ export type SessionRuntimeDataRefs =
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
   selectedSessionIdentity: SessionRuntimeDataSource | null;
+  runtimePolicy: AgentSessionRuntimePolicy | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
 
@@ -42,6 +43,7 @@ const runtimeSupportsTodos = (
 export const resolveSessionRuntimeDataRefs = ({
   repoPath,
   selectedSessionIdentity,
+  runtimePolicy,
   runtimeDefinitions,
 }: ResolveSessionRuntimeDataRefsInput): SessionRuntimeDataRefs => {
   if (!selectedSessionIdentity) {
@@ -74,10 +76,17 @@ export const resolveSessionRuntimeDataRefs = ({
       error: `Session '${selectedSessionIdentity.externalSessionId}' requires role and task context to read runtime todos.`,
     };
   }
+  if (!runtimePolicy) {
+    return {
+      kind: "available",
+      catalogRef,
+      todosRef: null,
+    };
+  }
 
   return {
     kind: "available",
     catalogRef,
-    todosRef: toRuntimeSessionContextRef(repoPath, selectedSessionIdentity),
+    todosRef: toRuntimeSessionContextRef(repoPath, selectedSessionIdentity, runtimePolicy),
   };
 };

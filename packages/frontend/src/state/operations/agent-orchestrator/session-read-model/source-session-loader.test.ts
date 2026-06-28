@@ -156,7 +156,7 @@ describe("source session loader", () => {
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
+        runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
       },
     ]);
@@ -165,10 +165,10 @@ describe("source session loader", () => {
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
+        runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
-        taskId: "task-1",
-        role: record.role,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: record.role },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
   });

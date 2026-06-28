@@ -31,7 +31,9 @@ import type {
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
+  assertAgentRuntimePolicyBinding,
   formatWorkflowAgentSessionTitle,
+  requireWorkflowAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -98,30 +100,23 @@ import {
 } from "./workflow-tool-selection";
 
 const requireWorkflowRole = (session: SessionRecord): AgentRole => {
-  if (session.input.role !== null) {
-    return session.input.role;
-  }
-  throw new Error(
-    `Session ${session.summary.externalSessionId} is a transcript and cannot send messages.`,
-  );
+  return requireWorkflowAgentSessionScope(
+    session.input.sessionScope,
+    `send message for session ${session.summary.externalSessionId}`,
+  ).role;
 };
 
-const toExistingSessionInput = (input: AgentSessionRef | AgentSessionRuntimeRef): SessionInput =>
-  toSessionInput({
-    ...input,
-    taskId: "taskId" in input ? input.taskId : "",
-    role: "role" in input ? input.role : null,
-    ...("model" in input && input.model ? { model: input.model } : {}),
-    ...("systemPrompt" in input && input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
-  });
+const toExistingSessionInput = (input: AgentSessionRuntimeRef): SessionInput => {
+  return toSessionInput(input);
+};
 
 const applyRuntimeContextToSession = (
   session: SessionRecord,
   input: AgentSessionRuntimeRef,
 ): void => {
   session.input = { ...session.input };
-  session.input.taskId = input.taskId;
-  session.input.role = input.role;
+  session.input.sessionScope = input.sessionScope;
+  session.input.runtimePolicy = input.runtimePolicy;
   if (input.model !== undefined) {
     if (input.model) {
       session.input.model = input.model;
@@ -207,14 +202,16 @@ export class OpencodeSdkAdapter
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
+    assertAgentRuntimePolicyBinding(input, "start OpenCode session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start OpenCode session");
     const runtimeDefinition = this.getRuntimeDefinition();
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
-      title: formatWorkflowAgentSessionTitle(input.role, input.taskId),
+      title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
       permission: buildRoleScopedPermissionRules({
-        role: input.role,
+        role: scope.role,
         runtimeDescriptor: runtimeDefinition,
       }),
     });
@@ -232,7 +229,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${input.role} session`,
+      startedMessage: `Started ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -240,6 +237,7 @@ export class OpencodeSdkAdapter
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    assertAgentRuntimePolicyBinding(input, "resume OpenCode session");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
@@ -257,6 +255,7 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const sessionInput = toSessionInput(input);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session");
 
     return registerSession({
       sessions: this.sessions,
@@ -268,16 +267,15 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${input.role} session`,
+      startedMessage: `Resumed ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
   }
 
-  private async ensureSessionState(
-    input: AgentSessionRef | AgentSessionRuntimeRef,
-  ): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: AgentSessionRuntimeRef): Promise<AgentSessionSummary> {
+    assertAgentRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
@@ -373,6 +371,7 @@ export class OpencodeSdkAdapter
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
     const sessionInput = toSessionInput(input);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork OpenCode session");
 
     return registerSession({
       sessions: this.sessions,
@@ -384,7 +383,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${input.role} session`,
+      startedMessage: `Forked ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -672,7 +671,7 @@ export class OpencodeSdkAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRef,
+    input: AgentSessionRuntimeRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     if (!this.sessions.has(input.externalSessionId)) {

@@ -1,9 +1,11 @@
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   buildSession,
   type createSessionsRef,
   createSessionUpdater,
+  findSession,
   listenToAgentSessionEvents,
   type SessionEvent,
   type SessionEventAdapter,
@@ -33,6 +35,8 @@ export const startTestSessionObserver = async (input: {
     replyApproval: input.replyApproval ?? (async () => {}),
   };
   const updateSession = input.updateSession ?? createSessionUpdater(input.sessionsRef);
+  const observedSession = findSession(input.sessionsRef, input.externalSessionId);
+  const shouldLoadSettingsSnapshot = observedSession?.runtimeKind === "opencode";
 
   await listenToAgentSessionEvents({
     adapter,
@@ -44,6 +48,9 @@ export const startTestSessionObserver = async (input: {
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
     refreshTaskData: async () => {},
+    ...(shouldLoadSettingsSnapshot
+      ? { loadSettingsSnapshot: async () => createSettingsSnapshotFixture() }
+      : {}),
   });
 
   const handleEvent = handlers[0];

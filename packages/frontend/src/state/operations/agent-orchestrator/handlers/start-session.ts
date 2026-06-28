@@ -1,4 +1,5 @@
 import type { AgentSessionRuntimeRef } from "@openducktor/core";
+import { toAgentRuntimePolicyBinding, workflowAgentSessionScope } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
@@ -63,10 +64,12 @@ const observeAgentSessionAndGuard = async ({
   const observerTarget: AgentSessionRuntimeRef = {
     externalSessionId: startedCtx.summary.externalSessionId,
     repoPath: startedCtx.repoPath,
-    runtimeKind: runtimeInfo.runtimeKind,
+    ...toAgentRuntimePolicyBinding({
+      runtimeKind: runtimeInfo.runtimeKind,
+      runtimePolicy: startResult.runtimePolicy,
+    }),
     workingDirectory: runtimeInfo.workingDirectory,
-    taskId: startedCtx.taskId,
-    role: startedCtx.role,
+    sessionScope: workflowAgentSessionScope(startedCtx.taskId, startedCtx.role),
   };
 
   await session.observeAgentSession(observerTarget);

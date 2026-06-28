@@ -7,6 +7,7 @@ import type {
   AgentSessionRuntimeRef,
   RuntimeKind,
 } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 
@@ -22,14 +23,18 @@ const sessionRef = (externalSessionId = "external-session-1"): AgentSessionRef =
   workingDirectory: "/repo",
 });
 
-const sessionRuntimeRef = (externalSessionId = "external-session-1"): AgentSessionRuntimeRef => ({
+const sessionRuntimeRef = (
+  externalSessionId = "external-session-1",
+  overrides: Partial<Omit<AgentSessionRuntimeRef, "runtimeKind" | "runtimePolicy">> = {},
+): AgentSessionRuntimeRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec",
+  sessionScope: workflowAgentSessionScope("task-1", "spec"),
+  runtimePolicy: { kind: "opencode" },
   systemPrompt: "system",
+  ...overrides,
 });
 
 const createDeferred = <T>(): {
@@ -48,6 +53,9 @@ const createDeferred = <T>(): {
 
 const defaultRepoPath = "/repo";
 const defaultWorkingDirectory = "/repo";
+const opencodeRuntimePolicy = { kind: "opencode" } as const;
+const opencodeWorkflowScope = (role: "spec" | "planner" | "build" | "qa") =>
+  workflowAgentSessionScope("task-1", role);
 
 const expectedReadApproval = {
   requestId: "perm-1",
@@ -124,6 +132,32 @@ const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
     super({ repoRuntimeResolver: defaultRepoRuntimeResolver, ...options });
   }
 };
+
+test("rejects non-OpenCode runtime policy bindings at the adapter boundary", async () => {
+  const adapter = new OpencodeSdkAdapter();
+
+  await expect(
+    adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      sessionScope: workflowAgentSessionScope("task-1", "build"),
+      runtimePolicy: {
+        kind: "codex",
+        policy: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          workspaceWriteNetworkAccess: false,
+          approvalsReviewerApplies: true,
+        },
+      },
+      systemPrompt: "system",
+    } as never),
+  ).rejects.toThrow(
+    "Cannot start OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
+  );
+});
 
 const makeMockClient = (
   options: {
@@ -333,9 +367,9 @@ describe("opencode-sdk-adapter", () => {
     await adapter.startSession({
       repoPath: defaultRepoPath,
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "spec",
+      sessionScope: opencodeWorkflowScope("spec"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -356,9 +390,9 @@ describe("opencode-sdk-adapter", () => {
     await adapter.resumeSession({
       repoPath: defaultRepoPath,
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
       externalSessionId: "external-session-1",
     });
@@ -385,15 +419,18 @@ describe("opencode-sdk-adapter", () => {
     await adapter.resumeSession({
       repoPath: defaultRepoPath,
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
       externalSessionId: "external-session-1",
     });
 
     await expect(
       adapter.replyApproval({
+        ...sessionRuntimeRef("external-session-1", {
+          sessionScope: opencodeWorkflowScope("build"),
+        }),
         externalSessionId: "external-session-1",
         requestId: "missing-permission",
         outcome: "approve_once",
@@ -424,15 +461,18 @@ describe("opencode-sdk-adapter", () => {
     await adapter.resumeSession({
       repoPath: defaultRepoPath,
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
       externalSessionId: "external-session-1",
     });
 
     await expect(
       adapter.replyQuestion({
+        ...sessionRuntimeRef("external-session-1", {
+          sessionScope: opencodeWorkflowScope("build"),
+        }),
         externalSessionId: "external-session-1",
         requestId: "missing-question",
         answers: [["yes"]],
@@ -476,9 +516,9 @@ describe("opencode-sdk-adapter", () => {
     const summary = await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo",
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "spec",
+      sessionScope: opencodeWorkflowScope("spec"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -511,10 +551,9 @@ describe("opencode-sdk-adapter", () => {
     await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo",
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "spec",
-      scenario: "spec_initial",
+      sessionScope: opencodeWorkflowScope("spec"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -527,10 +566,10 @@ describe("opencode-sdk-adapter", () => {
     session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
       { type: "approval_required", requestId: "request-1" },
       { type: "question_required", requestId: "request-2" },
-    ]);
+    ] as never[]);
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
       { type: "question_required", requestId: "request-1" },
-    ]);
+    ] as never[]);
 
     adapterInternals.clearPendingSubagentInputEvent("child-a", "request-1");
 
@@ -557,9 +596,9 @@ describe("opencode-sdk-adapter", () => {
       adapter.startSession({
         repoPath: "/repo",
         workingDirectory: "/repo",
-        taskId: "task-1",
         runtimeKind: "opencode",
-        role: "spec",
+        sessionScope: opencodeWorkflowScope("spec"),
+        runtimePolicy: opencodeRuntimePolicy,
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");
@@ -584,7 +623,8 @@ describe("opencode-sdk-adapter", () => {
       mcp: {
         status: async (input: { directory: string }) => {
           statusCalls.push(input);
-          const response = statusResponses[statusResponseIndex] ?? statusResponses.at(-1);
+          const response =
+            statusResponses[statusResponseIndex] ?? statusResponses[statusResponses.length - 1];
           statusResponseIndex += 1;
           return { data: response, error: undefined };
         },
@@ -608,9 +648,9 @@ describe("opencode-sdk-adapter", () => {
     await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -623,10 +663,10 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Expected test session to be registered.");
     }
     const events: AgentEvent[] = [];
-    const subscribedSessionRef = {
-      ...sessionRef("external-session-1"),
+    const subscribedSessionRef = sessionRuntimeRef("external-session-1", {
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
-    };
+      sessionScope: opencodeWorkflowScope("build"),
+    });
     await adapter.subscribeEvents(subscribedSessionRef, (event) => {
       events.push(event);
     });
@@ -655,7 +695,10 @@ describe("opencode-sdk-adapter", () => {
         workingDirectory: "/repo/.openducktor/worktrees/task-1",
         status: "failed",
         errorDetails: "MCP error -32000: Connection closed",
-        sessionRef: subscribedSessionRef,
+        sessionRef: {
+          ...sessionRef("external-session-1"),
+          workingDirectory: "/repo/.openducktor/worktrees/task-1",
+        },
       }),
     ]);
   });
@@ -1079,8 +1122,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1163,12 +1206,15 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
     const sendPromise = adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       externalSessionId: "external-session-1",
       parts: [{ kind: "text", text: "Continue" }],
     });
@@ -1250,8 +1296,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1346,8 +1392,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1435,8 +1481,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1514,8 +1560,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1567,8 +1613,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
     const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
@@ -1607,8 +1653,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1650,8 +1696,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
 
@@ -1696,8 +1742,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
     const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
@@ -1773,8 +1819,8 @@ describe("opencode-sdk-adapter", () => {
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
-      taskId: "task-1",
-      role: "build",
+      sessionScope: opencodeWorkflowScope("build"),
+      runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
     const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
@@ -1811,7 +1857,10 @@ describe("opencode-sdk-adapter", () => {
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });
-    const unsubscribe = await adapter.subscribeEvents(sessionRef("external-session-1"), () => {});
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("external-session-1"),
+      () => {},
+    );
 
     try {
       const snapshots = await adapter.listSessionRuntimeSnapshots({

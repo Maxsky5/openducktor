@@ -2,6 +2,7 @@ import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
@@ -35,8 +36,8 @@ export const sessionRuntimeRef = (
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec" satisfies AgentRole,
+  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
+  runtimePolicy: { kind: "opencode" },
   systemPrompt: "system prompt",
   ...overrides,
 });
@@ -479,9 +480,9 @@ export const startDefaultSession = async (
   await adapter.startSession({
     repoPath: "/repo",
     workingDirectory: "/repo",
-    taskId: "task-1",
     runtimeKind: "opencode",
-    role,
+    sessionScope: workflowAgentSessionScope("task-1", role),
+    runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
     ...(model ? { model } : {}),
   });

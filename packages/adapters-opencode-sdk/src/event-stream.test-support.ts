@@ -1,5 +1,6 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
 import type {
   OpencodeEventLogger,
@@ -49,8 +50,8 @@ export const makeSessionInput = (): SessionInput => ({
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec",
+  sessionScope: workflowAgentSessionScope("task-1", "spec"),
+  runtimePolicy: { kind: "opencode" },
   systemPrompt: "System prompt",
 });
 

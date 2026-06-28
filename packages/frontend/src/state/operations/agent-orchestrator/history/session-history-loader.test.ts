@@ -219,35 +219,26 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("loads history for sessions without workflow prompt context", async () => {
+  test("fails history loading when workflow role context is unavailable", async () => {
     const sessionWithoutRole = {
       ...createSession(),
       role: null,
     };
     const harness = createHistoryLoadHarness(sessionWithoutRole);
     const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
-    let receivedSystemPrompt:
-      | Parameters<
-          Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
-        >[0]["systemPromptContext"]
-      | undefined;
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "History must not load without workflow role context.",
+        parts: [],
+      },
+    ]);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
       workspaceId: "workspace-1",
-      adapter: {
-        loadSessionHistory: async (input) => {
-          receivedSystemPrompt = input.systemPromptContext;
-          return [
-            {
-              messageId: "history-1",
-              role: "assistant",
-              timestamp: "2026-06-12T08:00:01.000Z",
-              text: "Loaded transcript without workflow prompt",
-              parts: [],
-            },
-          ];
-        },
-      },
+      adapter: { loadSessionHistory },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -259,10 +250,9 @@ describe("session history loader", () => {
     await loadAgentSessionHistory(sessionTarget);
 
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
-    expect(receivedSystemPrompt).toBeUndefined();
-    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
-      "Loaded transcript without workflow prompt",
-    ]);
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("failed");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([]);
   });
 
   test("fails selected history loading for an unknown session", async () => {
@@ -570,8 +560,8 @@ describe("session history loader", () => {
         repoPath: "/repo",
         runtimeKind: sessionTarget.runtimeKind,
         workingDirectory: sessionTarget.workingDirectory,
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
   }, 500);

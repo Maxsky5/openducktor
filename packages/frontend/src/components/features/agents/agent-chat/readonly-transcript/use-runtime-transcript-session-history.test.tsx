@@ -138,8 +138,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo-a/worktree",
           externalSessionId: "session-1",
-          taskId: "task-1",
-          role: "spec",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+          runtimePolicy: { kind: "opencode" },
         },
         expect.any(Function),
       );
@@ -148,8 +148,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
-        taskId: "task-1",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "opencode" },
       });
 
       await harness.run(async () => {
@@ -195,8 +195,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
-        taskId: "task-1",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "opencode" },
       });
       const session = harness.getLatest().session;
       expect(session?.externalSessionId).toBe("session-1");
@@ -279,8 +279,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
-        taskId: "task-1",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "opencode" },
       });
       expect(harness.getLatest().session?.activityState).toBeNull();
       expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");

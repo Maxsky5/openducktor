@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
@@ -37,6 +40,11 @@ const createQaAvailableTaskDependencies = () =>
     },
   });
 
+const createModelDependenciesFixture = () => ({
+  loadRepoPromptOverrides: async () => ({}),
+  loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+});
+
 describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
   test("loads and returns a persisted reusable session", async () => {
     const sessionsRef = createSessionsRef();
@@ -70,9 +78,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
               createBuildContinuationTargetFixture("/tmp/repo/worktree"),
           }),
           task: createTaskDependenciesFixture(),
-          model: {
-            loadRepoPromptOverrides: async () => ({}),
-          },
+          model: createModelDependenciesFixture(),
         },
       }),
     ).resolves.toMatchObject({
@@ -113,9 +119,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
               createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
           }),
           task: createTaskDependenciesFixture(),
-          model: {
-            loadRepoPromptOverrides: async () => ({}),
-          },
+          model: createModelDependenciesFixture(),
         },
       }),
     ).rejects.toThrow("it does not match the current builder continuation target");
@@ -147,9 +151,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
             resolveTaskWorktree: async () => null,
           }),
           task: createQaAvailableTaskDependencies(),
-          model: {
-            loadRepoPromptOverrides: async () => ({}),
-          },
+          model: createModelDependenciesFixture(),
         },
       }),
     ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
@@ -183,9 +185,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
               createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
           }),
           task: createQaAvailableTaskDependencies(),
-          model: {
-            loadRepoPromptOverrides: async () => ({}),
-          },
+          model: createModelDependenciesFixture(),
         },
       }),
     ).rejects.toThrow("it does not match the required builder worktree for this QA session");
@@ -229,9 +229,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           task: createTaskDependenciesFixture({
             taskRef: { current: [taskCard] },
           }),
-          model: {
-            loadRepoPromptOverrides: async () => ({}),
-          },
+          model: createModelDependenciesFixture(),
         },
       }),
     ).rejects.toThrow(unavailableRoleErrorMessage(taskCard, "qa"));

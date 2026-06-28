@@ -6,6 +6,7 @@ import {
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
+  defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
   flushCodexAdapterWork,
   makeRuntimeSummary,
@@ -41,6 +42,13 @@ const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalsReviewer: "user",
   sandboxPolicy: codexWorkspaceWriteSandboxPolicy(workingDirectory, false),
 });
+const codexPolicy = (
+  config: ReturnType<typeof defaultCodexRuntimeConfig>,
+  role: "build" | "spec",
+) => ({
+  kind: "codex" as const,
+  policy: resolveCodexEffectivePolicy(config, role),
+});
 
 describe("CodexAppServerAdapter lifecycle", () => {
   test("returns the Codex runtime definition", () => {
@@ -57,8 +65,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -102,8 +110,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -124,15 +132,16 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "Continue" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -161,8 +170,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "planner",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Carry forward the plan.",
       externalSessionId: "thread-9",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -172,8 +181,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "qa",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Review the fork.",
       parentExternalSessionId: "thread-7",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -219,8 +228,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -228,7 +237,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "Hello Codex" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -253,39 +263,29 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("applies Codex role overrides to thread/start and turn/start", async () => {
-    const { adapter, transports } = createHarness({
-      loadCodexRuntimeConfig: async () => ({
-        enabled: true,
-        defaults: {
-          sandboxMode: "read-only",
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
-          workspaceWriteNetworkAccess: false,
-        },
-        roleOverrides: {
-          build: {
-            sandboxMode: "workspace-write",
-            approvalPolicy: "untrusted",
-            approvalsReviewer: "auto_review",
-            workspaceWriteNetworkAccess: true,
-          },
-        },
-      }),
-    });
+    const { adapter, transports } = createHarness();
+    const config = defaultCodexRuntimeConfig();
+    config.roleOverrides.build = {
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      workspaceWriteNetworkAccess: true,
+    };
+    const runtimePolicy = codexPolicy(config, "build");
 
     await adapter.startSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy,
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy,
         parts: [{ kind: "text", text: "Build it" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -320,21 +320,19 @@ describe("CodexAppServerAdapter lifecycle", () => {
         approvalsReviewer: "auto_review" as const,
       },
     };
-    const { adapter, transports } = createHarness({
-      loadCodexRuntimeConfig: async () => config,
-    });
+    const { adapter, transports } = createHarness();
 
     await adapter.startSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: codexPolicy(config, "spec"),
       systemPrompt: "Spec it.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    expect(resolveCodexEffectivePolicy(config, "spec").approvalsReviewerApplies).toBe(false);
+    expect(config.defaults.approvalPolicy).toBe("never");
     expect(transports.get("runtime-live")?.calls[1]?.params).toMatchObject({
       approvalPolicy: "never",
       approvalsReviewer: "auto_review",
@@ -342,25 +340,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("adjusts inherited build read-only defaults to workspace-write", async () => {
-    const { adapter, transports } = createHarness({
-      loadCodexRuntimeConfig: async () => ({
-        enabled: true,
-        defaults: {
-          sandboxMode: "read-only",
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
-          workspaceWriteNetworkAccess: false,
-        },
-        roleOverrides: {},
-      }),
-    });
+    const { adapter, transports } = createHarness();
 
     await adapter.resumeSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Resume build.",
       externalSessionId: "thread-9",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -368,7 +355,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-9",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "Continue build" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -383,34 +371,25 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("maps explicit spec read-only policy to no writable roots for turns", async () => {
-    const { adapter, transports } = createHarness({
-      loadCodexRuntimeConfig: async () => ({
-        enabled: true,
-        defaults: {
-          sandboxMode: "workspace-write",
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
-          workspaceWriteNetworkAccess: true,
-        },
-        roleOverrides: {
-          spec: { sandboxMode: "read-only" },
-        },
-      }),
-    });
+    const { adapter, transports } = createHarness();
+    const config = defaultCodexRuntimeConfig();
+    config.roleOverrides.spec = { sandboxMode: "read-only" };
+    const runtimePolicy = codexPolicy(config, "spec");
 
     await adapter.startSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy,
       systemPrompt: "Spec it.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy,
         parts: [{ kind: "text", text: "Continue spec" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -436,7 +415,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         role: null,
       }),
     ).rejects.toThrow(
-      "Cannot load Codex runtime policy for session 'thread-roleless' because no agent role was provided or registered locally.",
+      "Codex App Server requires a model selection with a reasoning effort variant.",
     );
   });
 
@@ -447,13 +426,16 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
     adapter.updateSessionModel({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
       model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
     });
@@ -461,7 +443,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
-        role: "spec",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "Use deeper reasoning" }],
       }),
     );
@@ -478,10 +461,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-live",
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
     });
     const assistantMessage = history.find(
       (message) => message.role === "assistant" && message.messageId === "msg-1",
@@ -498,10 +478,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
     await expect(
       adapter.loadSessionHistory({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-saved",
+        ...codexSessionRuntimeRef("thread-saved"),
       }),
     ).resolves.toEqual([
       expect.objectContaining({ messageId: "user-history-1", text: "Hello Codex" }),
@@ -545,8 +522,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -566,8 +543,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -607,8 +584,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -630,8 +607,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -664,8 +641,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5" },
       }),
@@ -678,8 +655,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "xhigh" },
       }),
@@ -696,7 +673,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => new RecordingTransport("runtime-live", false),
       drainServerRequests: async () => [],
       respondServerRequest: async () => {},
-      loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     });
 
     await expect(
@@ -716,7 +692,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => transport,
       drainServerRequests: async () => [],
       respondServerRequest: async () => {},
-      loadCodexRuntimeConfig: async () => defaultCodexRuntimeConfig(),
     });
 
     await expect(
@@ -724,8 +699,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree-task-1",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),

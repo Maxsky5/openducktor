@@ -9,7 +9,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { PendingInputRecordTarget } from "../pending-input-projection";
 import { appendSessionMessage } from "../support/messages";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
 import { readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import {
@@ -199,30 +199,33 @@ const autoRejectMutatingApproval = (
     );
     return;
   }
-
-  let replyTarget: ReturnType<typeof toRuntimeSessionContextRef>;
-  try {
-    replyTarget = toRuntimeSessionContextRef(context.session.repoPath, {
+  if (!context.approvals.loadSettingsSnapshot) {
+    markManualResponseRequired(
+      new Error(
+        `Cannot auto-reject approval '${event.requestId}' without runtime policy settings.`,
+      ),
+    );
+    return;
+  }
+  void resolveRuntimeSessionContextRef(
+    context.session.repoPath,
+    {
       ...loadedReplySession,
       externalSessionId: replySession.externalSessionId,
       runtimeKind: replySession.runtimeKind,
       workingDirectory: replySession.workingDirectory,
-    });
-  } catch (error) {
-    markManualResponseRequired(error);
-    return;
-  }
-
-  void context.approvals
-    .buildReadOnlyApprovalRejectionMessage(role)
-    .then((rejectionMessage) =>
-      context.approvals.adapter.replyApproval({
+    },
+    context.approvals.loadSettingsSnapshot,
+  )
+    .then(async (replyTarget) => {
+      const rejectionMessage = await context.approvals.buildReadOnlyApprovalRejectionMessage(role);
+      await context.approvals.adapter.replyApproval({
         ...replyTarget,
         requestId: event.requestId,
         outcome: "reject",
         message: rejectionMessage,
-      }),
-    )
+      });
+    })
     .then(() => {
       for (const target of recordedTargets) {
         context.store.updateSession(

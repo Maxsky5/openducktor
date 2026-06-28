@@ -3,6 +3,7 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CODEX_RUNTIME_POLICY,
+  resolveCodexEffectivePolicy,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
@@ -27,6 +28,15 @@ const createCodexRuntime = (runtimeId: string) => ({
   startedAt: "2026-02-22T09:00:00.000Z",
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
+
+const codexBuildRuntimePolicy = {
+  kind: "codex" as const,
+  policy: resolveCodexEffectivePolicy(DEFAULT_AGENT_RUNTIMES.codex, "build"),
+};
+const codexQaRuntimePolicy = {
+  kind: "codex" as const,
+  policy: resolveCodexEffectivePolicy(DEFAULT_AGENT_RUNTIMES.codex, "qa"),
+};
 
 const codexModelListResponse = {
   data: [
@@ -134,8 +144,8 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           repoPath: "/repo",
           runtimeKind: "codex",
           workingDirectory: "/repo",
-          taskId: "task-1",
-          role: "build",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          runtimePolicy: codexQaRuntimePolicy,
           systemPrompt: "Use the repo rules.",
           model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
         }),
@@ -257,8 +267,8 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           runtimeKind: "codex",
           workingDirectory: "/repo",
           externalSessionId: "thread-live",
-          taskId: "task-1",
-          role: "qa",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+          runtimePolicy: codexBuildRuntimePolicy,
         },
         (event) => events.push(event),
       );
@@ -266,9 +276,9 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       expect(codexRequestCalls.find(([, method]) => method === "thread/resume")?.[2]).toEqual(
         expect.objectContaining({
           threadId: "thread-live",
-          approvalPolicy: "untrusted",
-          approvalsReviewer: "auto_review",
-          sandbox: "read-only",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          sandbox: "workspace-write",
         }),
       );
 

@@ -5,7 +5,6 @@ import type {
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
-  CodexRuntimeConfig,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type {
@@ -17,6 +16,7 @@ import type {
   AgentRole,
   AgentSessionActivity,
   AgentSessionHistoryMessage,
+  AgentSessionRuntimePolicy,
   AgentSessionSummary,
   AgentSkillCatalog,
   ForkAgentSessionInput,
@@ -267,6 +267,7 @@ export type CodexSessionState = {
   threadId: string;
   workingDirectory: string;
   taskId: string;
+  runtimePolicy: AgentSessionRuntimePolicy;
   liveStatus?: {
     classification: AgentSessionActivity;
   };
@@ -309,7 +310,6 @@ export type CodexAppServerAdapterOptions = {
     listener: (event: CodexAppServerStreamEvent) => void,
   ) => Promise<() => void> | (() => void);
   respondServerRequest: CodexServerRequestResponder;
-  loadCodexRuntimeConfig: () => Promise<CodexRuntimeConfig>;
 };
 
 export type {

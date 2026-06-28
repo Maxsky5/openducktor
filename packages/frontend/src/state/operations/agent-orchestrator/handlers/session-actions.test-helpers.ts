@@ -10,6 +10,7 @@ import {
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentChatMessage,
   AgentSessionState,
@@ -139,6 +140,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     }),
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     loadRepoPromptOverrides: async () => ({}),
+    loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,

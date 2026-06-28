@@ -5,7 +5,7 @@ import type {
   CodexAppServerSandboxPolicy,
   CodexEffectivePolicy,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentRole, AgentSessionRuntimePolicy } from "@openducktor/core";
 
 export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
@@ -49,3 +49,16 @@ export const codexTransportPolicy = (policy: CodexEffectivePolicy): CodexTranspo
   approvalsReviewer: codexApprovalsReviewer(policy),
   sandbox: policy.sandboxMode,
 });
+
+export const requireCodexRuntimePolicy = (
+  runtimePolicy: AgentSessionRuntimePolicy | undefined,
+  action: string,
+): CodexEffectivePolicy => {
+  if (!runtimePolicy) {
+    throw new Error(`Cannot ${action} without resolved runtime policy.`);
+  }
+  if (runtimePolicy.kind !== "codex") {
+    throw new Error(`Cannot ${action} with non-Codex runtime policy '${runtimePolicy.kind}'.`);
+  }
+  return runtimePolicy.policy;
+};

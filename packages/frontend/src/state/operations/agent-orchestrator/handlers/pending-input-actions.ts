@@ -11,7 +11,8 @@ import type {
 import type { UpdateSession } from "../events/session-event-types";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
+import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
 export type PendingInputActionDependencies = {
@@ -25,6 +26,7 @@ export type PendingInputActionDependencies = {
     timestamp: string | number,
   ) => number | undefined;
   readTurnUserMessageStartedAtMs: (sessionKey: string) => number | undefined;
+  loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
 };
 
 const markTurnUserAnchorIfMissing = (
@@ -139,8 +141,13 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     });
     markTurnUserAnchorIfMissing(dependencies, runtimeSession);
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
+    const runtimeSessionRef = await resolveRuntimeSessionContextRef(
+      repoPath,
+      runtimeSession,
+      dependencies.loadSettingsSnapshot,
+    );
     await dependencies.adapter.replyApproval({
-      ...toRuntimeSessionContextRef(repoPath, runtimeSession),
+      ...runtimeSessionRef,
       requestId: request.requestId,
       outcome,
       ...(message ? { message } : {}),
@@ -168,8 +175,13 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     });
     markTurnUserAnchorIfMissing(dependencies, runtimeSession);
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
+    const runtimeSessionRef = await resolveRuntimeSessionContextRef(
+      repoPath,
+      runtimeSession,
+      dependencies.loadSettingsSnapshot,
+    );
     await dependencies.adapter.replyQuestion({
-      ...toRuntimeSessionContextRef(repoPath, runtimeSession),
+      ...runtimeSessionRef,
       requestId: request.requestId,
       answers,
     });

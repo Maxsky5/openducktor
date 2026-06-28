@@ -329,8 +329,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-subagent-1",
-        taskId: "task-a",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       });
       const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.externalSessionId).toBe("session-subagent-1");
@@ -391,8 +391,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-requested",
-        taskId: "task-a",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       });
     } finally {
       await harness.unmount();
@@ -578,8 +578,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-subagent-1",
-        taskId: "task-a",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       });
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",

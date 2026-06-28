@@ -1138,8 +1138,8 @@ describe("useAgentStudioSelectionController", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-1",
         externalSessionId: "session-build",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       });
       readSessionTodos.mockClear();
 
@@ -1169,8 +1169,8 @@ describe("useAgentStudioSelectionController", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-2",
         externalSessionId: "session-qa",
-        taskId: "task-2",
-        role: "qa",
+        sessionScope: { kind: "workflow", taskId: "task-2", role: "qa" },
+        runtimePolicy: { kind: "opencode" },
       });
     } finally {
       await harness.unmount();

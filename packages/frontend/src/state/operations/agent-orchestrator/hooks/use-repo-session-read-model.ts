@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { useSnapshotReadableRepoRuntimeKinds } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -144,6 +145,7 @@ export const useRepoSessionReadModel = ({
           observeAgentSession,
           clearSessionObservationState,
           loadLiveSessionHistory,
+          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -180,6 +182,7 @@ export const useRepoSessionReadModel = ({
     repoEpochRef,
     isLoadingTasks,
     taskSessionRecordsState,
+    queryClient,
     workspaceRepoPath,
   ]);
 

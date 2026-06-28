@@ -5,6 +5,7 @@ import {
   codexUserMessageInput,
   createDeferred,
   createHarness,
+  defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
   waitForEvent,
@@ -460,7 +461,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     expect(transport.calls.some((call) => call.method === "thread/read")).toBe(true);
     await flushCodexAdapterWork();
@@ -511,7 +513,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     await flushCodexAdapterWork();
     await waitForTransportCall(
@@ -584,7 +587,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     await flushCodexAdapterWork();
 
@@ -631,7 +635,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     await flushCodexAdapterWork();
 
@@ -749,8 +754,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -826,8 +831,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         externalSessionId: "thread-idle",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -860,8 +865,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         externalSessionId: "thread-idle",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -1313,8 +1318,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       externalSessionId: "thread-saved",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },

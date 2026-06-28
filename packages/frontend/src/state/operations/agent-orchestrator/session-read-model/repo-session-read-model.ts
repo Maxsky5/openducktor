@@ -1,5 +1,10 @@
-import type { AgentSessionRuntimeRef } from "@openducktor/core";
-import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
+import type {
+  AgentSessionRuntimePolicy,
+  AgentSessionRuntimeRef,
+  AgentSessionScope,
+  RuntimeKind,
+} from "@openducktor/core";
+import { toMissingAgentSessionRuntimeSnapshot, workflowAgentSessionScope } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -26,6 +31,11 @@ export type RepoSessionReadModel = {
   unlistedSessionRefs: AgentSessionRuntimeRef[];
 };
 
+export type ResolveSessionRuntimePolicySync = (input: {
+  runtimeKind: RuntimeKind;
+  sessionScope: AgentSessionScope;
+}) => AgentSessionRuntimePolicy;
+
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
 
@@ -34,11 +44,13 @@ export const buildRepoSessionReadModel = ({
   tasks,
   currentSessionCollection,
   runtimeSnapshots,
+  resolveSessionRuntimePolicy,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords;
   currentSessionCollection?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
+  resolveSessionRuntimePolicy: ResolveSessionRuntimePolicySync;
 }): RepoSessionReadModel => {
   const loadedTaskIds = new Set(tasks.taskIds);
   const persistedSessionKeys = new Set(
@@ -48,6 +60,15 @@ export const buildRepoSessionReadModel = ({
   const carriedSessions: AgentSessionState[] = [];
   const unlistedSessionRefs: AgentSessionRuntimeRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
+  const runtimePolicyForSession = (session: AgentSessionState): AgentSessionRuntimePolicy => {
+    if (!session.role) {
+      throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
+    }
+    return resolveSessionRuntimePolicy({
+      runtimeKind: session.runtimeKind,
+      sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+    });
+  };
 
   for (const session of listAgentSessions(currentSessions)) {
     if (
@@ -60,7 +81,9 @@ export const buildRepoSessionReadModel = ({
     }
 
     if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
-      unlistedSessionRefs.push(toRuntimeSessionContextRef(repoPath, session));
+      unlistedSessionRefs.push(
+        toRuntimeSessionContextRef(repoPath, session, runtimePolicyForSession(session)),
+      );
     }
   }
 
@@ -91,7 +114,9 @@ export const buildRepoSessionReadModel = ({
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
       projectedPendingInput.hasProjectedChildPendingInput
     ) {
-      liveSessionRefs.push(toRuntimeSessionContextRef(repoPath, session));
+      liveSessionRefs.push(
+        toRuntimeSessionContextRef(repoPath, session, runtimePolicyForSession(session)),
+      );
     }
   }
 

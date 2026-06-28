@@ -1,10 +1,11 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRuntimeRef } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { appendSessionMessage } from "../support/messages";
 import { buildSessionErrorNoticeMessage } from "../support/session-notice-messages";
+import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
@@ -99,6 +100,7 @@ export const loadRepoSessionReadModel = async ({
   observeAgentSession,
   clearSessionObservationState,
   loadLiveSessionHistory,
+  loadSettingsSnapshot,
   isStaleRepoOperation,
 }: {
   repoPath: string;
@@ -109,6 +111,7 @@ export const loadRepoSessionReadModel = async ({
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
   loadLiveSessionHistory: (session: AgentSessionRuntimeRef) => Promise<unknown>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {
   if (isStaleRepoOperation()) {
@@ -124,6 +127,14 @@ export const loadRepoSessionReadModel = async ({
   if (isStaleRepoOperation()) {
     return false;
   }
+  const requiresCodexRuntimePolicy =
+    Array.from(runtimeSnapshots.values()).some(
+      (snapshot) => snapshot.ref.runtimeKind === "codex",
+    ) || snapshotRuntimeKinds?.includes("codex") === true;
+  const settingsSnapshot = requiresCodexRuntimePolicy ? await loadSettingsSnapshot() : null;
+  if (isStaleRepoOperation()) {
+    return false;
+  }
 
   const readModel = commitSessionCollection((currentSessionCollection) => {
     const readModel = buildRepoSessionReadModel({
@@ -131,6 +142,21 @@ export const loadRepoSessionReadModel = async ({
       tasks: taskSessionRecords,
       currentSessionCollection,
       runtimeSnapshots,
+      resolveSessionRuntimePolicy: ({ runtimeKind, sessionScope }) => {
+        if (runtimeKind === "opencode") {
+          return { kind: "opencode" };
+        }
+        if (!settingsSnapshot) {
+          throw new Error(
+            `Settings snapshot is required to resolve ${runtimeKind} runtime policy.`,
+          );
+        }
+        return resolveAgentSessionRuntimePolicyFromSnapshot({
+          runtimeKind,
+          sessionScope,
+          snapshot: settingsSnapshot,
+        });
+      },
     });
     return {
       collection: readModel.sessionCollection,

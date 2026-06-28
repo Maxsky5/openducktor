@@ -441,8 +441,8 @@ describe("useRepoSessionReadModel", () => {
           repoPath: "/repo",
           externalSessionId: record.externalSessionId,
           runtimeKind: "opencode",
-          taskId: "task-1",
-          role: "build",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          runtimePolicy: { kind: "opencode" },
           workingDirectory: record.workingDirectory,
         },
       ]);
@@ -613,8 +613,8 @@ describe("useRepoSessionReadModel", () => {
           repoPath: "/repo",
           externalSessionId: record.externalSessionId,
           runtimeKind: "opencode",
-          taskId: "task-1",
-          role: "build",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          runtimePolicy: { kind: "opencode" },
           workingDirectory: record.workingDirectory,
         },
       ]);

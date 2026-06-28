@@ -214,7 +214,13 @@ describe("agent-orchestrator permission auto-rejection", () => {
   });
 
   test("lets active child sessions own linked auto-reject replies", async () => {
-    const replyApproval = mock(async () => {});
+    let completeReply!: () => void;
+    const replyCompleted = new Promise<void>((resolve) => {
+      completeReply = resolve;
+    });
+    const replyApproval = mock(async () => {
+      await replyCompleted;
+    });
     const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
     const sessionsRef = createSessionsRef([
       buildParentSessionWithSubagent({
@@ -254,7 +260,7 @@ describe("agent-orchestrator permission auto-rejection", () => {
     });
 
     handleParentEvent(event);
-    await Promise.resolve();
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(replyApproval).toHaveBeenCalledWith(
@@ -270,6 +276,8 @@ describe("agent-orchestrator permission auto-rejection", () => {
     await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
+    completeReply();
+    await flushAutoReject();
     expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(0);
   });
 });

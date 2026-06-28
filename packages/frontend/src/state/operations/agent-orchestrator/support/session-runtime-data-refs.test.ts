@@ -40,6 +40,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: null,
+        runtimePolicy: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -52,6 +53,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: null,
         selectedSessionIdentity: sessionState(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -65,6 +67,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionState(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -78,8 +81,8 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         externalSessionId: "external-1",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     });
   });
@@ -89,6 +92,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
       }),
     ).toEqual({
@@ -106,6 +110,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -119,6 +124,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionState({ role: null }),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -132,6 +138,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionState({ workingDirectory: "" }),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toThrow("Session workingDirectory is required to reach session 'external-1'.");

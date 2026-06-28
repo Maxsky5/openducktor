@@ -1,7 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
-  AgentRole,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
   RepoRuntimeRef,
@@ -22,9 +21,7 @@ import type {
  */
 export const WORKFLOW_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-export type SessionInput = Omit<StartAgentSessionInput, "role"> & {
-  role: AgentRole | null;
-};
+export type SessionInput = StartAgentSessionInput;
 
 export type QueuedUserMessageSend = {
   signature: string;

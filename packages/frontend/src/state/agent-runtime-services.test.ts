@@ -26,6 +26,30 @@ describe("agent runtime services", () => {
     ).rejects.toThrow("Unsupported agent runtime 'test-runtime'.");
   });
 
+  test("rejects mismatched runtime policy bindings before dispatching to an adapter", async () => {
+    const { agentEngine } = createAgentRuntimeServices();
+
+    expect(() =>
+      agentEngine.loadSessionTodos({
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/tmp/repo",
+        externalSessionId: "external-1",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: {
+          kind: "codex",
+          policy: {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "on-request",
+            approvalsReviewer: "user",
+            workspaceWriteNetworkAccess: false,
+            approvalsReviewerApplies: true,
+          },
+        },
+      } as never),
+    ).toThrow("Cannot load session todos with runtime 'opencode' and 'codex' runtime policy.");
+  });
+
   test("returns adapter session summaries without repairing runtime identity", async () => {
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const adapterSummary: AgentSessionSummary = {
@@ -47,8 +71,8 @@ describe("agent runtime services", () => {
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
-          taskId: "task-1",
-          role: "build",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          runtimePolicy: { kind: "opencode" },
           systemPrompt: "Prompt",
         }),
       ).resolves.toBe(adapterSummary);
@@ -91,8 +115,8 @@ describe("agent runtime services", () => {
         repoPath: "/repo",
         workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       });
 
       await readSessionRuntimeSnapshots({
@@ -160,11 +184,11 @@ describe("agent runtime services", () => {
     try {
       const sessionRef = {
         externalSessionId: "external-pending",
-        taskId: "task-1",
-        role: "build",
         repoPath: "/repo",
         workingDirectory: "/repo/worktree",
         runtimeKind: "opencode",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       } as const;
 
       const unsubscribe = await agentEngine.subscribeEvents(sessionRef, () => {});

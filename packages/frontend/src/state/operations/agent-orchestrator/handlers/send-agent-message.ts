@@ -22,7 +22,8 @@ import {
   requireLoadedSession,
   requireWorkspaceRepoPath,
 } from "../support/session-invariants";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
+import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
 import { isWorkflowAgentSession } from "../support/workflow-session";
@@ -41,6 +42,7 @@ export type SendAgentMessageDependencies = {
     sessionKey: string,
     timestamp: string | number,
   ) => number | undefined;
+  loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
 };
 
 export const settleStartingSession = (
@@ -200,8 +202,13 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     }
 
     try {
+      const runtimeSessionRef = await resolveRuntimeSessionContextRef(
+        preparedSend.repoPath,
+        readySession,
+        dependencies.loadSettingsSnapshot,
+      );
       const acceptedUserMessage = await dependencies.adapter.sendUserMessage({
-        ...toRuntimeSessionContextRef(preparedSend.repoPath, readySession),
+        ...runtimeSessionRef,
         parts: normalizedParts,
         ...(preparedSend.systemPrompt !== undefined
           ? { systemPrompt: preparedSend.systemPrompt }

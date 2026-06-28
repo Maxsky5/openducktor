@@ -1,7 +1,5 @@
 import type {
   AgentModelSelection,
-  AgentRole,
-  AgentSessionRef,
   AgentSessionRuntimeRef,
   AgentSessionSummary,
   ForkAgentSessionInput,
@@ -27,14 +25,12 @@ type SessionInput =
   | StartAgentSessionInput
   | ResumeAgentSessionInput
   | ForkAgentSessionInput
-  | AgentSessionRuntimeRef
-  | AgentSessionRef;
+  | AgentSessionRuntimeRef;
 
-type SessionStateInput = SessionInput & {
-  role?: AgentRole | null;
-  systemPrompt?: string;
-  taskId?: string;
-};
+type SessionStateInput = SessionInput & { systemPrompt?: string };
+
+const inputRole = (input: SessionStateInput) => input.sessionScope.role;
+const inputTaskId = (input: SessionStateInput): string => input.sessionScope.taskId;
 
 const buildSessionState = (
   input: SessionStateInput,
@@ -46,12 +42,13 @@ const buildSessionState = (
   summary,
   ...(model ? { model } : {}),
   systemPrompt: input.systemPrompt ?? "",
-  role: input.role ?? null,
+  role: inputRole(input),
   runtimeId,
   repoPath: input.repoPath,
   threadId: summary.externalSessionId,
   workingDirectory: input.workingDirectory,
-  taskId: input.taskId ?? "",
+  taskId: inputTaskId(input),
+  runtimePolicy: input.runtimePolicy,
   ...(liveStatus ? { liveStatus } : {}),
 });
 
@@ -59,8 +56,9 @@ export const applyRuntimeContextToSession = (
   session: CodexSessionState,
   input: AgentSessionRuntimeRef,
 ): void => {
-  session.role = input.role;
-  session.taskId = input.taskId;
+  session.role = input.sessionScope.role;
+  session.taskId = input.sessionScope.taskId;
+  session.runtimePolicy = input.runtimePolicy;
   if (input.systemPrompt !== undefined) {
     session.systemPrompt = input.systemPrompt;
   }
@@ -82,7 +80,7 @@ export const sessionStateFromThreadStart = (
     workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
-    role: input.role,
+    role: inputRole(input),
     status: "running",
   });
   return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
@@ -108,14 +106,14 @@ export const sessionStateFromThreadFork = (
     workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
-    role: input.role,
+    role: inputRole(input),
     status: "running",
   });
   return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
 export const sessionStateFromExistingThread = (
-  input: AgentSessionRef | AgentSessionRuntimeRef,
+  input: AgentSessionRuntimeRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
@@ -126,7 +124,7 @@ export const sessionStateFromExistingThread = (
 };
 
 export const sessionStateFromThreadSnapshot = (
-  input: AgentSessionRef | AgentSessionRuntimeRef,
+  input: AgentSessionRuntimeRef,
   runtimeId: string,
   threadSnapshot: CodexThreadSnapshot,
 ): CodexSessionState => {
@@ -135,7 +133,7 @@ export const sessionStateFromThreadSnapshot = (
     workingDirectory: input.workingDirectory,
     startedAt: threadSnapshot.startedAt,
     title: threadSnapshot.title,
-    role: "role" in input ? input.role : null,
+    role: inputRole(input),
     status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
   });
   return buildSessionState(input, summary, runtimeId, undefined);
@@ -155,11 +153,12 @@ export const preserveRuntimeContextForExistingThread = (
     role: existingThreadSession.role ?? current.role,
     taskId: existingThreadSession.taskId || current.taskId,
     systemPrompt: existingThreadSession.systemPrompt || current.systemPrompt,
+    runtimePolicy: existingThreadSession.runtimePolicy,
   };
 };
 
 const sessionStateFromThreadResumeResponse = (
-  input: ResumeAgentSessionInput | AgentSessionRuntimeRef | AgentSessionRef,
+  input: ResumeAgentSessionInput | AgentSessionRuntimeRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
@@ -175,7 +174,7 @@ const sessionStateFromThreadResumeResponse = (
     workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? threadSnapshot.startedAt,
     title: threadSnapshot.title,
-    role: "role" in input ? input.role : null,
+    role: inputRole(input),
     status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
   });
   return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);

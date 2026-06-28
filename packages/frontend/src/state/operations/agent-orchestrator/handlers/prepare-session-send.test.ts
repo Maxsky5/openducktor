@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRuntimeRef } from "@openducktor/core";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionObserversRefFixture,
@@ -63,6 +64,7 @@ const createPrepareSend = (
         };
       },
       loadRepoPromptOverrides: async () => ({}),
+      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       ...overrides,
     }),
   };
@@ -95,8 +97,8 @@ describe("prepare session send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "session-1",
-        taskId: "task-1",
-        role: "build",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
       },
     ]);
     expect(

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexUserMessageInput,
   createHarness,
   flushCodexAdapterWork,
@@ -24,15 +25,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -361,15 +354,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -520,16 +505,9 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     adapter.updateSessionModel({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
     });
@@ -606,15 +584,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -622,6 +592,7 @@ describe("CodexAppServerAdapter streaming", () => {
     );
     drainNotifications.mockImplementationOnce(async () => {
       adapter.updateSessionModel({
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
         model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
       });
@@ -684,15 +655,7 @@ describe("CodexAppServerAdapter streaming", () => {
     );
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
@@ -734,15 +697,7 @@ describe("CodexAppServerAdapter streaming", () => {
       });
     };
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     await expect(
       adapter.sendUserMessage(
@@ -776,15 +731,7 @@ describe("CodexAppServerAdapter streaming", () => {
       });
     };
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     await expect(
       adapter.sendUserMessage(
@@ -819,15 +766,7 @@ describe("CodexAppServerAdapter streaming", () => {
       });
     };
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     await expect(
       adapter.sendUserMessage(
@@ -844,15 +783,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     transports.get("runtime-live")?.turnStartDeferred.resolve({
       turn: { id: "turn-1", status: "completed" },
     });
@@ -900,15 +831,7 @@ describe("CodexAppServerAdapter streaming", () => {
     ]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     transports.get("runtime-live")?.turnStartDeferred.resolve({
       turn: { id: "turn-active", status: "running" },
     });
@@ -948,15 +871,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -1039,15 +954,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -1102,15 +1009,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -1183,15 +1082,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -1268,15 +1159,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const subscribeEvents = mock(() => () => {});
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -1552,15 +1435,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -1618,9 +1493,7 @@ describe("CodexAppServerAdapter streaming", () => {
     );
     await expect(
       adapter.loadSessionTodos({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toEqual([
