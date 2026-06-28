@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createElement, createRef, type MutableRefObject, type PropsWithChildren } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -10,11 +10,22 @@ import {
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
+const actEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+
+beforeEach(() => {
+  actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterEach(() => {
+  if (previousActEnvironment === undefined) {
+    delete actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    return;
   }
-).IS_REACT_ACT_ENVIRONMENT = true;
+  actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+});
 
 const settingsWrapper = ({ children }: PropsWithChildren) =>
   createElement(

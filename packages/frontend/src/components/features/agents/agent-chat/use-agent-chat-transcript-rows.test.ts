@@ -9,11 +9,10 @@ import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+const actEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 type HarnessProps = {
   session: AgentChatThreadSession | null;
@@ -24,8 +23,12 @@ type HookResult = ReturnType<typeof useAgentChatTranscriptRows>;
 
 const animationFrameDriver = createAnimationFrameTestDriver();
 
-const flushTranscriptDerivation = async (isDone: () => boolean): Promise<void> => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+const flushTranscriptDerivation = async (
+  isDone: () => boolean,
+  { timeoutMs }: { timeoutMs: number },
+): Promise<void> => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
     await animationFrameDriver.flushFrames();
     await animationFrameDriver.flushTimers(1);
     if (isDone()) {
@@ -67,11 +70,17 @@ const mountHarness = async (props: HarnessProps) => {
 
 describe("useAgentChatTranscriptRows", () => {
   beforeEach(() => {
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     animationFrameDriver.install();
   });
 
   afterEach(() => {
     animationFrameDriver.restore();
+    if (previousActEnvironment === undefined) {
+      delete actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+      return;
+    }
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
   });
 
   test("starts cache-miss sessions with lightweight rows until post-paint derivation completes", async () => {
@@ -84,7 +93,9 @@ describe("useAgentChatTranscriptRows", () => {
     expect(harness.getLatest().transcriptState.rows).toEqual([]);
     expect(harness.getLatest().isTranscriptRowsMissing).toBe(true);
 
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
 
     expect(harness.getLatest().transcriptState.rows.length).toBeGreaterThan(0);
     expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
@@ -103,7 +114,9 @@ describe("useAgentChatTranscriptRows", () => {
       session: secondSession,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
 
     const rowKeys = harness.getLatest().transcriptState.rows.map((row) => row.key);
     const secondSessionKey = agentSessionIdentityKey(secondSession);
@@ -126,7 +139,9 @@ describe("useAgentChatTranscriptRows", () => {
       },
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
 
     expect(harness.getLatest().transcriptState.rows.length).toBeGreaterThan(0);
     expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
@@ -139,7 +154,9 @@ describe("useAgentChatTranscriptRows", () => {
       session,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const prefixRow = harness.getLatest().transcriptState.rows[0];
 
     const nextSession = buildSession({
@@ -176,7 +193,9 @@ describe("useAgentChatTranscriptRows", () => {
       session,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const previousRows = harness.getLatest().transcriptState.rows;
     const prefixRow = previousRows[0];
     const previousRowCount = previousRows.length;
@@ -226,7 +245,9 @@ describe("useAgentChatTranscriptRows", () => {
       session,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const prefixRow = harness.getLatest().transcriptState.rows[0];
     expect(harness.getLatest().transcriptState.activeStreamingAssistantMessageId).toBe(
       "assistant-streaming",
@@ -302,7 +323,9 @@ describe("useAgentChatTranscriptRows", () => {
       session,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     expect(harness.getLatest().transcriptState.hasAttachmentMessages).toBe(true);
     expect(harness.getLatest().transcriptState.lastUserMessageId).toBe("user-with-attachment");
 
@@ -344,7 +367,9 @@ describe("useAgentChatTranscriptRows", () => {
       session,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const resolvedRows = harness.getLatest().transcriptState.rows;
 
     await harness.update({
@@ -384,7 +409,9 @@ describe("useAgentChatTranscriptRows", () => {
       messages: createSessionMessagesState("session-earlier-change-tail-edit", messages, 1),
     });
     const harness = await mountHarness({ session, showThinkingMessages: true });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const resolvedRows = harness.getLatest().transcriptState.rows;
 
     const nextMessages = messages.slice();
@@ -404,12 +431,21 @@ describe("useAgentChatTranscriptRows", () => {
     expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
     expect(harness.getLatest().isTranscriptRowsPending).toBe(true);
 
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     expect(
       harness
         .getLatest()
         .transcriptState.rows.some(
           (row) => row.kind === "message" && row.message.content === "Tail edited",
+        ),
+    ).toBe(true);
+    expect(
+      harness
+        .getLatest()
+        .transcriptState.rows.some(
+          (row) => row.kind === "message" && row.message.content === "Earlier changed",
         ),
     ).toBe(true);
     await harness.unmount();
@@ -430,14 +466,18 @@ describe("useAgentChatTranscriptRows", () => {
       session: firstSession,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     const cachedRows = harness.getLatest().transcriptState.rows;
 
     await harness.update({
       session: secondSession,
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
     await harness.update({
       session: buildSession({
         ...firstSession,
@@ -476,8 +516,9 @@ describe("useAgentChatTranscriptRows", () => {
       }),
     );
 
-    await flushTranscriptDerivation(() =>
-      Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
     );
     const cachedRows = observedStates.at(-1)?.transcriptState.rows;
     expect(cachedRows?.length).toBeGreaterThan(0);
@@ -488,8 +529,9 @@ describe("useAgentChatTranscriptRows", () => {
         showThinkingMessages: true,
       }),
     );
-    await flushTranscriptDerivation(() =>
-      Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
     );
 
     const observationsBeforeSwitchBack = observedStates.length;
@@ -534,7 +576,9 @@ describe("useAgentChatTranscriptRows", () => {
       }),
       showThinkingMessages: true,
     });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession);
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
 
     const messageRow = harness
       .getLatest()
