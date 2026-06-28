@@ -7,7 +7,6 @@ import type {
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
 
 type ReadonlyTranscriptSessionInput = AgentSessionIdentity & {
   history: AgentSessionHistoryMessage[];
@@ -34,23 +33,6 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
   }
   return hash;
 };
-
-export const createReadonlyTranscriptSession = ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory,
-  history,
-}: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  activityState: null,
-  messages: createSessionMessagesState(
-    externalSessionId,
-    historyToChatMessages(history, {
-      role: null,
-    }),
-    transcriptHistoryVersion(history),
-  ),
-});
 
 export const createReadonlyRuntimeSessionState = ({
   externalSessionId,

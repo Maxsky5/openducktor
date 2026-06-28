@@ -63,13 +63,12 @@ export function useAgentChatWindow({
     isSessionWorking,
   });
   const {
-    latestTurnStart,
-    turnStart,
     windowStart,
+    isLatestWindow,
     windowedRows,
     windowedTurns,
     resetToLatestTurns,
-    revealAllHistory,
+    revealOlderHistory,
   } = useAgentChatHistoryWindow({
     rows,
     shouldResetForTranscriptLoad,
@@ -101,14 +100,14 @@ export function useAgentChatWindow({
   }, [displayedSessionKey, messagesContainerRef, userScrolledRef]);
 
   const resetLatestTurnsAndPinBottom = useCallback(() => {
-    if (turnStart === latestTurnStart) {
+    if (isLatestWindow) {
       forceScrollToBottom();
       return;
     }
 
     pendingBottomResetRef.current = true;
     resetToLatestTurns();
-  }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
+  }, [forceScrollToBottom, isLatestWindow, resetToLatestTurns]);
 
   useLayoutEffect(() => {
     if (prevSessionKeyRef.current === displayedSessionKey) {
@@ -240,7 +239,7 @@ export function useAgentChatWindow({
     windowedTurns,
     windowStart,
     isNearBottom,
-    isNearTop: isNearTop && turnStart === 0,
+    isNearTop: isNearTop && windowStart === 0,
     preserveScrollBeforeStagedPrepend,
     scrollToBottom: () => {
       resetLatestTurnsAndPinBottom();
@@ -251,7 +250,7 @@ export function useAgentChatWindow({
         container.style.overflowAnchor = "none";
       }
 
-      revealAllHistory();
+      revealOlderHistory({ preserveScroll: false });
       if (!container) {
         refreshScrollState();
         return;

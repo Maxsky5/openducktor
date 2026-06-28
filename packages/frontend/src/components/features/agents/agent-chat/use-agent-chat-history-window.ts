@@ -4,6 +4,8 @@ import {
   type AgentChatWindowRow,
   type AgentChatWindowTurn,
   buildAgentChatWindowTurns,
+  CHAT_ROW_WINDOW_BATCH,
+  CHAT_ROW_WINDOW_INIT,
   CHAT_TURN_WINDOW_BATCH,
   getAgentChatInitialTurnStart,
 } from "./agent-chat-thread-windowing";
@@ -22,10 +24,11 @@ type UseAgentChatHistoryWindowResult = {
   latestTurnStart: number;
   turnStart: number;
   windowStart: number;
+  isLatestWindow: boolean;
   windowedRows: AgentChatWindowRow[];
   windowedTurns: AgentChatWindowTurn[];
   resetToLatestTurns: () => void;
-  revealAllHistory: () => void;
+  revealOlderHistory: (options?: { preserveScroll?: boolean }) => void;
 };
 
 export const resolveAgentChatEffectiveTurnStart = ({
@@ -57,6 +60,28 @@ export const resolveAgentChatEffectiveTurnStart = ({
   return clampedTurnStart;
 };
 
+const findFirstVisibleTurnIndex = (
+  turns: AgentChatWindowTurn[],
+  startIndex: number,
+  windowStart: number,
+): number => {
+  let low = Math.max(0, Math.min(startIndex, turns.length));
+  let high = turns.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const turn = turns[mid];
+    if (turn && turn.end < windowStart) {
+      low = mid + 1;
+      continue;
+    }
+
+    high = mid;
+  }
+
+  return low;
+};
+
 export function useAgentChatHistoryWindow({
   rows,
   turns: providedTurns,
@@ -74,7 +99,10 @@ export function useAgentChatHistoryWindow({
     [turns.length],
   );
   const [turnStart, setTurnStart] = useState(() => getLatestTurnStart());
+  const [rowWindowLimit, setRowWindowLimit] = useState(CHAT_ROW_WINDOW_INIT);
   const turnStartRef = useRef(turnStart);
+  const rowWindowLimitRef = useRef(rowWindowLimit);
+  const windowStartRef = useRef(0);
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
@@ -88,6 +116,8 @@ export function useAgentChatHistoryWindow({
   const didSessionChange = previousSessionKeyRef.current !== displayedSessionKey;
   const shouldFlagPendingLatestReset = shouldResetForTranscriptLoad && rows.length === 0;
   const shouldClampToLatestTurnStart = rows.length > 0 && turnStartRef.current > latestTurnStart;
+  const shouldResetRowWindowLimit =
+    didSessionChange || shouldUsePendingLatestTurnStart || shouldClampToLatestTurnStart;
   const effectiveTurnStart = resolveAgentChatEffectiveTurnStart({
     displayedSessionKey,
     previousSessionKey: previousSessionKeyRef.current,
@@ -96,6 +126,24 @@ export function useAgentChatHistoryWindow({
     rowsLength: rows.length,
     pendingLatestReset: shouldUsePendingLatestTurnStart,
   });
+  const effectiveRowWindowLimit = shouldResetRowWindowLimit ? CHAT_ROW_WINDOW_INIT : rowWindowLimit;
+  const turnWindowStart = turns[effectiveTurnStart]?.start ?? 0;
+  const rowWindowStart = Math.max(0, rows.length - effectiveRowWindowLimit);
+  const windowStart = Math.max(turnWindowStart, rowWindowStart);
+  const latestTurnWindowStart = turns[latestTurnStart]?.start ?? 0;
+  const latestRowWindowStart = Math.max(0, rows.length - CHAT_ROW_WINDOW_INIT);
+  const latestWindowStart = Math.max(latestTurnWindowStart, latestRowWindowStart);
+  const firstVisibleTurnIndex = findFirstVisibleTurnIndex(turns, effectiveTurnStart, windowStart);
+  const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);
+  const windowedTurns = useMemo(
+    () =>
+      turns.slice(firstVisibleTurnIndex).map((turn) => ({
+        key: turn.key,
+        start: Math.max(turn.start, windowStart) - windowStart,
+        end: turn.end - windowStart,
+      })),
+    [firstVisibleTurnIndex, turns, windowStart],
+  );
 
   const setTurnStartState = useCallback(
     (nextTurnStart: number) => {
@@ -105,6 +153,18 @@ export function useAgentChatHistoryWindow({
       setTurnStart(clampedTurnStart);
     },
     [getLatestTurnStart],
+  );
+
+  const setRowWindowLimitState = useCallback(
+    (nextRowWindowLimit: number) => {
+      const clampedRowWindowLimit = Math.max(
+        CHAT_ROW_WINDOW_INIT,
+        Math.min(nextRowWindowLimit, Math.max(rows.length, CHAT_ROW_WINDOW_INIT)),
+      );
+      rowWindowLimitRef.current = clampedRowWindowLimit;
+      setRowWindowLimit(clampedRowWindowLimit);
+    },
+    [rows.length],
   );
 
   const preserveScroll = useCallback(
@@ -124,20 +184,34 @@ export function useAgentChatHistoryWindow({
     [messagesContainerRef],
   );
 
-  const revealOlderTurns = useCallback(() => {
-    if (pendingScrollRestoreRef.current !== null) {
-      return;
-    }
+  const revealOlderHistory = useCallback(
+    (options?: { preserveScroll?: boolean }) => {
+      if (pendingScrollRestoreRef.current !== null) {
+        return;
+      }
 
-    const currentTurnStart = turnStartRef.current;
-    if (currentTurnStart <= 0) {
-      return;
-    }
+      if (windowStartRef.current <= 0) {
+        return;
+      }
 
-    preserveScroll(() => {
-      setTurnStartState(currentTurnStart - CHAT_TURN_WINDOW_BATCH);
-    });
-  }, [preserveScroll, setTurnStartState]);
+      const currentTurnStart = turnStartRef.current;
+      const reveal = () => {
+        setRowWindowLimitState(rowWindowLimitRef.current + CHAT_ROW_WINDOW_BATCH);
+
+        if (currentTurnStart > 0) {
+          setTurnStartState(currentTurnStart - CHAT_TURN_WINDOW_BATCH);
+        }
+      };
+
+      if (options?.preserveScroll === false) {
+        reveal();
+        return;
+      }
+
+      preserveScroll(reveal);
+    },
+    [preserveScroll, setRowWindowLimitState, setTurnStartState],
+  );
 
   const scheduleFill = useCallback(() => {
     if (fillFrameRef.current !== null) {
@@ -160,13 +234,13 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      if (turnStartRef.current <= 0) {
+      if (windowStartRef.current <= 0) {
         return;
       }
 
-      revealOlderTurns();
+      revealOlderHistory();
     });
-  }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
+  }, [messagesContainerRef, revealOlderHistory, userScrolledRef]);
 
   const scheduleContinuation = useCallback(() => {
     if (continuationFrameRef.current !== null) {
@@ -189,7 +263,7 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      if (turnStartRef.current <= 0) {
+      if (windowStartRef.current <= 0) {
         return;
       }
 
@@ -197,9 +271,9 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      revealOlderTurns();
+      revealOlderHistory();
     });
-  }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
+  }, [messagesContainerRef, revealOlderHistory, userScrolledRef]);
 
   const cancelScheduledFrames = useCallback(() => {
     if (fillFrameRef.current !== null) {
@@ -213,7 +287,7 @@ export function useAgentChatHistoryWindow({
   }, []);
 
   // Intentionally runs after every commit so pending scroll restoration and
-  // session-switch latest-turn rebasing happen on the very next DOM update.
+  // session-switch latest-window rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
     if (didSessionChange) {
       previousSessionKeyRef.current = displayedSessionKey;
@@ -231,7 +305,13 @@ export function useAgentChatHistoryWindow({
       setTurnStartState(latestTurnStart);
     }
 
+    if (shouldResetRowWindowLimit && rowWindowLimit !== CHAT_ROW_WINDOW_INIT) {
+      setRowWindowLimitState(CHAT_ROW_WINDOW_INIT);
+    }
+
     turnStartRef.current = effectiveTurnStart;
+    rowWindowLimitRef.current = effectiveRowWindowLimit;
+    windowStartRef.current = windowStart;
 
     const pendingRestore = pendingScrollRestoreRef.current;
     const container = messagesContainerRef.current;
@@ -239,7 +319,7 @@ export function useAgentChatHistoryWindow({
       if (
         container &&
         userScrolledRef.current &&
-        turnStartRef.current > 0 &&
+        windowStartRef.current > 0 &&
         container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
       ) {
         scheduleContinuation();
@@ -259,7 +339,7 @@ export function useAgentChatHistoryWindow({
 
     if (
       userScrolledRef.current &&
-      turnStartRef.current > 0 &&
+      windowStartRef.current > 0 &&
       container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
     ) {
       scheduleContinuation();
@@ -277,7 +357,7 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      if (turnStartRef.current <= 0) {
+      if (windowStartRef.current <= 0) {
         return;
       }
 
@@ -285,14 +365,14 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      revealOlderTurns();
+      revealOlderHistory();
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
+  }, [messagesContainerRef, revealOlderHistory, userScrolledRef]);
 
   // Intentionally runs after every commit so an underfilled viewport can keep
   // backfilling until the rendered transcript is tall enough to scroll.
@@ -306,22 +386,11 @@ export function useAgentChatHistoryWindow({
 
   useEffect(() => cancelScheduledFrames, [cancelScheduledFrames]);
 
-  const windowStart = turns[effectiveTurnStart]?.start ?? 0;
-  const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);
-  const windowedTurns = useMemo(
-    () =>
-      turns.slice(effectiveTurnStart).map((turn) => ({
-        key: turn.key,
-        start: turn.start - windowStart,
-        end: turn.end - windowStart,
-      })),
-    [effectiveTurnStart, turns, windowStart],
-  );
-
   return {
     latestTurnStart,
     turnStart: effectiveTurnStart,
     windowStart,
+    isLatestWindow: effectiveTurnStart === latestTurnStart && windowStart === latestWindowStart,
     windowedRows,
     windowedTurns,
     resetToLatestTurns: () => {
@@ -330,8 +399,9 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
+      setRowWindowLimitState(CHAT_ROW_WINDOW_INIT);
       setTurnStartState(latestTurnStart);
     },
-    revealAllHistory: () => setTurnStartState(0),
+    revealOlderHistory,
   };
 }

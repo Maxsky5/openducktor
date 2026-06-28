@@ -13,6 +13,10 @@ import type { AgentChatThreadSession } from "./agent-chat.types";
 export const CHAT_TURN_WINDOW_INIT = 10;
 /** Number of older user turns revealed per upward backfill step. */
 export const CHAT_TURN_WINDOW_BATCH = 8;
+/** Maximum transcript rows mounted from the bottom for oversized turns. */
+export const CHAT_ROW_WINDOW_INIT = 240;
+/** Number of older rows revealed per upward backfill step for oversized turns. */
+export const CHAT_ROW_WINDOW_BATCH = 160;
 
 export type AgentChatWindowRow =
   | {

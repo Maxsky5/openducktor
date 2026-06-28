@@ -4,6 +4,8 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import {
   buildAgentChatWindowTurns,
+  CHAT_ROW_WINDOW_BATCH,
+  CHAT_ROW_WINDOW_INIT,
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
 } from "./agent-chat-thread-windowing";
@@ -11,11 +13,10 @@ import { createAnimationFrameTestDriver } from "./test-support/animation-frame-t
 import { resolveAgentChatEffectiveTurnStart } from "./use-agent-chat-history-window";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+const actEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 type HarnessProps = {
   rows: AgentChatWindowRow[];
@@ -110,6 +111,47 @@ const createTurnRows = (turnCount: number, externalSessionId = "session-1"): Age
       },
     },
   ]).flat();
+
+const createSingleTurnRows = (
+  rowCount: number,
+  externalSessionId = "single-turn-session",
+): AgentChatWindowRow[] => {
+  if (rowCount < 1) {
+    throw new Error("Expected at least one row");
+  }
+
+  return Array.from({ length: rowCount }, (_, rowIndex) => {
+    if (rowIndex === 0) {
+      return {
+        kind: "message" as const,
+        key: `${externalSessionId}:user-0`,
+        message: {
+          id: "user-0",
+          role: "user" as const,
+          content: "Question",
+          timestamp: "2026-02-20T10:01:00.000Z",
+        },
+      };
+    }
+
+    return {
+      kind: "message" as const,
+      key: `${externalSessionId}:assistant-${rowIndex}`,
+      message: {
+        id: `assistant-${rowIndex}`,
+        role: "assistant" as const,
+        content: `Answer chunk ${rowIndex}`,
+        timestamp: "2026-02-20T10:01:01.000Z",
+        meta: {
+          kind: "assistant" as const,
+          agentRole: "spec" as const,
+          isFinal: true,
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      },
+    };
+  });
+};
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -259,12 +301,19 @@ describe("useAgentChatWindow", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
 
   beforeEach(() => {
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     mockResizeObserverControllers.clear();
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     animationFrameDriver.install();
   });
 
   afterEach(() => {
+    if (previousActEnvironment === undefined) {
+      delete actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+
     globalThis.ResizeObserver = originalResizeObserver;
     animationFrameDriver.restore();
   });
@@ -302,6 +351,187 @@ describe("useAgentChatWindow", () => {
     });
 
     expect(harness.getLatestResult().windowedRows).toBe(initialWindowedRows);
+
+    await harness.unmount();
+  });
+
+  test("caps oversized single-turn transcripts by row budget", async () => {
+    const rows = createSingleTurnRows(CHAT_ROW_WINDOW_INIT + 25);
+    const harness = await mountHarness({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(25);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(CHAT_ROW_WINDOW_INIT);
+    expect(harness.getLatestResult().windowedTurns).toEqual([
+      {
+        key: "single-turn-session:user-0",
+        start: 0,
+        end: CHAT_ROW_WINDOW_INIT - 1,
+      },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("scrollToTop reveals only a bounded row batch for oversized single-turn transcripts", async () => {
+    const hiddenRowsAfterReveal = 25;
+    const rows = createSingleTurnRows(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH + hiddenRowsAfterReveal,
+    );
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(hiddenRowsAfterReveal);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH,
+    );
+    expect(container.scrollTop).toBe(0);
+    expect(harness.getLatestResult().isNearTop).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("repeated scrollToTop reveals oversized single-turn transcripts in bounded batches", async () => {
+    const rows = createSingleTurnRows(1_000);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    let expectedVisibleRows = CHAT_ROW_WINDOW_INIT;
+    while (expectedVisibleRows < rows.length) {
+      await act(async () => {
+        harness.getLatestResult().scrollToTop();
+        await flush();
+      });
+
+      expectedVisibleRows = Math.min(rows.length, expectedVisibleRows + CHAT_ROW_WINDOW_BATCH);
+      expect(harness.getLatestResult().windowedRows).toHaveLength(expectedVisibleRows);
+      expect(harness.getLatestResult().windowStart).toBe(rows.length - expectedVisibleRows);
+    }
+
+    expect(harness.getLatestResult().isNearTop).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("scroll-driven reveal preserves position for row-capped single-turn transcripts", async () => {
+    const hiddenRowsAfterReveal = 25;
+    const rows = createSingleTurnRows(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH + hiddenRowsAfterReveal,
+    );
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 160;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(hiddenRowsAfterReveal);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH,
+    );
+    expect(container.scrollTop).toBe(160 + CHAT_ROW_WINDOW_BATCH * ROW_HEIGHT_PX);
+
+    await harness.unmount();
+  });
+
+  test("scrollToBottom collapses row-expanded single-turn transcripts back to the latest rows", async () => {
+    const rows = createSingleTurnRows(CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH + 25);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH,
+    );
+
+    await act(async () => {
+      harness.getLatestResult().scrollToBottom();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(rows.length - CHAT_ROW_WINDOW_INIT);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(CHAT_ROW_WINDOW_INIT);
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("keeps the latest row budget when an oversized single-turn transcript appends", async () => {
+    const initialRows = createSingleTurnRows(CHAT_ROW_WINDOW_INIT + 25);
+    const nextRows = createSingleTurnRows(CHAT_ROW_WINDOW_INIT + 50);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    await harness.update({
+      rows: nextRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: true,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(nextRows.length - CHAT_ROW_WINDOW_INIT);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(CHAT_ROW_WINDOW_INIT);
 
     await harness.unmount();
   });
@@ -979,5 +1209,7 @@ describe("useAgentChatWindow", () => {
   test("exports the expected turn window constants", () => {
     expect(CHAT_TURN_WINDOW_INIT).toBe(10);
     expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
+    expect(CHAT_ROW_WINDOW_INIT).toBe(240);
+    expect(CHAT_ROW_WINDOW_BATCH).toBe(160);
   });
 });
