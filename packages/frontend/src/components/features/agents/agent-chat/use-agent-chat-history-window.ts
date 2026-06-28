@@ -18,7 +18,6 @@ type UseAgentChatHistoryWindowInput = {
   shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
-  userScrollIntentVersionRef: RefObject<number>;
 };
 
 type RevealOlderHistoryOptions = {
@@ -95,7 +94,6 @@ export function useAgentChatHistoryWindow({
   shouldResetForTranscriptLoad,
   messagesContainerRef,
   userScrolledRef,
-  userScrollIntentVersionRef,
 }: UseAgentChatHistoryWindowInput): UseAgentChatHistoryWindowResult {
   const turns = useMemo(
     () => providedTurns ?? buildAgentChatWindowTurns(rows),
@@ -112,7 +110,8 @@ export function useAgentChatHistoryWindow({
   const windowStartRef = useRef(0);
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
-  const suppressedTopContinuationVersionRef = useRef<number | null>(null);
+  const topContinuationSuppressedRef = useRef(false);
+  const topContinuationSuppressionFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousSessionKeyRef = useRef<string | null>(displayedSessionKey);
   const pendingScrollRestoreRef = useRef<{
@@ -192,19 +191,32 @@ export function useAgentChatHistoryWindow({
     [messagesContainerRef],
   );
 
+  const cancelTopContinuationSuppressionFrame = useCallback(() => {
+    if (topContinuationSuppressionFrameRef.current === null) {
+      return;
+    }
+
+    globalThis.cancelAnimationFrame(topContinuationSuppressionFrameRef.current);
+    topContinuationSuppressionFrameRef.current = null;
+  }, []);
+
+  const clearTopContinuationSuppression = useCallback(() => {
+    cancelTopContinuationSuppressionFrame();
+    topContinuationSuppressedRef.current = false;
+  }, [cancelTopContinuationSuppressionFrame]);
+
+  const suppressTopContinuationUntilNextFrame = useCallback(() => {
+    topContinuationSuppressedRef.current = true;
+    cancelTopContinuationSuppressionFrame();
+    topContinuationSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
+      topContinuationSuppressionFrameRef.current = null;
+      topContinuationSuppressedRef.current = false;
+    });
+  }, [cancelTopContinuationSuppressionFrame]);
+
   const isTopContinuationSuppressed = useCallback(() => {
-    const suppressedVersion = suppressedTopContinuationVersionRef.current;
-    if (suppressedVersion === null) {
-      return false;
-    }
-
-    if (suppressedVersion === userScrollIntentVersionRef.current) {
-      return true;
-    }
-
-    suppressedTopContinuationVersionRef.current = null;
-    return false;
-  }, [userScrollIntentVersionRef]);
+    return topContinuationSuppressedRef.current;
+  }, []);
 
   const revealOlderHistory = useCallback(
     (options?: RevealOlderHistoryOptions) => {
@@ -227,7 +239,7 @@ export function useAgentChatHistoryWindow({
 
       if (options?.preserveScroll === false) {
         if (options.suppressTopContinuation) {
-          suppressedTopContinuationVersionRef.current = userScrollIntentVersionRef.current;
+          suppressTopContinuationUntilNextFrame();
         }
         reveal();
         return;
@@ -235,7 +247,12 @@ export function useAgentChatHistoryWindow({
 
       preserveScroll(reveal);
     },
-    [preserveScroll, setRowWindowLimitState, setTurnStartState, userScrollIntentVersionRef],
+    [
+      preserveScroll,
+      setRowWindowLimitState,
+      setTurnStartState,
+      suppressTopContinuationUntilNextFrame,
+    ],
   );
 
   const scheduleFill = useCallback(() => {
@@ -313,7 +330,8 @@ export function useAgentChatHistoryWindow({
       globalThis.cancelAnimationFrame(continuationFrameRef.current);
       continuationFrameRef.current = null;
     }
-  }, []);
+    cancelTopContinuationSuppressionFrame();
+  }, [cancelTopContinuationSuppressionFrame]);
 
   // Intentionally runs after every commit so pending scroll restoration and
   // session-switch latest-window rebasing happen on the very next DOM update.
@@ -321,7 +339,7 @@ export function useAgentChatHistoryWindow({
     if (didSessionChange) {
       previousSessionKeyRef.current = displayedSessionKey;
       pendingLatestResetRef.current = shouldFlagPendingLatestReset;
-      suppressedTopContinuationVersionRef.current = null;
+      clearTopContinuationSuppression();
     } else if (shouldFlagPendingLatestReset) {
       pendingLatestResetRef.current = true;
     } else if (shouldUsePendingLatestTurnStart) {
@@ -436,7 +454,7 @@ export function useAgentChatHistoryWindow({
       }
 
       setRowWindowLimitState(CHAT_ROW_WINDOW_INIT);
-      suppressedTopContinuationVersionRef.current = null;
+      clearTopContinuationSuppression();
       setTurnStartState(latestTurnStart);
     },
     revealOlderHistory,

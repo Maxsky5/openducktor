@@ -411,6 +411,88 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("scrollToTop stays at the top through native scroll and resize events", async () => {
+    const hiddenRowsAfterReveal = 25;
+    const rows = createSingleTurnRows(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH + hiddenRowsAfterReveal,
+    );
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      expect(container.style.overflowAnchor).toBe("none");
+      await flush();
+      await dispatchScroll(container);
+      triggerResizeObservers();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(hiddenRowsAfterReveal);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH,
+    );
+    expect(container.scrollTop).toBe(0);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("scrollToTop suppression expires before later top scroll reveal", async () => {
+    const hiddenRowsAfterSecondReveal = 25;
+    const rows = createSingleTurnRows(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH * 2 + hiddenRowsAfterSecondReveal,
+    );
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH,
+    );
+
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(hiddenRowsAfterSecondReveal);
+    expect(harness.getLatestResult().windowedRows).toHaveLength(
+      CHAT_ROW_WINDOW_INIT + CHAT_ROW_WINDOW_BATCH * 2,
+    );
+    expect(container.scrollTop).toBe(CHAT_ROW_WINDOW_BATCH * ROW_HEIGHT_PX);
+
+    await harness.unmount();
+  });
+
   test("repeated scrollToTop reveals oversized single-turn transcripts in bounded batches", async () => {
     const rows = createSingleTurnRows(1_000);
     const harness = await mountHarness(
@@ -648,7 +730,7 @@ describe("useAgentChatWindow", () => {
     expect(container.scrollTop).toBe(0);
     expect(harness.getLatestResult().isNearTop).toBe(true);
     expect(harness.getLatestResult().isNearBottom).toBe(false);
-    expect(container.style.overflowAnchor).toBe("none");
+    expect(container.style.overflowAnchor).toBe("auto");
 
     await harness.unmount();
   });

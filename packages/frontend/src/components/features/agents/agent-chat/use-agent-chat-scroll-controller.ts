@@ -14,6 +14,7 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   userScrolledRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
+  stopFollowingTranscript: () => void;
   forceScrollToBottom: () => void;
   refreshScrollState: () => void;
 };
@@ -201,6 +202,16 @@ export function useAgentChatScrollController({
     applyUserScrolledState(true);
   }, [canScroll, messagesContainerRef, applyUserScrolledState]);
 
+  const stopFollowingTranscript = useCallback(() => {
+    userScrollIntentVersionRef.current += 1;
+    applyUserScrolledState(true);
+
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.style.overflowAnchor = "auto";
+    }
+  }, [messagesContainerRef, applyUserScrolledState]);
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
@@ -346,6 +357,7 @@ export function useAgentChatScrollController({
     isNearTop: buttonState.nearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
+    stopFollowingTranscript,
     forceScrollToBottom: () => scrollToBottomNow(true),
     refreshScrollState,
   };

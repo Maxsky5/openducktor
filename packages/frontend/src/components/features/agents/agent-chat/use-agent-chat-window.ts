@@ -54,6 +54,7 @@ export function useAgentChatWindow({
     isNearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
+    stopFollowingTranscript,
     forceScrollToBottom,
     refreshScrollState,
   } = useAgentChatScrollController({
@@ -75,7 +76,6 @@ export function useAgentChatWindow({
     displayedSessionKey,
     messagesContainerRef,
     userScrolledRef,
-    userScrollIntentVersionRef,
     ...(turns ? { turns } : {}),
   });
   const pendingBottomResetRef = useRef(false);
@@ -248,6 +248,7 @@ export function useAgentChatWindow({
     scrollToTop: () => {
       const container = messagesContainerRef.current;
       if (container) {
+        stopFollowingTranscript();
         container.style.overflowAnchor = "none";
       }
 
