@@ -35,7 +35,6 @@ export const CODEX_SANDBOX_MODE_VALUES = [
 ] as const;
 export const CODEX_APPROVAL_POLICY_VALUES = ["untrusted", "on-request", "never"] as const;
 export const CODEX_APPROVALS_REVIEWER_VALUES = ["user", "auto_review"] as const;
-const CODEX_READ_ONLY_ROLES = ["spec", "planner", "qa"] as const satisfies readonly AgentRole[];
 
 export const DEFAULT_CODEX_RUNTIME_POLICY = {
   sandboxMode: "workspace-write",
@@ -132,35 +131,6 @@ export const codexRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
   })
   .strict()
   .superRefine((config, context) => {
-    for (const role of CODEX_READ_ONLY_ROLES) {
-      const override = config.roleOverrides[role];
-      const effectiveSandboxMode = override?.sandboxMode ?? config.defaults.sandboxMode;
-      const effectiveApprovalPolicy = override?.approvalPolicy ?? config.defaults.approvalPolicy;
-      if (effectiveSandboxMode === "danger-full-access") {
-        const isExplicitOverride = override?.sandboxMode === "danger-full-access";
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: isExplicitOverride
-            ? `Codex ${role} role sandboxMode cannot be danger-full-access.`
-            : `Codex ${role} role effective sandboxMode cannot be danger-full-access.`,
-          path: isExplicitOverride
-            ? ["roleOverrides", role, "sandboxMode"]
-            : ["defaults", "sandboxMode"],
-        });
-      }
-      if (effectiveApprovalPolicy === "never") {
-        const isExplicitOverride = override?.approvalPolicy === "never";
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: isExplicitOverride
-            ? `Codex ${role} role approvalPolicy cannot be never.`
-            : `Codex ${role} role effective approvalPolicy cannot be never.`,
-          path: isExplicitOverride
-            ? ["roleOverrides", role, "approvalPolicy"]
-            : ["defaults", "approvalPolicy"],
-        });
-      }
-    }
     if (config.roleOverrides.build?.sandboxMode === "read-only") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -214,21 +184,6 @@ export type CodexEffectivePolicy = CodexPolicyFields & {
   adjustmentReason?: string;
 };
 
-const assertCodexEffectivePolicyAllowedForRole = (
-  policy: CodexPolicyFields,
-  role: AgentRole,
-): void => {
-  if (!CODEX_READ_ONLY_ROLES.includes(role as (typeof CODEX_READ_ONLY_ROLES)[number])) {
-    return;
-  }
-  if (policy.sandboxMode === "danger-full-access") {
-    throw new Error(`Codex ${role} role effective sandboxMode cannot be danger-full-access.`);
-  }
-  if (policy.approvalPolicy === "never") {
-    throw new Error(`Codex ${role} role effective approvalPolicy cannot be never.`);
-  }
-};
-
 export const resolveCodexEffectivePolicy = (
   config: CodexRuntimeConfig,
   role: AgentRole,
@@ -248,7 +203,6 @@ export const resolveCodexEffectivePolicy = (
       ? "Build role requires workspace-write when sandboxMode is inherited from read-only."
       : undefined;
   const sandboxMode = adjustmentReason ? "workspace-write" : policy.sandboxMode;
-  assertCodexEffectivePolicyAllowedForRole({ ...policy, sandboxMode }, role);
 
   return {
     ...policy,

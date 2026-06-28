@@ -168,7 +168,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("blocks dangerous effective Codex read-only role settings before persistence", async () => {
+  test("saves dangerous effective Codex read-only role settings after acknowledgement", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.codex = {
@@ -176,6 +176,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       defaults: {
         ...snapshotDraft.agentRuntimes.codex.defaults,
         sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
       },
     };
     const harness = createHookHarness(
@@ -190,16 +191,14 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     await harness.mount();
 
-    let didSave = true;
+    let didSave = false;
     await harness.run(async (state) => {
       didSave = await state.submit();
     });
 
-    expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe(
-      "Codex spec role effective sandboxMode cannot be danger-full-access.",
-    );
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    expect(didSave).toBe(true);
+    expect(harness.getLatest().saveError).toBeNull();
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
   });

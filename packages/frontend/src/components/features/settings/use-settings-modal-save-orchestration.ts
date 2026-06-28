@@ -1,8 +1,4 @@
-import {
-  agentRoleValues,
-  resolveCodexEffectivePolicy,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -39,17 +35,6 @@ type UseSettingsModalSaveOrchestrationArgs = {
   selectedWorkspaceId: string | null;
   saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
-};
-
-const codexEffectivePolicySaveError = (snapshot: SettingsSnapshot): string | null => {
-  for (const role of agentRoleValues) {
-    try {
-      resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, role);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
-  }
-  return null;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -151,15 +136,6 @@ export const useSettingsModalSaveOrchestration = ({
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
-      });
-      return false;
-    }
-
-    const codexPolicyError = codexEffectivePolicySaveError(snapshotDraft);
-    if (codexPolicyError) {
-      setSaveError(codexPolicyError);
-      toast.error("Cannot save settings", {
-        description: codexPolicyError,
       });
       return false;
     }

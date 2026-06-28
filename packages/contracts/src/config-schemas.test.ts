@@ -239,39 +239,26 @@ describe("config-schemas", () => {
     });
   });
 
-  test("rejects dangerous explicit codex read-only role overrides", () => {
-    expect(() =>
-      codexRuntimeConfigSchema.parse({
-        enabled: true,
-        roleOverrides: {
-          spec: { approvalPolicy: "never" },
-          qa: { sandboxMode: "danger-full-access" },
-        },
-      }),
-    ).toThrow("Codex spec role approvalPolicy cannot be never.");
-  });
-
-  test("rejects dangerous inherited codex policy for read-only roles", () => {
-    const result = codexRuntimeConfigSchema.safeParse({
+  test("allows dangerous explicit codex read-only role overrides", () => {
+    const config = codexRuntimeConfigSchema.parse({
       enabled: true,
-      defaults: {
-        sandboxMode: "danger-full-access",
-        approvalPolicy: "never",
-        approvalsReviewer: "user",
-        workspaceWriteNetworkAccess: false,
+      roleOverrides: {
+        spec: { approvalPolicy: "never" },
+        qa: { sandboxMode: "danger-full-access" },
       },
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error?.issues.map((issue) => issue.message)).toContain(
-      "Codex spec role effective sandboxMode cannot be danger-full-access.",
-    );
-    expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain(
-      "defaults.sandboxMode",
-    );
+    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewerApplies: false,
+    });
+    expect(resolveCodexEffectivePolicy(config, "qa")).toMatchObject({
+      sandboxMode: "danger-full-access",
+      workspaceWriteNetworkAccess: false,
+    });
   });
 
-  test("allows dangerous codex defaults when read-only roles explicitly override safely", () => {
+  test("allows dangerous inherited codex policy for read-only roles", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,
       defaults: {
@@ -280,18 +267,13 @@ describe("config-schemas", () => {
         approvalsReviewer: "user",
         workspaceWriteNetworkAccess: false,
       },
-      roleOverrides: {
-        spec: { sandboxMode: "workspace-write", approvalPolicy: "on-request" },
-        planner: { sandboxMode: "read-only", approvalPolicy: "untrusted" },
-        qa: { sandboxMode: "workspace-write", approvalPolicy: "on-request" },
-      },
     });
 
     expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
-      sandboxMode: "workspace-write",
-      approvalPolicy: "on-request",
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
     });
-    expect(resolveCodexEffectivePolicy(config, "build")).toMatchObject({
+    expect(resolveCodexEffectivePolicy(config, "planner")).toMatchObject({
       sandboxMode: "danger-full-access",
       approvalPolicy: "never",
     });

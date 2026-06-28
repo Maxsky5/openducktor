@@ -33,7 +33,6 @@ type AgentRuntimesSectionProps = {
 type CodexPolicyField = keyof CodexPolicyFields;
 
 const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
-const READ_ONLY_AGENT_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
 const POLICY_LABELS = {
   sandboxMode: "Sandbox mode",
@@ -70,13 +69,13 @@ const VALUE_HELP = {
 
 const FEATURE_HELP = {
   sandboxMode:
-    "Choose how much filesystem access Codex gets. Read-only is safest; workspace-write allows edits; danger-full-access removes sandbox boundaries.",
+    "Choose the filesystem sandbox Codex starts with. Use danger-full-access only when this repository and task are trusted.",
   approvalPolicy:
-    "Choose when Codex should ask before proceeding. Read-only roles cannot use never.",
+    "Choose when Codex asks before proceeding. Never removes approval prompts and requires acknowledgement before saving.",
   approvalsReviewer:
-    "Choose who reviews prompts. This is saved but has no effect while approval prompts are never.",
+    "Choose who reviews approval prompts. This setting is ignored while approval policy is never.",
   workspaceWriteNetworkAccess:
-    "Choose whether spawned commands can use the network. This only applies with workspace-write.",
+    "Allow commands launched inside workspace-write to use the network. Other sandbox modes ignore this switch.",
 } satisfies Record<CodexPolicyField, string>;
 
 const FEATURE_FIELDS: CodexPolicyField[] = [
@@ -148,7 +147,7 @@ function PolicyOptionCards<T extends string | boolean>({
   inheritedLabel?: string;
 }): ReactElement {
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-2 md:grid-cols-3">
       {includeInherit ? (
         <button
           type="button"
@@ -156,14 +155,14 @@ function PolicyOptionCards<T extends string | boolean>({
           disabled={disabled}
           onClick={() => onChange(undefined)}
           className={cn(
-            "rounded-md border p-3 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+            "rounded-md border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
             value === undefined
               ? "border-primary bg-primary/10 text-foreground shadow-sm"
               : "border-border bg-background text-muted-foreground hover:bg-muted/70",
           )}
         >
-          <span className="block font-semibold text-foreground">Inherit default</span>
-          <span className="mt-1 block">
+          <span className="block text-sm font-semibold text-foreground">Inherit default</span>
+          <span className="mt-0.5 block leading-relaxed">
             Uses {inheritedLabel} unless role safety rules adjust it.
           </span>
         </button>
@@ -179,14 +178,14 @@ function PolicyOptionCards<T extends string | boolean>({
             disabled={disabled}
             onClick={() => onChange(option)}
             className={cn(
-              "rounded-md border p-3 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              "rounded-md border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               active
                 ? "border-primary bg-primary/10 text-foreground shadow-sm"
                 : "border-border bg-background text-muted-foreground hover:bg-muted/70",
             )}
           >
-            <span className="block font-semibold text-foreground">{VALUE_LABELS[key]}</span>
-            <span className="mt-1 block">{VALUE_HELP[key]}</span>
+            <span className="block text-sm font-semibold text-foreground">{VALUE_LABELS[key]}</span>
+            <span className="mt-0.5 block leading-relaxed">{VALUE_HELP[key]}</span>
           </button>
         );
       })}
@@ -206,7 +205,7 @@ function RuntimeOverview({
   onToggle: (enabled: boolean) => void;
 }): ReactElement {
   return (
-    <div className="grid gap-3 rounded-md border border-border bg-card p-3 sm:grid-cols-[1fr_auto] sm:items-start">
+    <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-[1fr_auto] sm:items-start">
       <div className="min-w-0 space-y-2">
         <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
         <p className="text-xs text-muted-foreground">{definition.description}</p>
@@ -274,7 +273,7 @@ function CodexSettings({
     });
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       {FEATURE_FIELDS.map((field) => (
         <CodexFeatureGroup
           key={field}
@@ -287,7 +286,7 @@ function CodexSettings({
       ))}
 
       {codexHasDangerousSelection(config) ? (
-        <div className="rounded-md border border-destructive bg-card p-3 text-xs text-foreground space-y-3">
+        <div className="rounded-lg border border-destructive bg-card p-4 text-xs text-foreground space-y-3">
           <p>
             Acknowledgement required: danger-full-access removes sandbox boundaries, and never
             disables approval prompts. Save only after confirming this is intended.
@@ -335,33 +334,152 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
     | CodexPolicyFields[Field]
     | undefined;
   const allowedValues = valuesForRole(field, selectedRole);
+  const isNetworkAccess = field === "workspaceWriteNetworkAccess";
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-      <div className="space-y-1">
-        <h4 className="text-sm font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
-        <p className="text-xs text-muted-foreground">{FEATURE_HELP[field]}</p>
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-4">
+      <div className="space-y-1.5">
+        <h4 className="text-base font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
+        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          {FEATURE_HELP[field]}
+        </p>
       </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-foreground">Default setting</Label>
-        <PolicyOptionCards
-          value={defaultValue}
-          values={defaultValuesForField(field)}
-          disabled={disabled}
-          onChange={(value) => value !== undefined && onDefaultChange(field, value)}
-        />
+      <div className="space-y-2.5 rounded-lg border border-border bg-background p-3">
+        <div className="space-y-0.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Default
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Used by every role unless that role overrides it.
+          </p>
+        </div>
+        {isNetworkAccess ? (
+          <NetworkAccessSwitch
+            value={defaultValue as boolean}
+            disabled={disabled}
+            onChange={(value) => onDefaultChange(field, value as CodexPolicyFields[Field])}
+          />
+        ) : (
+          <PolicyOptionCards
+            value={defaultValue as string}
+            values={defaultValuesForField(field) as string[]}
+            disabled={disabled}
+            onChange={(value) =>
+              value !== undefined && onDefaultChange(field, value as CodexPolicyFields[Field])
+            }
+          />
+        )}
       </div>
-      <div className="space-y-3 rounded-md border border-border bg-muted/40 p-3">
+      <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-3">
+        <div className="space-y-0.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Role override
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Pick a role, then either inherit or set a role-specific value.
+          </p>
+        </div>
         <RoleTabs value={selectedRole} onChange={setSelectedRole} disabled={disabled} />
-        <PolicyOptionCards
-          value={override}
-          values={allowedValues}
-          disabled={disabled}
-          includeInherit
-          inheritedLabel={VALUE_LABELS[valueKey(defaultValue)]}
-          onChange={(value) => onOverrideChange(selectedRole, field, value)}
-        />
+        {isNetworkAccess ? (
+          <NetworkAccessOverride
+            value={override as boolean | undefined}
+            inheritedValue={defaultValue as boolean}
+            disabled={disabled}
+            onChange={(value) =>
+              onOverrideChange(selectedRole, field, value as CodexPolicyFields[Field] | undefined)
+            }
+          />
+        ) : (
+          <PolicyOptionCards
+            value={override as string | undefined}
+            values={allowedValues as string[]}
+            disabled={disabled}
+            includeInherit
+            inheritedLabel={VALUE_LABELS[valueKey(defaultValue)]}
+            onChange={(value) =>
+              onOverrideChange(selectedRole, field, value as CodexPolicyFields[Field] | undefined)
+            }
+          />
+        )}
         <EffectivePolicyMessage config={config} role={selectedRole} field={field} />
+      </div>
+    </div>
+  );
+}
+
+function NetworkAccessSwitch({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: boolean;
+  disabled: boolean;
+  onChange: (value: boolean) => void;
+}): ReactElement {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-card px-3 py-2.5">
+      <div className="space-y-0.5">
+        <p className="text-sm font-semibold text-foreground">Command network access</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {value ? VALUE_HELP.true : VALUE_HELP.false}
+        </p>
+      </div>
+      <Switch
+        checked={value}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-label="Command network access"
+      />
+    </div>
+  );
+}
+
+function NetworkAccessOverride({
+  value,
+  inheritedValue,
+  disabled,
+  onChange,
+}: {
+  value: boolean | undefined;
+  inheritedValue: boolean;
+  disabled: boolean;
+  onChange: (value: boolean | undefined) => void;
+}): ReactElement {
+  const isInherited = value === undefined;
+  return (
+    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <button
+        type="button"
+        aria-pressed={isInherited}
+        disabled={disabled}
+        onClick={() => onChange(undefined)}
+        className={cn(
+          "rounded-md border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+          isInherited
+            ? "border-primary bg-primary/10 text-foreground shadow-sm"
+            : "border-border bg-background text-muted-foreground hover:bg-muted/70",
+        )}
+      >
+        <span className="block text-sm font-semibold text-foreground">Inherit default</span>
+        <span className="mt-0.5 block leading-relaxed">
+          Uses {VALUE_LABELS[valueKey(inheritedValue)]} for this role.
+        </span>
+      </button>
+      <div className="rounded-md border border-border bg-background px-3 py-2.5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold text-foreground">Override network access</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {value === true ? VALUE_HELP.true : VALUE_HELP.false}
+            </p>
+          </div>
+          <Switch
+            checked={value ?? inheritedValue}
+            disabled={disabled}
+            onCheckedChange={onChange}
+            aria-label="Override command network access"
+          />
+        </div>
       </div>
     </div>
   );
@@ -411,10 +529,6 @@ function valuesForRole<Field extends CodexPolicyField>(
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {
     if (role === "build") return values.filter((v) => v !== "read-only");
-    if (READ_ONLY_AGENT_ROLES.has(role)) return values.filter((v) => v !== "danger-full-access");
-  }
-  if (field === "approvalPolicy" && READ_ONLY_AGENT_ROLES.has(role)) {
-    return values.filter((v) => v !== "never");
   }
   return values;
 }
