@@ -168,6 +168,42 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
+  test("blocks dangerous effective Codex read-only role settings before persistence", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes.codex = {
+      ...snapshotDraft.agentRuntimes.codex,
+      defaults: {
+        ...snapshotDraft.agentRuntimes.codex.defaults,
+        sandboxMode: "danger-full-access",
+      },
+    };
+    const harness = createHookHarness(
+      createArgs(
+        {
+          snapshotDraft,
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, agentRuntimes: true },
+      ),
+    );
+
+    await harness.mount();
+
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Codex spec role effective sandboxMode cannot be danger-full-access.",
+    );
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
   test("blocks repo script validation errors, shows submit-gated errors, and resets the gate when validation clears", async () => {
     const harness = createHookHarness(
       createArgs({

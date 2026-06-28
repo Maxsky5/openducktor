@@ -346,7 +346,7 @@ describe("useSessionRuntimeData", () => {
     await expect(harness.mount()).rejects.toThrow(
       "Session workingDirectory is required to reach session 'external-1'.",
     );
-    expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+    expect(loadRuntimeCatalog).not.toHaveBeenCalled();
     expect(readSessionTodos).not.toHaveBeenCalled();
   });
 });

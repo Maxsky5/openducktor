@@ -1,20 +1,14 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
-  AgentSessionRuntimePolicy,
   AgentSessionRuntimeRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import {
-  AGENT_SESSION_RUNTIME_POLICY_STALE_TIME_MS,
-  agentSessionRuntimePolicyQueryKeys,
-  agentSessionRuntimePolicyQueryOptions,
-} from "@/state/queries/agent-session-runtime-policy";
 import {
   agentSessionTodosQueryKeys,
   SESSION_TODOS_STALE_TIME_MS,
@@ -26,13 +20,14 @@ import {
   runtimeCatalogQueryKeys,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
-import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
 } from "@/types/selected-session-runtime-data";
 import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
+import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
@@ -57,11 +52,6 @@ const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
-const skippedRuntimePolicyQueryOptions = skippedQueryOptions<AgentSessionRuntimePolicy>({
-  queryKey: agentSessionRuntimePolicyQueryKeys.all,
-  staleTime: AGENT_SESSION_RUNTIME_POLICY_STALE_TIME_MS,
-});
-
 export const useSessionRuntimeData = ({
   repoPath,
   selectedSessionIdentity,
@@ -70,7 +60,6 @@ export const useSessionRuntimeData = ({
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
-  const queryClient = useQueryClient();
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
   const selectedRuntimeContext =
     selectedSessionIdentity && "role" in selectedSessionIdentity ? selectedSessionIdentity : null;
@@ -126,22 +115,48 @@ export const useSessionRuntimeData = ({
       ),
     };
   }, [stableSelectedSessionRuntimeContext]);
-  const runtimePolicyQuery = useQuery(
-    runtimePolicyTarget
-      ? agentSessionRuntimePolicyQueryOptions({
+  const settingsSnapshotQuery = useQuery({
+    ...settingsSnapshotQueryOptions(),
+    enabled: runtimePolicyTarget?.runtimeKind === "codex",
+  });
+  const runtimePolicyResult = useMemo(() => {
+    if (!runtimePolicyTarget) {
+      return { runtimePolicy: null, error: null };
+    }
+    if (runtimePolicyTarget.runtimeKind === "opencode") {
+      return { runtimePolicy: { kind: "opencode" } as const, error: null };
+    }
+    const settingsSnapshot = settingsSnapshotQuery.data;
+    if (!settingsSnapshot) {
+      return { runtimePolicy: null, error: null };
+    }
+    try {
+      return {
+        runtimePolicy: resolveAgentSessionRuntimePolicyFromSnapshot({
           ...runtimePolicyTarget,
-          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
-        })
-      : skippedRuntimePolicyQueryOptions,
-  );
+          snapshot: settingsSnapshot,
+        }),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        runtimePolicy: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, [runtimePolicyTarget, settingsSnapshotQuery.data]);
+  const runtimePolicyError =
+    runtimePolicyResult.error ??
+    (settingsSnapshotQuery.error instanceof Error ? settingsSnapshotQuery.error.message : null);
+  const runtimePolicy = runtimePolicyResult.runtimePolicy;
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,
       selectedSessionIdentity: sessionForRuntimeData,
-      runtimePolicy: runtimePolicyQuery.data ?? null,
+      runtimePolicy,
       runtimeDefinitions,
     });
-  }, [repoPath, runtimeDefinitions, runtimePolicyQuery.data, sessionForRuntimeData]);
+  }, [repoPath, runtimeDefinitions, runtimePolicy, sessionForRuntimeData]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
@@ -167,12 +182,10 @@ export const useSessionRuntimeData = ({
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const runtimePolicyQueryError =
-      runtimePolicyQuery.error instanceof Error ? runtimePolicyQuery.error.message : null;
     const error =
       runtimeDataRefs.kind === "unavailable"
         ? runtimeDataRefs.error
-        : (runtimePolicyQueryError ?? runtimeDataQueryError);
+        : (runtimePolicyError ?? runtimeDataQueryError);
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const canShowModelCatalogLoading =
@@ -192,7 +205,7 @@ export const useSessionRuntimeData = ({
     catalogQuery.isPending,
     isRuntimeReady,
     runtimeDataRefs,
-    runtimePolicyQuery.error,
+    runtimePolicyError,
     todosQuery.data,
     todosQuery.error,
   ]);

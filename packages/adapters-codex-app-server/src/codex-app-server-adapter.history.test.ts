@@ -1224,6 +1224,85 @@ describe("CodexAppServerAdapter history loading", () => {
     expect(calls).toEqual([]);
   });
 
+  test("rejects Codex todo policy mismatches before returning cached todos", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread-history-todos",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "active", activeFlags: [] },
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "thread-history-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "turn-1",
+                  status: "completed",
+                  items: [
+                    {
+                      id: "todo-call-1",
+                      type: "dynamicToolCall",
+                      namespace: "functions",
+                      tool: "update_plan",
+                      arguments: { plan: [{ step: "Cached todo", status: "completed" }] },
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-history-todos",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    calls.length = 0;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-history-todos",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "opencode" },
+      } as never),
+    ).rejects.toThrow(
+      "Cannot load Codex session todos with runtime 'codex' and 'opencode' runtime policy.",
+    );
+    expect(calls).toEqual([]);
+  });
+
   test("reuses empty todos discovered while loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {

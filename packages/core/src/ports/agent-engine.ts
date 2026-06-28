@@ -58,6 +58,9 @@ export const assertAgentRuntimePolicyBinding = (
   input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
   action: string,
 ): void => {
+  if (!input.runtimePolicy) {
+    throw new Error(`Cannot ${action} without resolved runtime policy.`);
+  }
   if (input.runtimeKind !== input.runtimePolicy.kind) {
     throw new Error(
       `Cannot ${action} with runtime '${input.runtimeKind}' and '${input.runtimePolicy.kind}' runtime policy.`,

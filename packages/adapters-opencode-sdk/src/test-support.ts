@@ -6,6 +6,8 @@ import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
+type OpencodeSessionRuntimeRef = Extract<AgentSessionRuntimeRef, { runtimeKind: "opencode" }>;
+
 export const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 export const buildQueuedSignature = (text: string): string =>
   buildQueuedRequestSignature([{ kind: "text", text }]);
@@ -19,6 +21,8 @@ export const defaultRepoRuntimeInput = {
   repoPath: "/repo",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo",
+  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
+  runtimePolicy: { kind: "opencode" as const },
 };
 
 export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessionRef => ({
@@ -30,8 +34,8 @@ export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessi
 
 export const sessionRuntimeRef = (
   externalSessionId = "session-opencode-1",
-  overrides: Partial<AgentSessionRuntimeRef> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<OpencodeSessionRuntimeRef> = {},
+): OpencodeSessionRuntimeRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",
@@ -489,9 +493,7 @@ export const startDefaultSession = async (
 };
 
 export const defaultLoadSessionTodosInput = {
-  repoPath: "/repo",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/repo",
+  ...defaultRepoRuntimeInput,
   externalSessionId: "session-opencode-1",
 };
 

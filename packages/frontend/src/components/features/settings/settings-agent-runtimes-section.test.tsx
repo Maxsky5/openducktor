@@ -58,6 +58,18 @@ describe("AgentRuntimesSection", () => {
     expect(builderHtml).toContain("danger-full-access");
   });
 
+  test("read-only Codex role overrides do not present dangerous choices", () => {
+    const html = renderSection();
+    const specStart = html.indexOf("Spec");
+    const plannerStart = html.indexOf("Planner", specStart);
+    const specHtml = html.slice(specStart, plannerStart);
+
+    expect(specHtml).not.toContain("danger-full-access");
+    expect(specHtml).not.toContain("never");
+    expect(specHtml).toContain("read-only");
+    expect(specHtml).toContain("workspace-write");
+  });
+
   test("default read-only shows Builder effective workspace-write reason", () => {
     const html = renderSection({
       ...DEFAULT_AGENT_RUNTIMES,
@@ -137,6 +149,38 @@ describe("AgentRuntimesSection", () => {
       fireEvent.click(screen.getByRole("switch", { name: /reduce safety protections/i }));
 
       expect(acknowledged).toBe(true);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("selects a valid runtime tab after definitions load asynchronously", () => {
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [],
+        disabled: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      renderer.rerender(
+        createElement(AgentRuntimesSection, {
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+          runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+          disabled: false,
+          isCodexDangerAcknowledged: false,
+          onCodexDangerAcknowledgedChange: () => {},
+          onUpdateAgentRuntimes: () => {},
+        }),
+      );
+
+      expect(screen.getByRole("tab", { name: "OpenCode" }).getAttribute("data-state")).toBe(
+        "active",
+      );
     } finally {
       renderer.unmount();
     }

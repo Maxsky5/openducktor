@@ -6,6 +6,7 @@ import type {
   CodexEffectivePolicy,
 } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionRuntimePolicy } from "@openducktor/core";
+import { assertAgentRuntimePolicyBinding } from "@openducktor/core";
 
 export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
@@ -61,4 +62,14 @@ export const requireCodexRuntimePolicy = (
     throw new Error(`Cannot ${action} with non-Codex runtime policy '${runtimePolicy.kind}'.`);
   }
   return runtimePolicy.policy;
+};
+
+export const assertCodexRuntimePolicyBinding = (
+  input: { runtimeKind: "opencode" | "codex"; runtimePolicy: AgentSessionRuntimePolicy },
+  action: string,
+): void => {
+  assertAgentRuntimePolicyBinding(input, action);
+  if (input.runtimeKind !== "codex") {
+    throw new Error(`Cannot ${action} for non-Codex runtime '${input.runtimeKind}'.`);
+  }
 };

@@ -159,6 +159,37 @@ test("rejects non-OpenCode runtime policy bindings at the adapter boundary", asy
   );
 });
 
+test("rejects fork policy mismatches before runtime side effects", async () => {
+  const createClient = mock(() => {
+    throw new Error("createClient should not be called");
+  });
+  const adapter = new OpencodeSdkAdapter({ createClient });
+
+  await expect(
+    adapter.forkSession({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      parentExternalSessionId: "parent-session",
+      sessionScope: workflowAgentSessionScope("task-1", "build"),
+      runtimePolicy: {
+        kind: "codex",
+        policy: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          workspaceWriteNetworkAccess: false,
+          approvalsReviewerApplies: true,
+        },
+      },
+      systemPrompt: "system",
+    } as never),
+  ).rejects.toThrow(
+    "Cannot fork OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
+  );
+  expect(createClient).toHaveBeenCalledTimes(0);
+});
+
 const makeMockClient = (
   options: {
     permissionReplyResult?: { data?: unknown; error?: unknown; response?: unknown };

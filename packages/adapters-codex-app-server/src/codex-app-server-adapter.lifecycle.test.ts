@@ -326,8 +326,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
-      runtimePolicy: codexPolicy(config, "spec"),
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: codexPolicy(config, "build"),
       systemPrompt: "Spec it.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
@@ -403,17 +403,16 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
-  test("fails roleless existing-session hydration without defaulting policy", async () => {
+  test("fails existing-session send without a model selection", async () => {
     const { adapter } = createHarness();
 
     await expect(
-      adapter.sendUserMessage({
-        ...codexUserMessageInput({
-          externalSessionId: "thread-roleless",
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread-without-model",
           parts: [{ kind: "text", text: "Continue" }],
         }),
-        role: null,
-      }),
+      ),
     ).rejects.toThrow(
       "Codex App Server requires a model selection with a reasoning effort variant.",
     );
@@ -466,7 +465,10 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const assistantMessage = history.find(
       (message) => message.role === "assistant" && message.messageId === "msg-1",
     );
-    expect(assistantMessage?.model).toEqual({
+    if (assistantMessage?.role !== "assistant") {
+      throw new Error("expected assistant history message");
+    }
+    expect(assistantMessage.model).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",

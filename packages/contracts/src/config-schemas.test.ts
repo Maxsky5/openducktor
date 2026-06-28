@@ -184,8 +184,8 @@ describe("config-schemas", () => {
     const parsed = codexRuntimeConfigSchema.parse({
       enabled: true,
       defaults: {
-        sandboxMode: "danger-full-access",
-        approvalPolicy: "never",
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
         workspaceWriteNetworkAccess: true,
       },
@@ -210,7 +210,6 @@ describe("config-schemas", () => {
         workspaceWriteNetworkAccess: true,
       },
       roleOverrides: {
-        spec: { approvalPolicy: "never" },
         qa: { sandboxMode: "workspace-write", workspaceWriteNetworkAccess: true },
       },
     });
@@ -224,9 +223,9 @@ describe("config-schemas", () => {
     });
     expect(resolveCodexEffectivePolicy(config, "spec")).toEqual({
       sandboxMode: "read-only",
-      approvalPolicy: "never",
+      approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
-      approvalsReviewerApplies: false,
+      approvalsReviewerApplies: true,
       workspaceWriteNetworkAccess: false,
     });
     expect(resolveCodexEffectivePolicy(config, "build")).toEqual({
@@ -237,6 +236,64 @@ describe("config-schemas", () => {
       workspaceWriteNetworkAccess: true,
       adjustmentReason:
         "Build role requires workspace-write when sandboxMode is inherited from read-only.",
+    });
+  });
+
+  test("rejects dangerous explicit codex read-only role overrides", () => {
+    expect(() =>
+      codexRuntimeConfigSchema.parse({
+        enabled: true,
+        roleOverrides: {
+          spec: { approvalPolicy: "never" },
+          qa: { sandboxMode: "danger-full-access" },
+        },
+      }),
+    ).toThrow("Codex spec role approvalPolicy cannot be never.");
+  });
+
+  test("rejects dangerous inherited codex policy for read-only roles", () => {
+    const result = codexRuntimeConfigSchema.safeParse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        workspaceWriteNetworkAccess: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toContain(
+      "Codex spec role effective sandboxMode cannot be danger-full-access.",
+    );
+    expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain(
+      "defaults.sandboxMode",
+    );
+  });
+
+  test("allows dangerous codex defaults when read-only roles explicitly override safely", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        workspaceWriteNetworkAccess: false,
+      },
+      roleOverrides: {
+        spec: { sandboxMode: "workspace-write", approvalPolicy: "on-request" },
+        planner: { sandboxMode: "read-only", approvalPolicy: "untrusted" },
+        qa: { sandboxMode: "workspace-write", approvalPolicy: "on-request" },
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "on-request",
+    });
+    expect(resolveCodexEffectivePolicy(config, "build")).toMatchObject({
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
     });
   });
 

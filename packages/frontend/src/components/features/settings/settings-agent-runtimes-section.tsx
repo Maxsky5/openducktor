@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
@@ -32,6 +33,7 @@ type AgentRuntimesSectionProps = {
 type CodexPolicyField = keyof CodexPolicyFields;
 
 const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
+const READ_ONLY_AGENT_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
 const POLICY_LABELS: Record<CodexPolicyField, string> = {
   sandboxMode: "Sandbox mode",
@@ -315,11 +317,22 @@ function CodexRoleOverride({
   ) => void;
 }): ReactElement {
   const override = config.roleOverrides[role] ?? {};
-  const effective = resolveCodexEffectivePolicy(config, role);
+  let effective: ReturnType<typeof resolveCodexEffectivePolicy> | null = null;
+  let effectiveError: string | null = null;
+  try {
+    effective = resolveCodexEffectivePolicy(config, role);
+  } catch (error) {
+    effectiveError = error instanceof Error ? error.message : String(error);
+  }
   const sandboxValues =
     role === "build"
       ? CODEX_SANDBOX_MODE_VALUES.filter((v) => v !== "read-only")
-      : [...CODEX_SANDBOX_MODE_VALUES];
+      : READ_ONLY_AGENT_ROLES.has(role)
+        ? CODEX_SANDBOX_MODE_VALUES.filter((v) => v !== "danger-full-access")
+        : [...CODEX_SANDBOX_MODE_VALUES];
+  const approvalPolicyValues = READ_ONLY_AGENT_ROLES.has(role)
+    ? CODEX_APPROVAL_POLICY_VALUES.filter((v) => v !== "never")
+    : [...CODEX_APPROVAL_POLICY_VALUES];
 
   return (
     <div className="rounded-md border border-border bg-card p-3 space-y-3">
@@ -334,7 +347,7 @@ function CodexRoleOverride({
       <OverrideRow
         label={POLICY_LABELS.approvalPolicy}
         value={override.approvalPolicy}
-        values={[...CODEX_APPROVAL_POLICY_VALUES]}
+        values={approvalPolicyValues}
         disabled={disabled}
         onChange={(value) => onChange(role, "approvalPolicy", value)}
       />
@@ -353,13 +366,19 @@ function CodexRoleOverride({
         onChange={(value) => onChange(role, "workspaceWriteNetworkAccess", value)}
       />
       <div className="rounded-md border border-border bg-muted p-2 text-xs text-muted-foreground">
-        Effective: sandbox {effective.sandboxMode}, approvals {effective.approvalPolicy}, reviewer{" "}
-        {effective.approvalsReviewer}, network{" "}
-        {effective.workspaceWriteNetworkAccess ? "on" : "off"}.
-        {effective.adjustmentReason ? ` ${effective.adjustmentReason}` : ""}
-        {!effective.approvalsReviewerApplies
-          ? " Reviewer is saved but has no effect while approval prompts are never."
-          : ""}
+        {effective ? (
+          <>
+            Effective: sandbox {effective.sandboxMode}, approvals {effective.approvalPolicy},
+            reviewer {effective.approvalsReviewer}, network{" "}
+            {effective.workspaceWriteNetworkAccess ? "on" : "off"}.
+            {effective.adjustmentReason ? ` ${effective.adjustmentReason}` : ""}
+            {!effective.approvalsReviewerApplies
+              ? " Reviewer is saved but has no effect while approval prompts are never."
+              : ""}
+          </>
+        ) : (
+          <span className="text-destructive">{effectiveError}</span>
+        )}
       </div>
     </div>
   );
@@ -422,6 +441,17 @@ export function AgentRuntimesSection({
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const defaultTab = sortedRuntimeDefinitions[0]?.kind;
+  const [selectedTab, setSelectedTab] = useState(defaultTab ?? "");
+
+  useEffect(() => {
+    if (!defaultTab) {
+      setSelectedTab("");
+      return;
+    }
+    if (!sortedRuntimeDefinitions.some((definition) => definition.kind === selectedTab)) {
+      setSelectedTab(defaultTab);
+    }
+  }, [defaultTab, selectedTab, sortedRuntimeDefinitions]);
 
   return (
     <div className="grid gap-4 p-4">
@@ -433,7 +463,7 @@ export function AgentRuntimesSection({
         </p>
       </div>
 
-      <Tabs defaultValue={defaultTab ?? ""} className="gap-4">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="gap-4">
         <TabsList className="flex h-auto w-full flex-wrap justify-start">
           {sortedRuntimeDefinitions.map((definition) => (
             <TabsTrigger key={definition.kind} value={definition.kind}>
