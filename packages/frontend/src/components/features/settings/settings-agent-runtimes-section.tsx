@@ -16,8 +16,8 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { codexHasDangerousSelection } from "./settings-codex-risk-policy";
 
@@ -35,22 +35,66 @@ type CodexPolicyField = keyof CodexPolicyFields;
 const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 const READ_ONLY_AGENT_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
-const POLICY_LABELS: Record<CodexPolicyField, string> = {
+const POLICY_LABELS = {
   sandboxMode: "Sandbox mode",
   approvalPolicy: "Approval prompts",
   approvalsReviewer: "Prompt reviewer",
   workspaceWriteNetworkAccess: "Command network access",
-};
+} satisfies Record<CodexPolicyField, string>;
 
-const VALUE_LABELS: Record<string, string> = {
-  "read-only": "read-only",
-  "workspace-write": "workspace-write",
-  "danger-full-access": "danger-full-access",
-  untrusted: "untrusted",
-  "on-request": "on-request",
-  never: "never",
-  user: "user",
-  auto_review: "auto_review",
+const VALUE_LABELS = {
+  "read-only": "Read-only",
+  "workspace-write": "Workspace-write",
+  "danger-full-access": "Danger full access",
+  untrusted: "Untrusted",
+  "on-request": "On request",
+  never: "Never",
+  user: "User",
+  auto_review: "Auto review",
+  true: "On",
+  false: "Off",
+} satisfies Record<string, string>;
+
+const VALUE_HELP = {
+  "read-only": "Codex can inspect files but cannot change the workspace.",
+  "workspace-write": "Codex can edit files in the workspace while keeping sandbox boundaries.",
+  "danger-full-access": "Codex runs without sandbox boundaries. Use only for trusted tasks.",
+  untrusted: "Codex asks before writes or commands that need trust.",
+  "on-request": "Codex asks when it decides a command needs approval.",
+  never: "Codex does not ask for approval prompts.",
+  user: "Approval prompts go to the user.",
+  auto_review: "Eligible prompts go through Codex automatic review.",
+  true: "Allow network for commands when sandbox mode is workspace-write.",
+  false: "Keep command network blocked when sandbox mode is workspace-write.",
+} satisfies Record<string, string>;
+
+const FEATURE_HELP = {
+  sandboxMode:
+    "Choose how much filesystem access Codex gets. Read-only is safest; workspace-write allows edits; danger-full-access removes sandbox boundaries.",
+  approvalPolicy:
+    "Choose when Codex should ask before proceeding. Read-only roles cannot use never.",
+  approvalsReviewer:
+    "Choose who reviews prompts. This is saved but has no effect while approval prompts are never.",
+  workspaceWriteNetworkAccess:
+    "Choose whether spawned commands can use the network. This only applies with workspace-write.",
+} satisfies Record<CodexPolicyField, string>;
+
+const FEATURE_FIELDS: CodexPolicyField[] = [
+  "sandboxMode",
+  "approvalPolicy",
+  "approvalsReviewer",
+  "workspaceWriteNetworkAccess",
+];
+
+const defaultValuesForField = <Field extends CodexPolicyField>(
+  field: Field,
+): CodexPolicyFields[Field][] => {
+  if (field === "sandboxMode") return [...CODEX_SANDBOX_MODE_VALUES] as CodexPolicyFields[Field][];
+  if (field === "approvalPolicy")
+    return [...CODEX_APPROVAL_POLICY_VALUES] as CodexPolicyFields[Field][];
+  if (field === "approvalsReviewer")
+    return [...CODEX_APPROVALS_REVIEWER_VALUES] as CodexPolicyFields[Field][];
+  return [false, true] as CodexPolicyFields[Field][];
 };
 
 const sortRuntimeDefinitionsForSettings = (
@@ -85,30 +129,68 @@ const removeUndefinedFields = (
   return next;
 };
 
-function PolicyOptionButtons<T extends string | boolean>({
+const valueKey = (value: string | boolean): keyof typeof VALUE_LABELS =>
+  String(value) as keyof typeof VALUE_LABELS;
+
+function PolicyOptionCards<T extends string | boolean>({
   value,
   values,
   disabled,
   onChange,
+  includeInherit,
+  inheritedLabel,
 }: {
-  value: T;
+  value: T | undefined;
   values: T[];
   disabled: boolean;
-  onChange: (value: T) => void;
+  onChange: (value: T | undefined) => void;
+  includeInherit?: boolean;
+  inheritedLabel?: string;
 }): ReactElement {
   return (
-    <SegmentedControlRoot className="flex-wrap" size="sm">
-      {values.map((option) => (
-        <SegmentedControlItem
-          key={String(option)}
-          active={option === value}
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {includeInherit ? (
+        <button
+          type="button"
+          aria-pressed={value === undefined}
           disabled={disabled}
-          onClick={() => onChange(option)}
+          onClick={() => onChange(undefined)}
+          className={cn(
+            "rounded-md border p-3 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+            value === undefined
+              ? "border-primary bg-primary/10 text-foreground shadow-sm"
+              : "border-border bg-background text-muted-foreground hover:bg-muted/70",
+          )}
         >
-          {typeof option === "boolean" ? (option ? "on" : "off") : VALUE_LABELS[String(option)]}
-        </SegmentedControlItem>
-      ))}
-    </SegmentedControlRoot>
+          <span className="block font-semibold text-foreground">Inherit default</span>
+          <span className="mt-1 block">
+            Uses {inheritedLabel} unless role safety rules adjust it.
+          </span>
+        </button>
+      ) : null}
+      {values.map((option) => {
+        const key = valueKey(option);
+        const active = option === value;
+        return (
+          <button
+            key={String(option)}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled}
+            onClick={() => onChange(option)}
+            className={cn(
+              "rounded-md border p-3 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              active
+                ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                : "border-border bg-background text-muted-foreground hover:bg-muted/70",
+            )}
+          >
+            <span className="block font-semibold text-foreground">{VALUE_LABELS[key]}</span>
+            <span className="mt-1 block">{VALUE_HELP[key]}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -193,30 +275,16 @@ function CodexSettings({
 
   return (
     <div className="grid gap-4">
-      <div className="rounded-md border border-border bg-card p-3 space-y-3">
-        <h4 className="text-sm font-semibold text-foreground">Codex defaults</h4>
-        <CodexPolicyControls
-          policy={config.defaults}
+      {FEATURE_FIELDS.map((field) => (
+        <CodexFeatureGroup
+          key={field}
+          field={field}
+          config={config}
           disabled={disabled}
-          onChange={updateDefault}
+          onDefaultChange={updateDefault}
+          onOverrideChange={updateOverride}
         />
-        <p className="text-xs text-muted-foreground">
-          Command network access applies only to commands spawned by Codex while using
-          workspace-write. It does not change OpenDucktor host or network access.
-        </p>
-      </div>
-
-      <div className="grid gap-3">
-        {AGENT_ROLE_ORDER.map((role) => (
-          <CodexRoleOverride
-            key={role}
-            role={role}
-            config={config}
-            disabled={disabled}
-            onChange={updateOverride}
-          />
-        ))}
-      </div>
+      ))}
 
       {codexHasDangerousSelection(config) ? (
         <div className="rounded-md border border-destructive bg-card p-3 text-xs text-foreground space-y-3">
@@ -237,83 +305,129 @@ function CodexSettings({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
 
-      <div className="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground space-y-1">
-        <p>danger-full-access removes sandbox boundaries.</p>
-        <p>never disables approval prompts.</p>
-        <p>user routes approval prompts to the user.</p>
-        <p>
-          auto_review routes eligible prompts through Codex automatic review; it does not weaken the
-          sandbox.
-        </p>
+function CodexFeatureGroup<Field extends CodexPolicyField>({
+  field,
+  config,
+  disabled,
+  onDefaultChange,
+  onOverrideChange,
+}: {
+  field: Field;
+  config: CodexRuntimeConfig;
+  disabled: boolean;
+  onDefaultChange: <ChangeField extends CodexPolicyField>(
+    field: ChangeField,
+    value: CodexPolicyFields[ChangeField],
+  ) => void;
+  onOverrideChange: <ChangeField extends CodexPolicyField>(
+    role: AgentRole,
+    field: ChangeField,
+    value: CodexPolicyFields[ChangeField] | undefined,
+  ) => void;
+}): ReactElement {
+  const [selectedRole, setSelectedRole] = useState<AgentRole>("spec");
+  const defaultValue = config.defaults[field];
+  const override = config.roleOverrides[selectedRole]?.[field] as
+    | CodexPolicyFields[Field]
+    | undefined;
+  const allowedValues = valuesForRole(field, selectedRole);
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div className="space-y-1">
+        <h4 className="text-sm font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
+        <p className="text-xs text-muted-foreground">{FEATURE_HELP[field]}</p>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs text-foreground">Default setting</Label>
+        <PolicyOptionCards
+          value={defaultValue}
+          values={defaultValuesForField(field)}
+          disabled={disabled}
+          onChange={(value) => value !== undefined && onDefaultChange(field, value)}
+        />
+      </div>
+      <div className="space-y-3 rounded-md border border-border bg-muted/40 p-3">
+        <RoleTabs value={selectedRole} onChange={setSelectedRole} disabled={disabled} />
+        <PolicyOptionCards
+          value={override}
+          values={allowedValues}
+          disabled={disabled}
+          includeInherit
+          inheritedLabel={VALUE_LABELS[valueKey(defaultValue)]}
+          onChange={(value) => onOverrideChange(selectedRole, field, value)}
+        />
+        <EffectivePolicyMessage config={config} role={selectedRole} field={field} />
       </div>
     </div>
   );
 }
 
-function CodexPolicyControls({
-  policy,
-  disabled,
+function RoleTabs({
+  value,
   onChange,
+  disabled,
 }: {
-  policy: CodexPolicyFields;
+  value: AgentRole;
+  onChange: (role: AgentRole) => void;
   disabled: boolean;
-  onChange: <Field extends CodexPolicyField>(field: Field, value: CodexPolicyFields[Field]) => void;
 }): ReactElement {
   return (
-    <div className="grid gap-3">
-      <PolicyRow label={POLICY_LABELS.sandboxMode}>
-        <PolicyOptionButtons
-          value={policy.sandboxMode}
-          values={[...CODEX_SANDBOX_MODE_VALUES]}
+    <div
+      className="grid grid-cols-2 gap-1 rounded-md border border-border bg-background p-1 sm:grid-cols-4"
+      role="tablist"
+      aria-label="Codex role tabs"
+    >
+      {AGENT_ROLE_ORDER.map((role) => (
+        <button
+          key={role}
+          type="button"
+          role="tab"
+          aria-selected={value === role}
           disabled={disabled}
-          onChange={(value) => onChange("sandboxMode", value)}
-        />
-      </PolicyRow>
-      <PolicyRow label={POLICY_LABELS.approvalPolicy}>
-        <PolicyOptionButtons
-          value={policy.approvalPolicy}
-          values={[...CODEX_APPROVAL_POLICY_VALUES]}
-          disabled={disabled}
-          onChange={(value) => onChange("approvalPolicy", value)}
-        />
-      </PolicyRow>
-      <PolicyRow label={POLICY_LABELS.approvalsReviewer}>
-        <PolicyOptionButtons
-          value={policy.approvalsReviewer}
-          values={[...CODEX_APPROVALS_REVIEWER_VALUES]}
-          disabled={disabled}
-          onChange={(value) => onChange("approvalsReviewer", value)}
-        />
-      </PolicyRow>
-      <PolicyRow label={POLICY_LABELS.workspaceWriteNetworkAccess}>
-        <PolicyOptionButtons
-          value={policy.workspaceWriteNetworkAccess}
-          values={[false, true]}
-          disabled={disabled}
-          onChange={(value) => onChange("workspaceWriteNetworkAccess", value)}
-        />
-      </PolicyRow>
+          onClick={() => onChange(role)}
+          className={cn(
+            "rounded-sm px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+            value === role
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          {AGENT_ROLE_LABELS[role]}
+        </button>
+      ))}
     </div>
   );
 }
 
-function CodexRoleOverride({
-  role,
+function valuesForRole<Field extends CodexPolicyField>(
+  field: Field,
+  role: AgentRole,
+): CodexPolicyFields[Field][] {
+  const values = defaultValuesForField(field);
+  if (field === "sandboxMode") {
+    if (role === "build") return values.filter((v) => v !== "read-only");
+    if (READ_ONLY_AGENT_ROLES.has(role)) return values.filter((v) => v !== "danger-full-access");
+  }
+  if (field === "approvalPolicy" && READ_ONLY_AGENT_ROLES.has(role)) {
+    return values.filter((v) => v !== "never");
+  }
+  return values;
+}
+
+function EffectivePolicyMessage({
   config,
-  disabled,
-  onChange,
+  role,
+  field,
 }: {
-  role: AgentRole;
   config: CodexRuntimeConfig;
-  disabled: boolean;
-  onChange: <Field extends CodexPolicyField>(
-    role: AgentRole,
-    field: Field,
-    value: CodexPolicyFields[Field] | undefined,
-  ) => void;
+  role: AgentRole;
+  field: CodexPolicyField;
 }): ReactElement {
-  const override = config.roleOverrides[role] ?? {};
   let effective: ReturnType<typeof resolveCodexEffectivePolicy> | null = null;
   let effectiveError: string | null = null;
   try {
@@ -321,109 +435,20 @@ function CodexRoleOverride({
   } catch (error) {
     effectiveError = error instanceof Error ? error.message : String(error);
   }
-  const sandboxValues =
-    role === "build"
-      ? CODEX_SANDBOX_MODE_VALUES.filter((v) => v !== "read-only")
-      : READ_ONLY_AGENT_ROLES.has(role)
-        ? CODEX_SANDBOX_MODE_VALUES.filter((v) => v !== "danger-full-access")
-        : [...CODEX_SANDBOX_MODE_VALUES];
-  const approvalPolicyValues = READ_ONLY_AGENT_ROLES.has(role)
-    ? CODEX_APPROVAL_POLICY_VALUES.filter((v) => v !== "never")
-    : [...CODEX_APPROVAL_POLICY_VALUES];
-
+  const effectiveValue = effective?.[field] ?? false;
   return (
-    <div className="rounded-md border border-border bg-card p-3 space-y-3">
-      <h4 className="text-sm font-semibold text-foreground">{AGENT_ROLE_LABELS[role]}</h4>
-      <OverrideRow
-        label={POLICY_LABELS.sandboxMode}
-        value={override.sandboxMode}
-        values={sandboxValues}
-        disabled={disabled}
-        onChange={(value) => onChange(role, "sandboxMode", value)}
-      />
-      <OverrideRow
-        label={POLICY_LABELS.approvalPolicy}
-        value={override.approvalPolicy}
-        values={approvalPolicyValues}
-        disabled={disabled}
-        onChange={(value) => onChange(role, "approvalPolicy", value)}
-      />
-      <OverrideRow
-        label={POLICY_LABELS.approvalsReviewer}
-        value={override.approvalsReviewer}
-        values={[...CODEX_APPROVALS_REVIEWER_VALUES]}
-        disabled={disabled}
-        onChange={(value) => onChange(role, "approvalsReviewer", value)}
-      />
-      <OverrideRow
-        label={POLICY_LABELS.workspaceWriteNetworkAccess}
-        value={override.workspaceWriteNetworkAccess}
-        values={[false, true]}
-        disabled={disabled}
-        onChange={(value) => onChange(role, "workspaceWriteNetworkAccess", value)}
-      />
-      <div className="rounded-md border border-border bg-muted p-2 text-xs text-muted-foreground">
-        {effective ? (
-          <>
-            Effective: sandbox {effective.sandboxMode}, approvals {effective.approvalPolicy},
-            reviewer {effective.approvalsReviewer}, network{" "}
-            {effective.workspaceWriteNetworkAccess ? "on" : "off"}.
-            {effective.adjustmentReason ? ` ${effective.adjustmentReason}` : ""}
-            {!effective.approvalsReviewerApplies
-              ? " Reviewer is saved but has no effect while approval prompts are never."
-              : ""}
-          </>
-        ) : (
-          <span className="text-destructive">{effectiveError}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function OverrideRow<T extends string | boolean>({
-  label,
-  value,
-  values,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: T | undefined;
-  values: T[];
-  disabled: boolean;
-  onChange: (value: T | undefined) => void;
-}): ReactElement {
-  return (
-    <PolicyRow label={label}>
-      <SegmentedControlRoot className="flex-wrap" size="sm">
-        <SegmentedControlItem
-          active={value === undefined}
-          disabled={disabled}
-          onClick={() => onChange(undefined)}
-        >
-          inherit default
-        </SegmentedControlItem>
-        {values.map((option) => (
-          <SegmentedControlItem
-            key={String(option)}
-            active={option === value}
-            disabled={disabled}
-            onClick={() => onChange(option)}
-          >
-            {typeof option === "boolean" ? (option ? "on" : "off") : VALUE_LABELS[String(option)]}
-          </SegmentedControlItem>
-        ))}
-      </SegmentedControlRoot>
-    </PolicyRow>
-  );
-}
-
-function PolicyRow({ label, children }: { label: string; children: ReactElement }): ReactElement {
-  return (
-    <div className="grid gap-2 md:grid-cols-[12rem_1fr] md:items-center">
-      <Label className="text-xs text-foreground">{label}</Label>
-      {children}
+    <div className="rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
+      {effective ? (
+        <>
+          Effective for {AGENT_ROLE_LABELS[role]}: {VALUE_LABELS[valueKey(effectiveValue)]}.
+          {effective.adjustmentReason ? ` ${effective.adjustmentReason}` : ""}
+          {!effective.approvalsReviewerApplies
+            ? " Reviewer is saved but has no effect while approval prompts are never."
+            : ""}
+        </>
+      ) : (
+        <span className="text-destructive">{effectiveError}</span>
+      )}
     </div>
   );
 }
@@ -480,13 +505,26 @@ export function AgentRuntimesSection({
                     role="tab"
                     aria-controls={panelId}
                     aria-selected={selectedDefinition.kind === definition.kind}
-                    variant={selectedDefinition.kind === definition.kind ? "accent" : "ghost"}
-                    className="w-full justify-between gap-3"
+                    variant="ghost"
+                    className={cn(
+                      "w-full justify-between gap-3 border text-left",
+                      selectedDefinition.kind === definition.kind
+                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground",
+                    )}
                     disabled={disabled}
                     onClick={() => setSelectedTab(definition.kind)}
                   >
                     <span className="truncate">{definition.label}</span>
-                    <Badge variant="outline" className="shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "shrink-0 border",
+                        enabled
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          : "border-border bg-muted text-muted-foreground",
+                      )}
+                    >
                       {enabled ? "Enabled" : "Disabled"}
                     </Badge>
                   </Button>

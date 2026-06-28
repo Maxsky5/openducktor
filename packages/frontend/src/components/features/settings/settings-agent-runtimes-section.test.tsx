@@ -47,7 +47,7 @@ describe("AgentRuntimesSection", () => {
       expect(renderer.container.innerHTML).toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
       );
-      expect(renderer.container.innerHTML).not.toContain("Codex defaults");
+      expect(renderer.container.innerHTML).not.toContain("Default setting");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
     } finally {
       renderer.unmount();
@@ -78,7 +78,7 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      expect(renderer.container.innerHTML).toContain("Codex defaults");
+      expect(renderer.container.innerHTML).toContain("Default setting");
       expect(renderer.container.innerHTML).toContain("Sandbox mode");
       expect(renderer.container.innerHTML).not.toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
@@ -88,54 +88,79 @@ describe("AgentRuntimesSection", () => {
     }
   });
 
-  test("renders Codex defaults from contract values", () => {
+  test("renders Codex feature groups from contract values", () => {
     const html = renderCodexSectionHtml();
 
-    expect(html).toContain("Codex defaults");
-    expect(html).toContain("workspace-write");
-    expect(html).toContain("on-request");
-    expect(html).toContain("user");
+    expect(html).toContain("Default setting");
+    expect(html).toContain("Workspace-write");
+    expect(html).toContain("On request");
+    expect(html).toContain("User");
     expect(html).toContain("Command network access");
-    expect(html).toContain(">off</button>");
+    expect(html).toContain("Off");
   });
 
-  test("role overrides include inherit and Builder cannot select read-only", () => {
-    const html = renderCodexSectionHtml();
-    const builderStart = html.indexOf("Builder");
-    const qaStart = html.indexOf("QA", builderStart);
-    const builderHtml = html.slice(builderStart, qaStart);
+  test("feature role tabs hide non-selected role content and Builder cannot select read-only", () => {
+    const renderer = render(createSection());
 
-    expect(html).toContain("inherit default");
-    expect(builderHtml).not.toContain("read-only");
-    expect(builderHtml).toContain("workspace-write");
-    expect(builderHtml).toContain("danger-full-access");
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      fireEvent.click(screen.getAllByRole("tab", { name: "Builder" })[0] as HTMLElement);
+
+      const html = renderer.container.innerHTML;
+      const builderRoleStart = html.indexOf("Uses Workspace-write");
+      const builderRoleEnd = html.indexOf("Effective for Builder", builderRoleStart);
+      const builderRoleHtml = html.slice(builderRoleStart, builderRoleEnd);
+      expect(html).toContain("Inherit default");
+      expect(html).toContain("Effective for Builder");
+      expect(builderRoleHtml).not.toContain("Effective for Spec");
+      expect(builderRoleHtml).not.toContain(
+        "Codex can inspect files but cannot change the workspace.",
+      );
+      expect(builderRoleHtml).toContain("Codex can edit files in the workspace");
+      expect(builderRoleHtml).toContain("Codex runs without sandbox boundaries");
+    } finally {
+      renderer.unmount();
+    }
   });
 
   test("read-only Codex role overrides do not present dangerous choices", () => {
     const html = renderCodexSectionHtml();
-    const specStart = html.indexOf("Spec");
-    const plannerStart = html.indexOf("Planner", specStart);
-    const specHtml = html.slice(specStart, plannerStart);
+    const roleSandboxStart = html.indexOf("Uses Workspace-write");
+    const approvalStart = html.indexOf("Approval prompts");
+    const specSandboxHtml = html.slice(roleSandboxStart, approvalStart);
 
-    expect(specHtml).not.toContain("danger-full-access");
-    expect(specHtml).not.toContain("never");
-    expect(specHtml).toContain("read-only");
-    expect(specHtml).toContain("workspace-write");
+    expect(specSandboxHtml).not.toContain("Danger full access");
+    expect(specSandboxHtml).toContain("Read-only");
+    expect(specSandboxHtml).toContain("Workspace-write");
+
+    const roleApprovalStart = html.indexOf("Uses On request");
+    const reviewerStart = html.indexOf("Prompt reviewer");
+    const specApprovalHtml = html.slice(roleApprovalStart, reviewerStart);
+    expect(specApprovalHtml).not.toContain("Never");
   });
 
   test("default read-only shows Builder effective workspace-write reason", () => {
-    const html = renderCodexSectionHtml({
-      ...DEFAULT_AGENT_RUNTIMES,
-      codex: {
-        ...DEFAULT_AGENT_RUNTIMES.codex,
-        defaults: { ...DEFAULT_AGENT_RUNTIMES.codex.defaults, sandboxMode: "read-only" },
-      },
-    });
-
-    expect(html).toContain("Effective: sandbox workspace-write");
-    expect(html).toContain(
-      "Build role requires workspace-write when sandboxMode is inherited from read-only.",
+    const renderer = render(
+      createSection({
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          defaults: { ...DEFAULT_AGENT_RUNTIMES.codex.defaults, sandboxMode: "read-only" },
+        },
+      }),
     );
+
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      fireEvent.click(screen.getAllByRole("tab", { name: "Builder" })[0] as HTMLElement);
+      const html = renderer.container.innerHTML;
+
+      expect(html).toContain(
+        "Build role requires workspace-write when sandboxMode is inherited from read-only.",
+      );
+    } finally {
+      renderer.unmount();
+    }
   });
 
   test("does not render deprecated Codex values", () => {
@@ -158,12 +183,12 @@ describe("AgentRuntimesSection", () => {
       },
     });
 
-    expect(html).toContain("Reviewer is saved but has no effect while approval prompts are never.");
-    expect(html).toContain("commands spawned by Codex while using workspace-write");
+    expect(html).toContain("has no effect while approval prompts are never");
+    expect(html).toContain("only applies with workspace-write");
     expect(html).toContain("danger-full-access removes sandbox boundaries");
     expect(html).toContain("never disables approval prompts");
-    expect(html).toContain("user routes approval prompts to the user");
-    expect(html).toContain("auto_review routes eligible prompts through Codex automatic review");
+    expect(html).toContain("Approval prompts go to the user");
+    expect(html).toContain("Eligible prompts go through Codex automatic review");
     expect(html).toContain("Acknowledgement required");
     expect(html).toContain("I understand these Codex settings reduce safety protections.");
   });
