@@ -14,10 +14,10 @@ import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { codexHasDangerousSelection } from "./settings-codex-risk-policy";
 
@@ -126,10 +126,7 @@ function RuntimeOverview({
   return (
     <div className="grid gap-3 rounded-md border border-border bg-card p-3 sm:grid-cols-[1fr_auto] sm:items-start">
       <div className="min-w-0 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
-          <Badge variant="outline">{enabled ? "Enabled" : "Disabled"}</Badge>
-        </div>
+        <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
         <p className="text-xs text-muted-foreground">{definition.description}</p>
         <p className="text-xs text-muted-foreground">
           Supports {definition.capabilities.workflow.supportedScopes.join(", ")} workflow scopes.
@@ -442,6 +439,9 @@ export function AgentRuntimesSection({
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const defaultTab = sortedRuntimeDefinitions[0]?.kind;
   const [selectedTab, setSelectedTab] = useState(defaultTab ?? "");
+  const selectedDefinition =
+    sortedRuntimeDefinitions.find((definition) => definition.kind === selectedTab) ??
+    sortedRuntimeDefinitions[0];
 
   useEffect(() => {
     if (!defaultTab) {
@@ -463,64 +463,92 @@ export function AgentRuntimesSection({
         </p>
       </div>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="gap-4">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
-          {sortedRuntimeDefinitions.map((definition) => (
-            <TabsTrigger key={definition.kind} value={definition.kind}>
-              {definition.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {selectedDefinition ? (
+        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[14rem_minmax(0,1fr)]">
+          <aside className="border-border bg-muted/50 p-3 md:border-r">
+            <div className="space-y-1" role="tablist">
+              {sortedRuntimeDefinitions.map((definition) => {
+                const runtimeKind = definition.kind as RuntimeKind;
+                const enabled = agentRuntimes[runtimeKind]?.enabled === true;
+                const tabId = `agent-runtime-tab-${definition.kind}`;
+                const panelId = `agent-runtime-panel-${definition.kind}`;
+                return (
+                  <Button
+                    key={definition.kind}
+                    id={tabId}
+                    type="button"
+                    role="tab"
+                    aria-controls={panelId}
+                    aria-selected={selectedDefinition.kind === definition.kind}
+                    variant={selectedDefinition.kind === definition.kind ? "accent" : "ghost"}
+                    className="w-full justify-between gap-3"
+                    disabled={disabled}
+                    onClick={() => setSelectedTab(definition.kind)}
+                  >
+                    <span className="truncate">{definition.label}</span>
+                    <Badge variant="outline" className="shrink-0">
+                      {enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                  </Button>
+                );
+              })}
+            </div>
+          </aside>
 
-        {sortedRuntimeDefinitions.map((definition) => {
-          const runtimeKind = definition.kind as RuntimeKind;
-          const enabled = agentRuntimes[runtimeKind]?.enabled === true;
-          const updateRuntime = (
-            updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
-          ) =>
-            onUpdateAgentRuntimes((current) => ({
-              ...current,
-              [runtimeKind]: updater(current[runtimeKind]),
-            }));
+          {(() => {
+            const runtimeKind = selectedDefinition.kind as RuntimeKind;
+            const enabled = agentRuntimes[runtimeKind]?.enabled === true;
+            const updateRuntime = (
+              updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
+            ) =>
+              onUpdateAgentRuntimes((current) => ({
+                ...current,
+                [runtimeKind]: updater(current[runtimeKind]),
+              }));
 
-          return (
-            <TabsContent
-              key={definition.kind}
-              value={definition.kind}
-              forceMount
-              className="space-y-4"
-            >
-              <RuntimeOverview
-                definition={definition}
-                enabled={enabled}
-                disabled={disabled}
-                onToggle={(nextEnabled) =>
-                  onUpdateAgentRuntimes((current) => ({
-                    ...current,
-                    [runtimeKind]: {
-                      ...(current[runtimeKind] ?? {}),
-                      enabled: nextEnabled,
-                    },
-                  }))
-                }
-              />
-              {definition.kind === "codex" ? (
-                <CodexSettings
-                  config={codexConfigWithDefaults(agentRuntimes.codex)}
+            return (
+              <div
+                id={`agent-runtime-panel-${selectedDefinition.kind}`}
+                role="tabpanel"
+                aria-labelledby={`agent-runtime-tab-${selectedDefinition.kind}`}
+                className="min-w-0 space-y-4 p-3"
+              >
+                <RuntimeOverview
+                  definition={selectedDefinition}
+                  enabled={enabled}
                   disabled={disabled}
-                  isDangerAcknowledged={isCodexDangerAcknowledged}
-                  onDangerAcknowledgedChange={onCodexDangerAcknowledgedChange}
-                  onUpdate={(updater) =>
-                    updateRuntime((current) =>
-                      updater(codexConfigWithDefaults(current as CodexRuntimeConfig)),
-                    )
+                  onToggle={(nextEnabled) =>
+                    onUpdateAgentRuntimes((current) => ({
+                      ...current,
+                      [runtimeKind]: {
+                        ...(current[runtimeKind] ?? {}),
+                        enabled: nextEnabled,
+                      },
+                    }))
                   }
                 />
-              ) : null}
-            </TabsContent>
-          );
-        })}
-      </Tabs>
+                {selectedDefinition.kind === "codex" ? (
+                  <CodexSettings
+                    config={codexConfigWithDefaults(agentRuntimes.codex)}
+                    disabled={disabled}
+                    isDangerAcknowledged={isCodexDangerAcknowledged}
+                    onDangerAcknowledgedChange={onCodexDangerAcknowledgedChange}
+                    onUpdate={(updater) =>
+                      updateRuntime((current) =>
+                        updater(codexConfigWithDefaults(current as CodexRuntimeConfig)),
+                      )
+                    }
+                  />
+                ) : null}
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
+          No runtimes are available.
+        </div>
+      )}
     </div>
   );
 }

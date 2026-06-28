@@ -7,36 +7,89 @@ import {
 } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
 enableReactActEnvironment();
 
-const renderSection = (agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES): string =>
-  renderToStaticMarkup(
-    createElement(AgentRuntimesSection, {
-      agentRuntimes,
-      runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
-      disabled: false,
-      isCodexDangerAcknowledged: false,
-      onCodexDangerAcknowledgedChange: () => {},
-      onUpdateAgentRuntimes: () => {},
-    }),
-  );
+const createSection = (agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES) =>
+  createElement(AgentRuntimesSection, {
+    agentRuntimes,
+    runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+    disabled: false,
+    isCodexDangerAcknowledged: false,
+    onCodexDangerAcknowledgedChange: () => {},
+    onUpdateAgentRuntimes: () => {},
+  });
+
+const renderCodexSectionHtml = (agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES): string => {
+  const renderer = render(createSection(agentRuntimes));
+  try {
+    fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+    return renderer.container.innerHTML;
+  } finally {
+    renderer.unmount();
+  }
+};
 
 describe("AgentRuntimesSection", () => {
-  test("shows OpenCode and Codex tabs with OpenCode first", () => {
-    const html = renderSection();
+  test("shows vertical runtime tabs with status badges and selects OpenCode first", () => {
+    const renderer = render(createSection());
 
-    expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
-    expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
-    const openCodePanel = html.slice(html.indexOf("OpenCode"), html.indexOf("Codex defaults"));
-    expect(openCodePanel).not.toContain("Sandbox mode");
+    try {
+      const tabs = screen.getAllByRole("tab");
+      expect(tabs).toHaveLength(2);
+      expect(tabs[0]?.textContent).toContain("OpenCode");
+      expect(tabs[0]?.textContent).toContain("Enabled");
+      expect(tabs[1]?.textContent).toContain("Codex");
+      expect(tabs[1]?.textContent).toContain("Disabled");
+      expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+      expect(renderer.container.innerHTML).toContain(
+        "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+      );
+      expect(renderer.container.innerHTML).not.toContain("Codex defaults");
+      expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows disabled status in runtime tab titles", () => {
+    const renderer = render(
+      createSection({
+        ...DEFAULT_AGENT_RUNTIMES,
+        opencode: { enabled: false },
+      }),
+    );
+
+    try {
+      expect(screen.getByRole("tab", { name: /OpenCode/i }).textContent).toContain("Disabled");
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("renders Codex configuration only when Codex is selected", () => {
+    const renderer = render(createSection());
+
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+
+      expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      expect(renderer.container.innerHTML).toContain("Codex defaults");
+      expect(renderer.container.innerHTML).toContain("Sandbox mode");
+      expect(renderer.container.innerHTML).not.toContain(
+        "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+      );
+    } finally {
+      renderer.unmount();
+    }
   });
 
   test("renders Codex defaults from contract values", () => {
-    const html = renderSection();
+    const html = renderCodexSectionHtml();
 
     expect(html).toContain("Codex defaults");
     expect(html).toContain("workspace-write");
@@ -47,7 +100,7 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("role overrides include inherit and Builder cannot select read-only", () => {
-    const html = renderSection();
+    const html = renderCodexSectionHtml();
     const builderStart = html.indexOf("Builder");
     const qaStart = html.indexOf("QA", builderStart);
     const builderHtml = html.slice(builderStart, qaStart);
@@ -59,7 +112,7 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("read-only Codex role overrides do not present dangerous choices", () => {
-    const html = renderSection();
+    const html = renderCodexSectionHtml();
     const specStart = html.indexOf("Spec");
     const plannerStart = html.indexOf("Planner", specStart);
     const specHtml = html.slice(specStart, plannerStart);
@@ -71,7 +124,7 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("default read-only shows Builder effective workspace-write reason", () => {
-    const html = renderSection({
+    const html = renderCodexSectionHtml({
       ...DEFAULT_AGENT_RUNTIMES,
       codex: {
         ...DEFAULT_AGENT_RUNTIMES.codex,
@@ -86,14 +139,14 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("does not render deprecated Codex values", () => {
-    const html = renderSection();
+    const html = renderCodexSectionHtml();
 
     expect(html).not.toContain("on-failure");
     expect(html).not.toContain("guardian_subagent");
   });
 
   test("renders reviewer, network, and risky acknowledgement copy", () => {
-    const html = renderSection({
+    const html = renderCodexSectionHtml({
       ...DEFAULT_AGENT_RUNTIMES,
       codex: {
         ...DEFAULT_AGENT_RUNTIMES.codex,
@@ -116,7 +169,7 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("hides risky acknowledgement control when Codex selections are safe", () => {
-    const html = renderSection();
+    const html = renderCodexSectionHtml();
 
     expect(html).not.toContain("I understand these Codex settings reduce safety protections.");
   });
@@ -146,6 +199,7 @@ describe("AgentRuntimesSection", () => {
     );
 
     try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
       fireEvent.click(screen.getByRole("switch", { name: /reduce safety protections/i }));
 
       expect(acknowledged).toBe(true);
@@ -178,8 +232,8 @@ describe("AgentRuntimesSection", () => {
         }),
       );
 
-      expect(screen.getByRole("tab", { name: "OpenCode" }).getAttribute("data-state")).toBe(
-        "active",
+      expect(screen.getByRole("tab", { name: /OpenCode/i }).getAttribute("aria-selected")).toBe(
+        "true",
       );
     } finally {
       renderer.unmount();
