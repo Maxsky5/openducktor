@@ -160,6 +160,7 @@ describe("useAgentChatTranscriptRows", () => {
 
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+    expect(latest.isTranscriptRowsPending).toBe(false);
     expect(latest.transcriptState.rows[0]).toBe(prefixRow);
     expect(
       latest.transcriptState.rows.some(
@@ -249,6 +250,7 @@ describe("useAgentChatTranscriptRows", () => {
 
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+    expect(latest.isTranscriptRowsPending).toBe(false);
     expect(latest.transcriptState.rows[0]).toBe(prefixRow);
     expect(latest.transcriptState.activeStreamingAssistantMessageId).toBeNull();
     expect(

@@ -89,6 +89,79 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(true);
   });
 
+  test("changed message row identity invalidates turn groups", () => {
+    const message = createMessage();
+    const props = baseProps({
+      turn: {
+        key: "turn-message",
+        rows: [{ kind: "message", key: "message-row", message }],
+        isActive: false,
+        activeStreamingAssistantMessageId: null,
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [{ kind: "message", key: "changed-message-row", message }],
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [{ kind: "turn_duration", key: "message-row", durationMs: 1_000 }],
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [{ kind: "message", key: "message-row", message: createMessage() }],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("changed turn duration values invalidate turn groups", () => {
+    const props = baseProps({
+      turn: {
+        key: "turn-duration",
+        rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
+        isActive: false,
+        activeStreamingAssistantMessageId: null,
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 2_000 }],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("active streaming assistant id differences only invalidate the affected turn", () => {
     const previousProps = baseProps();
 
@@ -106,6 +179,25 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         turn: { ...previousProps.turn, activeStreamingAssistantMessageId: null },
       }),
     ).toBe(true);
+  });
+
+  test("changed non-null active streaming assistant id invalidates turn groups", () => {
+    const props = baseProps({
+      turn: {
+        ...baseProps().turn,
+        activeStreamingAssistantMessageId: "assistant-1",
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: { ...props.turn, activeStreamingAssistantMessageId: "assistant-2" },
+        }),
+      ),
+    ).toBe(false);
   });
 
   test("recreated pending count maps with unchanged row counts compare equal", () => {
