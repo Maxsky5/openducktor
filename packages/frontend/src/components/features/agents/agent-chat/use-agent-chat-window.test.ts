@@ -399,6 +399,7 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
+    await animationFrameDriver.flushFrames();
 
     expect(harness.getLatestResult().windowStart).toBe(hiddenRowsAfterReveal);
     expect(harness.getLatestResult().windowedRows).toHaveLength(

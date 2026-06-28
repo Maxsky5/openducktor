@@ -75,6 +75,7 @@ export function useAgentChatWindow({
     displayedSessionKey,
     messagesContainerRef,
     userScrolledRef,
+    userScrollIntentVersionRef,
     ...(turns ? { turns } : {}),
   });
   const pendingBottomResetRef = useRef(false);
@@ -250,7 +251,7 @@ export function useAgentChatWindow({
         container.style.overflowAnchor = "none";
       }
 
-      revealOlderHistory({ preserveScroll: false });
+      revealOlderHistory({ preserveScroll: false, suppressTopContinuation: true });
       if (!container) {
         refreshScrollState();
         return;

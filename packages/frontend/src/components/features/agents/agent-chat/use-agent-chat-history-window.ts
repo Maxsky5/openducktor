@@ -18,6 +18,12 @@ type UseAgentChatHistoryWindowInput = {
   shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
+  userScrollIntentVersionRef: RefObject<number>;
+};
+
+type RevealOlderHistoryOptions = {
+  preserveScroll?: boolean;
+  suppressTopContinuation?: boolean;
 };
 
 type UseAgentChatHistoryWindowResult = {
@@ -28,7 +34,7 @@ type UseAgentChatHistoryWindowResult = {
   windowedRows: AgentChatWindowRow[];
   windowedTurns: AgentChatWindowTurn[];
   resetToLatestTurns: () => void;
-  revealOlderHistory: (options?: { preserveScroll?: boolean }) => void;
+  revealOlderHistory: (options?: RevealOlderHistoryOptions) => void;
 };
 
 export const resolveAgentChatEffectiveTurnStart = ({
@@ -89,6 +95,7 @@ export function useAgentChatHistoryWindow({
   shouldResetForTranscriptLoad,
   messagesContainerRef,
   userScrolledRef,
+  userScrollIntentVersionRef,
 }: UseAgentChatHistoryWindowInput): UseAgentChatHistoryWindowResult {
   const turns = useMemo(
     () => providedTurns ?? buildAgentChatWindowTurns(rows),
@@ -105,6 +112,7 @@ export function useAgentChatHistoryWindow({
   const windowStartRef = useRef(0);
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
+  const suppressedTopContinuationVersionRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousSessionKeyRef = useRef<string | null>(displayedSessionKey);
   const pendingScrollRestoreRef = useRef<{
@@ -184,8 +192,22 @@ export function useAgentChatHistoryWindow({
     [messagesContainerRef],
   );
 
+  const isTopContinuationSuppressed = useCallback(() => {
+    const suppressedVersion = suppressedTopContinuationVersionRef.current;
+    if (suppressedVersion === null) {
+      return false;
+    }
+
+    if (suppressedVersion === userScrollIntentVersionRef.current) {
+      return true;
+    }
+
+    suppressedTopContinuationVersionRef.current = null;
+    return false;
+  }, [userScrollIntentVersionRef]);
+
   const revealOlderHistory = useCallback(
-    (options?: { preserveScroll?: boolean }) => {
+    (options?: RevealOlderHistoryOptions) => {
       if (pendingScrollRestoreRef.current !== null) {
         return;
       }
@@ -204,13 +226,16 @@ export function useAgentChatHistoryWindow({
       };
 
       if (options?.preserveScroll === false) {
+        if (options.suppressTopContinuation) {
+          suppressedTopContinuationVersionRef.current = userScrollIntentVersionRef.current;
+        }
         reveal();
         return;
       }
 
       preserveScroll(reveal);
     },
-    [preserveScroll, setRowWindowLimitState, setTurnStartState],
+    [preserveScroll, setRowWindowLimitState, setTurnStartState, userScrollIntentVersionRef],
   );
 
   const scheduleFill = useCallback(() => {
@@ -271,9 +296,13 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
+      if (isTopContinuationSuppressed()) {
+        return;
+      }
+
       revealOlderHistory();
     });
-  }, [messagesContainerRef, revealOlderHistory, userScrolledRef]);
+  }, [isTopContinuationSuppressed, messagesContainerRef, revealOlderHistory, userScrolledRef]);
 
   const cancelScheduledFrames = useCallback(() => {
     if (fillFrameRef.current !== null) {
@@ -292,6 +321,7 @@ export function useAgentChatHistoryWindow({
     if (didSessionChange) {
       previousSessionKeyRef.current = displayedSessionKey;
       pendingLatestResetRef.current = shouldFlagPendingLatestReset;
+      suppressedTopContinuationVersionRef.current = null;
     } else if (shouldFlagPendingLatestReset) {
       pendingLatestResetRef.current = true;
     } else if (shouldUsePendingLatestTurnStart) {
@@ -320,7 +350,8 @@ export function useAgentChatHistoryWindow({
         container &&
         userScrolledRef.current &&
         windowStartRef.current > 0 &&
-        container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
+        container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX &&
+        !isTopContinuationSuppressed()
       ) {
         scheduleContinuation();
       }
@@ -340,7 +371,8 @@ export function useAgentChatHistoryWindow({
     if (
       userScrolledRef.current &&
       windowStartRef.current > 0 &&
-      container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
+      container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX &&
+      !isTopContinuationSuppressed()
     ) {
       scheduleContinuation();
     }
@@ -365,6 +397,10 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
+      if (isTopContinuationSuppressed()) {
+        return;
+      }
+
       revealOlderHistory();
     };
 
@@ -372,7 +408,7 @@ export function useAgentChatHistoryWindow({
     return () => {
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [messagesContainerRef, revealOlderHistory, userScrolledRef]);
+  }, [isTopContinuationSuppressed, messagesContainerRef, revealOlderHistory, userScrolledRef]);
 
   // Intentionally runs after every commit so an underfilled viewport can keep
   // backfilling until the rendered transcript is tall enough to scroll.
@@ -400,6 +436,7 @@ export function useAgentChatHistoryWindow({
       }
 
       setRowWindowLimitState(CHAT_ROW_WINDOW_INIT);
+      suppressedTopContinuationVersionRef.current = null;
       setTurnStartState(latestTurnStart);
     },
     revealOlderHistory,
