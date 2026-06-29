@@ -709,6 +709,127 @@ describe("OpencodeSdkAdapter session history", () => {
     ]);
   });
 
+  test("loadSessionHistory maps synthetic background task completion prompts to subagent updates", async () => {
+    const taskStartedAtMs = Date.parse("2026-02-17T12:00:03.000Z");
+    const taskCompletedAtMs = Date.parse("2026-02-17T12:00:45.000Z");
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Run tests",
+              description: "Run tests",
+            } as unknown as Part,
+            {
+              id: "tool-task-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-a",
+              type: "tool",
+              tool: "task",
+              state: {
+                status: "completed",
+                input: {
+                  subagent_type: "build",
+                  prompt: "Run tests",
+                  description: "Run tests",
+                },
+                output: [
+                  '<task id="child-session-a" state="running">',
+                  "<summary>Background task started</summary>",
+                  "<task_result>",
+                  "The task is running in the background.",
+                  "</task_result>",
+                  "</task>",
+                ].join("\n"),
+                metadata: {
+                  background: true,
+                  sessionId: "child-session-a",
+                  jobId: "child-session-a",
+                },
+                time: {
+                  start: taskStartedAtMs,
+                  end: taskStartedAtMs + 10,
+                },
+              },
+            } as unknown as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-201",
+            role: "user",
+            time: { created: taskCompletedAtMs },
+          },
+          parts: [
+            {
+              id: "text-background-task-completed",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              type: "text",
+              synthetic: true,
+              text: [
+                '<task id="child-session-a" state="completed">',
+                "<summary>Background task completed: Run tests</summary>",
+                "<task_result>",
+                "Tests passed.",
+                "</task_result>",
+                "</task>",
+              ].join("\n"),
+            } as unknown as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(2);
+    if (history[0]?.role !== "assistant" || history[1]?.role !== "user") {
+      throw new Error("Expected assistant history followed by synthetic user task result");
+    }
+    expect(history[0].parts).toEqual([
+      expect.objectContaining({
+        kind: "subagent",
+        status: "running",
+        correlationKey: "part:msg-200:subtask-a",
+      }),
+      expect.objectContaining({
+        kind: "subagent",
+        status: "running",
+        externalSessionId: "child-session-a",
+        correlationKey: "part:msg-200:subtask-a",
+      }),
+    ]);
+    expect(history[1].parts).toEqual([
+      expect.objectContaining({
+        kind: "subagent",
+        status: "completed",
+        externalSessionId: "child-session-a",
+        description: "Background task completed: Run tests",
+        endedAtMs: taskCompletedAtMs,
+      }),
+    ]);
+  });
+
   test("loadSessionHistory seeds live subagent correlation for later task-tool updates", async () => {
     const streamEvents: Event[] = [
       {

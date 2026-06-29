@@ -19,6 +19,7 @@ import {
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
+import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
@@ -215,6 +216,7 @@ const removePendingSubagentCorrelationKey = (
 const normalizeHistoryStreamParts = (
   parts: Part[],
   childSessionLinks: ChildSessionLink[] = [],
+  timestamp?: string,
 ): AgentStreamPart[] => {
   const pendingBySignature = new Map<string, string[]>();
   const correlationByExternalSessionId = new Map<string, string>();
@@ -223,6 +225,16 @@ const normalizeHistoryStreamParts = (
 
   for (const rawPart of parts) {
     if (rawPart.type === "patch") {
+      continue;
+    }
+
+    if (rawPart.type === "text") {
+      const backgroundTaskResult = mapOpenCodeBackgroundTaskResultPart(rawPart, {
+        ...(timestamp ? { timestamp } : {}),
+      });
+      if (backgroundTaskResult) {
+        normalized.push(backgroundTaskResult);
+      }
       continue;
     }
 
@@ -445,7 +457,7 @@ export const loadSessionHistory = async (
     parts:
       item.entry.info.role === "assistant"
         ? (assistantNormalizedPartsByMessageId.get(item.entry.info.id) ?? [])
-        : normalizeHistoryStreamParts(item.rawParts),
+        : normalizeHistoryStreamParts(item.rawParts, [], item.timestamp),
   }));
 
   const pendingAssistantReverseIndex = [...entries]
