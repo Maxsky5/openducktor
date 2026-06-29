@@ -30,9 +30,9 @@ describe("agent chat transcript model", () => {
     const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
 
     expect(rows.map((row) => row.key)).toEqual([
-      `${sessionKey}:assistant-1:duration`,
-      `${sessionKey}:assistant-1`,
-      `${sessionKey}:user-1`,
+      `${sessionKey}:0:assistant-1:duration`,
+      `${sessionKey}:0:assistant-1`,
+      `${sessionKey}:1:user-1`,
     ]);
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
@@ -55,17 +55,17 @@ describe("agent chat transcript model", () => {
 
     expect(turnAnchors).toEqual([
       {
-        key: `${sessionKey}:assistant-0:duration`,
+        key: `${sessionKey}:0:assistant-0:duration`,
         startRow: 0,
         endRowExclusive: 2,
       },
       {
-        key: `${sessionKey}:user-1`,
+        key: `${sessionKey}:1:user-1`,
         startRow: 2,
         endRowExclusive: 5,
       },
       {
-        key: `${sessionKey}:user-2`,
+        key: `${sessionKey}:3:user-2`,
         startRow: 5,
         endRowExclusive: 8,
       },
@@ -95,9 +95,32 @@ describe("agent chat transcript model", () => {
     const firstSessionKey = agentSessionIdentityKey(firstSession);
     const secondSessionKey = agentSessionIdentityKey(secondSession);
 
-    expect(firstKeys).toContain(`${firstSessionKey}:message-1`);
-    expect(secondKeys).toContain(`${secondSessionKey}:message-1`);
-    expect(firstKeys).not.toContain(`${secondSessionKey}:message-1`);
+    expect(firstKeys).toContain(`${firstSessionKey}:0:message-1`);
+    expect(secondKeys).toContain(`${secondSessionKey}:0:message-1`);
+    expect(firstKeys).not.toContain(`${secondSessionKey}:0:message-1`);
+  });
+
+  test("buildAgentChatTranscriptModel keeps same-session duplicate message ids distinct", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("user", "First", { id: "message-1" }),
+        buildMessage("user", "Second", { id: "message-1" }),
+      ],
+      pendingQuestions: [],
+    });
+    const sessionKey = agentSessionIdentityKey(session);
+
+    const model = buildAgentChatTranscriptModel(session, { showThinkingMessages: true });
+
+    expect(model.rows.map((row) => row.key)).toEqual([
+      `${sessionKey}:0:message-1`,
+      `${sessionKey}:1:message-1`,
+    ]);
+    expect(new Set(model.rows.map((row) => row.key)).size).toBe(model.rows.length);
+    expect(model.turnAnchors.map((turn) => turn.key)).toEqual([
+      `${sessionKey}:0:message-1`,
+      `${sessionKey}:1:message-1`,
+    ]);
   });
 
   test("buildAgentChatTranscriptModel omits reasoning rows when showThinkingMessages is false", () => {
@@ -119,15 +142,15 @@ describe("agent chat transcript model", () => {
     }).rows;
 
     expect(visibleRows.map((row) => row.key)).toEqual([
-      `${sessionKey}:user-1`,
-      `${sessionKey}:thinking-1`,
-      `${sessionKey}:assistant-1:duration`,
-      `${sessionKey}:assistant-1`,
+      `${sessionKey}:0:user-1`,
+      `${sessionKey}:1:thinking-1`,
+      `${sessionKey}:2:assistant-1:duration`,
+      `${sessionKey}:2:assistant-1`,
     ]);
     expect(hiddenRows.map((row) => row.key)).toEqual([
-      `${sessionKey}:user-1`,
-      `${sessionKey}:assistant-1:duration`,
-      `${sessionKey}:assistant-1`,
+      `${sessionKey}:0:user-1`,
+      `${sessionKey}:2:assistant-1:duration`,
+      `${sessionKey}:2:assistant-1`,
     ]);
     expect(
       hiddenRows.some((row) => row.kind === "message" && row.message.role === "thinking"),
@@ -182,11 +205,11 @@ describe("agent chat transcript model", () => {
     }
     expect(nextTranscriptModel.rows[0]).toBe(prefixRow);
     expect(nextTranscriptModel.rows.map((row) => row.key)).toEqual([
-      `${agentSessionIdentityKey(nextSession)}:user-1`,
-      `${agentSessionIdentityKey(nextSession)}:assistant-1:duration`,
-      `${agentSessionIdentityKey(nextSession)}:assistant-1`,
-      `${agentSessionIdentityKey(nextSession)}:assistant-2:duration`,
-      `${agentSessionIdentityKey(nextSession)}:assistant-2`,
+      `${agentSessionIdentityKey(nextSession)}:0:user-1`,
+      `${agentSessionIdentityKey(nextSession)}:2:assistant-1:duration`,
+      `${agentSessionIdentityKey(nextSession)}:2:assistant-1`,
+      `${agentSessionIdentityKey(nextSession)}:4:assistant-2:duration`,
+      `${agentSessionIdentityKey(nextSession)}:4:assistant-2`,
     ]);
     expect(
       nextTranscriptModel.rows.some(
@@ -238,8 +261,8 @@ describe("agent chat transcript model", () => {
     }
     expect(nextTranscriptModel.rows[0]).toBe(prefixRow);
     expect(nextTranscriptModel.rows.map((row) => row.key)).toEqual([
-      `${agentSessionIdentityKey(nextSession)}:user-1`,
-      `${agentSessionIdentityKey(nextSession)}:assistant-live`,
+      `${agentSessionIdentityKey(nextSession)}:0:user-1`,
+      `${agentSessionIdentityKey(nextSession)}:2:assistant-live`,
     ]);
     expect(nextTranscriptModel.activeStreamingAssistantMessageId).toBe("assistant-live");
     expect(
@@ -385,7 +408,7 @@ describe("agent chat transcript model", () => {
     const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
-    expect(rows[0]?.key).toBe(`${sessionKey}:assistant-live`);
+    expect(rows[0]?.key).toBe(`${sessionKey}:0:assistant-live`);
   });
 
   test("buildAgentChatTranscriptModel marks active streaming assistant only while session activity is running", () => {

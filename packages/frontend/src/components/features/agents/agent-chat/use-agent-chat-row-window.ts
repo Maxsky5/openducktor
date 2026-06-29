@@ -13,6 +13,7 @@ type UseAgentChatRowWindowInput = {
   turnAnchors: AgentChatTurnAnchor[];
   displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
+  shouldFollowLatestWindow: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -36,6 +37,7 @@ export function useAgentChatRowWindow({
   turnAnchors,
   displayedSessionKey,
   shouldResetForTranscriptLoad,
+  shouldFollowLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
   const windows = useMemo(() => buildAgentChatRowWindows(rows.length), [rows.length]);
@@ -130,6 +132,7 @@ export function useAgentChatRowWindow({
 
     if (
       rows.length !== previousRowsLength &&
+      shouldFollowLatestWindow &&
       selectedWindowIndexRef.current === previousLatestIndex &&
       selectedWindowIndexRef.current !== latestWindowIndex(windows)
     ) {
@@ -140,7 +143,14 @@ export function useAgentChatRowWindow({
     if (selectedWindowIndexRef.current > latestWindowIndex(windows)) {
       setWindowIndex(latestWindowIndex(windows));
     }
-  }, [displayedSessionKey, rows.length, setWindowIndex, shouldResetForTranscriptLoad, windows]);
+  }, [
+    displayedSessionKey,
+    rows.length,
+    setWindowIndex,
+    shouldFollowLatestWindow,
+    shouldResetForTranscriptLoad,
+    windows,
+  ]);
 
   useLayoutEffect(() => {
     const pendingRestore = pendingScrollRestoreRef.current;

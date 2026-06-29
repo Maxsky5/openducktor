@@ -66,6 +66,7 @@ export function useAgentChatWindow({
     rows,
     turnAnchors,
     shouldResetForTranscriptLoad,
+    shouldFollowLatestWindow: !userScrolledRef.current,
     displayedSessionKey,
     messagesContainerRef,
   });

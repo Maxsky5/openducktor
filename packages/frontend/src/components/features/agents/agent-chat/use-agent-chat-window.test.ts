@@ -732,6 +732,45 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("does not advance to latest when rows append after user scrolls within latest window", async () => {
+    const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 25);
+    const nextRows = createSingleTurnRows(
+      AGENT_CHAT_ROW_WINDOW_SIZE + AGENT_CHAT_ROW_WINDOW_STEP + 25,
+    );
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    expect(harness.getLatestResult().windowStart).toBe(25);
+    container.scrollTop = 1_000;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+
+    await harness.update({
+      rows: nextRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_STEP);
+    expect(harness.getLatestResult().windowStart).not.toBe(
+      nextRows.length - AGENT_CHAT_ROW_WINDOW_SIZE,
+    );
+
+    await harness.unmount();
+  });
+
   test("fills hidden history until the transcript overflows", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(

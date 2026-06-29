@@ -87,6 +87,7 @@ const appendMessageRows = (
   rows: AgentChatTranscriptRow[],
   sessionKey: string,
   message: AgentChatMessage,
+  messageIndex: number,
   showThinkingMessages: boolean,
 ): void => {
   if (message.role === "thinking" && !showThinkingMessages) {
@@ -99,18 +100,19 @@ const appendMessageRows = (
     isFinalAssistantChatMessage(message) &&
     typeof turnDurationMs === "number" &&
     turnDurationMs > 0;
+  const rowKey = `${sessionKey}:${messageIndex}:${message.id}`;
 
   if (shouldShowTurnDuration) {
     rows.push({
       kind: "turn_duration",
-      key: `${sessionKey}:${message.id}:duration`,
+      key: `${rowKey}:duration`,
       durationMs: turnDurationMs,
     });
   }
 
   rows.push({
     kind: "message",
-    key: `${sessionKey}:${message.id}`,
+    key: rowKey,
     message,
   });
 };
@@ -131,7 +133,7 @@ export function createAgentChatTranscriptModelBuilder(
   };
   let nextMessageIndex = 0;
 
-  const processMessage = (message: AgentChatMessage): void => {
+  const processMessage = (message: AgentChatMessage, messageIndex: number): void => {
     updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
 
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
@@ -143,7 +145,7 @@ export function createAgentChatTranscriptModelBuilder(
       turnRowStartIndexes.push(nextRowStart);
     }
 
-    appendMessageRows(rows, sessionKey, message, showThinkingMessages);
+    appendMessageRows(rows, sessionKey, message, messageIndex, showThinkingMessages);
   };
 
   return {
@@ -152,7 +154,7 @@ export function createAgentChatTranscriptModelBuilder(
       while (processedCount < maxMessages && nextMessageIndex < messageCount) {
         const message = getSessionMessageAt(session, nextMessageIndex);
         if (message) {
-          processMessage(message);
+          processMessage(message, nextMessageIndex);
         }
         nextMessageIndex += 1;
         processedCount += 1;
@@ -268,7 +270,7 @@ export function updateAgentChatTranscriptModelFromPrefix({
       const maybeDurationRow = previousTranscriptModel.rows[maybeDurationRowIndex];
       firstTailRowIndex =
         maybeDurationRow?.kind === "turn_duration" &&
-        maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
+        maybeDurationRow.key === `${previousTranscriptModel.rows[messageRowIndex]?.key}:duration`
           ? maybeDurationRowIndex
           : messageRowIndex;
       break;
@@ -279,12 +281,15 @@ export function updateAgentChatTranscriptModelFromPrefix({
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
   const metadata = buildMetadataFromRows(rows, isSessionWorking);
 
+  let messageIndex = startMessageIndex;
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
+    const currentMessageIndex = messageIndex;
+    messageIndex += 1;
     updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }
-    appendMessageRows(rows, sessionKey, message, showThinkingMessages);
+    appendMessageRows(rows, sessionKey, message, currentMessageIndex, showThinkingMessages);
   });
 
   return {
