@@ -22,6 +22,34 @@ const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
 };
 
+const isTerminalBackgroundSubagentPart = (
+  part: Extract<SessionPart, { kind: "subagent" }>,
+): boolean => {
+  if (part.executionMode !== "background") {
+    return false;
+  }
+  return part.status === "completed" || part.status === "cancelled" || part.status === "error";
+};
+
+const shouldPreserveIdleForSubagentPart = (
+  session: AgentSessionState,
+  part: Extract<SessionPart, { kind: "subagent" }>,
+): boolean => {
+  return session.status === "idle" && isTerminalBackgroundSubagentPart(part);
+};
+
+const shouldRecordPartAsTurnActivity = (
+  context: SessionPartEventContext,
+  part: SessionPart,
+): boolean => {
+  if (part.kind !== "subagent" || !isTerminalBackgroundSubagentPart(part)) {
+    return true;
+  }
+
+  const current = context.store.readSession(context.session.identity);
+  return current?.status !== "idle";
+};
+
 const resolvePartModelSelection = (
   context: SessionPartEventContext,
   current: AgentSessionState,
@@ -210,9 +238,10 @@ const handleSubagentPart = (
       ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
+    const status = shouldPreserveIdleForSubagentPart(prepared, part) ? prepared.status : "running";
     return {
       ...prepared,
-      status: "running",
+      status,
       messages: upsertSubagentMessage({
         owner: prepared,
         incomingMeta,
@@ -259,7 +288,7 @@ export const handleAssistantPart = (
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
-  if (part.kind !== "step") {
+  if (part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part)) {
     const activityTimestamp =
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
