@@ -100,7 +100,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(clearTurnDurationCalls).toBe(1);
   });
 
-  test("keeps an idle parent session idle when a background subagent completes late", async () => {
+  test.each([
+    "idle",
+    "stopped",
+    "error",
+  ] as const)("keeps an inactive parent session %s when a background subagent completes late", async (inactiveStatus) => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -152,13 +156,21 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
 
-    handleEvent({
-      type: "session_idle",
-      externalSessionId: "session-1",
-      timestamp: "2026-02-22T08:00:05.000Z",
-    });
+    if (inactiveStatus === "idle") {
+      handleEvent({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "idle" },
+        timestamp: "2026-02-22T08:00:05.000Z",
+      });
+    } else {
+      updateSession(getSession(sessionsRef), (current) => ({
+        ...current,
+        status: inactiveStatus,
+      }));
+    }
 
-    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
 
     handleEvent({
       type: "assistant_part",
@@ -177,7 +189,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
     });
 
-    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
     const subagentMessage = getSessionMessages(sessionsRef).find(
       (message) => message.role === "system" && message.meta?.kind === "subagent",
     );

@@ -31,11 +31,15 @@ const isTerminalBackgroundSubagentPart = (
   return part.status === "completed" || part.status === "cancelled" || part.status === "error";
 };
 
-const shouldPreserveIdleForSubagentPart = (
+const isInactiveSessionStatus = (status: AgentSessionState["status"]): boolean => {
+  return status === "idle" || status === "stopped" || status === "error";
+};
+
+const shouldPreserveInactiveStatusForSubagentPart = (
   session: AgentSessionState,
   part: Extract<SessionPart, { kind: "subagent" }>,
 ): boolean => {
-  return session.status === "idle" && isTerminalBackgroundSubagentPart(part);
+  return isInactiveSessionStatus(session.status) && isTerminalBackgroundSubagentPart(part);
 };
 
 const shouldRecordPartAsTurnActivity = (
@@ -47,7 +51,7 @@ const shouldRecordPartAsTurnActivity = (
   }
 
   const current = context.store.readSession(context.session.identity);
-  return current?.status !== "idle";
+  return current ? !isInactiveSessionStatus(current.status) : true;
 };
 
 const resolvePartModelSelection = (
@@ -238,7 +242,9 @@ const handleSubagentPart = (
       ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
-    const status = shouldPreserveIdleForSubagentPart(prepared, part) ? prepared.status : "running";
+    const status = shouldPreserveInactiveStatusForSubagentPart(prepared, part)
+      ? prepared.status
+      : "running";
     return {
       ...prepared,
       status,

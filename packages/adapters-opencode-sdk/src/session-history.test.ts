@@ -824,6 +824,7 @@ describe("OpencodeSdkAdapter session history", () => {
         kind: "subagent",
         status: "completed",
         externalSessionId: "child-session-a",
+        correlationKey: "part:msg-200:subtask-a",
         description: "Background task completed: Run tests",
         endedAtMs: taskCompletedAtMs,
       }),
