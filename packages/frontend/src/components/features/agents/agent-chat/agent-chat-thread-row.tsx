@@ -3,11 +3,11 @@ import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
-type AgentChatWindowRowProps = {
-  row: AgentChatWindowRow;
+type AgentChatTranscriptRowProps = {
+  row: AgentChatTranscriptRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionIdentity | null;
@@ -22,7 +22,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionIdentity,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
-}: AgentChatWindowRowProps): ReactElement {
+}: AgentChatTranscriptRowProps): ReactElement {
   switch (row.kind) {
     case "turn_duration": {
       return <AgentTurnDurationSeparator durationMs={row.durationMs} />;

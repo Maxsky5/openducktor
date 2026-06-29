@@ -3,34 +3,34 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
-  type AgentChatWindowRowsState,
-  findActiveStreamingAssistantMessageId,
-} from "./agent-chat-thread-windowing";
+  type AgentChatTranscriptModel,
+  findActiveStreamingAssistantMessageIdInRows,
+} from "./agent-chat-transcript-model";
 
-const TRANSCRIPT_ROWS_CACHE_LIMIT = 6;
+const TRANSCRIPT_MODEL_CACHE_LIMIT = 6;
 
-export type TranscriptRowsCacheValue = Pick<
-  AgentChatWindowRowsState,
+export type TranscriptModelCacheValue = Pick<
+  AgentChatTranscriptModel,
   | "rows"
-  | "turns"
+  | "turnAnchors"
   | "hasAttachmentMessages"
   | "lastUserMessageId"
   | "activeStreamingAssistantMessageId"
 >;
 
-export type TranscriptRowsCacheEntry = AgentChatWindowRowsState & {
+export type TranscriptModelCacheEntry = AgentChatTranscriptModel & {
   messages: AgentChatThreadSession["messages"];
 };
 
-export type TranscriptRowsCache = Map<string, TranscriptRowsCacheEntry>;
+export type TranscriptModelCache = Map<string, TranscriptModelCacheEntry>;
 
-const toTranscriptRowsCacheKey = (sessionKey: string, showThinkingMessages: boolean): string =>
+const toTranscriptModelCacheKey = (sessionKey: string, showThinkingMessages: boolean): string =>
   `${sessionKey}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
 
-const touchTranscriptRowsCacheEntry = (
-  cache: TranscriptRowsCache,
+const touchTranscriptModelCacheEntry = (
+  cache: TranscriptModelCache,
   cacheKey: string,
-  entry: TranscriptRowsCacheEntry,
+  entry: TranscriptModelCacheEntry,
 ): void => {
   if (cache.has(cacheKey)) {
     cache.delete(cacheKey);
@@ -38,7 +38,7 @@ const touchTranscriptRowsCacheEntry = (
 
   cache.set(cacheKey, entry);
 
-  while (cache.size > TRANSCRIPT_ROWS_CACHE_LIMIT) {
+  while (cache.size > TRANSCRIPT_MODEL_CACHE_LIMIT) {
     const oldestKey = cache.keys().next().value;
     if (typeof oldestKey !== "string") {
       break;
@@ -47,44 +47,47 @@ const touchTranscriptRowsCacheEntry = (
   }
 };
 
-const toTranscriptRowsCacheValue = (
-  cacheEntry: TranscriptRowsCacheEntry,
+const toTranscriptModelCacheValue = (
+  cacheEntry: TranscriptModelCacheEntry,
   activityState: AgentChatThreadSession["activityState"],
-): TranscriptRowsCacheValue => {
+): TranscriptModelCacheValue => {
   return {
     rows: cacheEntry.rows,
-    turns: cacheEntry.turns,
+    turnAnchors: cacheEntry.turnAnchors,
     hasAttachmentMessages: cacheEntry.hasAttachmentMessages,
     lastUserMessageId: cacheEntry.lastUserMessageId,
     activeStreamingAssistantMessageId: isAgentSessionActivityWorking(activityState)
       ? (cacheEntry.activeStreamingAssistantMessageId ??
-        findActiveStreamingAssistantMessageId(cacheEntry.rows))
+        findActiveStreamingAssistantMessageIdInRows(cacheEntry.rows))
       : null,
   };
 };
 
-export const createTranscriptRowsCache = (): TranscriptRowsCache =>
-  new Map<string, TranscriptRowsCacheEntry>();
+export const createTranscriptModelCache = (): TranscriptModelCache =>
+  new Map<string, TranscriptModelCacheEntry>();
 
-export const writeTranscriptRowsCacheEntry = ({
+export const writeTranscriptModelCacheEntry = ({
   session,
   showThinkingMessages,
-  rowsState,
+  transcriptModel,
   cache,
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
-  rowsState: AgentChatWindowRowsState;
-  cache: TranscriptRowsCache;
+  transcriptModel: AgentChatTranscriptModel;
+  cache: TranscriptModelCache;
 }): void => {
-  const cacheKey = toTranscriptRowsCacheKey(agentSessionIdentityKey(session), showThinkingMessages);
-  touchTranscriptRowsCacheEntry(cache, cacheKey, {
-    ...rowsState,
+  const cacheKey = toTranscriptModelCacheKey(
+    agentSessionIdentityKey(session),
+    showThinkingMessages,
+  );
+  touchTranscriptModelCacheEntry(cache, cacheKey, {
+    ...transcriptModel,
     messages: session.messages,
   });
 };
 
-export const peekReusableTranscriptRowsState = ({
+export const peekReusableTranscriptModelState = ({
   session,
   showThinkingMessages,
   cache,
@@ -92,10 +95,13 @@ export const peekReusableTranscriptRowsState = ({
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
-  cache: TranscriptRowsCache;
+  cache: TranscriptModelCache;
   touch?: boolean;
-}): TranscriptRowsCacheValue | null => {
-  const cacheKey = toTranscriptRowsCacheKey(agentSessionIdentityKey(session), showThinkingMessages);
+}): TranscriptModelCacheValue | null => {
+  const cacheKey = toTranscriptModelCacheKey(
+    agentSessionIdentityKey(session),
+    showThinkingMessages,
+  );
   const cacheEntry = cache.get(cacheKey);
   if (!cacheEntry) {
     return null;
@@ -111,22 +117,25 @@ export const peekReusableTranscriptRowsState = ({
   }
 
   if (touch) {
-    touchTranscriptRowsCacheEntry(cache, cacheKey, cacheEntry);
+    touchTranscriptModelCacheEntry(cache, cacheKey, cacheEntry);
   }
-  return toTranscriptRowsCacheValue(cacheEntry, session.activityState);
+  return toTranscriptModelCacheValue(cacheEntry, session.activityState);
 };
 
 // Intentionally returns the latest entry for this session key without revision validation.
 // Callers must apply strict safety gates before reusing any prefix rows from it.
-export const peekTranscriptRowsCacheEntry = ({
+export const peekTranscriptModelCacheEntry = ({
   session,
   showThinkingMessages,
   cache,
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
-  cache: TranscriptRowsCache;
-}): TranscriptRowsCacheEntry | null => {
-  const cacheKey = toTranscriptRowsCacheKey(agentSessionIdentityKey(session), showThinkingMessages);
+  cache: TranscriptModelCache;
+}): TranscriptModelCacheEntry | null => {
+  const cacheKey = toTranscriptModelCacheKey(
+    agentSessionIdentityKey(session),
+    showThinkingMessages,
+  );
   return cache.get(cacheKey) ?? null;
 };

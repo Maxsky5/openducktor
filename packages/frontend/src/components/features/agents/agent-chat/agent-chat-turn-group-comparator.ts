@@ -1,11 +1,11 @@
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { getSubagentMessageSessionKey } from "./subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
 
 export type AgentChatThreadMotionRowProps = {
-  row: AgentChatWindowRow;
+  row: AgentChatTranscriptRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionIdentity | null;
@@ -60,8 +60,8 @@ export const areAgentSessionIdentitiesEqual = (
 };
 
 export const areChatRowsEquivalent = (
-  left: AgentChatWindowRow,
-  right: AgentChatWindowRow,
+  left: AgentChatTranscriptRow,
+  right: AgentChatTranscriptRow,
 ): boolean => {
   if (left === right) {
     return true;
@@ -76,7 +76,7 @@ export const areChatRowsEquivalent = (
 };
 
 export const readSubagentPendingApprovalCount = (
-  row: AgentChatWindowRow,
+  row: AgentChatTranscriptRow,
   countsBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"],
   sessionIdentity: AgentSessionIdentity | null,
 ): number => {
@@ -92,7 +92,7 @@ export const readSubagentPendingApprovalCount = (
 };
 
 export const readSubagentPendingQuestionCount = (
-  row: AgentChatWindowRow,
+  row: AgentChatTranscriptRow,
   countsBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"],
   sessionIdentity: AgentSessionIdentity | null,
 ): number => {
@@ -108,8 +108,8 @@ export const readSubagentPendingQuestionCount = (
 };
 
 const areTurnRowsEquivalent = (
-  previousRows: AgentChatWindowRow[],
-  nextRows: AgentChatWindowRow[],
+  previousRows: AgentChatTranscriptRow[],
+  nextRows: AgentChatTranscriptRow[],
 ): boolean => {
   if (previousRows.length !== nextRows.length) {
     return false;
@@ -134,7 +134,7 @@ const areTurnSubagentPendingCountsEquivalent = ({
   nextQuestionCounts,
   sessionIdentity,
 }: {
-  rows: AgentChatWindowRow[];
+  rows: AgentChatTranscriptRow[];
   previousApprovalCounts: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   nextApprovalCounts: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   previousQuestionCounts: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];

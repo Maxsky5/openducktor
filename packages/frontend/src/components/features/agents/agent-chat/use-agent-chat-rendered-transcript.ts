@@ -1,18 +1,12 @@
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
-import {
-  type AgentChatWindowRow,
-  type AgentChatWindowTurn,
-  isStreamingAssistantMessage,
-} from "./agent-chat-thread-windowing";
-import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
+import { isAssistantMessageStreaming } from "./agent-chat-streaming";
+import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
-const STAGED_WINDOW_INITIAL_ROWS = 8;
-const STAGED_WINDOW_ROW_BATCH = 8;
-
-const TRANSCRIPT_ROWS_PENDING_NOTICE: NonNullable<AgentChatThreadModel["transcriptNotice"]> =
+const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatThreadModel["transcriptNotice"]> =
   Object.freeze({
     kind: "session_loading",
     severity: "loading",
@@ -22,13 +16,13 @@ const TRANSCRIPT_ROWS_PENDING_NOTICE: NonNullable<AgentChatThreadModel["transcri
 
 export type AgentChatRenderedTurn = {
   key: string;
-  rows: AgentChatWindowRow[];
+  rows: AgentChatTranscriptRow[];
   isActive: boolean;
   activeStreamingAssistantMessageId: string | null;
 };
 
 export const getTurnActiveStreamingAssistantMessageId = (
-  rows: AgentChatWindowRow[],
+  rows: AgentChatTranscriptRow[],
   activeStreamingAssistantMessageId: string | null,
 ): string | null => {
   if (!activeStreamingAssistantMessageId) {
@@ -41,7 +35,7 @@ export const getTurnActiveStreamingAssistantMessageId = (
     (row) =>
       row.kind === "message" &&
       row.message.id === activeStreamingAssistantMessageId &&
-      isStreamingAssistantMessage(row.message),
+      isAssistantMessageStreaming(row.message),
   )
     ? activeStreamingAssistantMessageId
     : null;
@@ -69,171 +63,6 @@ type UseAgentChatRenderedTranscriptResult = {
   scrollToTop: () => void;
 };
 
-type StagedTranscriptWindow = {
-  rows: AgentChatWindowRow[];
-  turns: AgentChatWindowTurn[];
-};
-
-const shouldStageWindow = ({
-  completedSessionKeys,
-  forceStage,
-  rowCount,
-  sessionKey,
-}: {
-  completedSessionKeys: Set<string>;
-  forceStage?: boolean;
-  rowCount: number;
-  sessionKey: string;
-}): boolean =>
-  rowCount > STAGED_WINDOW_INITIAL_ROWS &&
-  (forceStage === true || !completedSessionKeys.has(sessionKey));
-
-function useStagedTranscriptWindow({
-  sessionKey,
-  rows,
-  turns,
-  onBeforePrepend,
-}: {
-  sessionKey: string | null;
-  rows: AgentChatWindowRow[];
-  turns: AgentChatWindowTurn[];
-  onBeforePrepend: () => void;
-}): StagedTranscriptWindow {
-  const [rowCount, setRowCount] = useState(() =>
-    sessionKey !== null && rows.length > STAGED_WINDOW_INITIAL_ROWS
-      ? STAGED_WINDOW_INITIAL_ROWS
-      : rows.length,
-  );
-  const rowCountRef = useRef(rowCount);
-  const frameRef = useRef<number | null>(null);
-  const activeSessionKeyRef = useRef<string | null>(null);
-  const completedSessionKeysRef = useRef<Set<string>>(new Set());
-  const previousSessionKeyRef = useRef<string | null>(sessionKey);
-  const previousSessionKey = previousSessionKeyRef.current;
-  const renderedSwitchedSession =
-    previousSessionKey !== null && sessionKey !== null && previousSessionKey !== sessionKey;
-
-  useEffect(() => {
-    const updateRowCount = (nextRowCount: number): void => {
-      rowCountRef.current = nextRowCount;
-      setRowCount((current) => (current === nextRowCount ? current : nextRowCount));
-    };
-
-    if (frameRef.current !== null) {
-      globalThis.cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
-
-    const effectPreviousSessionKey = previousSessionKeyRef.current;
-    const effectSwitchedSession =
-      effectPreviousSessionKey !== null &&
-      sessionKey !== null &&
-      effectPreviousSessionKey !== sessionKey;
-    previousSessionKeyRef.current = sessionKey;
-
-    if (effectSwitchedSession && sessionKey !== null) {
-      completedSessionKeysRef.current.delete(sessionKey);
-    }
-
-    if (sessionKey === null) {
-      activeSessionKeyRef.current = null;
-      updateRowCount(rows.length);
-      return;
-    }
-
-    const shouldStage = shouldStageWindow({
-      completedSessionKeys: completedSessionKeysRef.current,
-      forceStage: effectSwitchedSession,
-      rowCount: rows.length,
-      sessionKey,
-    });
-
-    if (!shouldStage) {
-      activeSessionKeyRef.current = null;
-      updateRowCount(rows.length);
-      return;
-    }
-
-    const activeSessionKey = sessionKey;
-    const isContinuingActiveSession = activeSessionKeyRef.current === sessionKey;
-    activeSessionKeyRef.current = activeSessionKey;
-    let nextRowCount = Math.min(
-      rows.length,
-      isContinuingActiveSession ? rowCountRef.current : STAGED_WINDOW_INITIAL_ROWS,
-    );
-    updateRowCount(nextRowCount);
-
-    if (nextRowCount >= rows.length) {
-      activeSessionKeyRef.current = null;
-      completedSessionKeysRef.current.add(activeSessionKey);
-      return;
-    }
-
-    const step = (): void => {
-      if (activeSessionKeyRef.current !== activeSessionKey) {
-        frameRef.current = null;
-        return;
-      }
-
-      nextRowCount = Math.min(rows.length, nextRowCount + STAGED_WINDOW_ROW_BATCH);
-      onBeforePrepend();
-      updateRowCount(nextRowCount);
-
-      if (nextRowCount >= rows.length) {
-        frameRef.current = null;
-        activeSessionKeyRef.current = null;
-        completedSessionKeysRef.current.add(activeSessionKey);
-        return;
-      }
-
-      frameRef.current = globalThis.requestAnimationFrame(step);
-    };
-
-    frameRef.current = globalThis.requestAnimationFrame(step);
-    return () => {
-      if (frameRef.current !== null) {
-        globalThis.cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-    };
-  }, [onBeforePrepend, rows.length, sessionKey]);
-
-  return useMemo(() => {
-    if (
-      sessionKey === null ||
-      !shouldStageWindow({
-        completedSessionKeys: completedSessionKeysRef.current,
-        forceStage: renderedSwitchedSession,
-        rowCount: rows.length,
-        sessionKey,
-      })
-    ) {
-      return { rows, turns };
-    }
-
-    const effectiveRowCount =
-      renderedSwitchedSession && activeSessionKeyRef.current !== sessionKey
-        ? Math.min(rows.length, STAGED_WINDOW_INITIAL_ROWS)
-        : rowCount;
-
-    if (effectiveRowCount >= rows.length) {
-      return { rows, turns };
-    }
-
-    const rowStart = Math.max(0, rows.length - effectiveRowCount);
-    return {
-      rows: rows.slice(rowStart),
-      turns: turns
-        .filter((turn) => turn.end >= rowStart)
-        .map((turn) => ({
-          key: turn.key,
-          start: Math.max(turn.start, rowStart) - rowStart,
-          end: turn.end - rowStart,
-        })),
-    };
-  }, [renderedSwitchedSession, rowCount, rows, sessionKey, turns]);
-}
-
 export function useAgentChatRenderedTranscript({
   session,
   displayedSessionKey,
@@ -246,27 +75,26 @@ export function useAgentChatRenderedTranscript({
 }: UseAgentChatRenderedTranscriptArgs): UseAgentChatRenderedTranscriptResult {
   const { showThinkingMessages } = useAgentChatSettings();
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
-  const { transcriptState: transcriptRowsState, isTranscriptRowsMissing } =
-    useAgentChatTranscriptRows({
+  const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
+    useAgentChatTranscriptModel({
       session,
       showThinkingMessages,
     });
   const effectiveShouldResetTranscriptWindow =
-    shouldResetTranscriptWindow || isTranscriptRowsMissing;
+    shouldResetTranscriptWindow || isTranscriptModelMissing;
   const effectiveTranscriptNotice =
-    transcriptNotice ?? (isTranscriptRowsMissing ? TRANSCRIPT_ROWS_PENDING_NOTICE : null);
+    transcriptNotice ?? (isTranscriptModelMissing ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
   const {
-    windowedRows,
-    windowedTurns,
+    visibleRows,
+    visibleTurnAnchors,
     isNearBottom,
     isNearTop,
-    preserveScrollBeforeStagedPrepend,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
   } = useAgentChatWindow({
-    rows: transcriptRowsState.rows,
-    turns: transcriptRowsState.turns,
+    rows: transcriptModelState.rows,
+    turnAnchors: transcriptModelState.turnAnchors,
     displayedSessionKey,
     shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
     isSessionWorking,
@@ -274,29 +102,23 @@ export function useAgentChatRenderedTranscript({
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
   });
-  const stagedTranscript = useStagedTranscriptWindow({
-    sessionKey: displayedSessionKey,
-    rows: windowedRows,
-    turns: windowedTurns,
-    onBeforePrepend: preserveScrollBeforeStagedPrepend,
-  });
   const latestUserTurnKey = useMemo(() => {
-    if (!displayedSessionKey || !transcriptRowsState.lastUserMessageId) {
+    if (!displayedSessionKey || !transcriptModelState.lastUserMessageId) {
       return null;
     }
 
-    return `${displayedSessionKey}:${transcriptRowsState.lastUserMessageId}`;
-  }, [displayedSessionKey, transcriptRowsState.lastUserMessageId]);
+    return `${displayedSessionKey}:${transcriptModelState.lastUserMessageId}`;
+  }, [displayedSessionKey, transcriptModelState.lastUserMessageId]);
   const renderedTurns = useMemo<AgentChatRenderedTurn[]>(() => {
-    if (stagedTranscript.rows.length === 0) {
+    if (visibleRows.length === 0) {
       return [];
     }
 
-    return stagedTranscript.turns.map((turn) => {
-      const rows = stagedTranscript.rows.slice(turn.start, turn.end + 1);
+    return visibleTurnAnchors.map((turn) => {
+      const rows = visibleRows.slice(turn.startRow, turn.endRowExclusive);
       const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
         rows,
-        transcriptRowsState.activeStreamingAssistantMessageId,
+        transcriptModelState.activeStreamingAssistantMessageId,
       );
 
       return {
@@ -308,9 +130,9 @@ export function useAgentChatRenderedTranscript({
     });
   }, [
     latestUserTurnKey,
-    stagedTranscript.rows,
-    stagedTranscript.turns,
-    transcriptRowsState.activeStreamingAssistantMessageId,
+    visibleRows,
+    visibleTurnAnchors,
+    transcriptModelState.activeStreamingAssistantMessageId,
   ]);
 
   useLayoutEffect(() => {
@@ -320,7 +142,7 @@ export function useAgentChatRenderedTranscript({
   return {
     messagesContentRef,
     renderedTurns,
-    allowTurnContainment: !transcriptRowsState.hasAttachmentMessages,
+    allowTurnContainment: !transcriptModelState.hasAttachmentMessages,
     transcriptNotice: effectiveTranscriptNotice,
     isNearBottom,
     isNearTop,

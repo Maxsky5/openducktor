@@ -9,16 +9,9 @@ import {
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 
-/** Initial number of user turns rendered from the bottom of the transcript. */
-export const CHAT_TURN_WINDOW_INIT = 10;
-/** Number of older user turns revealed per upward backfill step. */
-export const CHAT_TURN_WINDOW_BATCH = 8;
-/** Maximum transcript rows mounted from the bottom for oversized turns. */
-export const CHAT_ROW_WINDOW_INIT = 240;
-/** Number of older rows revealed per upward backfill step for oversized turns. */
-export const CHAT_ROW_WINDOW_BATCH = 160;
+import { isAssistantMessageStreaming } from "./agent-chat-streaming";
 
-export type AgentChatWindowRow =
+export type AgentChatTranscriptRow =
   | {
       kind: "turn_duration";
       key: string;
@@ -30,39 +23,34 @@ export type AgentChatWindowRow =
       message: AgentChatMessage;
     };
 
-export type AgentChatWindowTurn = {
+export type AgentChatTurnAnchor = {
   key: string;
-  start: number;
-  end: number;
+  startRow: number;
+  endRowExclusive: number;
 };
 
-type AgentChatWindowAggregateMetadata = {
+type AgentChatTranscriptMetadata = {
   hasAttachmentMessages: boolean;
   lastUserMessageId: string | null;
   activeStreamingAssistantMessageId: string | null;
 };
 
-export type AgentChatWindowRowsState = AgentChatWindowAggregateMetadata & {
-  rows: AgentChatWindowRow[];
-  turns: AgentChatWindowTurn[];
+export type AgentChatTranscriptModel = AgentChatTranscriptMetadata & {
+  rows: AgentChatTranscriptRow[];
+  turnAnchors: AgentChatTurnAnchor[];
 };
 
-type BuildAgentChatWindowRowsOptions = {
+type BuildAgentChatTranscriptModelOptions = {
   showThinkingMessages: boolean;
 };
 
-export type AgentChatWindowRowsStateBuilder = {
+export type AgentChatTranscriptModelBuilder = {
   step: (maxMessages?: number) => number;
   isDone: () => boolean;
-  complete: () => AgentChatWindowRowsState;
+  complete: () => AgentChatTranscriptModel;
 };
 
-export type AgentChatWindowRowsPrefixMode = "append" | "replace-tail";
-
-export const isStreamingAssistantMessage = (message: AgentChatMessage): boolean =>
-  message.role === "assistant" &&
-  message.meta?.kind === "assistant" &&
-  message.meta.isFinal === false;
+export type AgentChatTranscriptModelPrefixMode = "append" | "replace-tail";
 
 const isVisibleTranscriptMessage = (
   message: AgentChatMessage,
@@ -76,7 +64,7 @@ const updateAggregateMetadataForMessage = ({
 }: {
   message: AgentChatMessage;
   isSessionWorking: boolean;
-  metadata: AgentChatWindowAggregateMetadata;
+  metadata: AgentChatTranscriptMetadata;
 }): void => {
   if (
     !metadata.hasAttachmentMessages &&
@@ -90,13 +78,13 @@ const updateAggregateMetadataForMessage = ({
     metadata.lastUserMessageId = message.id;
   }
 
-  if (isSessionWorking && isStreamingAssistantMessage(message)) {
+  if (isSessionWorking && isAssistantMessageStreaming(message)) {
     metadata.activeStreamingAssistantMessageId = message.id;
   }
 };
 
 const appendMessageRows = (
-  rows: AgentChatWindowRow[],
+  rows: AgentChatTranscriptRow[],
   sessionKey: string,
   message: AgentChatMessage,
   showThinkingMessages: boolean,
@@ -127,16 +115,16 @@ const appendMessageRows = (
   });
 };
 
-export function createAgentChatWindowRowsStateBuilder(
+export function createAgentChatTranscriptModelBuilder(
   session: AgentChatThreadSession,
-  { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
-): AgentChatWindowRowsStateBuilder {
-  const rows: AgentChatWindowRow[] = [];
+  { showThinkingMessages }: BuildAgentChatTranscriptModelOptions,
+): AgentChatTranscriptModelBuilder {
+  const rows: AgentChatTranscriptRow[] = [];
   const turnRowStartIndexes: number[] = [];
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
-  const metadata: AgentChatWindowAggregateMetadata = {
+  const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageId: null,
     activeStreamingAssistantMessageId: null,
@@ -174,17 +162,17 @@ export function createAgentChatWindowRowsStateBuilder(
     isDone(): boolean {
       return nextMessageIndex >= messageCount;
     },
-    complete(): AgentChatWindowRowsState {
+    complete(): AgentChatTranscriptModel {
       if (nextMessageIndex < messageCount) {
         this.step();
       }
 
       return {
         rows,
-        turns: turnRowStartIndexes.map((start, index) => ({
-          key: rows[start]?.key ?? `turn-${index}`,
-          start,
-          end: (turnRowStartIndexes[index + 1] ?? rows.length) - 1,
+        turnAnchors: turnRowStartIndexes.map((startRow, index) => ({
+          key: rows[startRow]?.key ?? `turn-${index}`,
+          startRow,
+          endRowExclusive: turnRowStartIndexes[index + 1] ?? rows.length,
         })),
         ...metadata,
       };
@@ -192,14 +180,14 @@ export function createAgentChatWindowRowsStateBuilder(
   };
 }
 
-export function buildAgentChatWindowRowsState(
+export function buildAgentChatTranscriptModel(
   session: AgentChatThreadSession,
-  { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
-): AgentChatWindowRowsState {
-  return createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages }).complete();
+  { showThinkingMessages }: BuildAgentChatTranscriptModelOptions,
+): AgentChatTranscriptModel {
+  return createAgentChatTranscriptModelBuilder(session, { showThinkingMessages }).complete();
 }
 
-const findRowIndexForMessage = (rows: AgentChatWindowRow[], messageId: string): number => {
+const findRowIndexForMessage = (rows: AgentChatTranscriptRow[], messageId: string): number => {
   let matchingRowIndex = -1;
   for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
     const row = rows[rowIndex];
@@ -215,10 +203,10 @@ const findRowIndexForMessage = (rows: AgentChatWindowRow[], messageId: string): 
 };
 
 const buildMetadataFromRows = (
-  rows: AgentChatWindowRow[],
+  rows: AgentChatTranscriptRow[],
   isSessionWorking: boolean,
-): AgentChatWindowAggregateMetadata => {
-  const metadata: AgentChatWindowAggregateMetadata = {
+): AgentChatTranscriptMetadata => {
+  const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageId: null,
     activeStreamingAssistantMessageId: null,
@@ -233,12 +221,12 @@ const buildMetadataFromRows = (
   return metadata;
 };
 
-export const findActiveStreamingAssistantMessageId = (
-  rows: AgentChatWindowRow[],
+export const findActiveStreamingAssistantMessageIdInRows = (
+  rows: AgentChatTranscriptRow[],
 ): string | null => {
   for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
     const row = rows[rowIndex];
-    if (row?.kind === "message" && isStreamingAssistantMessage(row.message)) {
+    if (row?.kind === "message" && isAssistantMessageStreaming(row.message)) {
       return row.message.id;
     }
   }
@@ -248,22 +236,22 @@ export const findActiveStreamingAssistantMessageId = (
 
 // This helper intentionally trusts the caller's incremental safety plan. Use append mode only
 // for true tail appends; replace-tail is the only mode allowed to cut by message id.
-export function buildAgentChatWindowRowsStateFromPrefix({
+export function updateAgentChatTranscriptModelFromPrefix({
   session,
   showThinkingMessages,
-  previousRowsState,
+  previousTranscriptModel,
   startMessageIndex,
   mode,
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
-  previousRowsState: AgentChatWindowRowsState;
+  previousTranscriptModel: AgentChatTranscriptModel;
   startMessageIndex: number;
-  mode: AgentChatWindowRowsPrefixMode;
-}): AgentChatWindowRowsState | null {
+  mode: AgentChatTranscriptModelPrefixMode;
+}): AgentChatTranscriptModel | null {
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
-  let firstTailRowIndex = previousRowsState.rows.length;
+  let firstTailRowIndex = previousTranscriptModel.rows.length;
 
   if (mode === "replace-tail") {
     for (let messageIndex = startMessageIndex; messageIndex < messageCount; messageIndex += 1) {
@@ -272,12 +260,12 @@ export function buildAgentChatWindowRowsStateFromPrefix({
         continue;
       }
 
-      const messageRowIndex = findRowIndexForMessage(previousRowsState.rows, message.id);
+      const messageRowIndex = findRowIndexForMessage(previousTranscriptModel.rows, message.id);
       if (messageRowIndex < 0) {
         return null;
       }
       const maybeDurationRowIndex = messageRowIndex - 1;
-      const maybeDurationRow = previousRowsState.rows[maybeDurationRowIndex];
+      const maybeDurationRow = previousTranscriptModel.rows[maybeDurationRowIndex];
       firstTailRowIndex =
         maybeDurationRow?.kind === "turn_duration" &&
         maybeDurationRow.key === `${sessionKey}:${message.id}:duration`
@@ -287,7 +275,7 @@ export function buildAgentChatWindowRowsStateFromPrefix({
     }
   }
 
-  const rows = previousRowsState.rows.slice(0, firstTailRowIndex);
+  const rows = previousTranscriptModel.rows.slice(0, firstTailRowIndex);
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
   const metadata = buildMetadataFromRows(rows, isSessionWorking);
 
@@ -301,19 +289,12 @@ export function buildAgentChatWindowRowsStateFromPrefix({
 
   return {
     rows,
-    turns: buildAgentChatWindowTurns(rows),
+    turnAnchors: buildAgentChatTurnAnchors(rows),
     ...metadata,
   };
 }
 
-export function buildAgentChatWindowRows(
-  session: AgentChatThreadSession,
-  { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
-): AgentChatWindowRow[] {
-  return buildAgentChatWindowRowsState(session, { showThinkingMessages }).rows;
-}
-
-export function buildAgentChatWindowTurns(rows: AgentChatWindowRow[]): AgentChatWindowTurn[] {
+export function buildAgentChatTurnAnchors(rows: AgentChatTranscriptRow[]): AgentChatTurnAnchor[] {
   if (rows.length === 0) {
     return [];
   }
@@ -331,11 +312,7 @@ export function buildAgentChatWindowTurns(rows: AgentChatWindowRow[]): AgentChat
 
   return turnStartIndices.map((start, index) => ({
     key: rows[start]?.key ?? `turn-${index}`,
-    start,
-    end: (turnStartIndices[index + 1] ?? rows.length) - 1,
+    startRow: start,
+    endRowExclusive: turnStartIndices[index + 1] ?? rows.length,
   }));
-}
-
-export function getAgentChatInitialTurnStart(turnCount: number): number {
-  return turnCount > CHAT_TURN_WINDOW_INIT ? turnCount - CHAT_TURN_WINDOW_INIT : 0;
 }

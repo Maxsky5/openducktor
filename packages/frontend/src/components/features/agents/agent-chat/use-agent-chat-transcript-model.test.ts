@@ -7,7 +7,7 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
-import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
+import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -19,7 +19,7 @@ type HarnessProps = {
   showThinkingMessages: boolean;
 };
 
-type HookResult = ReturnType<typeof useAgentChatTranscriptRows>;
+type HookResult = ReturnType<typeof useAgentChatTranscriptModel>;
 
 const animationFrameDriver = createAnimationFrameTestDriver();
 
@@ -60,7 +60,7 @@ const createLargeSession = (
 
 const mountHarness = async (props: HarnessProps) => {
   const harness = createHookHarness(
-    (nextProps: HarnessProps): HookResult => useAgentChatTranscriptRows(nextProps),
+    (nextProps: HarnessProps): HookResult => useAgentChatTranscriptModel(nextProps),
     props,
   );
 
@@ -68,7 +68,7 @@ const mountHarness = async (props: HarnessProps) => {
   return harness;
 };
 
-describe("useAgentChatTranscriptRows", () => {
+describe("useAgentChatTranscriptModel", () => {
   beforeEach(() => {
     actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     animationFrameDriver.install();
@@ -91,7 +91,7 @@ describe("useAgentChatTranscriptRows", () => {
     });
 
     expect(harness.getLatest().transcriptState.rows).toEqual([]);
-    expect(harness.getLatest().isTranscriptRowsMissing).toBe(true);
+    expect(harness.getLatest().isTranscriptModelMissing).toBe(true);
 
     await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
       timeoutMs: 1_000,
@@ -177,7 +177,7 @@ describe("useAgentChatTranscriptRows", () => {
 
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
-    expect(latest.isTranscriptRowsPending).toBe(false);
+    expect(latest.isTranscriptModelPending).toBe(false);
     expect(latest.transcriptState.rows[0]).toBe(prefixRow);
     expect(
       latest.transcriptState.rows.some(
@@ -271,7 +271,7 @@ describe("useAgentChatTranscriptRows", () => {
 
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
-    expect(latest.isTranscriptRowsPending).toBe(false);
+    expect(latest.isTranscriptModelPending).toBe(false);
     expect(latest.transcriptState.rows[0]).toBe(prefixRow);
     expect(latest.transcriptState.activeStreamingAssistantMessageId).toBeNull();
     expect(
@@ -388,7 +388,7 @@ describe("useAgentChatTranscriptRows", () => {
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
-    expect(harness.getLatest().isTranscriptRowsPending).toBe(true);
+    expect(harness.getLatest().isTranscriptModelPending).toBe(true);
     await harness.unmount();
   });
 
@@ -429,7 +429,7 @@ describe("useAgentChatTranscriptRows", () => {
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
-    expect(harness.getLatest().isTranscriptRowsPending).toBe(true);
+    expect(harness.getLatest().isTranscriptModelPending).toBe(true);
 
     await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
       timeoutMs: 1_000,
@@ -505,7 +505,7 @@ describe("useAgentChatTranscriptRows", () => {
     const secondSession = createLargeSession("session-cache-visible-b");
     const observedStates: HookResult[] = [];
     const Probe = (props: HarnessProps) => {
-      observedStates.push(useAgentChatTranscriptRows(props));
+      observedStates.push(useAgentChatTranscriptModel(props));
       return null;
     };
 
@@ -547,7 +547,7 @@ describe("useAgentChatTranscriptRows", () => {
 
     const firstRenderAfterSwitchBack = observedStates[observationsBeforeSwitchBack];
     expect(firstRenderAfterSwitchBack?.transcriptState.rows).toBe(cachedRows);
-    expect(firstRenderAfterSwitchBack?.isTranscriptRowsMissing).toBe(false);
+    expect(firstRenderAfterSwitchBack?.isTranscriptModelMissing).toBe(false);
 
     rendered.unmount();
   });

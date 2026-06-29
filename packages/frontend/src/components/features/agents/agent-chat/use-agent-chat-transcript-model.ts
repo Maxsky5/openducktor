@@ -9,26 +9,26 @@ import {
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
-  type AgentChatWindowRow,
-  type AgentChatWindowTurn,
-  buildAgentChatWindowRowsStateFromPrefix,
-  createAgentChatWindowRowsStateBuilder,
-} from "./agent-chat-thread-windowing";
+  type AgentChatTranscriptRow,
+  type AgentChatTurnAnchor,
+  createAgentChatTranscriptModelBuilder,
+  updateAgentChatTranscriptModelFromPrefix,
+} from "./agent-chat-transcript-model";
 import {
-  createTranscriptRowsCache,
-  peekReusableTranscriptRowsState,
-  peekTranscriptRowsCacheEntry,
-  type TranscriptRowsCache,
-  type TranscriptRowsCacheEntry,
-  writeTranscriptRowsCacheEntry,
-} from "./agent-chat-transcript-rows-cache";
+  createTranscriptModelCache,
+  peekReusableTranscriptModelState,
+  peekTranscriptModelCacheEntry,
+  type TranscriptModelCache,
+  type TranscriptModelCacheEntry,
+  writeTranscriptModelCacheEntry,
+} from "./agent-chat-transcript-model-cache";
 
-const EMPTY_ROWS: AgentChatWindowRow[] = [];
+const EMPTY_ROWS: AgentChatTranscriptRow[] = [];
 const TRANSCRIPT_DERIVATION_CHUNK_BUDGET_MS = 6;
 const TRANSCRIPT_DERIVATION_MAX_MESSAGES_PER_CHUNK = 250;
 const TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT = 100;
 
-type TranscriptRowsRevision = {
+type TranscriptModelRevision = {
   sessionKey: string | null;
   activityState: AgentChatThreadSession["activityState"];
   showThinkingMessages: boolean;
@@ -37,16 +37,16 @@ type TranscriptRowsRevision = {
   count: number | null;
 };
 
-export type TranscriptRowsState = {
-  revision: TranscriptRowsRevision;
-  rows: AgentChatWindowRow[];
-  turns: AgentChatWindowTurn[];
+export type TranscriptModelState = {
+  revision: TranscriptModelRevision;
+  rows: AgentChatTranscriptRow[];
+  turnAnchors: AgentChatTurnAnchor[];
   hasAttachmentMessages: boolean;
   lastUserMessageId: string | null;
   activeStreamingAssistantMessageId: string | null;
 };
 
-const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
+const EMPTY_TRANSCRIPT_MODEL_REVISION: TranscriptModelRevision = Object.freeze({
   sessionKey: null,
   activityState: null,
   showThinkingMessages: false,
@@ -55,21 +55,21 @@ const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
   count: null,
 });
 
-const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
-  revision: EMPTY_TRANSCRIPT_ROWS_REVISION,
+const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
+  revision: EMPTY_TRANSCRIPT_MODEL_REVISION,
   rows: EMPTY_ROWS,
-  turns: [] as AgentChatWindowTurn[],
+  turnAnchors: [] as AgentChatTurnAnchor[],
   hasAttachmentMessages: false,
   lastUserMessageId: null,
   activeStreamingAssistantMessageId: null,
 });
 
-const buildTranscriptRowsRevision = (
+const buildTranscriptModelRevision = (
   session: AgentChatThreadSession | null,
   showThinkingMessages: boolean,
-): TranscriptRowsRevision => {
+): TranscriptModelRevision => {
   if (!session) {
-    return EMPTY_TRANSCRIPT_ROWS_REVISION;
+    return EMPTY_TRANSCRIPT_MODEL_REVISION;
   }
 
   const messagesRevision = getSessionMessagesRevision(session);
@@ -86,63 +86,63 @@ const buildTranscriptRowsRevision = (
   };
 };
 
-const toTranscriptRowsState = ({
+const toTranscriptModelState = ({
   session,
   revision,
-  rowsState,
+  transcriptModel,
 }: {
   session: AgentChatThreadSession;
-  revision: TranscriptRowsRevision;
-  rowsState: Pick<
-    TranscriptRowsState,
+  revision: TranscriptModelRevision;
+  transcriptModel: Pick<
+    TranscriptModelState,
     | "rows"
-    | "turns"
+    | "turnAnchors"
     | "hasAttachmentMessages"
     | "lastUserMessageId"
     | "activeStreamingAssistantMessageId"
   >;
-}): TranscriptRowsState => {
+}): TranscriptModelState => {
   return {
     revision,
-    rows: rowsState.rows,
-    turns: rowsState.turns,
-    hasAttachmentMessages: rowsState.hasAttachmentMessages,
-    lastUserMessageId: rowsState.lastUserMessageId,
+    rows: transcriptModel.rows,
+    turnAnchors: transcriptModel.turnAnchors,
+    hasAttachmentMessages: transcriptModel.hasAttachmentMessages,
+    lastUserMessageId: transcriptModel.lastUserMessageId,
     activeStreamingAssistantMessageId: isAgentSessionActivityWorking(session.activityState)
-      ? rowsState.activeStreamingAssistantMessageId
+      ? transcriptModel.activeStreamingAssistantMessageId
       : null,
   };
 };
 
-const buildImmediateTranscriptRowsState = ({
+const buildImmediateTranscriptModelState = ({
   session,
   showThinkingMessages,
   cache,
 }: {
   session: AgentChatThreadSession;
   showThinkingMessages: boolean;
-  cache: TranscriptRowsCache;
-}): TranscriptRowsState => {
-  const rowsState = createAgentChatWindowRowsStateBuilder(session, {
+  cache: TranscriptModelCache;
+}): TranscriptModelState => {
+  const transcriptModel = createAgentChatTranscriptModelBuilder(session, {
     showThinkingMessages,
   }).complete();
-  writeTranscriptRowsCacheEntry({
+  writeTranscriptModelCacheEntry({
     session,
     showThinkingMessages,
-    rowsState,
+    transcriptModel,
     cache,
   });
 
-  return toTranscriptRowsState({
+  return toTranscriptModelState({
     session,
-    revision: buildTranscriptRowsRevision(session, showThinkingMessages),
-    rowsState,
+    revision: buildTranscriptModelRevision(session, showThinkingMessages),
+    transcriptModel,
   });
 };
 
-const areTranscriptRowsRevisionsEqual = (
-  left: TranscriptRowsRevision,
-  right: TranscriptRowsRevision,
+const areTranscriptModelRevisionsEqual = (
+  left: TranscriptModelRevision,
+  right: TranscriptModelRevision,
 ): boolean => {
   return (
     left.sessionKey === right.sessionKey &&
@@ -154,7 +154,7 @@ const areTranscriptRowsRevisionsEqual = (
   );
 };
 
-const toTranscriptRowsRevisionKey = (revision: TranscriptRowsRevision): string => {
+const toTranscriptModelRevisionKey = (revision: TranscriptModelRevision): string => {
   return [
     revision.sessionKey ?? "",
     revision.activityState ?? "",
@@ -171,7 +171,7 @@ const now = (): number => {
     : Date.now();
 };
 
-type IncrementalTranscriptRowsPlan = {
+type IncrementalTranscriptModelPlan = {
   mode: "append" | "replace-tail";
   startMessageIndex: number;
 };
@@ -194,7 +194,7 @@ const arePrefixMessagesUnchanged = ({
   currentSession,
   endIndex,
 }: {
-  previousCacheEntry: TranscriptRowsCacheEntry;
+  previousCacheEntry: TranscriptModelCacheEntry;
   currentSession: AgentChatThreadSession;
   endIndex: number;
 }): boolean => {
@@ -206,13 +206,13 @@ const arePrefixMessagesUnchanged = ({
   return true;
 };
 
-const getIncrementalTranscriptRowsPlan = ({
+const getIncrementalTranscriptModelPlan = ({
   previousCacheEntry,
   currentSession,
 }: {
-  previousCacheEntry: TranscriptRowsCacheEntry | null;
+  previousCacheEntry: TranscriptModelCacheEntry | null;
   currentSession: AgentChatThreadSession;
-}): IncrementalTranscriptRowsPlan | null => {
+}): IncrementalTranscriptModelPlan | null => {
   if (!previousCacheEntry) {
     return null;
   }
@@ -273,42 +273,42 @@ const getIncrementalTranscriptRowsPlan = ({
   };
 };
 
-export const useAgentChatTranscriptRows = ({
+export const useAgentChatTranscriptModel = ({
   session,
   showThinkingMessages,
 }: {
   session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
 }): {
-  transcriptState: TranscriptRowsState;
+  transcriptState: TranscriptModelState;
   hasRowsForActiveSession: boolean;
   hasCurrentRowsForActiveSession: boolean;
-  isTranscriptRowsMissing: boolean;
-  isTranscriptRowsPending: boolean;
+  isTranscriptModelMissing: boolean;
+  isTranscriptModelPending: boolean;
 } => {
-  const rowsCacheRef = useRef<TranscriptRowsCache | null>(null);
+  const rowsCacheRef = useRef<TranscriptModelCache | null>(null);
   if (rowsCacheRef.current === null) {
-    rowsCacheRef.current = createTranscriptRowsCache();
+    rowsCacheRef.current = createTranscriptModelCache();
   }
   const rowsCache = rowsCacheRef.current;
   const derivationTokenRef = useRef(0);
   const activeRevision = useMemo(
-    () => buildTranscriptRowsRevision(session, showThinkingMessages),
+    () => buildTranscriptModelRevision(session, showThinkingMessages),
     [session, showThinkingMessages],
   );
   const activeRevisionKey = useMemo(
-    () => toTranscriptRowsRevisionKey(activeRevision),
+    () => toTranscriptModelRevisionKey(activeRevision),
     [activeRevision],
   );
   const [resolvedTranscriptState, dispatchResolvedTranscriptState] = useReducer(
-    (_current: TranscriptRowsState, next: TranscriptRowsState) => next,
+    (_current: TranscriptModelState, next: TranscriptModelState) => next,
     undefined,
     () => {
       if (!session || getSessionMessageCount(session) > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
-        return EMPTY_TRANSCRIPT_ROWS_STATE;
+        return EMPTY_TRANSCRIPT_MODEL_STATE;
       }
 
-      return buildImmediateTranscriptRowsState({
+      return buildImmediateTranscriptModelState({
         session,
         showThinkingMessages,
         cache: rowsCache,
@@ -331,20 +331,20 @@ export const useAgentChatTranscriptRows = ({
       return null;
     }
 
-    const reusableRowsState = peekReusableTranscriptRowsState({
+    const reusableTranscriptModel = peekReusableTranscriptModelState({
       session,
       showThinkingMessages,
       cache: rowsCache,
       touch: false,
     });
-    if (!reusableRowsState) {
+    if (!reusableTranscriptModel) {
       return null;
     }
 
-    return toTranscriptRowsState({
+    return toTranscriptModelState({
       session,
       revision: activeRevision,
-      rowsState: reusableRowsState,
+      transcriptModel: reusableTranscriptModel,
     });
   }, [activeRevision, hasResolvedRowsForActiveSession, rowsCache, session, showThinkingMessages]);
   const displayedTranscriptState = cachedTranscriptState ?? resolvedTranscriptState;
@@ -354,10 +354,10 @@ export const useAgentChatTranscriptRows = ({
       displayedTranscriptState.revision.showThinkingMessages === showThinkingMessages,
   );
   const hasCurrentRowsForActiveSession = Boolean(
-    session && areTranscriptRowsRevisionsEqual(displayedTranscriptState.revision, activeRevision),
+    session && areTranscriptModelRevisionsEqual(displayedTranscriptState.revision, activeRevision),
   );
-  const isTranscriptRowsMissing = Boolean(session && !hasRowsForActiveSession);
-  const isTranscriptRowsPending = Boolean(session && !hasCurrentRowsForActiveSession);
+  const isTranscriptModelMissing = Boolean(session && !hasRowsForActiveSession);
+  const isTranscriptModelPending = Boolean(session && !hasCurrentRowsForActiveSession);
 
   useEffect(() => {
     // activeRevisionKey intentionally triggers this effect; async work reads refs below.
@@ -368,26 +368,26 @@ export const useAgentChatTranscriptRows = ({
     const currentRevision = activeRevisionRef.current;
 
     if (!currentSession) {
-      dispatchResolvedTranscriptState(EMPTY_TRANSCRIPT_ROWS_STATE);
+      dispatchResolvedTranscriptState(EMPTY_TRANSCRIPT_MODEL_STATE);
       return;
     }
 
     if (
-      areTranscriptRowsRevisionsEqual(resolvedTranscriptStateRef.current.revision, currentRevision)
+      areTranscriptModelRevisionsEqual(resolvedTranscriptStateRef.current.revision, currentRevision)
     ) {
       return;
     }
 
-    const reusableRowsState = peekReusableTranscriptRowsState({
+    const reusableTranscriptModel = peekReusableTranscriptModelState({
       session: currentSession,
       showThinkingMessages,
       cache: rowsCache,
     });
-    if (reusableRowsState) {
-      const nextTranscriptState = toTranscriptRowsState({
+    if (reusableTranscriptModel) {
+      const nextTranscriptState = toTranscriptModelState({
         session: currentSession,
         revision: currentRevision,
-        rowsState: reusableRowsState,
+        transcriptModel: reusableTranscriptModel,
       });
       startTransition(() => {
         if (derivationTokenRef.current === derivationToken) {
@@ -397,38 +397,38 @@ export const useAgentChatTranscriptRows = ({
       return;
     }
 
-    const previousCacheEntry = peekTranscriptRowsCacheEntry({
+    const previousCacheEntry = peekTranscriptModelCacheEntry({
       session: currentSession,
       showThinkingMessages,
       cache: rowsCache,
     });
-    const incrementalPlan = getIncrementalTranscriptRowsPlan({
+    const incrementalPlan = getIncrementalTranscriptModelPlan({
       previousCacheEntry,
       currentSession,
     });
     if (previousCacheEntry && incrementalPlan) {
-      const rowsState = buildAgentChatWindowRowsStateFromPrefix({
+      const transcriptModel = updateAgentChatTranscriptModelFromPrefix({
         session: currentSession,
         showThinkingMessages,
-        previousRowsState: previousCacheEntry,
+        previousTranscriptModel: previousCacheEntry,
         startMessageIndex: incrementalPlan.startMessageIndex,
         mode: incrementalPlan.mode,
       });
-      if (rowsState) {
-        writeTranscriptRowsCacheEntry({
+      if (transcriptModel) {
+        writeTranscriptModelCacheEntry({
           session: currentSession,
           showThinkingMessages,
-          rowsState,
+          transcriptModel,
           cache: rowsCache,
         });
         if (derivationTokenRef.current === derivationToken) {
           // Bounded incremental derivation intentionally publishes current selected rows immediately
           // so large running sessions stay responsive as new tail messages stream in.
           dispatchResolvedTranscriptState(
-            toTranscriptRowsState({
+            toTranscriptModelState({
               session: currentSession,
               revision: currentRevision,
-              rowsState,
+              transcriptModel,
             }),
           );
         }
@@ -436,20 +436,20 @@ export const useAgentChatTranscriptRows = ({
       }
     }
 
-    const builder = createAgentChatWindowRowsStateBuilder(currentSession, { showThinkingMessages });
+    const builder = createAgentChatTranscriptModelBuilder(currentSession, { showThinkingMessages });
     if (getSessionMessageCount(currentSession) <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
-      const rowsState = builder.complete();
-      writeTranscriptRowsCacheEntry({
+      const transcriptModel = builder.complete();
+      writeTranscriptModelCacheEntry({
         session: currentSession,
         showThinkingMessages,
-        rowsState,
+        transcriptModel,
         cache: rowsCache,
       });
       dispatchResolvedTranscriptState(
-        toTranscriptRowsState({
+        toTranscriptModelState({
           session: currentSession,
           revision: currentRevision,
-          rowsState,
+          transcriptModel,
         }),
       );
       return;
@@ -482,17 +482,17 @@ export const useAgentChatTranscriptRows = ({
           return;
         }
 
-        const rowsState = builder.complete();
-        writeTranscriptRowsCacheEntry({
+        const transcriptModel = builder.complete();
+        writeTranscriptModelCacheEntry({
           session: currentSession,
           showThinkingMessages,
-          rowsState,
+          transcriptModel,
           cache: rowsCache,
         });
-        const nextTranscriptState = toTranscriptRowsState({
+        const nextTranscriptState = toTranscriptModelState({
           session: currentSession,
           revision: currentRevision,
-          rowsState,
+          transcriptModel,
         });
         startTransition(() => {
           if (derivationTokenRef.current === derivationToken) {
@@ -513,7 +513,7 @@ export const useAgentChatTranscriptRows = ({
 
   const transcriptState = useMemo(() => {
     if (!hasRowsForActiveSession) {
-      return EMPTY_TRANSCRIPT_ROWS_STATE;
+      return EMPTY_TRANSCRIPT_MODEL_STATE;
     }
 
     if (isAgentSessionActivityWorking(session?.activityState)) {
@@ -534,7 +534,7 @@ export const useAgentChatTranscriptRows = ({
     transcriptState,
     hasRowsForActiveSession,
     hasCurrentRowsForActiveSession,
-    isTranscriptRowsMissing,
-    isTranscriptRowsPending,
+    isTranscriptModelMissing,
+    isTranscriptModelPending,
   };
 };

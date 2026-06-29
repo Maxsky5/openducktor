@@ -663,7 +663,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("renders a large attachment transcript through the history window on session switch", async () => {
+  test("renders an attachment transcript immediately after session switch", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
         buildMessage(
@@ -718,23 +718,19 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
-
-      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
-      await animationFrameDriver.flushFrame();
       await animationFrameDriver.flushTimers();
 
       await waitFor(() => {
         expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
       });
-      expect(rendered.queryByText("Attachment message 1")).toBeNull();
+      expect(rendered.queryByText("Attachment message 1")).not.toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
       rendered.unmount();
     });
   });
 
-  test("stages a cached large transcript immediately after switching back", async () => {
+  test("renders cached large transcripts through the latest row window after switching back", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
         buildMessage("user", `Turn ${turnIndex + 1} request`, {
@@ -796,20 +792,14 @@ describe("AgentChatThread", () => {
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
       expect(immediateRowCount).toBeLessThan(largeMessages.length);
-
-      await animationFrameDriver.flushFrame();
-      await waitFor(() => {
-        expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeGreaterThan(
-          immediateRowCount,
-        );
-      });
+      expect(rendered.queryByText("Turn 1 request")).toBeNull();
 
       rendered.unmount();
     });
   });
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
-    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+    await withAnimationFrameTestDriver(async () => {
       const initialMessages = [
         buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
       ];
@@ -844,7 +834,7 @@ describe("AgentChatThread", () => {
 
       expect(rendered.queryByText("Loading session")).toBeNull();
       expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
-      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
+      expect(rendered.queryByText("Streaming update")).not.toBeNull();
 
       rendered.unmount();
     });

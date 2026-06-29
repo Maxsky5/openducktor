@@ -2,20 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import {
-  buildAgentChatWindowRowsState,
-  buildAgentChatWindowRowsStateFromPrefix,
-  buildAgentChatWindowTurns,
-  CHAT_TURN_WINDOW_BATCH,
-  CHAT_TURN_WINDOW_INIT,
-} from "./agent-chat-thread-windowing";
+  buildAgentChatTranscriptModel,
+  buildAgentChatTurnAnchors,
+  updateAgentChatTranscriptModelFromPrefix,
+} from "./agent-chat-transcript-model";
 
-describe("agent-chat-thread windowing helpers", () => {
-  test("exports the turn window constants", () => {
-    expect(CHAT_TURN_WINDOW_INIT).toBe(10);
-    expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
-  });
-
-  test("buildAgentChatWindowRowsState keeps message order without synthetic draft rows", () => {
+describe("agent chat transcript model", () => {
+  test("buildAgentChatTranscriptModel keeps message order without synthetic draft rows", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Done", {
@@ -34,7 +27,7 @@ describe("agent-chat-thread windowing helpers", () => {
     });
     const sessionKey = agentSessionIdentityKey(session);
 
-    const rows = buildAgentChatWindowRowsState(session, { showThinkingMessages: true }).rows;
+    const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
 
     expect(rows.map((row) => row.key)).toEqual([
       `${sessionKey}:assistant-1:duration`,
@@ -44,7 +37,7 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
 
-  test("buildAgentChatWindowTurns groups transcript rows by user turns", () => {
+  test("buildAgentChatTurnAnchors groups transcript rows by user turns", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Prelude", { id: "assistant-0" }),
@@ -57,29 +50,29 @@ describe("agent-chat-thread windowing helpers", () => {
     });
     const sessionKey = agentSessionIdentityKey(session);
 
-    const rows = buildAgentChatWindowRowsState(session, { showThinkingMessages: true }).rows;
-    const turns = buildAgentChatWindowTurns(rows);
+    const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
+    const turnAnchors = buildAgentChatTurnAnchors(rows);
 
-    expect(turns).toEqual([
+    expect(turnAnchors).toEqual([
       {
         key: `${sessionKey}:assistant-0:duration`,
-        start: 0,
-        end: 1,
+        startRow: 0,
+        endRowExclusive: 2,
       },
       {
         key: `${sessionKey}:user-1`,
-        start: 2,
-        end: 4,
+        startRow: 2,
+        endRowExclusive: 5,
       },
       {
         key: `${sessionKey}:user-2`,
-        start: 5,
-        end: 7,
+        startRow: 5,
+        endRowExclusive: 8,
       },
     ]);
   });
 
-  test("buildAgentChatWindowRowsState keeps row keys distinct across sessions with repeated message ids", () => {
+  test("buildAgentChatTranscriptModel keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "session-a",
@@ -93,10 +86,10 @@ describe("agent-chat-thread windowing helpers", () => {
       pendingQuestions: [],
     });
 
-    const firstKeys = buildAgentChatWindowRowsState(firstSession, {
+    const firstKeys = buildAgentChatTranscriptModel(firstSession, {
       showThinkingMessages: true,
     }).rows.map((row) => row.key);
-    const secondKeys = buildAgentChatWindowRowsState(secondSession, {
+    const secondKeys = buildAgentChatTranscriptModel(secondSession, {
       showThinkingMessages: true,
     }).rows.map((row) => row.key);
     const firstSessionKey = agentSessionIdentityKey(firstSession);
@@ -107,7 +100,7 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(firstKeys).not.toContain(`${secondSessionKey}:message-1`);
   });
 
-  test("buildAgentChatWindowRowsState omits reasoning rows when showThinkingMessages is false", () => {
+  test("buildAgentChatTranscriptModel omits reasoning rows when showThinkingMessages is false", () => {
     const session = buildSession({
       messages: [
         buildMessage("user", "Question", { id: "user-1" }),
@@ -118,10 +111,10 @@ describe("agent-chat-thread windowing helpers", () => {
     });
     const sessionKey = agentSessionIdentityKey(session);
 
-    const visibleRows = buildAgentChatWindowRowsState(session, {
+    const visibleRows = buildAgentChatTranscriptModel(session, {
       showThinkingMessages: true,
     }).rows;
-    const hiddenRows = buildAgentChatWindowRowsState(session, {
+    const hiddenRows = buildAgentChatTranscriptModel(session, {
       showThinkingMessages: false,
     }).rows;
 
@@ -141,19 +134,19 @@ describe("agent-chat-thread windowing helpers", () => {
     ).toBe(false);
   });
 
-  test("buildAgentChatWindowRowsState does not append synthetic thinking rows", () => {
+  test("buildAgentChatTranscriptModel does not append synthetic thinking rows", () => {
     const session = buildSession({
       messages: [],
       pendingQuestions: [],
       status: "running",
     });
 
-    const rows = buildAgentChatWindowRowsState(session, { showThinkingMessages: true }).rows;
+    const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
 
     expect(rows).toEqual([]);
   });
 
-  test("buildAgentChatWindowRowsStateFromPrefix preserves visible prefix rows while hiding appended thinking messages", () => {
+  test("updateAgentChatTranscriptModelFromPrefix preserves visible prefix rows while hiding appended thinking messages", () => {
     const previousSession = buildSession({
       externalSessionId: "session-prefix-hidden-append",
       messages: [
@@ -162,10 +155,10 @@ describe("agent-chat-thread windowing helpers", () => {
         buildMessage("assistant", "Answer", { id: "assistant-1" }),
       ],
     });
-    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+    const previousTranscriptModel = buildAgentChatTranscriptModel(previousSession, {
       showThinkingMessages: false,
     });
-    const prefixRow = previousRowsState.rows[0];
+    const prefixRow = previousTranscriptModel.rows[0];
     const nextSession = buildSession({
       ...previousSession,
       messages: [
@@ -175,20 +168,20 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
     });
 
-    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+    const nextTranscriptModel = updateAgentChatTranscriptModelFromPrefix({
       session: nextSession,
       showThinkingMessages: false,
-      previousRowsState,
+      previousTranscriptModel,
       startMessageIndex: previousSession.messages.items.length,
       mode: "append",
     });
 
-    expect(nextRowsState).not.toBeNull();
-    if (!nextRowsState) {
+    expect(nextTranscriptModel).not.toBeNull();
+    if (!nextTranscriptModel) {
       return;
     }
-    expect(nextRowsState.rows[0]).toBe(prefixRow);
-    expect(nextRowsState.rows.map((row) => row.key)).toEqual([
+    expect(nextTranscriptModel.rows[0]).toBe(prefixRow);
+    expect(nextTranscriptModel.rows.map((row) => row.key)).toEqual([
       `${agentSessionIdentityKey(nextSession)}:user-1`,
       `${agentSessionIdentityKey(nextSession)}:assistant-1:duration`,
       `${agentSessionIdentityKey(nextSession)}:assistant-1`,
@@ -196,11 +189,13 @@ describe("agent-chat-thread windowing helpers", () => {
       `${agentSessionIdentityKey(nextSession)}:assistant-2`,
     ]);
     expect(
-      nextRowsState.rows.some((row) => row.kind === "message" && row.message.role === "thinking"),
+      nextTranscriptModel.rows.some(
+        (row) => row.kind === "message" && row.message.role === "thinking",
+      ),
     ).toBe(false);
   });
 
-  test("buildAgentChatWindowRowsStateFromPrefix replaces a tail after hidden thinking without duplicating rows", () => {
+  test("updateAgentChatTranscriptModelFromPrefix replaces a tail after hidden thinking without duplicating rows", () => {
     const previousSession = buildSession({
       externalSessionId: "session-prefix-hidden-edit",
       status: "running",
@@ -213,10 +208,10 @@ describe("agent-chat-thread windowing helpers", () => {
         }),
       ],
     });
-    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+    const previousTranscriptModel = buildAgentChatTranscriptModel(previousSession, {
       showThinkingMessages: false,
     });
-    const prefixRow = previousRowsState.rows[0];
+    const prefixRow = previousTranscriptModel.rows[0];
     const nextSession = buildSession({
       ...previousSession,
       messages: [
@@ -229,30 +224,32 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
     });
 
-    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+    const nextTranscriptModel = updateAgentChatTranscriptModelFromPrefix({
       session: nextSession,
       showThinkingMessages: false,
-      previousRowsState,
+      previousTranscriptModel,
       startMessageIndex: 1,
       mode: "replace-tail",
     });
 
-    expect(nextRowsState).not.toBeNull();
-    if (!nextRowsState) {
+    expect(nextTranscriptModel).not.toBeNull();
+    if (!nextTranscriptModel) {
       return;
     }
-    expect(nextRowsState.rows[0]).toBe(prefixRow);
-    expect(nextRowsState.rows.map((row) => row.key)).toEqual([
+    expect(nextTranscriptModel.rows[0]).toBe(prefixRow);
+    expect(nextTranscriptModel.rows.map((row) => row.key)).toEqual([
       `${agentSessionIdentityKey(nextSession)}:user-1`,
       `${agentSessionIdentityKey(nextSession)}:assistant-live`,
     ]);
-    expect(nextRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(nextTranscriptModel.activeStreamingAssistantMessageId).toBe("assistant-live");
     expect(
-      nextRowsState.rows.some((row) => row.kind === "message" && row.message.role === "thinking"),
+      nextTranscriptModel.rows.some(
+        (row) => row.kind === "message" && row.message.role === "thinking",
+      ),
     ).toBe(false);
   });
 
-  test("buildAgentChatWindowRowsStateFromPrefix returns null for ambiguous replace-tail anchors", () => {
+  test("updateAgentChatTranscriptModelFromPrefix returns null for ambiguous replace-tail anchors", () => {
     const previousSession = buildSession({
       externalSessionId: "session-prefix-ambiguous-tail",
       messages: [
@@ -261,7 +258,7 @@ describe("agent-chat-thread windowing helpers", () => {
         buildMessage("assistant", "Tail duplicate", { id: "assistant-dup" }),
       ],
     });
-    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+    const previousTranscriptModel = buildAgentChatTranscriptModel(previousSession, {
       showThinkingMessages: true,
     });
     const nextSession = buildSession({
@@ -273,22 +270,22 @@ describe("agent-chat-thread windowing helpers", () => {
     });
 
     expect(
-      buildAgentChatWindowRowsStateFromPrefix({
+      updateAgentChatTranscriptModelFromPrefix({
         session: nextSession,
         showThinkingMessages: true,
-        previousRowsState,
+        previousTranscriptModel,
         startMessageIndex: 2,
         mode: "replace-tail",
       }),
     ).toBeNull();
   });
 
-  test("buildAgentChatWindowRowsStateFromPrefix returns null for missing replace-tail anchors", () => {
+  test("updateAgentChatTranscriptModelFromPrefix returns null for missing replace-tail anchors", () => {
     const previousSession = buildSession({
       externalSessionId: "session-prefix-missing-tail",
       messages: [buildMessage("assistant", "Tail", { id: "assistant-tail" })],
     });
-    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+    const previousTranscriptModel = buildAgentChatTranscriptModel(previousSession, {
       showThinkingMessages: true,
     });
     const nextSession = buildSession({
@@ -297,17 +294,17 @@ describe("agent-chat-thread windowing helpers", () => {
     });
 
     expect(
-      buildAgentChatWindowRowsStateFromPrefix({
+      updateAgentChatTranscriptModelFromPrefix({
         session: nextSession,
         showThinkingMessages: true,
-        previousRowsState,
+        previousTranscriptModel,
         startMessageIndex: 0,
         mode: "replace-tail",
       }),
     ).toBeNull();
   });
 
-  test("buildAgentChatWindowRowsStateFromPrefix rebuilds metadata from retained rows after trimming", () => {
+  test("updateAgentChatTranscriptModelFromPrefix rebuilds metadata from retained rows after trimming", () => {
     const previousSession = buildSession({
       externalSessionId: "session-prefix-trimmed-metadata",
       messages: [
@@ -337,7 +334,7 @@ describe("agent-chat-thread windowing helpers", () => {
         }),
       ],
     });
-    const previousRowsState = buildAgentChatWindowRowsState(previousSession, {
+    const previousTranscriptModel = buildAgentChatTranscriptModel(previousSession, {
       showThinkingMessages: true,
     });
     const nextSession = buildSession({
@@ -355,19 +352,19 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
     });
 
-    const nextRowsState = buildAgentChatWindowRowsStateFromPrefix({
+    const nextTranscriptModel = updateAgentChatTranscriptModelFromPrefix({
       session: nextSession,
       showThinkingMessages: true,
-      previousRowsState,
+      previousTranscriptModel,
       startMessageIndex: 1,
       mode: "replace-tail",
     });
 
-    expect(nextRowsState?.hasAttachmentMessages).toBe(false);
-    expect(nextRowsState?.lastUserMessageId).toBe("user-tail");
+    expect(nextTranscriptModel?.hasAttachmentMessages).toBe(false);
+    expect(nextTranscriptModel?.lastUserMessageId).toBe("user-tail");
   });
 
-  test("buildAgentChatWindowRowsState skips turn duration rows for non-final assistant messages", () => {
+  test("buildAgentChatTranscriptModel skips turn duration rows for non-final assistant messages", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Working", {
@@ -385,13 +382,13 @@ describe("agent-chat-thread windowing helpers", () => {
     });
     const sessionKey = agentSessionIdentityKey(session);
 
-    const rows = buildAgentChatWindowRowsState(session, { showThinkingMessages: true }).rows;
+    const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
     expect(rows[0]?.key).toBe(`${sessionKey}:assistant-live`);
   });
 
-  test("buildAgentChatWindowRowsState marks active streaming assistant only while session activity is running", () => {
+  test("buildAgentChatTranscriptModel marks active streaming assistant only while session activity is running", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
@@ -414,10 +411,10 @@ describe("agent-chat-thread windowing helpers", () => {
       status: "idle",
     });
 
-    const runningRowsState = buildAgentChatWindowRowsState(runningSession, {
+    const runningRowsState = buildAgentChatTranscriptModel(runningSession, {
       showThinkingMessages: true,
     });
-    const idleRowsState = buildAgentChatWindowRowsState(idleSession, {
+    const idleRowsState = buildAgentChatTranscriptModel(idleSession, {
       showThinkingMessages: true,
     });
 
@@ -425,7 +422,7 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(idleRowsState.activeStreamingAssistantMessageId).toBeNull();
   });
 
-  test("buildAgentChatWindowRowsState restores streaming metadata when session activity resumes", () => {
+  test("buildAgentChatTranscriptModel restores streaming metadata when session activity resumes", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
@@ -448,10 +445,10 @@ describe("agent-chat-thread windowing helpers", () => {
       status: "running",
     });
 
-    const idleRowsState = buildAgentChatWindowRowsState(idleSession, {
+    const idleRowsState = buildAgentChatTranscriptModel(idleSession, {
       showThinkingMessages: true,
     });
-    const resumedRowsState = buildAgentChatWindowRowsState(resumedSession, {
+    const resumedRowsState = buildAgentChatTranscriptModel(resumedSession, {
       showThinkingMessages: true,
     });
 

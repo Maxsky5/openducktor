@@ -1,12 +1,12 @@
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
-import { useAgentChatHistoryWindow } from "./use-agent-chat-history-window";
+import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
+import { useAgentChatRowWindow } from "./use-agent-chat-row-window";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
 
 type UseAgentChatWindowInput = {
-  rows: AgentChatWindowRow[];
-  turns?: AgentChatWindowTurn[];
+  rows: AgentChatTranscriptRow[];
+  turnAnchors?: AgentChatTurnAnchor[];
   displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
@@ -16,26 +16,19 @@ type UseAgentChatWindowInput = {
 };
 
 type UseAgentChatWindowResult = {
-  windowedRows: AgentChatWindowRow[];
-  windowedTurns: AgentChatWindowTurn[];
+  visibleRows: AgentChatTranscriptRow[];
+  visibleTurnAnchors: AgentChatTurnAnchor[];
   windowStart: number;
   isNearBottom: boolean;
   isNearTop: boolean;
-  preserveScrollBeforeStagedPrepend: () => void;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
 };
 
-type StagedPrependScrollSnapshot = {
-  sessionKey: string | null;
-  beforeScrollHeight: number;
-  beforeScrollTop: number;
-};
-
 export function useAgentChatWindow({
   rows,
-  turns,
+  turnAnchors = [],
   displayedSessionKey,
   shouldResetForTranscriptLoad,
   isSessionWorking = false,
@@ -48,7 +41,6 @@ export function useAgentChatWindow({
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionKeyRef = useRef<string | null>(null);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
-  const stagedPrependScrollSnapshotRef = useRef<StagedPrependScrollSnapshot | null>(null);
   const {
     isNearBottom,
     isNearTop,
@@ -66,40 +58,22 @@ export function useAgentChatWindow({
   const {
     windowStart,
     isLatestWindow,
-    windowedRows,
-    windowedTurns,
-    resetToLatestTurns,
-    revealOlderHistory,
-  } = useAgentChatHistoryWindow({
+    visibleRows,
+    visibleTurnAnchors,
+    selectFirstRowWindow,
+    selectLatestRowWindow,
+  } = useAgentChatRowWindow({
     rows,
+    turnAnchors,
     shouldResetForTranscriptLoad,
     displayedSessionKey,
     messagesContainerRef,
-    userScrolledRef,
-    ...(turns ? { turns } : {}),
   });
   const pendingBottomResetRef = useRef(false);
-  const visibleWindowKey = `${windowStart}:${windowedRows.length}`;
+  const visibleWindowKey = `${windowStart}:${visibleRows.length}`;
   const isFollowingTranscript = useCallback(() => {
     return !userScrolledRef.current;
   }, [userScrolledRef]);
-  const preserveScrollBeforeStagedPrepend = useCallback((): void => {
-    if (!userScrolledRef.current || stagedPrependScrollSnapshotRef.current !== null) {
-      return;
-    }
-
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    stagedPrependScrollSnapshotRef.current = {
-      sessionKey: displayedSessionKey,
-      beforeScrollHeight: container.scrollHeight,
-      beforeScrollTop: container.scrollTop,
-    };
-  }, [displayedSessionKey, messagesContainerRef, userScrolledRef]);
-
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (isLatestWindow) {
       forceScrollToBottom();
@@ -107,8 +81,8 @@ export function useAgentChatWindow({
     }
 
     pendingBottomResetRef.current = true;
-    resetToLatestTurns();
-  }, [forceScrollToBottom, isLatestWindow, resetToLatestTurns]);
+    selectLatestRowWindow();
+  }, [forceScrollToBottom, isLatestWindow, selectLatestRowWindow]);
 
   useLayoutEffect(() => {
     if (prevSessionKeyRef.current === displayedSessionKey) {
@@ -116,7 +90,6 @@ export function useAgentChatWindow({
     }
 
     prevSessionKeyRef.current = displayedSessionKey;
-    stagedPrependScrollSnapshotRef.current = null;
     resetLatestTurnsAndPinBottom();
   }, [displayedSessionKey, resetLatestTurnsAndPinBottom]);
 
@@ -205,43 +178,17 @@ export function useAgentChatWindow({
   }, [forceScrollToBottom, visibleWindowKey]);
 
   useLayoutEffect(() => {
-    const pendingStagedPrepend = stagedPrependScrollSnapshotRef.current;
-    const container = messagesContainerRef.current;
-    let restoredStagedPrepend = false;
-
-    if (
-      pendingStagedPrepend &&
-      pendingStagedPrepend.sessionKey === displayedSessionKey &&
-      container
-    ) {
-      stagedPrependScrollSnapshotRef.current = null;
-      const scrollHeightDelta = container.scrollHeight - pendingStagedPrepend.beforeScrollHeight;
-      if (scrollHeightDelta !== 0) {
-        container.scrollTop = pendingStagedPrepend.beforeScrollTop + scrollHeightDelta;
-        restoredStagedPrepend = true;
-      }
-    } else if (pendingStagedPrepend) {
-      stagedPrependScrollSnapshotRef.current = null;
-    }
-
-    if (restoredStagedPrepend) {
-      refreshScrollState();
-    }
-  });
-
-  useLayoutEffect(() => {
     void visibleWindowKey;
 
     refreshScrollState();
   }, [refreshScrollState, visibleWindowKey]);
 
   return {
-    windowedRows,
-    windowedTurns,
+    visibleRows,
+    visibleTurnAnchors,
     windowStart,
-    isNearBottom,
+    isNearBottom: isNearBottom && isLatestWindow,
     isNearTop: isNearTop && windowStart === 0,
-    preserveScrollBeforeStagedPrepend,
     scrollToBottom: () => {
       resetLatestTurnsAndPinBottom();
     },
@@ -252,7 +199,7 @@ export function useAgentChatWindow({
         container.style.overflowAnchor = "none";
       }
 
-      revealOlderHistory({ preserveScroll: false, suppressTopContinuation: true });
+      selectFirstRowWindow();
       if (!container) {
         refreshScrollState();
         return;
@@ -265,7 +212,7 @@ export function useAgentChatWindow({
       refreshScrollState();
     },
     scrollToBottomOnSend: () => {
-      if (userScrolledRef.current) {
+      if (userScrolledRef.current || !isLatestWindow) {
         resetLatestTurnsAndPinBottom();
         return;
       }
