@@ -327,7 +327,9 @@ describe("useAgentChatTranscriptModel", () => {
       timeoutMs: 1_000,
     });
     expect(harness.getLatest().transcriptState.hasAttachmentMessages).toBe(true);
-    expect(harness.getLatest().transcriptState.lastUserMessageId).toBe("user-with-attachment");
+    expect(harness.getLatest().transcriptState.lastUserMessageKey).toBe(
+      `${agentSessionIdentityKey(session)}:0:user-with-attachment`,
+    );
 
     const nextMessages = Array.from({ length: 50 }, (_, index) =>
       buildMessage("assistant", `Current ${index + 1}`, {
@@ -350,7 +352,7 @@ describe("useAgentChatTranscriptModel", () => {
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
     expect(latest.transcriptState.hasAttachmentMessages).toBe(false);
-    expect(latest.transcriptState.lastUserMessageId).toBeNull();
+    expect(latest.transcriptState.lastUserMessageKey).toBeNull();
     expect(latest.transcriptState.rows).toHaveLength(50);
     await harness.unmount();
   });

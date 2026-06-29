@@ -732,7 +732,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("does not advance to latest when rows append after user scrolls within latest window", async () => {
+  test("keeps the selected row window anchored when rows append after user scrolls within latest window", async () => {
     const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 25);
     const nextRows = createSingleTurnRows(
       AGENT_CHAT_ROW_WINDOW_SIZE + AGENT_CHAT_ROW_WINDOW_STEP + 25,
@@ -763,7 +763,7 @@ describe("useAgentChatWindow", () => {
       shouldResetForTranscriptLoad: false,
     });
 
-    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_STEP);
+    expect(harness.getLatestResult().windowStart).toBe(25);
     expect(harness.getLatestResult().windowStart).not.toBe(
       nextRows.length - AGENT_CHAT_ROW_WINDOW_SIZE,
     );

@@ -14,7 +14,6 @@ export type TranscriptModelCacheValue = Pick<
   | "rows"
   | "turnAnchors"
   | "hasAttachmentMessages"
-  | "lastUserMessageId"
   | "lastUserMessageKey"
   | "activeStreamingAssistantMessageId"
 >;
@@ -56,7 +55,6 @@ const toTranscriptModelCacheValue = (
     rows: cacheEntry.rows,
     turnAnchors: cacheEntry.turnAnchors,
     hasAttachmentMessages: cacheEntry.hasAttachmentMessages,
-    lastUserMessageId: cacheEntry.lastUserMessageId,
     lastUserMessageKey: cacheEntry.lastUserMessageKey,
     activeStreamingAssistantMessageId: isAgentSessionActivityWorking(activityState)
       ? (cacheEntry.activeStreamingAssistantMessageId ??

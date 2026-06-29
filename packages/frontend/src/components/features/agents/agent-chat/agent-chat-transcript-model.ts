@@ -31,7 +31,6 @@ export type AgentChatTurnAnchor = {
 
 type AgentChatTranscriptMetadata = {
   hasAttachmentMessages: boolean;
-  lastUserMessageId: string | null;
   lastUserMessageKey: string | null;
   activeStreamingAssistantMessageId: string | null;
 };
@@ -73,10 +72,6 @@ const updateAggregateMetadataForMessage = ({
     message.meta.parts?.some((part) => part.kind === "attachment")
   ) {
     metadata.hasAttachmentMessages = true;
-  }
-
-  if (message.role === "user") {
-    metadata.lastUserMessageId = message.id;
   }
 
   if (isSessionWorking && isAssistantMessageStreaming(message)) {
@@ -131,7 +126,6 @@ export function createAgentChatTranscriptModelBuilder(
   const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
-    lastUserMessageId: null,
     lastUserMessageKey: null,
     activeStreamingAssistantMessageId: null,
   };
@@ -217,7 +211,6 @@ const buildMetadataFromRows = (
 ): AgentChatTranscriptMetadata => {
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
-    lastUserMessageId: null,
     lastUserMessageKey: null,
     activeStreamingAssistantMessageId: null,
   };

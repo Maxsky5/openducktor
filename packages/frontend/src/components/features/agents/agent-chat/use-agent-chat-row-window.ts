@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  AGENT_CHAT_ROW_WINDOW_SIZE,
   type AgentChatRowWindow,
   buildAgentChatRowWindows,
   selectTurnAnchorsForWindow,
@@ -32,6 +33,41 @@ type UseAgentChatRowWindowResult = {
 const latestWindowIndex = (windows: AgentChatRowWindow[]): number =>
   Math.max(0, windows.length - 1);
 
+const latestWindowStart = (windows: AgentChatRowWindow[]): number =>
+  windows[latestWindowIndex(windows)]?.startRow ?? 0;
+
+const clampWindowStart = (startRow: number, windows: AgentChatRowWindow[]): number =>
+  Math.max(0, Math.min(startRow, latestWindowStart(windows)));
+
+const buildWindowFromStart = (
+  startRow: number,
+  rowCount: number,
+): Pick<AgentChatRowWindow, "startRow" | "endRowExclusive"> => ({
+  startRow,
+  endRowExclusive: Math.min(rowCount, startRow + AGENT_CHAT_ROW_WINDOW_SIZE),
+});
+
+const previousWindowStart = (windows: AgentChatRowWindow[], currentStartRow: number): number => {
+  for (let index = windows.length - 1; index >= 0; index -= 1) {
+    const window = windows[index];
+    if (window && window.startRow < currentStartRow) {
+      return window.startRow;
+    }
+  }
+
+  return 0;
+};
+
+const nextWindowStart = (windows: AgentChatRowWindow[], currentStartRow: number): number => {
+  for (const window of windows) {
+    if (window.startRow > currentStartRow) {
+      return window.startRow;
+    }
+  }
+
+  return latestWindowStart(windows);
+};
+
 export function useAgentChatRowWindow({
   rows,
   turnAnchors,
@@ -41,8 +77,8 @@ export function useAgentChatRowWindow({
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
   const windows = useMemo(() => buildAgentChatRowWindows(rows.length), [rows.length]);
-  const [selectedWindowIndex, setSelectedWindowIndex] = useState(() => latestWindowIndex(windows));
-  const selectedWindowIndexRef = useRef(selectedWindowIndex);
+  const [selectedWindowStart, setSelectedWindowStart] = useState(() => latestWindowStart(windows));
+  const selectedWindowStartRef = useRef(selectedWindowStart);
   const previousSessionKeyRef = useRef<string | null>(displayedSessionKey);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const pendingScrollRestoreRef = useRef<{
@@ -51,58 +87,62 @@ export function useAgentChatRowWindow({
     rowOffset: number;
   } | null>(null);
   const previousRowsLengthRef = useRef(rows.length);
-  const previousLatestWindowIndexRef = useRef(latestWindowIndex(windows));
+  const previousLatestWindowStartRef = useRef(latestWindowStart(windows));
 
-  const setWindowIndex = useCallback(
-    (nextIndex: number) => {
-      const clampedIndex = Math.max(0, Math.min(nextIndex, latestWindowIndex(windows)));
-      selectedWindowIndexRef.current = clampedIndex;
-      setSelectedWindowIndex(clampedIndex);
+  const setWindowStart = useCallback(
+    (nextStart: number) => {
+      const clampedStart = clampWindowStart(nextStart, windows);
+      selectedWindowStartRef.current = clampedStart;
+      setSelectedWindowStart(clampedStart);
     },
     [windows],
   );
 
   const selectWithScrollRestore = useCallback(
-    (nextIndex: number) => {
+    (nextStart: number) => {
       const container = messagesContainerRef.current;
-      const currentWindow = windows[selectedWindowIndexRef.current];
-      const nextWindow = windows[Math.max(0, Math.min(nextIndex, latestWindowIndex(windows)))];
+      const currentStart = clampWindowStart(selectedWindowStartRef.current, windows);
+      const currentWindow = buildWindowFromStart(currentStart, rows.length);
+      const clampedNextStart = clampWindowStart(nextStart, windows);
+      const nextWindow = buildWindowFromStart(clampedNextStart, rows.length);
       if (container) {
-        const currentRowCount = currentWindow
-          ? currentWindow.endRowExclusive - currentWindow.startRow
-          : 0;
+        const currentRowCount = currentWindow.endRowExclusive - currentWindow.startRow;
         const rowHeight = currentRowCount > 0 ? container.scrollHeight / currentRowCount : 0;
         pendingScrollRestoreRef.current = {
           beforeScrollTop: container.scrollTop,
           rowHeight,
-          rowOffset: currentWindow && nextWindow ? currentWindow.startRow - nextWindow.startRow : 0,
+          rowOffset: currentWindow.startRow - nextWindow.startRow,
         };
       }
-      setWindowIndex(nextIndex);
+      setWindowStart(clampedNextStart);
     },
-    [messagesContainerRef, setWindowIndex, windows],
+    [messagesContainerRef, rows.length, setWindowStart, windows],
   );
 
-  const selectFirstRowWindow = useCallback(() => setWindowIndex(0), [setWindowIndex]);
+  const selectFirstRowWindow = useCallback(() => setWindowStart(0), [setWindowStart]);
   const selectLatestRowWindow = useCallback(() => {
     if (shouldResetForTranscriptLoad && rows.length === 0) {
       pendingLatestResetRef.current = true;
       return;
     }
-    setWindowIndex(latestWindowIndex(windows));
-  }, [rows.length, setWindowIndex, shouldResetForTranscriptLoad, windows]);
+    setWindowStart(latestWindowStart(windows));
+  }, [rows.length, setWindowStart, shouldResetForTranscriptLoad, windows]);
   const selectPreviousRowWindow = useCallback(() => {
-    if (selectedWindowIndexRef.current <= 0) return;
-    selectWithScrollRestore(selectedWindowIndexRef.current - 1);
-  }, [selectWithScrollRestore]);
+    const previousStart = previousWindowStart(windows, selectedWindowStartRef.current);
+    if (previousStart === selectedWindowStartRef.current) return;
+    selectWithScrollRestore(previousStart);
+  }, [selectWithScrollRestore, windows]);
   const selectNextRowWindow = useCallback(() => {
-    if (selectedWindowIndexRef.current >= latestWindowIndex(windows)) return;
-    selectWithScrollRestore(selectedWindowIndexRef.current + 1);
+    const nextStart = nextWindowStart(windows, selectedWindowStartRef.current);
+    if (nextStart === selectedWindowStartRef.current) return;
+    selectWithScrollRestore(nextStart);
   }, [selectWithScrollRestore, windows]);
 
-  const effectiveIndex = Math.max(0, Math.min(selectedWindowIndex, latestWindowIndex(windows)));
-  const window = windows[effectiveIndex] ??
-    windows[0] ?? { index: 0, startRow: 0, endRowExclusive: 0 };
+  const effectiveWindowStart = clampWindowStart(selectedWindowStart, windows);
+  const window = useMemo(
+    () => buildWindowFromStart(effectiveWindowStart, rows.length),
+    [effectiveWindowStart, rows.length],
+  );
   const visibleRows = useMemo(
     () => rows.slice(window.startRow, window.endRowExclusive),
     [rows, window.endRowExclusive, window.startRow],
@@ -121,32 +161,32 @@ export function useAgentChatRowWindow({
 
     if ((didSessionChange || pendingLatestResetRef.current) && rows.length > 0) {
       pendingLatestResetRef.current = false;
-      setWindowIndex(latestWindowIndex(windows));
+      setWindowStart(latestWindowStart(windows));
       return;
     }
 
     const previousRowsLength = previousRowsLengthRef.current;
-    const previousLatestIndex = previousLatestWindowIndexRef.current;
+    const previousLatestStart = previousLatestWindowStartRef.current;
     previousRowsLengthRef.current = rows.length;
-    previousLatestWindowIndexRef.current = latestWindowIndex(windows);
+    previousLatestWindowStartRef.current = latestWindowStart(windows);
 
     if (
       rows.length !== previousRowsLength &&
       shouldFollowLatestWindow &&
-      selectedWindowIndexRef.current === previousLatestIndex &&
-      selectedWindowIndexRef.current !== latestWindowIndex(windows)
+      selectedWindowStartRef.current === previousLatestStart &&
+      selectedWindowStartRef.current !== latestWindowStart(windows)
     ) {
-      setWindowIndex(latestWindowIndex(windows));
+      setWindowStart(latestWindowStart(windows));
       return;
     }
 
-    if (selectedWindowIndexRef.current > latestWindowIndex(windows)) {
-      setWindowIndex(latestWindowIndex(windows));
+    if (selectedWindowStartRef.current > latestWindowStart(windows)) {
+      setWindowStart(latestWindowStart(windows));
     }
   }, [
     displayedSessionKey,
     rows.length,
-    setWindowIndex,
+    setWindowStart,
     shouldFollowLatestWindow,
     shouldResetForTranscriptLoad,
     windows,
@@ -186,8 +226,8 @@ export function useAgentChatRowWindow({
 
   return {
     windowStart: window.startRow,
-    isFirstWindow: effectiveIndex === 0,
-    isLatestWindow: effectiveIndex === latestWindowIndex(windows),
+    isFirstWindow: window.startRow === 0,
+    isLatestWindow: window.startRow === latestWindowStart(windows),
     visibleRows,
     visibleTurnAnchors,
     selectFirstRowWindow,

@@ -121,7 +121,6 @@ describe("agent chat transcript model", () => {
       `${sessionKey}:0:message-1`,
       `${sessionKey}:1:message-1`,
     ]);
-    expect(model.lastUserMessageId).toBe("message-1");
     expect(model.lastUserMessageKey).toBe(`${sessionKey}:1:message-1`);
   });
 
@@ -386,7 +385,9 @@ describe("agent chat transcript model", () => {
     });
 
     expect(nextTranscriptModel?.hasAttachmentMessages).toBe(false);
-    expect(nextTranscriptModel?.lastUserMessageId).toBe("user-tail");
+    expect(nextTranscriptModel?.lastUserMessageKey).toBe(
+      `${agentSessionIdentityKey(nextSession)}:1:user-tail`,
+    );
   });
 
   test("buildAgentChatTranscriptModel skips turn duration rows for non-final assistant messages", () => {
