@@ -878,7 +878,7 @@ describe("AgentChatThread", () => {
       return turn.getAttribute("style") ?? "";
     };
 
-    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
+    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:22:user-12`);
     expect(runningLatestTurnStyle).not.toBeNull();
     expect(runningLatestTurnStyle).not.toContain("content-visibility");
 
@@ -897,8 +897,8 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-3`);
-    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
+    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:4:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:22:user-12`);
     expect(completedOlderTurnStyle).not.toBeNull();
     expect(completedOlderTurnStyle).toContain("content-visibility");
     expect(completedLatestTurnStyle).not.toBeNull();

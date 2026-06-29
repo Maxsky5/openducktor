@@ -121,6 +121,8 @@ describe("agent chat transcript model", () => {
       `${sessionKey}:0:message-1`,
       `${sessionKey}:1:message-1`,
     ]);
+    expect(model.lastUserMessageId).toBe("message-1");
+    expect(model.lastUserMessageKey).toBe(`${sessionKey}:1:message-1`);
   });
 
   test("buildAgentChatTranscriptModel omits reasoning rows when showThinkingMessages is false", () => {

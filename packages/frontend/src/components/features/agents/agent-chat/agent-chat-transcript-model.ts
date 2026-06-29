@@ -32,6 +32,7 @@ export type AgentChatTurnAnchor = {
 type AgentChatTranscriptMetadata = {
   hasAttachmentMessages: boolean;
   lastUserMessageId: string | null;
+  lastUserMessageKey: string | null;
   activeStreamingAssistantMessageId: string | null;
 };
 
@@ -89,9 +90,9 @@ const appendMessageRows = (
   message: AgentChatMessage,
   messageIndex: number,
   showThinkingMessages: boolean,
-): void => {
+): string | null => {
   if (message.role === "thinking" && !showThinkingMessages) {
-    return;
+    return null;
   }
 
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
@@ -115,6 +116,8 @@ const appendMessageRows = (
     key: rowKey,
     message,
   });
+
+  return rowKey;
 };
 
 export function createAgentChatTranscriptModelBuilder(
@@ -129,6 +132,7 @@ export function createAgentChatTranscriptModelBuilder(
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageId: null,
+    lastUserMessageKey: null,
     activeStreamingAssistantMessageId: null,
   };
   let nextMessageIndex = 0;
@@ -145,7 +149,10 @@ export function createAgentChatTranscriptModelBuilder(
       turnRowStartIndexes.push(nextRowStart);
     }
 
-    appendMessageRows(rows, sessionKey, message, messageIndex, showThinkingMessages);
+    const rowKey = appendMessageRows(rows, sessionKey, message, messageIndex, showThinkingMessages);
+    if (message.role === "user") {
+      metadata.lastUserMessageKey = rowKey;
+    }
   };
 
   return {
@@ -211,12 +218,16 @@ const buildMetadataFromRows = (
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageId: null,
+    lastUserMessageKey: null,
     activeStreamingAssistantMessageId: null,
   };
 
   for (const row of rows) {
     if (row.kind === "message") {
       updateAggregateMetadataForMessage({ message: row.message, isSessionWorking, metadata });
+      if (row.message.role === "user") {
+        metadata.lastUserMessageKey = row.key;
+      }
     }
   }
 
@@ -289,7 +300,16 @@ export function updateAgentChatTranscriptModelFromPrefix({
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }
-    appendMessageRows(rows, sessionKey, message, currentMessageIndex, showThinkingMessages);
+    const rowKey = appendMessageRows(
+      rows,
+      sessionKey,
+      message,
+      currentMessageIndex,
+      showThinkingMessages,
+    );
+    if (message.role === "user") {
+      metadata.lastUserMessageKey = rowKey;
+    }
   });
 
   return {

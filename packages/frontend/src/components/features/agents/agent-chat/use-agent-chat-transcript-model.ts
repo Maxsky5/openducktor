@@ -43,6 +43,7 @@ export type TranscriptModelState = {
   turnAnchors: AgentChatTurnAnchor[];
   hasAttachmentMessages: boolean;
   lastUserMessageId: string | null;
+  lastUserMessageKey: string | null;
   activeStreamingAssistantMessageId: string | null;
 };
 
@@ -61,6 +62,7 @@ const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
   turnAnchors: [] as AgentChatTurnAnchor[],
   hasAttachmentMessages: false,
   lastUserMessageId: null,
+  lastUserMessageKey: null,
   activeStreamingAssistantMessageId: null,
 });
 
@@ -99,6 +101,7 @@ const toTranscriptModelState = ({
     | "turnAnchors"
     | "hasAttachmentMessages"
     | "lastUserMessageId"
+    | "lastUserMessageKey"
     | "activeStreamingAssistantMessageId"
   >;
 }): TranscriptModelState => {
@@ -108,6 +111,7 @@ const toTranscriptModelState = ({
     turnAnchors: transcriptModel.turnAnchors,
     hasAttachmentMessages: transcriptModel.hasAttachmentMessages,
     lastUserMessageId: transcriptModel.lastUserMessageId,
+    lastUserMessageKey: transcriptModel.lastUserMessageKey,
     activeStreamingAssistantMessageId: isAgentSessionActivityWorking(session.activityState)
       ? transcriptModel.activeStreamingAssistantMessageId
       : null,

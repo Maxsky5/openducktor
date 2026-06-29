@@ -103,12 +103,12 @@ export function useAgentChatRenderedTranscript({
     syncBottomAfterComposerLayoutRef,
   });
   const latestUserTurnKey = useMemo(() => {
-    if (!displayedSessionKey || !transcriptModelState.lastUserMessageId) {
+    if (!displayedSessionKey || !transcriptModelState.lastUserMessageKey) {
       return null;
     }
 
-    return `${displayedSessionKey}:${transcriptModelState.lastUserMessageId}`;
-  }, [displayedSessionKey, transcriptModelState.lastUserMessageId]);
+    return transcriptModelState.lastUserMessageKey;
+  }, [displayedSessionKey, transcriptModelState.lastUserMessageKey]);
   const renderedTurns = useMemo<AgentChatRenderedTurn[]>(() => {
     if (visibleRows.length === 0) {
       return [];
