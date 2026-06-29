@@ -88,6 +88,7 @@ export function useAgentChatRowWindow({
   } | null>(null);
   const previousRowsLengthRef = useRef(rows.length);
   const previousLatestWindowStartRef = useRef(latestWindowStart(windows));
+  const previousFirstVisibleRowKeyRef = useRef(rows[selectedWindowStart]?.key ?? null);
 
   const setWindowStart = useCallback(
     (nextStart: number) => {
@@ -153,6 +154,7 @@ export function useAgentChatRowWindow({
   );
 
   useLayoutEffect(() => {
+    const currentLatestStart = latestWindowStart(windows);
     const didSessionChange = previousSessionKeyRef.current !== displayedSessionKey;
     if (didSessionChange) {
       previousSessionKeyRef.current = displayedSessionKey;
@@ -161,30 +163,57 @@ export function useAgentChatRowWindow({
 
     if ((didSessionChange || pendingLatestResetRef.current) && rows.length > 0) {
       pendingLatestResetRef.current = false;
-      setWindowStart(latestWindowStart(windows));
+      previousRowsLengthRef.current = rows.length;
+      previousLatestWindowStartRef.current = currentLatestStart;
+      previousFirstVisibleRowKeyRef.current = rows[currentLatestStart]?.key ?? null;
+      setWindowStart(currentLatestStart);
       return;
     }
 
     const previousRowsLength = previousRowsLengthRef.current;
     const previousLatestStart = previousLatestWindowStartRef.current;
+    const previousFirstVisibleRowKey = previousFirstVisibleRowKeyRef.current;
     previousRowsLengthRef.current = rows.length;
-    previousLatestWindowStartRef.current = latestWindowStart(windows);
+    previousLatestWindowStartRef.current = currentLatestStart;
+    const currentStart = effectiveWindowStart;
+
+    if (
+      rows.length !== previousRowsLength &&
+      !shouldFollowLatestWindow &&
+      previousFirstVisibleRowKey
+    ) {
+      const nextFirstVisibleRowIndex = rows.findIndex(
+        (row) => row.key === previousFirstVisibleRowKey,
+      );
+      if (nextFirstVisibleRowIndex >= 0 && nextFirstVisibleRowIndex !== currentStart) {
+        previousFirstVisibleRowKeyRef.current = rows[nextFirstVisibleRowIndex]?.key ?? null;
+        setWindowStart(nextFirstVisibleRowIndex);
+        return;
+      }
+    }
 
     if (
       rows.length !== previousRowsLength &&
       shouldFollowLatestWindow &&
-      selectedWindowStartRef.current === previousLatestStart &&
-      selectedWindowStartRef.current !== latestWindowStart(windows)
+      currentStart === previousLatestStart &&
+      currentStart !== currentLatestStart
     ) {
-      setWindowStart(latestWindowStart(windows));
+      previousFirstVisibleRowKeyRef.current = rows[currentLatestStart]?.key ?? null;
+      setWindowStart(currentLatestStart);
       return;
     }
 
-    if (selectedWindowStartRef.current > latestWindowStart(windows)) {
-      setWindowStart(latestWindowStart(windows));
+    if (currentStart > currentLatestStart) {
+      previousFirstVisibleRowKeyRef.current = rows[currentLatestStart]?.key ?? null;
+      setWindowStart(currentLatestStart);
+      return;
     }
+
+    previousFirstVisibleRowKeyRef.current = rows[currentStart]?.key ?? null;
   }, [
     displayedSessionKey,
+    effectiveWindowStart,
+    rows,
     rows.length,
     setWindowStart,
     shouldFollowLatestWindow,

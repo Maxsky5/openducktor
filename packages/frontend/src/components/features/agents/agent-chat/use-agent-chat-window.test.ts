@@ -944,6 +944,70 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps following the latest row window after a large transcript reset", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 60);
+    const appendedRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 61);
+    const harness = await mountHarness({
+      rows: [],
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: true,
+    });
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(60);
+
+    await harness.update({
+      rows: appendedRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(61);
+
+    await harness.unmount();
+  });
+
+  test("preserves the first visible row when history is prepended while not following", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 60);
+    const prependedRows = [...createSingleTurnRows(10, "history-session"), ...rows];
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    const firstVisibleRowKey = harness.getLatestResult().visibleRows[0]?.key;
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 260;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    await harness.update({
+      rows: prependedRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().visibleRows[0]?.key).toBe(firstVisibleRowKey);
+    expect(harness.getLatestResult().windowStart).toBe(70);
+
+    await harness.unmount();
+  });
+
   test("switching sessions after selecting first history resets the next session to its latest row window", async () => {
     const firstSessionRows = createTurnRows(12, "session-1");
     const secondSessionRows = createTurnRows(12, "session-2");
