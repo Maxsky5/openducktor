@@ -290,9 +290,7 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
     properties: {
       ...(input.eventTimestampMs !== undefined
         ? {
-            time: {
-              updated: input.eventTimestampMs,
-            },
+            time: input.eventTimestampMs,
           }
         : {}),
       part: {

@@ -20,19 +20,22 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
 };
 
-const readIsoTimestampFromTimeRecord = (time: unknown): string | undefined => {
+const readIsoTimestampFromTime = (time: unknown): string | undefined => {
+  if (typeof time === "number") {
+    return toIsoTimestamp(time);
+  }
   return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
 };
 
 const readPartUpdatedTimestamp = (properties: unknown, part: unknown): string | undefined => {
-  const eventTimestamp = readIsoTimestampFromTimeRecord(readRecordProp(properties, "time"));
+  const eventTimestamp = readIsoTimestampFromTime(readUnknownProp(properties, "time"));
   if (eventTimestamp) {
     return eventTimestamp;
   }
 
   const partTime =
     readRecordProp(part, "time") ?? readRecordProp(readRecordProp(part, "state"), "time");
-  return readIsoTimestampFromTimeRecord(partTime);
+  return readIsoTimestampFromTime(partTime);
 };
 
 export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
