@@ -214,6 +214,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
         ],
       ],
     ]),
+    pendingBackgroundTaskResultsByExternalSessionId: new Map(),
   };
 
   flushPendingSubagentInputEventsForSession(runtime, "external-child-session");

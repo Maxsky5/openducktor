@@ -118,6 +118,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
     const updateSession = createSessionUpdater(sessionsRef);
+    const recordedActivityTimestamps: Array<string | number> = [];
 
     await listenToAgentSessionEvents({
       adapter,
@@ -125,6 +126,9 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       externalSessionId: "session-1",
       sessionsRef,
       updateSession,
+      recordTurnActivityTimestamp: (_externalSessionId, timestamp) => {
+        recordedActivityTimestamps.push(timestamp);
+      },
       resolveTurnDurationMs: () => 300,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -155,6 +159,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
 
     if (inactiveStatus === "idle") {
       handleEvent({
@@ -171,6 +176,26 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     }
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:35.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-background-task",
+        partId: "tool-background-task-running",
+        correlationKey: "part:assistant-background-task:subtask-background",
+        status: "running",
+        description: "Background task still running",
+        externalSessionId: "child-background-session",
+        executionMode: "background",
+        startedAtMs: Date.parse("2026-02-22T08:00:02.000Z"),
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
 
     handleEvent({
       type: "assistant_part",
@@ -198,6 +223,8 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     }
     expect(subagentMessage.meta.status).toBe("completed");
     expect(subagentMessage.meta.externalSessionId).toBe("child-background-session");
+    expect(subagentMessage.meta.endedAtMs).toBe(Date.parse("2026-02-22T08:00:45.000Z"));
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
   });
 
   test("handles session start and assistant parts matrix", async () => {

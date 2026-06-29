@@ -3,6 +3,7 @@ import type { AgentEvent } from "@openducktor/core";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
 import { normalizeTodoList } from "../todo-normalizers";
 import { emitSubagentPartsForSession, publishUserMessageReadStateChanges } from "./message-events";
+import { flushPendingBackgroundTaskResultSubagentParts } from "./message-events/background-task-result";
 import {
   parsePendingInputReplied,
   parsePermissionAsked,
@@ -89,6 +90,7 @@ const bindPendingSubagentCorrelation = (
   runtime.pendingSubagentSessionsByExternalSessionId.delete(childExternalSessionId);
   removePendingSubagentCorrelationKey(runtime, correlationKey);
   emitSubagentPartsForSession(runtime, childExternalSessionId);
+  flushPendingBackgroundTaskResultSubagentParts(runtime, childExternalSessionId, correlationKey);
   flushPendingSubagentInputEventsForSession(runtime, childExternalSessionId);
   return correlationKey;
 };
@@ -453,6 +455,11 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       runtime.subagentPartIdByCorrelationKey.get(existingCorrelationKey),
     );
     emitSubagentPartsForSession(runtime, normalizedChildExternalSessionId);
+    flushPendingBackgroundTaskResultSubagentParts(
+      runtime,
+      normalizedChildExternalSessionId,
+      existingCorrelationKey,
+    );
     flushPendingSubagentInputEventsForSession(runtime, normalizedChildExternalSessionId);
     return true;
   }
@@ -497,6 +504,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     runtime.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
     removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
     emitSubagentPartsForSession(runtime, externalSessionId);
+    flushPendingBackgroundTaskResultSubagentParts(runtime, externalSessionId, nextCorrelationKey);
     flushPendingSubagentInputEventsForSession(runtime, externalSessionId);
   }
   return true;

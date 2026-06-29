@@ -177,6 +177,8 @@ export const createEventStreamRuntime = (
       session.pendingSubagentPartEmissionsByExternalSessionId,
     pendingSubagentInputEventsByExternalSessionId:
       session.pendingSubagentInputEventsByExternalSessionId,
+    pendingBackgroundTaskResultsByExternalSessionId:
+      session.pendingBackgroundTaskResultsByExternalSessionId,
   };
 };
 

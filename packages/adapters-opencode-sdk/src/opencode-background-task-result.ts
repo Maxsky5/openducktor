@@ -14,6 +14,18 @@ type ParsedTaskResult = {
 const TASK_OPEN_PREFIX = "<task ";
 const TASK_CLOSE_TAG = "</task>";
 
+const trimOuterEmptyLines = (lines: string[]): string[] => {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]?.trim().length === 0) {
+    start += 1;
+  }
+  while (end > start && lines[end - 1]?.trim().length === 0) {
+    end -= 1;
+  }
+  return lines.slice(start, end);
+};
+
 const readQuotedAttribute = (tag: string, attributeName: string): string | undefined => {
   const marker = ` ${attributeName}="`;
   const markerIndex = tag.indexOf(marker);
@@ -31,34 +43,48 @@ const readQuotedAttribute = (tag: string, attributeName: string): string | undef
   return value.length > 0 ? value : undefined;
 };
 
-const readInlineElement = (line: string, tagName: string): string | undefined => {
+const readElement = (
+  lines: string[],
+  tagName: string,
+  closeSearch: "first" | "last",
+): string | undefined => {
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
-  if (!line.startsWith(openTag) || !line.endsWith(closeTag)) {
-    return undefined;
-  }
-
-  const value = line.slice(openTag.length, line.length - closeTag.length).trim();
-  return value.length > 0 ? value : undefined;
-};
-
-const readBlockElement = (lines: string[], tagName: string): string | undefined => {
-  const openTag = `<${tagName}>`;
-  const closeTag = `</${tagName}>`;
-  const openIndex = lines.indexOf(openTag);
+  const openIndex = lines.findIndex((line) => line.trim().startsWith(openTag));
   if (openIndex < 0) {
     return undefined;
   }
 
-  const closeIndex = lines.findIndex((line, index) => index > openIndex && line === closeTag);
-  if (closeIndex < 0) {
+  const openLine = lines[openIndex] ?? "";
+  const trimmedOpenLine = openLine.trim();
+  if (trimmedOpenLine.endsWith(closeTag)) {
+    const inlineValue = trimmedOpenLine.slice(openTag.length, -closeTag.length).trim();
+    return inlineValue.length > 0 ? inlineValue : undefined;
+  }
+
+  const candidateCloseIndexes = lines
+    .map((line, index) => ({ index, line: line.trim() }))
+    .filter((candidate) => candidate.index > openIndex && candidate.line.endsWith(closeTag))
+    .map((candidate) => candidate.index);
+  const closeIndex =
+    closeSearch === "last" ? candidateCloseIndexes.at(-1) : candidateCloseIndexes[0];
+  if (closeIndex === undefined) {
     return undefined;
   }
 
-  const value = lines
-    .slice(openIndex + 1, closeIndex)
-    .join("\n")
-    .trim();
+  const closeLine = lines[closeIndex] ?? "";
+  const trimmedCloseLine = closeLine.trim();
+  const valueLines = lines.slice(openIndex + 1, closeIndex);
+  const inlineOpenValue = trimmedOpenLine.slice(openTag.length);
+  if (inlineOpenValue.length > 0) {
+    valueLines.unshift(inlineOpenValue);
+  }
+  const inlineCloseValue = trimmedCloseLine.slice(0, -closeTag.length);
+  if (inlineCloseValue.length > 0) {
+    valueLines.push(inlineCloseValue);
+  }
+
+  const value = valueLines.join("\n").trim();
   return value.length > 0 ? value : undefined;
 };
 
@@ -69,23 +95,20 @@ const toTaskResultStatus = (value: string | undefined): ParsedTaskResult["status
   return undefined;
 };
 
-export const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | null => {
-  const lines = value
-    .trim()
-    .split("\n")
-    .map((line) => {
-      const normalizedLine = line.endsWith("\r") ? line.slice(0, -1) : line;
-      return normalizedLine.trim();
-    })
-    .filter((line) => line.length > 0);
-  const [openTag] = lines;
+const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | null => {
+  const lines = trimOuterEmptyLines(
+    value.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line)),
+  );
+  const openTag = lines[0]?.trim();
   if (!openTag?.startsWith(TASK_OPEN_PREFIX) || !openTag.endsWith(">")) {
     return null;
   }
-  if (lines.at(-1) !== TASK_CLOSE_TAG) {
+  if (lines.at(-1)?.trim() !== TASK_CLOSE_TAG) {
     return null;
   }
 
+  const bodyLines = lines.slice(1, -1);
+  const normalizedBodyLines = bodyLines.map((line) => line.trim());
   const externalSessionId = readQuotedAttribute(openTag, "id");
   const status = toTaskResultStatus(readQuotedAttribute(openTag, "state"));
   if (!externalSessionId || !status) {
@@ -93,9 +116,8 @@ export const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResu
   }
 
   const resultTag = status === "error" ? "task_error" : "task_result";
-  const summaryLine = lines.find((line) => line.startsWith("<summary>"));
-  const summary = summaryLine ? readInlineElement(summaryLine, "summary") : undefined;
-  const resultText = readBlockElement(lines, resultTag);
+  const summary = readElement(normalizedBodyLines, "summary", "first");
+  const resultText = readElement(bodyLines, resultTag, "last");
 
   return {
     externalSessionId,

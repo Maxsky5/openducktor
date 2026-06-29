@@ -9,6 +9,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type {
+  PendingBackgroundTaskResult,
   PendingPartDelta,
   PendingSubagentInputEvent,
   PendingSubagentPartEmission,
@@ -71,6 +72,7 @@ export type SessionRecord = {
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
   pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
   pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
+  pendingBackgroundTaskResultsByExternalSessionId: Map<string, PendingBackgroundTaskResult[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */

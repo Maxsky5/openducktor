@@ -58,6 +58,7 @@ type HistoryStreamPartNormalizationState = {
   pendingBySignature: Map<string, string[]>;
   correlationByExternalSessionId: Map<string, string>;
   unmatchedChildSessionLinks: ChildSessionLink[];
+  pendingBackgroundTaskResultsByExternalSessionId: Map<string, MappedSubagentPart[]>;
 };
 
 const CHILD_SESSION_START_TOLERANCE_MS = 5_000;
@@ -218,12 +219,42 @@ const removePendingSubagentCorrelationKey = (
   }
 };
 
+const queuePendingBackgroundTaskResult = (
+  state: HistoryStreamPartNormalizationState,
+  externalSessionId: string,
+  part: MappedSubagentPart,
+): void => {
+  const pending = state.pendingBackgroundTaskResultsByExternalSessionId.get(externalSessionId);
+  const next = [...(pending?.filter((entry) => entry.partId !== part.partId) ?? []), part];
+  state.pendingBackgroundTaskResultsByExternalSessionId.set(externalSessionId, next);
+};
+
+const flushPendingBackgroundTaskResults = (
+  state: HistoryStreamPartNormalizationState,
+  externalSessionId: string,
+  correlationKey: string,
+): MappedSubagentPart[] => {
+  const pending = state.pendingBackgroundTaskResultsByExternalSessionId.get(externalSessionId);
+  if (!pending || pending.length === 0) {
+    return [];
+  }
+
+  state.pendingBackgroundTaskResultsByExternalSessionId.delete(externalSessionId);
+  state.correlationByExternalSessionId.set(externalSessionId, correlationKey);
+  removePendingSubagentCorrelationKey(state.pendingBySignature, correlationKey);
+  return pending.map((part) => ({
+    ...part,
+    correlationKey,
+  }));
+};
+
 const createHistoryStreamPartNormalizationState = (
   childSessionLinks: ChildSessionLink[],
 ): HistoryStreamPartNormalizationState => ({
   pendingBySignature: new Map<string, string[]>(),
   correlationByExternalSessionId: new Map<string, string>(),
   unmatchedChildSessionLinks: [...childSessionLinks],
+  pendingBackgroundTaskResultsByExternalSessionId: new Map<string, MappedSubagentPart[]>(),
 });
 
 const normalizeHistoryStreamParts = (
@@ -244,15 +275,23 @@ const normalizeHistoryStreamParts = (
       });
       if (backgroundTaskResult) {
         const externalSessionId = backgroundTaskResult.externalSessionId;
-        const correlationKey = externalSessionId
-          ? state.correlationByExternalSessionId.get(externalSessionId)
-          : undefined;
-        const mapped = correlationKey
-          ? { ...backgroundTaskResult, correlationKey }
-          : backgroundTaskResult;
-        if (externalSessionId && mapped.correlationKey) {
-          state.correlationByExternalSessionId.set(externalSessionId, mapped.correlationKey);
+        if (!externalSessionId) {
+          normalized.push(backgroundTaskResult);
+          continue;
         }
+
+        const correlationKey = state.correlationByExternalSessionId.get(externalSessionId);
+        if (!correlationKey) {
+          queuePendingBackgroundTaskResult(state, externalSessionId, backgroundTaskResult);
+          continue;
+        }
+
+        const mapped = {
+          ...backgroundTaskResult,
+          correlationKey,
+        };
+        state.correlationByExternalSessionId.set(externalSessionId, correlationKey);
+        removePendingSubagentCorrelationKey(state.pendingBySignature, correlationKey);
         normalized.push(mapped);
       }
       continue;
@@ -283,6 +322,11 @@ const normalizeHistoryStreamParts = (
         ...mapped,
         correlationKey,
       });
+      if (mapped.externalSessionId) {
+        normalized.push(
+          ...flushPendingBackgroundTaskResults(state, mapped.externalSessionId, correlationKey),
+        );
+      }
       continue;
     }
 
@@ -312,6 +356,11 @@ const normalizeHistoryStreamParts = (
       ...mapped,
       correlationKey,
     });
+    if (mapped.externalSessionId) {
+      normalized.push(
+        ...flushPendingBackgroundTaskResults(state, mapped.externalSessionId, correlationKey),
+      );
+    }
   }
 
   return normalized;

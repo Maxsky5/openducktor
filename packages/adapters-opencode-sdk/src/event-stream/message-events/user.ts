@@ -141,15 +141,21 @@ export const handleUserMessageUpdated = (
   });
 };
 
-export const handleUserPartUpdated = (runtime: EventStreamRuntime, messageId: string): void => {
+export const handleUserPartUpdated = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+  updatedPartTimestamp?: string,
+): void => {
   const session = runtime.getSession(runtime.externalSessionId);
   const metadata = session?.messageMetadataById.get(messageId);
   const knownParts = getKnownMessageParts(runtime, messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(knownParts);
-  emitBackgroundTaskResultSubagentParts(runtime, {
-    parts: knownParts,
-    timestamp: metadata?.timestamp ?? runtime.now(),
-  });
+  if (updatedPartTimestamp) {
+    emitBackgroundTaskResultSubagentParts(runtime, {
+      parts: knownParts,
+      timestamp: updatedPartTimestamp,
+    });
+  }
   const fallbackText = metadata?.text ?? "";
   const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
     fallbackText,

@@ -89,6 +89,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   pendingSubagentSessionsByExternalSessionId: new Map(),
   pendingSubagentPartEmissionsByExternalSessionId: new Map(),
   pendingSubagentInputEventsByExternalSessionId: new Map(),
+  pendingBackgroundTaskResultsByExternalSessionId: new Map(),
 });
 
 export const runEventStreamWithSession = async (

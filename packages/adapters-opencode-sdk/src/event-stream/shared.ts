@@ -1,5 +1,5 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
 import {
   clearAwaitingRuntimeTurnStart,
@@ -25,6 +25,11 @@ export type PendingSubagentInputEvent = Extract<
   AgentEvent,
   { type: "approval_required" | "question_required" }
 >;
+
+export type PendingBackgroundTaskResult = {
+  part: Extract<AgentStreamPart, { kind: "subagent" }>;
+  timestamp: string;
+};
 
 export type PendingSubagentSessionBinding = {
   createdAtMs?: number;
@@ -59,6 +64,7 @@ export type EventStreamState = {
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
   pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
   pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
+  pendingBackgroundTaskResultsByExternalSessionId: Map<string, PendingBackgroundTaskResult[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;

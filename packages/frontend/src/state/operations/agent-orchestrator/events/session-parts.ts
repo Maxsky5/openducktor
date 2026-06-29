@@ -22,13 +22,8 @@ const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
 };
 
-const isTerminalBackgroundSubagentPart = (
-  part: Extract<SessionPart, { kind: "subagent" }>,
-): boolean => {
-  if (part.executionMode !== "background") {
-    return false;
-  }
-  return part.status === "completed" || part.status === "cancelled" || part.status === "error";
+const isBackgroundSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
+  return part.executionMode === "background";
 };
 
 const isInactiveSessionStatus = (status: AgentSessionState["status"]): boolean => {
@@ -39,14 +34,14 @@ const shouldPreserveInactiveStatusForSubagentPart = (
   session: AgentSessionState,
   part: Extract<SessionPart, { kind: "subagent" }>,
 ): boolean => {
-  return isInactiveSessionStatus(session.status) && isTerminalBackgroundSubagentPart(part);
+  return isInactiveSessionStatus(session.status) && isBackgroundSubagentPart(part);
 };
 
 const shouldRecordPartAsTurnActivity = (
   context: SessionPartEventContext,
   part: SessionPart,
 ): boolean => {
-  if (part.kind !== "subagent" || !isTerminalBackgroundSubagentPart(part)) {
+  if (part.kind !== "subagent" || !isBackgroundSubagentPart(part)) {
     return true;
   }
 

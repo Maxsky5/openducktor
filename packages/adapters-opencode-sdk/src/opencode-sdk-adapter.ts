@@ -160,6 +160,16 @@ const copySubagentCorrelationState = (source: SessionRecord, target: SessionReco
   for (const [signature, pending] of source.pendingSubagentCorrelationKeysBySignature) {
     target.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
   }
+  target.pendingBackgroundTaskResultsByExternalSessionId.clear();
+  for (const [
+    externalSessionId,
+    pending,
+  ] of source.pendingBackgroundTaskResultsByExternalSessionId) {
+    target.pendingBackgroundTaskResultsByExternalSessionId.set(
+      externalSessionId,
+      pending.map((entry) => ({ ...entry })),
+    );
+  }
 };
 
 export class OpencodeSdkAdapter

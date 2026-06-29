@@ -371,6 +371,7 @@ export const registerSession = (
     pendingSubagentSessionsByExternalSessionId: new Map(),
     pendingSubagentPartEmissionsByExternalSessionId: new Map(),
     pendingSubagentInputEventsByExternalSessionId: new Map(),
+    pendingBackgroundTaskResultsByExternalSessionId: new Map(),
   });
 
   if (input.subscribeToEvents !== false) {

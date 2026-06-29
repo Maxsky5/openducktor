@@ -13,6 +13,7 @@ import {
   flushPendingSubagentInputEventsForSession,
   markSessionActive,
 } from "../shared";
+import { flushPendingBackgroundTaskResultSubagentParts } from "./background-task-result";
 import {
   getKnownMessageParts,
   hasTerminalStopSignalInParts,
@@ -90,6 +91,11 @@ export const emitAssistantPart = (
     part: nextMapped,
   });
   if (nextMapped.kind === "subagent" && nextMapped.externalSessionId) {
+    flushPendingBackgroundTaskResultSubagentParts(
+      runtime,
+      nextMapped.externalSessionId,
+      nextMapped.correlationKey,
+    );
     flushPendingSubagentInputEventsForSession(runtime, nextMapped.externalSessionId);
   }
   return true;

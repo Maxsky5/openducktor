@@ -637,11 +637,10 @@ const buildSubagentFromToolPart = (
   const error = structuredError ?? directError;
   const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata);
   let status = normalizedStatus;
-  if (isBackgroundResultStillRunning) {
-    status = "running";
-  }
-  if (directError) {
+  if (error) {
     status = "error";
+  } else if (isBackgroundResultStillRunning && status !== "cancelled") {
+    status = "running";
   }
   let mappedTiming = timing;
   if (status === "running" && isBackgroundResultStillRunning) {
