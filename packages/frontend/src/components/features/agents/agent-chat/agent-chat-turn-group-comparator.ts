@@ -1,5 +1,6 @@
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { isAssistantMessageStreaming } from "./agent-chat-streaming";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { getSubagentMessageSessionKey } from "./subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
@@ -58,6 +59,14 @@ export const areAgentSessionIdentitiesEqual = (
     left.workingDirectory === right.workingDirectory
   );
 };
+
+export const isAgentChatTurnRowStreamingAssistant = (
+  row: AgentChatTranscriptRow,
+  activeStreamingAssistantMessageId: string | null,
+): boolean =>
+  row.kind === "message" &&
+  row.message.id === activeStreamingAssistantMessageId &&
+  isAssistantMessageStreaming(row.message);
 
 export const areChatRowsEquivalent = (
   left: AgentChatTranscriptRow,

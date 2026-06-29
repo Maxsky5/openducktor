@@ -7,6 +7,7 @@ import {
   type AgentChatTurnGroupProps,
   areAgentChatThreadMotionRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
+  isAgentChatTurnRowStreamingAssistant,
 } from "./agent-chat-turn-group-comparator";
 
 const createSessionIdentity = (): AgentSessionIdentity => ({
@@ -63,6 +64,28 @@ const baseMotionRowProps = (
 });
 
 describe("areAgentChatTurnGroupPropsEqual", () => {
+  test("marks only the live assistant row as streaming when duplicate ids share a turn", () => {
+    const finalizedRow = {
+      kind: "message" as const,
+      key: "session:0:assistant-1",
+      message: buildMessage("assistant", "Finalized", {
+        id: "assistant-1",
+        meta: { kind: "assistant", isFinal: true },
+      }),
+    };
+    const liveRow = {
+      kind: "message" as const,
+      key: "session:1:assistant-1",
+      message: buildMessage("assistant", "Live", {
+        id: "assistant-1",
+        meta: { kind: "assistant", isFinal: false },
+      }),
+    };
+
+    expect(isAgentChatTurnRowStreamingAssistant(finalizedRow, "assistant-1")).toBe(false);
+    expect(isAgentChatTurnRowStreamingAssistant(liveRow, "assistant-1")).toBe(true);
+  });
+
   test("skips rerender for unchanged row identities and equivalent rows", () => {
     const previousProps = baseProps();
 

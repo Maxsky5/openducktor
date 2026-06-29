@@ -5,6 +5,7 @@ import {
   type AgentChatTurnGroupProps,
   areAgentChatThreadMotionRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
+  isAgentChatTurnRowStreamingAssistant,
   readSubagentPendingApprovalCount,
   readSubagentPendingQuestionCount,
 } from "./agent-chat-turn-group-comparator";
@@ -54,9 +55,10 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
         <AgentChatThreadMotionRow
           key={row.key}
           row={row}
-          isStreamingAssistantMessage={
-            row.kind === "message" && row.message.id === turn.activeStreamingAssistantMessageId
-          }
+          isStreamingAssistantMessage={isAgentChatTurnRowStreamingAssistant(
+            row,
+            turn.activeStreamingAssistantMessageId,
+          )}
           sessionAgentColors={sessionAgentColors}
           sessionIdentity={sessionIdentity}
           subagentPendingApprovalCount={readSubagentPendingApprovalCount(
