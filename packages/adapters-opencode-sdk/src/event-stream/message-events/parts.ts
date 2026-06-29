@@ -1,5 +1,5 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { readStringProp, readUnknownProp } from "../../guards";
+import { readNumberProp, readRecordProp, readStringProp, readUnknownProp } from "../../guards";
 import { readEventPart, readEventProperties } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "../shared";
@@ -11,6 +11,32 @@ import {
 import { applyPendingDeltas } from "./helpers";
 import { removeSubagentCorrelationForPart } from "./subagent";
 import { handleUserPartUpdated } from "./user";
+
+const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => {
+  if (timestampMs === undefined) {
+    return undefined;
+  }
+  const timestamp = new Date(timestampMs);
+  return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+};
+
+const readIsoTimestampFromTime = (time: unknown): string | undefined => {
+  if (typeof time === "number") {
+    return toIsoTimestamp(time);
+  }
+  return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
+};
+
+const readPartUpdatedTimestamp = (properties: unknown, part: unknown): string | undefined => {
+  const eventTimestamp = readIsoTimestampFromTime(readUnknownProp(properties, "time"));
+  if (eventTimestamp) {
+    return eventTimestamp;
+  }
+
+  const partTime =
+    readRecordProp(part, "time") ?? readRecordProp(readRecordProp(part, "state"), "time");
+  return readIsoTimestampFromTime(partTime);
+};
 
 export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "message.part.delta") {
@@ -107,7 +133,7 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
   if (role === "user") {
-    handleUserPartUpdated(runtime, messageId);
+    handleUserPartUpdated(runtime, messageId, readPartUpdatedTimestamp(properties, nextPart));
   }
   return true;
 };

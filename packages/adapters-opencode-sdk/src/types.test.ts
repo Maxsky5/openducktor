@@ -57,6 +57,7 @@ describe("types", () => {
       pendingSubagentSessionsByExternalSessionId: new Map(),
       pendingSubagentPartEmissionsByExternalSessionId: new Map(),
       pendingSubagentInputEventsByExternalSessionId: new Map(),
+      pendingBackgroundTaskResultsByExternalSessionId: new Map(),
     };
     const options: OpencodeSdkAdapterOptions = {
       now: () => "2026-02-22T12:00:00.000Z",

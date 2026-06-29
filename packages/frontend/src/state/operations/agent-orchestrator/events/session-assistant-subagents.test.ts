@@ -100,6 +100,133 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(clearTurnDurationCalls).toBe(1);
   });
 
+  test.each([
+    "idle",
+    "stopped",
+    "error",
+  ] as const)("keeps an inactive parent session %s when a background subagent completes late", async (inactiveStatus) => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+    const recordedActivityTimestamps: Array<string | number> = [];
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      recordTurnActivityTimestamp: (_externalSessionId, timestamp) => {
+        recordedActivityTimestamps.push(timestamp);
+      },
+      resolveTurnDurationMs: () => 300,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-background-task",
+        partId: "subtask-background",
+        correlationKey: "part:assistant-background-task:subtask-background",
+        status: "running",
+        agent: "fixer",
+        prompt: "Run build",
+        description: "Run build",
+        externalSessionId: "child-background-session",
+        executionMode: "background",
+        startedAtMs: Date.parse("2026-02-22T08:00:02.000Z"),
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
+
+    if (inactiveStatus === "idle") {
+      handleEvent({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "idle" },
+        timestamp: "2026-02-22T08:00:05.000Z",
+      });
+    } else {
+      updateSession(getSession(sessionsRef), (current) => ({
+        ...current,
+        status: inactiveStatus,
+      }));
+    }
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:35.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-background-task",
+        partId: "tool-background-task-running",
+        correlationKey: "part:assistant-background-task:subtask-background",
+        status: "running",
+        description: "Background task still running",
+        externalSessionId: "child-background-session",
+        executionMode: "background",
+        startedAtMs: Date.parse("2026-02-22T08:00:02.000Z"),
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:45.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "user-background-task-completed",
+        partId: "text-background-task-completed",
+        correlationKey: "part:assistant-background-task:subtask-background",
+        status: "completed",
+        description: "Background task completed: Run build",
+        externalSessionId: "child-background-session",
+        executionMode: "background",
+        endedAtMs: Date.parse("2026-02-22T08:00:45.000Z"),
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+    const subagentMessage = getSessionMessages(sessionsRef).find(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    if (subagentMessage?.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent message with subagent meta");
+    }
+    expect(subagentMessage.meta.status).toBe("completed");
+    expect(subagentMessage.meta.externalSessionId).toBe("child-background-session");
+    expect(subagentMessage.meta.endedAtMs).toBe(Date.parse("2026-02-22T08:00:45.000Z"));
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
+  });
+
   test("handles session start and assistant parts matrix", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     let refreshCalls = 0;

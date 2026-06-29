@@ -488,6 +488,26 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
+const resolveBackgroundJobId = (
+  metadata: Record<string, unknown> | undefined,
+): string | undefined => readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
+
+const isRunningBackgroundSubagentResult = (
+  metadata: Record<string, unknown> | undefined,
+): boolean => {
+  // OpenCode keeps the parent tool part carrying background job metadata; the synthetic task result is the terminal child update.
+  return (
+    resolveSubagentExecutionMode(metadata) === "background" &&
+    resolveBackgroundJobId(metadata) !== undefined
+  );
+};
+
+const omitEndedTiming = (
+  timing: ReturnType<typeof extractPartTiming>,
+): ReturnType<typeof extractPartTiming> => ({
+  ...(typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {}),
+});
+
 const resolveSubagentExternalSessionId = (...sources: unknown[]): string | undefined => {
   for (const source of sources) {
     const externalSessionId = readTrimmedString(source, [
@@ -616,7 +636,17 @@ const buildSubagentFromToolPart = (
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const directError = toDisplayText(readUnknownProp(toolState, "error"));
   const error = structuredError ?? directError;
-  const status = directError ? "error" : normalizedStatus;
+  const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata);
+  let status = normalizedStatus;
+  if (error) {
+    status = "error";
+  } else if (isBackgroundResultStillRunning && status !== "cancelled") {
+    status = "running";
+  }
+  let mappedTiming = timing;
+  if (status === "running" && isBackgroundResultStillRunning) {
+    mappedTiming = omitEndedTiming(timing);
+  }
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput,
@@ -637,7 +667,7 @@ const buildSubagentFromToolPart = (
     ...(externalSessionId ? { externalSessionId } : {}),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
     ...(metadata ? { metadata } : {}),
-    ...timing,
+    ...mappedTiming,
   });
 };
 

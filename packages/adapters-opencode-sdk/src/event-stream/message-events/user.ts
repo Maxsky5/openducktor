@@ -7,6 +7,7 @@ import {
 } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
+import { emitBackgroundTaskResultSubagentParts } from "./background-task-result";
 import { getKnownMessageParts } from "./helpers";
 import { buildVisibleUserMessage } from "./user-display";
 import { emitKnownUserMessage, emitUserMessage, persistUserMessageMetadata } from "./user-emitter";
@@ -96,6 +97,10 @@ export const handleUserMessageUpdated = (
     input.normalizedParts.length > 0
       ? input.normalizedParts
       : getKnownMessageParts(runtime, input.messageId);
+  emitBackgroundTaskResultSubagentParts(runtime, {
+    parts: userParts,
+    timestamp: input.messageTimestamp,
+  });
   const currentMetadata = session?.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
   const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(input.infoRecord);
@@ -136,12 +141,21 @@ export const handleUserMessageUpdated = (
   });
 };
 
-export const handleUserPartUpdated = (runtime: EventStreamRuntime, messageId: string): void => {
+export const handleUserPartUpdated = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+  updatedPartTimestamp?: string,
+): void => {
   const session = runtime.getSession(runtime.externalSessionId);
   const metadata = session?.messageMetadataById.get(messageId);
-  const normalizedDisplayParts = normalizeUserMessageDisplayParts(
-    getKnownMessageParts(runtime, messageId),
-  );
+  const knownParts = getKnownMessageParts(runtime, messageId);
+  const normalizedDisplayParts = normalizeUserMessageDisplayParts(knownParts);
+  if (updatedPartTimestamp) {
+    emitBackgroundTaskResultSubagentParts(runtime, {
+      parts: knownParts,
+      timestamp: updatedPartTimestamp,
+    });
+  }
   const fallbackText = metadata?.text ?? "";
   const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
     fallbackText,

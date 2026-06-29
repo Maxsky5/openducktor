@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
 const createToolPart = ({
@@ -56,6 +57,25 @@ const createToolPart = ({
     state,
   } as unknown as Part;
 };
+
+const createSyntheticTextPart = ({
+  id,
+  text,
+  time,
+}: {
+  id: string;
+  text: string;
+  time?: { end?: number };
+}): Part =>
+  ({
+    id,
+    sessionID: "session-1",
+    messageID: `user-${id}`,
+    type: "text",
+    synthetic: true,
+    text,
+    ...(time ? { time } : {}),
+  }) as unknown as Part;
 
 describe("stream-part-mapper", () => {
   test("maps raw subtask parts to canonical subagent parts", () => {
@@ -132,6 +152,209 @@ describe("stream-part-mapper", () => {
       startedAtMs: 10,
       endedAtMs: 40,
     });
+  });
+
+  test("keeps completed OpenCode background task results running while the child session is active", () => {
+    const part = createToolPart({
+      id: "tool-background-task-running-1",
+      tool: "task",
+      status: "completed",
+      input: {
+        subagent_type: "build",
+        prompt: "Inspect the repo",
+        description: "Inspect the race",
+      },
+      output: [
+        '<task id="session-child-background-1" state="running">',
+        "<summary>Background task started</summary>",
+        "<task_result>",
+        "The task is running in the background.",
+        "</task_result>",
+        "</task>",
+      ].join("\n"),
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-1",
+        jobId: "session-child-background-1",
+      },
+      time: {
+        start: 10,
+        end: 40,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      messageId: "assistant-tool-background-task-running-1",
+      partId: "tool-background-task-running-1",
+      status: "running",
+      agent: "build",
+      prompt: "Inspect the repo",
+      description: "Inspect the race",
+      externalSessionId: "session-child-background-1",
+      executionMode: "background",
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-1",
+        jobId: "session-child-background-1",
+      },
+      startedAtMs: 10,
+    });
+    expect(mapped).not.toEqual(expect.objectContaining({ endedAtMs: expect.any(Number) }));
+  });
+
+  test("preserves structured background task failures as terminal errors", () => {
+    const part = createToolPart({
+      id: "tool-background-task-error-1",
+      tool: "task",
+      status: "completed",
+      input: {
+        subagent_type: "build",
+        prompt: "Inspect the repo",
+      },
+      output: {
+        content: [{ type: "text", text: "Task failed" }],
+        isError: true,
+      },
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-error-1",
+      },
+      time: {
+        start: 10,
+        end: 40,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      status: "error",
+      error: "Task failed",
+      externalSessionId: "session-child-background-error-1",
+      executionMode: "background",
+      endedAtMs: 40,
+    });
+  });
+
+  test("preserves cancelled background task tool results as terminal", () => {
+    const part = createToolPart({
+      id: "tool-background-task-cancelled-1",
+      tool: "task",
+      status: "cancelled",
+      input: {
+        subagent_type: "build",
+        prompt: "Inspect the repo",
+      },
+      output: [
+        '<task id="session-child-background-cancelled-1" state="running">',
+        "<summary>Background task started</summary>",
+        "<task_result>",
+        "The task is running in the background.",
+        "</task_result>",
+        "</task>",
+      ].join("\n"),
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-cancelled-1",
+      },
+      time: {
+        start: 10,
+        end: 40,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      status: "cancelled",
+      externalSessionId: "session-child-background-cancelled-1",
+      executionMode: "background",
+      endedAtMs: 40,
+    });
+  });
+
+  test("maps synthetic completed background task text without truncating raw result lines", () => {
+    const part = createSyntheticTextPart({
+      id: "text-background-completed-1",
+      text: [
+        '<task id="session-child-completed-1" state="completed">',
+        "<task_result>",
+        "rendered raw line:",
+        "</task_result>",
+        "actual final output",
+        "</task_result>",
+        "</task>",
+      ].join("\n"),
+      time: {
+        end: Date.parse("2026-02-22T12:00:45.000Z"),
+      },
+    });
+
+    const mapped = mapOpenCodeBackgroundTaskResultPart(part, {
+      correlationKey: "part:assistant-background:subtask-a",
+      timestamp: "2026-02-22T12:00:40.000Z",
+    });
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      partId: "text-background-completed-1",
+      correlationKey: "part:assistant-background:subtask-a",
+      status: "completed",
+      description: "rendered raw line:\n</task_result>\nactual final output",
+      externalSessionId: "session-child-completed-1",
+      executionMode: "background",
+      endedAtMs: Date.parse("2026-02-22T12:00:45.000Z"),
+    });
+  });
+
+  test("maps synthetic errored background task text with inline summary", () => {
+    const part = createSyntheticTextPart({
+      id: "text-background-error-1",
+      text: [
+        '<task id="session-child-error-1" state="error">',
+        "<summary>Background task failed: Run tests</summary>",
+        "<task_error>",
+        "Tests failed.",
+        "</task_error>",
+        "</task>",
+      ].join("\n"),
+    });
+
+    const mapped = mapOpenCodeBackgroundTaskResultPart(part, {
+      correlationKey: "part:assistant-background:subtask-a",
+      timestamp: "2026-02-22T12:00:45.000Z",
+    });
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      partId: "text-background-error-1",
+      correlationKey: "part:assistant-background:subtask-a",
+      status: "error",
+      description: "Background task failed: Run tests",
+      error: "Tests failed.",
+      externalSessionId: "session-child-error-1",
+      executionMode: "background",
+      endedAtMs: Date.parse("2026-02-22T12:00:45.000Z"),
+    });
+  });
+
+  test("ignores malformed synthetic background task text", () => {
+    const part = createSyntheticTextPart({
+      id: "text-background-malformed-1",
+      text: [
+        '<task id="session-child-malformed-1" state="completed">',
+        "<task_result>",
+        "missing close task tag",
+        "</task_result>",
+      ].join("\n"),
+    });
+
+    expect(mapOpenCodeBackgroundTaskResultPart(part)).toBeNull();
   });
 
   test("does not map the unsupported subtask tool alias to a subagent part", () => {
