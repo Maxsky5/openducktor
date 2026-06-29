@@ -19,7 +19,7 @@ describe("build tools", () => {
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
-  });
+  }, 5000);
 
   it("marks files executable on POSIX platforms", async () => {
     const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-build-tools-"));
