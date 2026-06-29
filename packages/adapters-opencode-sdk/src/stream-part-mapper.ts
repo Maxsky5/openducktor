@@ -488,25 +488,16 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
-const OPENCODE_TASK_OUTPUT_STATE_PATTERN = /<task\b[^>]*\bstate="([^"]+)"[^>]*>/i;
-
-const readOpencodeTaskOutputState = (value: unknown): string | undefined => {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const match = OPENCODE_TASK_OUTPUT_STATE_PATTERN.exec(value);
-  const state = match?.[1]?.trim().toLowerCase();
-  return state && state.length > 0 ? state : undefined;
-};
+const resolveBackgroundJobId = (
+  metadata: Record<string, unknown> | undefined,
+): string | undefined => readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
 
 const isRunningBackgroundSubagentResult = (
   metadata: Record<string, unknown> | undefined,
-  output: unknown,
 ): boolean => {
   return (
     resolveSubagentExecutionMode(metadata) === "background" &&
-    readOpencodeTaskOutputState(output) === "running"
+    resolveBackgroundJobId(metadata) !== undefined
   );
 };
 
@@ -644,14 +635,18 @@ const buildSubagentFromToolPart = (
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const directError = toDisplayText(readUnknownProp(toolState, "error"));
   const error = structuredError ?? directError;
-  const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata, rawOutput);
-  const status = directError
-    ? "error"
-    : isBackgroundResultStillRunning
-      ? "running"
-      : normalizedStatus;
-  const mappedTiming =
-    status === "running" && isBackgroundResultStillRunning ? omitEndedTiming(timing) : timing;
+  const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata);
+  let status = normalizedStatus;
+  if (isBackgroundResultStillRunning) {
+    status = "running";
+  }
+  if (directError) {
+    status = "error";
+  }
+  let mappedTiming = timing;
+  if (status === "running" && isBackgroundResultStillRunning) {
+    mappedTiming = omitEndedTiming(timing);
+  }
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput,
