@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildMessage, buildQuestionRequest, buildSession } from "./agent-chat-test-fixtures";
-import { buildAgentChatWindowRowsState } from "./agent-chat-thread-windowing";
+import { buildAgentChatTranscriptModel } from "./agent-chat-transcript-model";
 
 describe("agent-chat-thread transcript keys", () => {
   test("stay stable when only pending questions change", () => {
@@ -13,10 +13,10 @@ describe("agent-chat-thread transcript keys", () => {
       pendingQuestions: [buildQuestionRequest({ requestId: "question-1" })],
     };
 
-    const baselineKeys = buildAgentChatWindowRowsState(session, {
+    const baselineKeys = buildAgentChatTranscriptModel(session, {
       showThinkingMessages: true,
     }).rows.map((row) => row.key);
-    const updatedKeys = buildAgentChatWindowRowsState(updatedSession, {
+    const updatedKeys = buildAgentChatTranscriptModel(updatedSession, {
       showThinkingMessages: true,
     }).rows.map((row) => row.key);
 
@@ -36,9 +36,9 @@ describe("agent-chat-thread transcript keys", () => {
       externalSessionId: "session-large-transcript",
       messages,
     });
-    const state = buildAgentChatWindowRowsState(session, { showThinkingMessages: true });
+    const state = buildAgentChatTranscriptModel(session, { showThinkingMessages: true });
 
     expect(state.rows.filter((row) => row.kind === "message")).toHaveLength(240);
-    expect(state.turns).toHaveLength(120);
+    expect(state.turnAnchors).toHaveLength(120);
   });
 });

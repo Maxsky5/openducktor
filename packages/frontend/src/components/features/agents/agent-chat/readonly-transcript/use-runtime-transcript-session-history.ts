@@ -19,7 +19,6 @@ import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
-import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 import { useRuntimeTranscriptLiveOverlay } from "./use-runtime-transcript-live-overlay";
 
@@ -92,25 +91,21 @@ export function useRuntimeTranscriptSessionHistory({
     if (matchingLiveSession !== null) {
       return toAgentChatThreadSession(matchingLiveSession);
     }
-    if (liveOverlay.hasVisibleRuntimeData && liveOverlay.session !== null) {
-      return toAgentChatThreadSession(liveOverlay.session);
+    if (
+      liveOverlay.session !== null &&
+      (liveOverlay.hasHistoryBase || liveOverlay.hasVisibleRuntimeData)
+    ) {
+      const overlaySession = toAgentChatThreadSession(liveOverlay.session);
+      return liveOverlay.hasVisibleRuntimeData
+        ? overlaySession
+        : { ...overlaySession, activityState: null };
     }
-    if (!shouldLoadHistory || !historyQuery.data || repoPath === null || stableTarget === null) {
-      return null;
-    }
-
-    return createReadonlyTranscriptSession({
-      ...stableTarget,
-      history: historyQuery.data,
-    });
+    return null;
   }, [
-    historyQuery.data,
+    liveOverlay.hasHistoryBase,
     liveOverlay.hasVisibleRuntimeData,
     liveOverlay.session,
     matchingLiveSession,
-    repoPath,
-    shouldLoadHistory,
-    stableTarget,
   ]);
   const interactionSession = matchingLiveSession ?? liveOverlay.interactionSession;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {

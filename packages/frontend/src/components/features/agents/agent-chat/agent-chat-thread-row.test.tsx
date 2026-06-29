@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildMessage } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 
 const baseProps = {
   isStreamingAssistantMessage: false,
@@ -47,7 +47,7 @@ describe("AgentChatThreadRow", () => {
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...baseProps,
-          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatWindowRow,
+          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatTranscriptRow,
         }),
       );
 

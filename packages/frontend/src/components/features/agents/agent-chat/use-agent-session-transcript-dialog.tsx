@@ -1,4 +1,12 @@
-import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  type PropsWithChildren,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
@@ -13,15 +21,44 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   const activeWorkspace = useActiveWorkspace();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
+  const [contentRequest, setContentRequest] = useState<OpenAgentSessionTranscriptRequest | null>(
+    null,
+  );
+  const contentFrameRef = useRef<number | null>(null);
   const open = request !== null;
 
-  const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
-    setRequest(nextRequest);
+  const cancelContentFrame = useCallback(() => {
+    if (contentFrameRef.current === null) {
+      return;
+    }
+
+    globalThis.cancelAnimationFrame(contentFrameRef.current);
+    contentFrameRef.current = null;
   }, []);
 
+  const openSessionTranscript = useCallback(
+    (nextRequest: OpenAgentSessionTranscriptRequest) => {
+      cancelContentFrame();
+      setContentRequest(null);
+      setRequest(nextRequest);
+
+      contentFrameRef.current = globalThis.requestAnimationFrame(() => {
+        contentFrameRef.current = globalThis.requestAnimationFrame(() => {
+          contentFrameRef.current = null;
+          setContentRequest(nextRequest);
+        });
+      });
+    },
+    [cancelContentFrame],
+  );
+
   const closeSessionTranscript = useCallback(() => {
+    cancelContentFrame();
+    setContentRequest(null);
     setRequest(null);
-  }, []);
+  }, [cancelContentFrame]);
+
+  useEffect(() => cancelContentFrame, [cancelContentFrame]);
 
   const contextValue = useMemo(
     () => ({
@@ -36,7 +73,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
       {children}
       <AgentSessionTranscriptDialog
         workspaceRepoPath={workspaceRepoPath}
-        target={request?.target ?? null}
+        target={contentRequest?.target ?? null}
         open={open}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {

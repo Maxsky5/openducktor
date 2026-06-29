@@ -22,6 +22,7 @@ type RuntimeTranscriptLiveOverlay = {
   session: AgentSessionState | null;
   interactionSession: AgentSessionState | null;
   error: string | null;
+  hasHistoryBase: boolean;
   hasVisibleRuntimeData: boolean;
 };
 
@@ -39,6 +40,7 @@ const EMPTY_RUNTIME_TRANSCRIPT_LIVE_OVERLAY: RuntimeTranscriptLiveOverlay = {
   session: null,
   interactionSession: null,
   error: null,
+  hasHistoryBase: false,
   hasVisibleRuntimeData: false,
 };
 
@@ -166,6 +168,7 @@ export function useRuntimeTranscriptLiveOverlay({
     session,
     interactionSession: hasRuntimeEvents ? session : null,
     error: liveState.error,
+    hasHistoryBase: session.historyLoadState === "loaded",
     hasVisibleRuntimeData: hasRuntimeEvents && hasVisibleRuntimeData(session),
   };
 }
