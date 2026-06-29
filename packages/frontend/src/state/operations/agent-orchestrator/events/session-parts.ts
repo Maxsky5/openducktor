@@ -46,6 +46,7 @@ const shouldRecordPartAsTurnActivity = (
   }
 
   const current = context.store.readSession(context.session.identity);
+  // If the live session is unavailable, keep the existing activity path because inactivity cannot be proven.
   return current ? !isInactiveSessionStatus(current.status) : true;
 };
 

@@ -495,6 +495,7 @@ const resolveBackgroundJobId = (
 const isRunningBackgroundSubagentResult = (
   metadata: Record<string, unknown> | undefined,
 ): boolean => {
+  // OpenCode keeps the parent tool part carrying background job metadata; the synthetic task result is the terminal child update.
   return (
     resolveSubagentExecutionMode(metadata) === "background" &&
     resolveBackgroundJobId(metadata) !== undefined
