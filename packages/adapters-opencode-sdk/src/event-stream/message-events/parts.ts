@@ -20,10 +20,19 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
 };
 
-const readPartUpdatedTimestamp = (part: unknown): string | undefined => {
-  const time =
-    readRecordProp(part, "time") ?? readRecordProp(readRecordProp(part, "state"), "time");
+const readIsoTimestampFromTimeRecord = (time: unknown): string | undefined => {
   return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
+};
+
+const readPartUpdatedTimestamp = (properties: unknown, part: unknown): string | undefined => {
+  const eventTimestamp = readIsoTimestampFromTimeRecord(readRecordProp(properties, "time"));
+  if (eventTimestamp) {
+    return eventTimestamp;
+  }
+
+  const partTime =
+    readRecordProp(part, "time") ?? readRecordProp(readRecordProp(part, "state"), "time");
+  return readIsoTimestampFromTimeRecord(partTime);
 };
 
 export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
@@ -121,7 +130,7 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
   if (role === "user") {
-    handleUserPartUpdated(runtime, messageId, readPartUpdatedTimestamp(nextPart));
+    handleUserPartUpdated(runtime, messageId, readPartUpdatedTimestamp(properties, nextPart));
   }
   return true;
 };

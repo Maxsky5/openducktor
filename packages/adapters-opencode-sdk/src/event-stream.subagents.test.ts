@@ -281,21 +281,33 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   state: "completed" | "error";
   summary: string;
   text: string;
-  timestampMs: number;
+  timestampMs?: number;
+  eventTimestampMs?: number;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
   return {
     type: "message.part.updated",
     properties: {
+      ...(input.eventTimestampMs !== undefined
+        ? {
+            time: {
+              updated: input.eventTimestampMs,
+            },
+          }
+        : {}),
       part: {
         id: input.partId,
         sessionID: "external-session-1",
         messageID: input.messageId,
         type: "text",
         synthetic: true,
-        time: {
-          end: input.timestampMs,
-        },
+        ...(input.timestampMs !== undefined
+          ? {
+              time: {
+                end: input.timestampMs,
+              },
+            }
+          : {}),
         text: [
           `<task id="${input.childSessionId}" state="${input.state}">`,
           `<summary>${input.summary}</summary>`,
@@ -572,6 +584,45 @@ describe("event-stream subagent correlation", () => {
       endedAtMs: Date.parse("2026-02-22T12:00:47.000Z"),
     });
     expect(subagentEvents[2]?.timestamp).toBe("2026-02-22T12:00:47.000Z");
+  });
+
+  test("uses the message.part.updated event timestamp for synthetic background task results", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-background-task-event-time"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-background-task-event-time",
+        partId: "subtask-a",
+        description: "Run tests",
+      }),
+      makeBackgroundTaskRunningPartUpdatedEvent({
+        messageId: "assistant-background-task-event-time",
+        partId: "tool-a",
+        callId: "call-a",
+        childSessionId: "child-a",
+      }),
+      userRoleEvent("user-background-task-event-time"),
+      makeBackgroundTaskResultUserPartUpdatedEvent({
+        messageId: "user-background-task-event-time",
+        partId: "text-background-task-event-time",
+        childSessionId: "child-a",
+        state: "completed",
+        summary: "Background task completed: Run tests",
+        text: "Tests passed.",
+        eventTimestampMs: Date.parse("2026-02-22T12:00:48.000Z"),
+      }),
+    ]);
+
+    const subagentEvents = readSubagentEvents(emitted);
+    const subagentParts = subagentEvents.map((event) => event.part);
+
+    expect(subagentParts).toHaveLength(3);
+    expect(subagentParts[2]).toMatchObject({
+      correlationKey: "part:assistant-background-task-event-time:subtask-a",
+      partId: "text-background-task-event-time",
+      status: "completed",
+      endedAtMs: Date.parse("2026-02-22T12:00:48.000Z"),
+    });
+    expect(subagentEvents[2]?.timestamp).toBe("2026-02-22T12:00:48.000Z");
   });
 
   test("keeps early synthetic background task results queued until the real subagent binding exists", async () => {
