@@ -134,6 +134,57 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("keeps completed OpenCode background task results running while the child session is active", () => {
+    const part = createToolPart({
+      id: "tool-background-task-running-1",
+      tool: "task",
+      status: "completed",
+      input: {
+        subagent_type: "build",
+        prompt: "Inspect the repo",
+        description: "Inspect the race",
+      },
+      output: [
+        '<task id="session-child-background-1" state="running">',
+        "<summary>Background task started</summary>",
+        "<task_result>",
+        "The task is running in the background.",
+        "</task_result>",
+        "</task>",
+      ].join("\n"),
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-1",
+        jobId: "session-child-background-1",
+      },
+      time: {
+        start: 10,
+        end: 40,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      messageId: "assistant-tool-background-task-running-1",
+      partId: "tool-background-task-running-1",
+      status: "running",
+      agent: "build",
+      prompt: "Inspect the repo",
+      description: "Inspect the race",
+      externalSessionId: "session-child-background-1",
+      executionMode: "background",
+      metadata: {
+        background: true,
+        sessionId: "session-child-background-1",
+        jobId: "session-child-background-1",
+      },
+      startedAtMs: 10,
+    });
+    expect(mapped).not.toEqual(expect.objectContaining({ endedAtMs: expect.any(Number) }));
+  });
+
   test("does not map the unsupported subtask tool alias to a subagent part", () => {
     const part = createToolPart({
       id: "tool-subtask-1",

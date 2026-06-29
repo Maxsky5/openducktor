@@ -169,6 +169,51 @@ const makeSubagentToolPartUpdatedEvent = (input: {
   } as unknown as Event;
 };
 
+const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
+  messageId: string;
+  partId: string;
+  callId: string;
+  childSessionId: string;
+}): Event =>
+  ({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        callID: input.callId,
+        type: "tool",
+        tool: "task",
+        state: {
+          status: "completed",
+          input: {
+            subagent_type: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+          },
+          output: [
+            `<task id="${input.childSessionId}" state="running">`,
+            "<summary>Background task started</summary>",
+            "<task_result>",
+            "The task is running in the background.",
+            "</task_result>",
+            "</task>",
+          ].join("\n"),
+          metadata: {
+            background: true,
+            sessionId: input.childSessionId,
+            jobId: input.childSessionId,
+          },
+          time: {
+            start: 10,
+            end: 40,
+          },
+        },
+      },
+    },
+  }) as unknown as Event;
+
 describe("event-stream subagent correlation", () => {
   test("binds same-turn sibling subagents to child sessions without fragmenting their cards", async () => {
     const { emitted } = await runEventStreamWithSession([
@@ -310,6 +355,39 @@ describe("event-stream subagent correlation", () => {
     ]);
     expect(subagentParts.map((part) => part.externalSessionId)).toEqual([undefined, "child-a"]);
     expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
+  });
+
+  test("keeps background task tool updates running when OpenCode completes the parent tool", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-background-task-tool-running"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-background-task-tool-running",
+        partId: "subtask-a",
+        description: "Starting A",
+      }),
+      makeBackgroundTaskRunningPartUpdatedEvent({
+        messageId: "assistant-background-task-tool-running",
+        partId: "tool-a",
+        callId: "call-a",
+        childSessionId: "child-a",
+      }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-background-task-tool-running:subtask-a",
+      "part:assistant-background-task-tool-running:subtask-a",
+    ]);
+    expect(subagentParts.map((part) => part.status)).toEqual(["running", "running"]);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([undefined, "child-a"]);
+    expect(subagentParts[1]).toMatchObject({
+      executionMode: "background",
+      startedAtMs: 10,
+    });
+    expect(subagentParts[1]).not.toEqual(
+      expect.objectContaining({ endedAtMs: expect.any(Number) }),
+    );
   });
 
   test("clears pending subagent queues once a running task tool update gains a session id", async () => {

@@ -488,6 +488,34 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
+const OPENCODE_TASK_OUTPUT_STATE_PATTERN = /<task\b[^>]*\bstate="([^"]+)"[^>]*>/i;
+
+const readOpencodeTaskOutputState = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const match = OPENCODE_TASK_OUTPUT_STATE_PATTERN.exec(value);
+  const state = match?.[1]?.trim().toLowerCase();
+  return state && state.length > 0 ? state : undefined;
+};
+
+const isRunningBackgroundSubagentResult = (
+  metadata: Record<string, unknown> | undefined,
+  output: unknown,
+): boolean => {
+  return (
+    resolveSubagentExecutionMode(metadata) === "background" &&
+    readOpencodeTaskOutputState(output) === "running"
+  );
+};
+
+const omitEndedTiming = (
+  timing: ReturnType<typeof extractPartTiming>,
+): ReturnType<typeof extractPartTiming> => ({
+  ...(typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {}),
+});
+
 const resolveSubagentExternalSessionId = (...sources: unknown[]): string | undefined => {
   for (const source of sources) {
     const externalSessionId = readTrimmedString(source, [
@@ -616,7 +644,14 @@ const buildSubagentFromToolPart = (
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const directError = toDisplayText(readUnknownProp(toolState, "error"));
   const error = structuredError ?? directError;
-  const status = directError ? "error" : normalizedStatus;
+  const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata, rawOutput);
+  const status = directError
+    ? "error"
+    : isBackgroundResultStillRunning
+      ? "running"
+      : normalizedStatus;
+  const mappedTiming =
+    status === "running" && isBackgroundResultStillRunning ? omitEndedTiming(timing) : timing;
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput,
@@ -637,7 +672,7 @@ const buildSubagentFromToolPart = (
     ...(externalSessionId ? { externalSessionId } : {}),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
     ...(metadata ? { metadata } : {}),
-    ...timing,
+    ...mappedTiming,
   });
 };
 
