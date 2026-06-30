@@ -1,7 +1,7 @@
 import type { AgentChatTurnAnchor } from "./agent-chat-transcript-model";
 
-export const AGENT_CHAT_ROW_WINDOW_SIZE = 240;
-export const AGENT_CHAT_ROW_WINDOW_STEP = 160;
+export const AGENT_CHAT_ROW_WINDOW_SIZE = 40;
+export const AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT = 10;
 
 export type AgentChatRowWindow = {
   index: number;
@@ -10,29 +10,14 @@ export type AgentChatRowWindow = {
 };
 
 export function buildAgentChatRowWindows(rowCount: number): AgentChatRowWindow[] {
-  if (rowCount <= AGENT_CHAT_ROW_WINDOW_SIZE) {
-    return [{ index: 0, startRow: 0, endRowExclusive: rowCount }];
-  }
-
-  const starts: number[] = [];
-  for (
-    let startRow = 0;
-    startRow < rowCount - AGENT_CHAT_ROW_WINDOW_SIZE;
-    startRow += AGENT_CHAT_ROW_WINDOW_STEP
-  ) {
-    starts.push(startRow);
-  }
-
-  const latestStartRow = rowCount - AGENT_CHAT_ROW_WINDOW_SIZE;
-  if (starts.at(-1) !== latestStartRow) {
-    starts.push(latestStartRow);
-  }
-
-  return starts.map((startRow, index) => ({
-    index,
-    startRow,
-    endRowExclusive: Math.min(rowCount, startRow + AGENT_CHAT_ROW_WINDOW_SIZE),
-  }));
+  const startRow = Math.max(0, rowCount - AGENT_CHAT_ROW_WINDOW_SIZE);
+  return [
+    {
+      index: 0,
+      startRow,
+      endRowExclusive: rowCount,
+    },
+  ];
 }
 
 export function selectTurnAnchorsForWindow(

@@ -22,7 +22,6 @@ export type AgentChatTurnGroupProps = {
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  allowTurnContainment: boolean;
 };
 
 export const areAgentColorsEqual = (
@@ -202,7 +201,6 @@ export const areAgentChatTurnGroupPropsEqual = (
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areAgentSessionIdentitiesEqual(previousProps.sessionIdentity, nextProps.sessionIdentity) &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
-    previousProps.allowTurnContainment === nextProps.allowTurnContainment &&
     areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
     areTurnSubagentPendingCountsEquivalent({
       rows: nextProps.turn.rows,

@@ -7,6 +7,7 @@ type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   isSessionWorking: boolean;
+  canFollowPhysicalBottomRef: MutableRefObject<boolean>;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -26,6 +27,7 @@ export function useAgentChatScrollController({
   messagesContainerRef,
   messagesContentRef,
   isSessionWorking,
+  canFollowPhysicalBottomRef,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const [userScrolled, dispatchUserScrolled] = useReducer(
     (_current: boolean, next: boolean) => next,
@@ -80,7 +82,7 @@ export function useAgentChatScrollController({
       !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
     const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
-    if (nearBottom && userScrolledRef.current) {
+    if (nearBottom && canFollowPhysicalBottomRef.current && userScrolledRef.current) {
       applyUserScrolledState(false);
       container.style.overflowAnchor = "none";
     }
@@ -88,6 +90,7 @@ export function useAgentChatScrollController({
     updateNearEdges(nearBottom, nearTop);
   }, [
     canScroll,
+    canFollowPhysicalBottomRef,
     distanceFromBottom,
     messagesContainerRef,
     applyUserScrolledState,
@@ -263,8 +266,10 @@ export function useAgentChatScrollController({
 
       if (nearBottom) {
         if (userScrolledRef.current) {
-          applyUserScrolledState(false);
-          updateOverflowAnchor();
+          if (canFollowPhysicalBottomRef.current) {
+            applyUserScrolledState(false);
+            updateOverflowAnchor();
+          }
         }
         return;
       }
@@ -301,6 +306,7 @@ export function useAgentChatScrollController({
     };
   }, [
     canScroll,
+    canFollowPhysicalBottomRef,
     distanceFromBottom,
     isAutoScrollEvent,
     messagesContainerRef,
@@ -337,6 +343,10 @@ export function useAgentChatScrollController({
 
     const observer = new ResizeObserver(() => {
       refreshScrollState();
+      if (!canFollowPhysicalBottomRef.current) {
+        return;
+      }
+
       if (userScrolledRef.current) {
         return;
       }
@@ -348,7 +358,7 @@ export function useAgentChatScrollController({
     return () => {
       observer.disconnect();
     };
-  }, [messagesContentRef, refreshScrollState, scrollToBottomNow]);
+  }, [messagesContentRef, refreshScrollState, scrollToBottomNow, canFollowPhysicalBottomRef]);
 
   useEffect(() => clearAutoScrollTimer, [clearAutoScrollTimer]);
 

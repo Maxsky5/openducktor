@@ -41,6 +41,7 @@ export function useAgentChatWindow({
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionKeyRef = useRef<string | null>(null);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
+  const canFollowPhysicalBottomRef = useRef(true);
   const {
     isNearBottom,
     isNearTop,
@@ -54,6 +55,7 @@ export function useAgentChatWindow({
     messagesContainerRef,
     messagesContentRef,
     isSessionWorking,
+    canFollowPhysicalBottomRef,
   });
   const {
     windowStart,
@@ -70,6 +72,7 @@ export function useAgentChatWindow({
     displayedSessionKey,
     messagesContainerRef,
   });
+  canFollowPhysicalBottomRef.current = isLatestWindow;
   const pendingBottomResetRef = useRef(false);
   const visibleWindowKey = `${windowStart}:${visibleRows.length}`;
   const isFollowingTranscript = useCallback(() => {
@@ -195,8 +198,8 @@ export function useAgentChatWindow({
     },
     scrollToTop: () => {
       const container = messagesContainerRef.current;
+      stopFollowingTranscript();
       if (container) {
-        stopFollowingTranscript();
         container.style.overflowAnchor = "none";
       }
 

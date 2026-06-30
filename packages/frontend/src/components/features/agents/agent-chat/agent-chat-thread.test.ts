@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   type AgentChatThreadModelInput,
@@ -377,6 +378,26 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Recheck");
   });
 
+  test("renders transcript rows without untracked vertical gap spacing", () => {
+    render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            messages: [buildMessage("assistant", "Measured transcript row", { id: "loaded-1" })],
+          }),
+        },
+      }),
+    );
+
+    const row = screen.getByText("Measured transcript row").closest(".agent-chat-row-motion");
+    if (!row?.parentElement) {
+      throw new Error("Expected transcript row wrapper");
+    }
+
+    expect(row.parentElement.className).not.toContain("space-y-");
+  });
+
   test("renders failed session loading state instead of a blank transcript", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
@@ -663,7 +684,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("renders an attachment transcript immediately after session switch", async () => {
+  test("shows the loader before rendering an attachment transcript after session switch", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
         buildMessage(
@@ -718,19 +739,25 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      await animationFrameDriver.flushTimers();
+      expect(rendered.queryByText("Loading session")).not.toBeNull();
+      expect(rendered.queryByText("Attachment message 140")).toBeNull();
 
-      await waitFor(() => {
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
         expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
       });
-      expect(rendered.queryByText("Attachment message 1")).not.toBeNull();
+      expect(
+        rendered.queryByText(`Attachment message ${140 - AGENT_CHAT_ROW_WINDOW_SIZE + 1}`),
+      ).not.toBeNull();
+      expect(rendered.queryByText("Attachment message 1")).toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
       rendered.unmount();
     });
   });
 
-  test("renders cached large transcripts through the latest row window after switching back", async () => {
+  test("shows the loader before rendering cached large transcripts after switching back", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
         buildMessage("user", `Turn ${turnIndex + 1} request`, {
@@ -761,6 +788,7 @@ describe("AgentChatThread", () => {
       );
 
       await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
         await animationFrameDriver.flushTimers();
         expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
       });
@@ -773,7 +801,11 @@ describe("AgentChatThread", () => {
           },
         }),
       );
-      await animationFrameDriver.flushTimers();
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Small transcript")).not.toBeNull();
+      });
 
       rendered.rerender(
         createElement(AgentChatThread, {
@@ -787,8 +819,14 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.queryByText("Loading session")).toBeNull();
-      expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      expect(rendered.queryByText("Loading session")).not.toBeNull();
+      expect(rendered.queryByText("Turn 18 reply 18")).toBeNull();
+
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      });
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
       expect(immediateRowCount).toBeLessThan(largeMessages.length);
@@ -840,7 +878,7 @@ describe("AgentChatThread", () => {
     });
   });
 
-  test("keeps the latest user turn uncontained after a running session completes", async () => {
+  test("does not apply content-visibility containment after a running session completes", async () => {
     const externalSessionId = "session-completed-scroll";
     const messages = Array.from({ length: 12 }, (_, index) => [
       buildMessage("user", `Command ${index + 1}`, {
@@ -900,7 +938,7 @@ describe("AgentChatThread", () => {
     const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:4:user-3`);
     const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:22:user-12`);
     expect(completedOlderTurnStyle).not.toBeNull();
-    expect(completedOlderTurnStyle).toContain("content-visibility");
+    expect(completedOlderTurnStyle).not.toContain("content-visibility");
     expect(completedLatestTurnStyle).not.toBeNull();
     expect(completedLatestTurnStyle).not.toContain("content-visibility");
 

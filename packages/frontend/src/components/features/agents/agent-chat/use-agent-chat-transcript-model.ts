@@ -321,33 +321,7 @@ export const useAgentChatTranscriptModel = ({
   activeSessionRef.current = session;
   activeRevisionRef.current = activeRevision;
   resolvedTranscriptStateRef.current = resolvedTranscriptState;
-  const hasResolvedRowsForActiveSession = Boolean(
-    session &&
-      resolvedTranscriptState.revision.sessionKey === agentSessionIdentityKey(session) &&
-      resolvedTranscriptState.revision.showThinkingMessages === showThinkingMessages,
-  );
-  const cachedTranscriptState = useMemo(() => {
-    if (!session || hasResolvedRowsForActiveSession) {
-      return null;
-    }
-
-    const reusableTranscriptModel = peekReusableTranscriptModelState({
-      session,
-      showThinkingMessages,
-      cache: rowsCache,
-      touch: false,
-    });
-    if (!reusableTranscriptModel) {
-      return null;
-    }
-
-    return toTranscriptModelState({
-      session,
-      revision: activeRevision,
-      transcriptModel: reusableTranscriptModel,
-    });
-  }, [activeRevision, hasResolvedRowsForActiveSession, rowsCache, session, showThinkingMessages]);
-  const displayedTranscriptState = cachedTranscriptState ?? resolvedTranscriptState;
+  const displayedTranscriptState = resolvedTranscriptState;
   const hasRowsForActiveSession = Boolean(
     session &&
       displayedTranscriptState.revision.sessionKey === agentSessionIdentityKey(session) &&

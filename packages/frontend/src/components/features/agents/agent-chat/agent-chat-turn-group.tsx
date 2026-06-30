@@ -12,11 +12,6 @@ import {
 
 export type { AgentChatTurnGroupProps } from "./agent-chat-turn-group-comparator";
 
-const TURN_CONTENT_VISIBILITY_STYLE = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "auto 500px",
-} as const;
-
 const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   row,
   isStreamingAssistantMessage,
@@ -47,10 +42,9 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
   resolveRowRef,
-  allowTurnContainment,
 }: AgentChatTurnGroupProps): ReactElement {
   return (
-    <div style={!allowTurnContainment || turn.isActive ? undefined : TURN_CONTENT_VISIBILITY_STYLE}>
+    <div>
       {turn.rows.map((row) => (
         <AgentChatThreadMotionRow
           key={row.key}

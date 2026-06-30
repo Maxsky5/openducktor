@@ -46,7 +46,6 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
   resolveRowRef,
-  allowTurnContainment: true,
   ...overrides,
 });
 

@@ -31,7 +31,6 @@ type AgentChatTranscriptProps = {
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
-  allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   transcriptNotice: AgentChatThreadModel["transcriptNotice"];
   runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
@@ -142,7 +141,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
-  allowTurnContainment,
   resolveRowRef,
   transcriptNotice,
   runtimeReadiness,
@@ -158,7 +156,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
         <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
       ) : null}
 
-      <div ref={messagesContentRef} className="space-y-1">
+      <div ref={messagesContentRef}>
         {!hasSession && !transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>
@@ -187,18 +185,19 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {renderedTurns.map((turn) => (
-          <AgentChatTurnGroup
-            key={turn.key}
-            turn={turn}
-            sessionAgentColors={sessionAgentColors}
-            sessionIdentity={sessionIdentity}
-            subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-            subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-            resolveRowRef={resolveRowRef}
-            allowTurnContainment={allowTurnContainment}
-          />
-        ))}
+        <div>
+          {renderedTurns.map((turn) => (
+            <AgentChatTurnGroup
+              key={turn.key}
+              turn={turn}
+              sessionAgentColors={sessionAgentColors}
+              sessionIdentity={sessionIdentity}
+              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+              resolveRowRef={resolveRowRef}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -311,7 +310,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     messagesContentRef,
     renderedTurns,
-    allowTurnContainment,
     transcriptNotice: renderedTranscriptNotice,
     isNearBottom,
     isNearTop,
@@ -328,8 +326,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   });
 
-  // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
-  // under-measure rich attachment rows and break bottom pinning.
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
   if (rowRefByKeyRef.current === null) {
     rowRefByKeyRef.current = new Map();
@@ -349,14 +345,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         return cached;
       }
 
-      const nextRef = registerRowElement(rowKey);
-      rowRefByKey.set(rowKey, nextRef);
-      return nextRef;
+      const motionRef = registerRowElement(rowKey);
+      rowRefByKey.set(rowKey, motionRef);
+      return motionRef;
     },
     [registerRowElement, rowRefByKey],
   );
-  // Keep the newest turn measured after completion too. Re-applying content-visibility to the
-  // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
 
@@ -416,7 +410,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={renderedTurns}
-        allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
         transcriptNotice={renderedTranscriptNotice}
         runtimeReadiness={runtimeReadiness}

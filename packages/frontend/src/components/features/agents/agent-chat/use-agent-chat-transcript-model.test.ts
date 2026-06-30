@@ -493,7 +493,7 @@ describe("useAgentChatTranscriptModel", () => {
     await harness.unmount();
   });
 
-  test("shows cached rows on the first render when switching back to an unchanged idle session", async () => {
+  test("publishes cached rows asynchronously when switching back to an unchanged idle session", async () => {
     const firstMessages = Array.from({ length: 500 }, (_, index) =>
       buildMessage(index % 2 === 0 ? "user" : "assistant", `First ${index + 1}`, {
         id: `first-message-${index + 1}`,
@@ -548,8 +548,15 @@ describe("useAgentChatTranscriptModel", () => {
     );
 
     const firstRenderAfterSwitchBack = observedStates[observationsBeforeSwitchBack];
-    expect(firstRenderAfterSwitchBack?.transcriptState.rows).toBe(cachedRows);
-    expect(firstRenderAfterSwitchBack?.isTranscriptModelMissing).toBe(false);
+    expect(firstRenderAfterSwitchBack?.transcriptState.rows).toEqual([]);
+    expect(firstRenderAfterSwitchBack?.isTranscriptModelMissing).toBe(true);
+
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+    expect(observedStates.at(-1)?.transcriptState.rows).toBe(cachedRows);
+    expect(observedStates.at(-1)?.isTranscriptModelMissing).toBe(false);
 
     rendered.unmount();
   });
