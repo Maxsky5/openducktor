@@ -84,6 +84,9 @@ const buildWindowFromRange = (range: RowRange): AgentChatRowWindow => ({
   endRowExclusive: range.endRowExclusive,
 });
 
+const areRangesEqual = (left: RowRange, right: RowRange): boolean =>
+  left.startRow === right.startRow && left.endRowExclusive === right.endRowExclusive;
+
 const rowCountForRange = (range: RowRange): number =>
   Math.max(0, range.endRowExclusive - range.startRow);
 
@@ -137,7 +140,9 @@ export function useAgentChatRowWindow({
       const clampedRange = clampRange(nextRange, rows.length);
       rangeRef.current = clampedRange;
       previousFirstVisibleRowKeyRef.current = rows[clampedRange.startRow]?.key ?? null;
-      setRangeState(clampedRange);
+      setRangeState((currentRange) =>
+        areRangesEqual(currentRange, clampedRange) ? currentRange : clampedRange,
+      );
     },
     [rows],
   );
@@ -380,10 +385,19 @@ export function useAgentChatRowWindow({
   }, [expandAfter, expandBefore, messagesContainerRef]);
 
   const effectiveRange = clampRange(range, rows.length);
-  const window = useMemo(() => buildWindowFromRange(effectiveRange), [effectiveRange]);
+  const effectiveStartRow = effectiveRange.startRow;
+  const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
+  const window = useMemo(
+    () =>
+      buildWindowFromRange({
+        startRow: effectiveStartRow,
+        endRowExclusive: effectiveEndRowExclusive,
+      }),
+    [effectiveEndRowExclusive, effectiveStartRow],
+  );
   const visibleRows = useMemo(
-    () => rows.slice(window.startRow, window.endRowExclusive),
-    [rows, window.endRowExclusive, window.startRow],
+    () => rows.slice(effectiveStartRow, effectiveEndRowExclusive),
+    [effectiveEndRowExclusive, effectiveStartRow, rows],
   );
   const visibleTurnAnchors = useMemo(
     () => selectTurnAnchorsForWindow(turnAnchors, window),

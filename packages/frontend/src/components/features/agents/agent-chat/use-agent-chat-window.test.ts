@@ -393,7 +393,33 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("keeps the same visibleRows reference when the window inputs are unchanged", async () => {
+  test("keeps the same visible row and anchor references when the window inputs are unchanged", async () => {
+    const rows = createTurnRows(12);
+    const turnAnchors = buildAgentChatTurnAnchors(rows);
+    const harness = await mountHarness({
+      rows,
+      turnAnchors,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    const initialWindowedRows = harness.getLatestResult().visibleRows;
+    const initialVisibleTurnAnchors = harness.getLatestResult().visibleTurnAnchors;
+
+    await harness.update({
+      rows,
+      turnAnchors,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().visibleRows).toBe(initialWindowedRows);
+    expect(harness.getLatestResult().visibleTurnAnchors).toBe(initialVisibleTurnAnchors);
+
+    await harness.unmount();
+  });
+
+  test("keeps scroll action references stable when inputs are unchanged", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
@@ -401,7 +427,7 @@ describe("useAgentChatWindow", () => {
       shouldResetForTranscriptLoad: false,
     });
 
-    const initialWindowedRows = harness.getLatestResult().visibleRows;
+    const initialResult = harness.getLatestResult();
 
     await harness.update({
       rows,
@@ -409,7 +435,9 @@ describe("useAgentChatWindow", () => {
       shouldResetForTranscriptLoad: false,
     });
 
-    expect(harness.getLatestResult().visibleRows).toBe(initialWindowedRows);
+    expect(harness.getLatestResult().scrollToTop).toBe(initialResult.scrollToTop);
+    expect(harness.getLatestResult().scrollToBottom).toBe(initialResult.scrollToBottom);
+    expect(harness.getLatestResult().scrollToBottomOnSend).toBe(initialResult.scrollToBottomOnSend);
 
     await harness.unmount();
   });
@@ -664,6 +692,55 @@ describe("useAgentChatWindow", () => {
     expect(harness.getLatestResult().visibleRows.at(-1)?.key).toBe(
       rows[AGENT_CHAT_ROW_WINDOW_SIZE * 4 - 1]?.key,
     );
+
+    await harness.unmount();
+  });
+
+  test("scrollToTop from a slid row window selects the first window and pins top with one click", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+
+    for (let index = 0; index < 3; index += 1) {
+      await act(async () => {
+        container.scrollTop = getMaxScrollTop(container);
+        await dispatchPointerDown(container);
+        await dispatchScroll(container);
+      });
+      await animationFrameDriver.flushFrames();
+    }
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE);
+    expect(container.scrollTop).toBeGreaterThan(0);
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+    expect(harness.getLatestResult().visibleRows[0]?.key).toBe(rows[0]?.key);
+    expect(container.scrollTop).toBe(0);
+    expect(harness.getLatestResult().isNearTop).toBe(true);
 
     await harness.unmount();
   });
@@ -1156,6 +1233,112 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(rows.length - AGENT_CHAT_ROW_WINDOW_SIZE);
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("pins bottom once when a followed running session becomes idle", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 0;
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: false,
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("pins bottom when a followed running session appends final rows while becoming idle", async () => {
+    const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+    const nextRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2 + 15);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = getMaxScrollTop(container);
+
+    await harness.update({
+      rows: nextRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(
+      nextRows.length - AGENT_CHAT_ROW_WINDOW_SIZE,
+    );
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("does not pin bottom when a manually scrolled running session becomes idle", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+    const manualScrollTop = container.scrollTop;
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: false,
+    });
+
+    expect(container.scrollTop).toBe(manualScrollTop);
+    expect(container.scrollTop).toBeLessThan(getMaxScrollTop(container));
 
     await harness.unmount();
   });

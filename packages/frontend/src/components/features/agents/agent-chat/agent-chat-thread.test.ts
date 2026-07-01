@@ -1201,13 +1201,6 @@ describe("AgentChatThread", () => {
     if (!containerNode) {
       throw new Error("Expected messages container node");
     }
-    const scrollToMock = mock((options: ScrollToOptions) => {
-      containerNode.scrollTop = Number(options.top ?? containerNode.scrollTop);
-    });
-    Object.defineProperty(containerNode, "scrollTo", {
-      configurable: true,
-      value: scrollToMock,
-    });
     Object.defineProperty(containerNode, "clientHeight", {
       configurable: true,
       value: 320,
@@ -1228,7 +1221,7 @@ describe("AgentChatThread", () => {
     fireEvent.click(scrollToTopButton);
     await act(flush);
 
-    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    expect(containerNode.scrollTop).toBe(0);
 
     fireEvent.click(scrollToBottomButton);
     await act(flush);

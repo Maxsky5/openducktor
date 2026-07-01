@@ -178,4 +178,56 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     );
     await harness.unmount();
   });
+
+  test("keeps rendered turns stable across unrelated rerenders of a large running session", async () => {
+    const messages = Array.from({ length: 120 }, (_, messageIndex) => {
+      const isAssistant = messageIndex % 2 === 1;
+      return buildMessage(isAssistant ? "assistant" : "user", `Message ${messageIndex}`, {
+        id: `message-${messageIndex}`,
+        ...(isAssistant
+          ? {
+              meta: {
+                kind: "assistant" as const,
+                isFinal: messageIndex < 119,
+              },
+            }
+          : {}),
+      });
+    });
+    const session = buildSession({
+      externalSessionId: "session-rendered-large-stability",
+      status: "running",
+      messages,
+    });
+    const displayedSessionKey = agentSessionIdentityKey(session);
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
+    const syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null> = {
+      current: null,
+    };
+    const harness = createHookHarness(
+      (_props: { tick: number }) =>
+        useAgentChatRenderedTranscript({
+          session,
+          displayedSessionKey,
+          isSessionWorking: true,
+          shouldResetTranscriptWindow: false,
+          transcriptNotice: null,
+          messagesContainerRef,
+          scrollToBottomOnSendRef,
+          syncBottomAfterComposerLayoutRef,
+        }),
+      { tick: 0 },
+      { wrapper: settingsWrapper },
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.renderedTurns.length > 0, 2000);
+    const initialRenderedTurns = harness.getLatest().renderedTurns;
+
+    await harness.update({ tick: 1 });
+
+    expect(harness.getLatest().renderedTurns).toBe(initialRenderedTurns);
+    await harness.unmount();
+  });
 });

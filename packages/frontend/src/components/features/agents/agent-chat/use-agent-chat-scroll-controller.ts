@@ -362,13 +362,17 @@ export function useAgentChatScrollController({
 
   useEffect(() => clearAutoScrollTimer, [clearAutoScrollTimer]);
 
+  const forceScrollToBottom = useCallback(() => {
+    scrollToBottomNow(true);
+  }, [scrollToBottomNow]);
+
   return {
     isNearBottom: buttonState.nearBottom,
     isNearTop: buttonState.nearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
     stopFollowingTranscript,
-    forceScrollToBottom: () => scrollToBottomNow(true),
+    forceScrollToBottom,
     refreshScrollState,
   };
 }

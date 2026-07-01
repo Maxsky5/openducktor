@@ -40,6 +40,7 @@ export function useAgentChatWindow({
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionKeyRef = useRef<string | null>(null);
+  const previousIsSessionWorkingRef = useRef(isSessionWorking);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
   const canFollowPhysicalBottomRef = useRef(true);
   const {
@@ -73,12 +74,14 @@ export function useAgentChatWindow({
     messagesContainerRef,
   });
   canFollowPhysicalBottomRef.current = isLatestWindow;
+  const pendingTopResetIntentVersionRef = useRef<number | null>(null);
   const pendingBottomResetRef = useRef(false);
   const visibleWindowKey = `${windowStart}:${visibleRows.length}`;
   const isFollowingTranscript = useCallback(() => {
     return !userScrolledRef.current;
   }, [userScrolledRef]);
   const resetLatestTurnsAndPinBottom = useCallback(() => {
+    pendingTopResetIntentVersionRef.current = null;
     if (isLatestWindow) {
       forceScrollToBottom();
       return;
@@ -96,6 +99,20 @@ export function useAgentChatWindow({
     prevSessionKeyRef.current = displayedSessionKey;
     resetLatestTurnsAndPinBottom();
   }, [displayedSessionKey, resetLatestTurnsAndPinBottom]);
+
+  useLayoutEffect(() => {
+    const wasSessionWorking = previousIsSessionWorkingRef.current;
+    previousIsSessionWorkingRef.current = isSessionWorking;
+    if (!wasSessionWorking || isSessionWorking) {
+      return;
+    }
+
+    if (userScrolledRef.current) {
+      return;
+    }
+
+    resetLatestTurnsAndPinBottom();
+  }, [isSessionWorking, resetLatestTurnsAndPinBottom, userScrolledRef]);
 
   useLayoutEffect(() => {
     const finishedTranscriptLoad =
@@ -173,6 +190,39 @@ export function useAgentChatWindow({
   useLayoutEffect(() => {
     void visibleWindowKey;
 
+    const pendingTopIntentVersion = pendingTopResetIntentVersionRef.current;
+    if (pendingTopIntentVersion === null) {
+      return;
+    }
+    if (windowStart !== 0) {
+      return;
+    }
+
+    pendingTopResetIntentVersionRef.current = null;
+    if (userScrollIntentVersionRef.current !== pendingTopIntentVersion) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      refreshScrollState();
+      return;
+    }
+
+    container.style.overflowAnchor = "none";
+    container.scrollTop = 0;
+    refreshScrollState();
+  }, [
+    messagesContainerRef,
+    refreshScrollState,
+    userScrollIntentVersionRef,
+    visibleWindowKey,
+    windowStart,
+  ]);
+
+  useLayoutEffect(() => {
+    void visibleWindowKey;
+
     if (!pendingBottomResetRef.current) {
       return;
     }
@@ -187,41 +237,63 @@ export function useAgentChatWindow({
     refreshScrollState();
   }, [refreshScrollState, visibleWindowKey]);
 
+  const scrollToBottom = useCallback(() => {
+    resetLatestTurnsAndPinBottom();
+  }, [resetLatestTurnsAndPinBottom]);
+
+  const scrollToTop = useCallback(() => {
+    const container = messagesContainerRef.current;
+    stopFollowingTranscript();
+    if (container) {
+      container.style.overflowAnchor = "none";
+    }
+
+    pendingBottomResetRef.current = false;
+
+    if (windowStart === 0) {
+      pendingTopResetIntentVersionRef.current = null;
+      if (container) {
+        container.scrollTop = 0;
+      }
+      refreshScrollState();
+      return;
+    }
+
+    pendingTopResetIntentVersionRef.current = userScrollIntentVersionRef.current;
+    selectFirstRowWindow();
+    if (!container) {
+      refreshScrollState();
+      return;
+    }
+
+    container.scrollTop = 0;
+    refreshScrollState();
+  }, [
+    messagesContainerRef,
+    refreshScrollState,
+    selectFirstRowWindow,
+    stopFollowingTranscript,
+    userScrollIntentVersionRef,
+    windowStart,
+  ]);
+
+  const scrollToBottomOnSend = useCallback(() => {
+    if (userScrolledRef.current || !isLatestWindow) {
+      resetLatestTurnsAndPinBottom();
+      return;
+    }
+
+    forceScrollToBottom();
+  }, [forceScrollToBottom, isLatestWindow, resetLatestTurnsAndPinBottom, userScrolledRef]);
+
   return {
     visibleRows,
     visibleTurnAnchors,
     windowStart,
     isNearBottom: isNearBottom && isLatestWindow,
     isNearTop: isNearTop && windowStart === 0,
-    scrollToBottom: () => {
-      resetLatestTurnsAndPinBottom();
-    },
-    scrollToTop: () => {
-      const container = messagesContainerRef.current;
-      stopFollowingTranscript();
-      if (container) {
-        container.style.overflowAnchor = "none";
-      }
-
-      selectFirstRowWindow();
-      if (!container) {
-        refreshScrollState();
-        return;
-      }
-
-      container.scrollTo({
-        top: 0,
-        behavior: "auto",
-      });
-      refreshScrollState();
-    },
-    scrollToBottomOnSend: () => {
-      if (userScrolledRef.current || !isLatestWindow) {
-        resetLatestTurnsAndPinBottom();
-        return;
-      }
-
-      forceScrollToBottom();
-    },
+    scrollToBottom,
+    scrollToTop,
+    scrollToBottomOnSend,
   };
 }
