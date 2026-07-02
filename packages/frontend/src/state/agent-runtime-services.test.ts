@@ -35,7 +35,6 @@ describe("agent runtime services", () => {
         repoPath: "/repo",
         workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: {
           kind: "codex",
           policy: {
@@ -115,7 +114,6 @@ describe("agent runtime services", () => {
         repoPath: "/repo",
         workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       });
 

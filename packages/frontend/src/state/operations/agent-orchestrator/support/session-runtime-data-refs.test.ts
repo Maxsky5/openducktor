@@ -81,7 +81,6 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         externalSessionId: "external-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     });
@@ -105,7 +104,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
-  test("requires role and task context for supported runtime todos", () => {
+  test("returns todo refs for a plain selected-session identity", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
@@ -114,12 +113,22 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
-      kind: "unavailable",
-      error: "Session 'external-1' requires role and task context to read runtime todos.",
+      kind: "available",
+      catalogRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      },
+      todosRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
+      },
     });
   });
 
-  test("requires a known role for supported runtime todos", () => {
+  test("returns todo refs when selected workflow session has no known role", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
@@ -128,8 +137,18 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
-      kind: "unavailable",
-      error: "Session 'external-1' requires role and task context to read runtime todos.",
+      kind: "available",
+      catalogRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      },
+      todosRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
+      },
     });
   });
 

@@ -45,7 +45,6 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "opencode" },
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
@@ -93,7 +92,6 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "opencode" },
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",

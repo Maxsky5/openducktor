@@ -153,8 +153,8 @@ export const loadRepoSessionReadModel = async ({
         }
         return resolveAgentSessionRuntimePolicyFromSnapshot({
           runtimeKind,
-          sessionScope,
           snapshot: settingsSnapshot,
+          ...(sessionScope !== undefined ? { sessionScope } : {}),
         });
       },
     });

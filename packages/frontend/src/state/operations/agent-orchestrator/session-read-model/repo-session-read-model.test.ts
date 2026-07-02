@@ -35,15 +35,11 @@ const expectedRuntimeRef = ({
   externalSessionId,
   runtimeKind = "opencode",
   workingDirectory = "/repo/worktree",
-  taskId = "task-1",
-  role = "build",
 }: {
   repoPath?: string;
   externalSessionId: string;
   runtimeKind?: RuntimeKind;
   workingDirectory?: string;
-  taskId?: string;
-  role?: "build";
 }): AgentSessionRuntimeRef =>
   runtimeKind === "codex"
     ? {
@@ -51,7 +47,6 @@ const expectedRuntimeRef = ({
         externalSessionId,
         runtimeKind,
         workingDirectory,
-        sessionScope: { kind: "workflow", taskId, role },
         runtimePolicy: { kind: "codex", policy: codexPolicy },
       }
     : {
@@ -59,7 +54,6 @@ const expectedRuntimeRef = ({
         externalSessionId,
         runtimeKind,
         workingDirectory,
-        sessionScope: { kind: "workflow", taskId, role },
         runtimePolicy: { kind: "opencode" },
       };
 

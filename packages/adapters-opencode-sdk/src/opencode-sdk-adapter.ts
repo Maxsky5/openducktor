@@ -120,7 +120,10 @@ const applyRuntimeContextToSession = (
   input: AgentSessionRuntimeRef,
 ): void => {
   session.input = { ...session.input };
-  session.input.sessionScope = input.sessionScope;
+  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
+  if (sessionScope) {
+    session.input.sessionScope = sessionScope;
+  }
   session.input.runtimePolicy = input.runtimePolicy;
   if (input.model !== undefined) {
     if (input.model) {
@@ -270,7 +273,9 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const sessionInput = toSessionInput(input);
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session");
+    const scope = input.sessionScope
+      ? requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session")
+      : null;
 
     return registerSession({
       sessions: this.sessions,
@@ -282,7 +287,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${scope.role} session`,
+      startedMessage: scope ? `Resumed ${scope.role} session` : "Resumed session",
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),

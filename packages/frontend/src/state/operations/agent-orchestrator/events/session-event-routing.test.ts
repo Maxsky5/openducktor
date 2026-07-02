@@ -4,7 +4,6 @@ import type {
   AgentSessionRuntimeRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSessionEventRouter } from "./session-event-router";
 import {
@@ -30,7 +29,6 @@ const routeRef = (
   repoPath: "/tmp/repo",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "spec"),
   runtimePolicy: { kind: "opencode" },
   ...overrides,
 });

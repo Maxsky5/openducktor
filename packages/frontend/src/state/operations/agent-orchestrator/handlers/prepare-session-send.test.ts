@@ -97,7 +97,6 @@ describe("prepare session send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "session-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     ]);

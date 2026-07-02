@@ -186,9 +186,9 @@ export type CodexEffectivePolicy = CodexPolicyFields & {
 
 export const resolveCodexEffectivePolicy = (
   config: CodexRuntimeConfig,
-  role: AgentRole,
+  role?: AgentRole | null,
 ): CodexEffectivePolicy => {
-  const override = config.roleOverrides[role] ?? {};
+  const override = role ? (config.roleOverrides[role] ?? {}) : {};
   const inheritedSandboxMode = override.sandboxMode === undefined;
   const policy: CodexPolicyFields = {
     sandboxMode: override.sandboxMode ?? config.defaults.sandboxMode,

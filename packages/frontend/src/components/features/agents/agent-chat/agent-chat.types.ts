@@ -39,8 +39,6 @@ export type AgentChatEmptyStateModel = {
 };
 
 export type AgentChatThreadSession = AgentSessionIdentity & {
-  taskId: string;
-  role: AgentRole | null;
   title?: string;
   activityState: AgentSessionActivityState | null;
   messages: SessionMessagesState;

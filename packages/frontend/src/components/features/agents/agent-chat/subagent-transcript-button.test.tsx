@@ -8,8 +8,6 @@ const runtimeKind = "opencode" as const;
 const parentSession: ParentSessionRuntimeIdentity = {
   runtimeKind,
   workingDirectory: "/repo-a",
-  taskId: "task-a",
-  role: "build",
 };
 
 const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
@@ -46,8 +44,6 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
-        taskId: "task-a",
-        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",
@@ -72,8 +68,6 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
-        taskId: "task-a",
-        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",
@@ -98,8 +92,6 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
-        taskId: "task-a",
-        role: "build",
       },
       title: "Subagent activity",
       description: "View what this subagent did.",

@@ -266,7 +266,7 @@ export type CodexSessionState = {
   repoPath: string;
   threadId: string;
   workingDirectory: string;
-  taskId: string;
+  taskId: string | null;
   runtimePolicy: AgentSessionRuntimePolicy;
   liveStatus?: {
     classification: AgentSessionActivity;

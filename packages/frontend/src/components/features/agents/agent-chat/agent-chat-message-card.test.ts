@@ -28,8 +28,6 @@ const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeIdentity = {
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec",
 };
 
 type AgentChatMessageCardTestProps = Omit<

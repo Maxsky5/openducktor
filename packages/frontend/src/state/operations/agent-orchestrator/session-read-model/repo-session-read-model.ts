@@ -17,7 +17,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { projectRuntimeChildPendingInputToSession } from "../pending-input-projection";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import { toRuntimeSessionContextRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { toRuntimeSessionRef, toRuntimeSessionRefWithPolicy } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import {
   applyRuntimeSnapshotToSession,
@@ -33,7 +33,7 @@ export type RepoSessionReadModel = {
 
 export type ResolveSessionRuntimePolicySync = (input: {
   runtimeKind: RuntimeKind;
-  sessionScope: AgentSessionScope;
+  sessionScope?: AgentSessionScope | null;
 }) => AgentSessionRuntimePolicy;
 
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
@@ -61,12 +61,9 @@ export const buildRepoSessionReadModel = ({
   const unlistedSessionRefs: AgentSessionRuntimeRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
   const runtimePolicyForSession = (session: AgentSessionState): AgentSessionRuntimePolicy => {
-    if (!session.role) {
-      throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
-    }
     return resolveSessionRuntimePolicy({
       runtimeKind: session.runtimeKind,
-      sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+      sessionScope: session.role ? workflowAgentSessionScope(session.taskId, session.role) : null,
     });
   };
 
@@ -82,7 +79,7 @@ export const buildRepoSessionReadModel = ({
 
     if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
       unlistedSessionRefs.push(
-        toRuntimeSessionContextRef(repoPath, session, runtimePolicyForSession(session)),
+        toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicyForSession(session)),
       );
     }
   }
@@ -115,7 +112,7 @@ export const buildRepoSessionReadModel = ({
       projectedPendingInput.hasProjectedChildPendingInput
     ) {
       liveSessionRefs.push(
-        toRuntimeSessionContextRef(repoPath, session, runtimePolicyForSession(session)),
+        toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicyForSession(session)),
       );
     }
   }

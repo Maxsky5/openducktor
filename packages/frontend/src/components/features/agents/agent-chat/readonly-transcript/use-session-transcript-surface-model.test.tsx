@@ -78,8 +78,6 @@ function makeTranscriptTarget(
     externalSessionId: "session-subagent-1",
     runtimeKind: "opencode",
     workingDirectory: "/repo-a",
-    taskId: "task-a",
-    role: "build",
     ...overrides,
   };
 }
@@ -329,7 +327,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-subagent-1",
-        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
         runtimePolicy: { kind: "opencode" },
       });
       const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
@@ -391,7 +388,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-requested",
-        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
         runtimePolicy: { kind: "opencode" },
       });
     } finally {
@@ -578,7 +574,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
         externalSessionId: "session-subagent-1",
-        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
         runtimePolicy: { kind: "opencode" },
       });
       await harness.waitFor(

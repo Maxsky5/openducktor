@@ -239,6 +239,29 @@ describe("config-schemas", () => {
     });
   });
 
+  test("resolves codex policy from defaults when no workflow role is supplied", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        workspaceWriteNetworkAccess: true,
+      },
+      roleOverrides: {
+        qa: { sandboxMode: "read-only", approvalsReviewer: "user" },
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, null)).toEqual({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      approvalsReviewerApplies: true,
+      workspaceWriteNetworkAccess: true,
+    });
+  });
+
   test("allows dangerous explicit codex read-only role overrides", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,

@@ -27,10 +27,10 @@ type SessionInput =
   | ForkAgentSessionInput
   | AgentSessionRuntimeRef;
 
-type SessionStateInput = SessionInput & { systemPrompt?: string };
+type SessionStateInput = SessionInput & { sessionScope?: StartAgentSessionInput["sessionScope"] };
 
-const inputRole = (input: SessionStateInput) => input.sessionScope.role;
-const inputTaskId = (input: SessionStateInput): string => input.sessionScope.taskId;
+const inputRole = (input: SessionStateInput) => input.sessionScope?.role ?? null;
+const inputTaskId = (input: SessionStateInput): string | null => input.sessionScope?.taskId ?? null;
 
 const buildSessionState = (
   input: SessionStateInput,
@@ -56,8 +56,12 @@ export const applyRuntimeContextToSession = (
   session: CodexSessionState,
   input: AgentSessionRuntimeRef,
 ): void => {
-  session.role = input.sessionScope.role;
-  session.taskId = input.sessionScope.taskId;
+  const sessionScope = (input as { sessionScope?: StartAgentSessionInput["sessionScope"] })
+    .sessionScope;
+  if (sessionScope) {
+    session.role = sessionScope.role;
+    session.taskId = sessionScope.taskId;
+  }
   session.runtimePolicy = input.runtimePolicy;
   if (input.systemPrompt !== undefined) {
     session.systemPrompt = input.systemPrompt;

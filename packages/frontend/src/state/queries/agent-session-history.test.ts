@@ -8,7 +8,6 @@ const sessionRefFixture: LoadAgentSessionHistoryInput = {
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimePolicy: { kind: "opencode" },
 };
 

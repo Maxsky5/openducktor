@@ -219,7 +219,7 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("fails history loading when workflow role context is unavailable", async () => {
+  test("loads history without workflow role context", async () => {
     const sessionWithoutRole = {
       ...createSession(),
       role: null,
@@ -231,7 +231,7 @@ describe("session history loader", () => {
         messageId: "history-1",
         role: "assistant" as const,
         timestamp: "2026-06-12T08:00:01.000Z",
-        text: "History must not load without workflow role context.",
+        text: "History can load without workflow role context.",
         parts: [],
       },
     ]);
@@ -250,9 +250,18 @@ describe("session history loader", () => {
     await loadAgentSessionHistory(sessionTarget);
 
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
-    expect(loadSessionHistory).not.toHaveBeenCalled();
-    expect(harness.session.historyLoadState).toBe("failed");
-    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([]);
+    expect(loadSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "external-1",
+      runtimePolicy: { kind: "opencode" },
+      limit: 600,
+    });
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "History can load without workflow role context.",
+    ]);
   });
 
   test("fails selected history loading for an unknown session", async () => {
@@ -560,7 +569,6 @@ describe("session history loader", () => {
         repoPath: "/repo",
         runtimeKind: sessionTarget.runtimeKind,
         workingDirectory: sessionTarget.workingDirectory,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     ]);

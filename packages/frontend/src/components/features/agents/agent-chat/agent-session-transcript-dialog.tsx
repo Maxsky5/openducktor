@@ -22,7 +22,7 @@ type AgentSessionTranscriptDialogProps = {
 
 type AgentSessionTranscriptDialogContentProps = {
   workspaceRepoPath: string | null;
-  target: AgentSessionIdentity;
+  target: AgentSessionTranscriptTarget;
   title: string;
   description: string;
 };

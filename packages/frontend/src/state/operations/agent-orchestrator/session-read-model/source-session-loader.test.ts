@@ -167,7 +167,6 @@ describe("source session loader", () => {
         externalSessionId: record.externalSessionId,
         runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: record.role },
         runtimePolicy: { kind: "opencode" },
       },
     ]);

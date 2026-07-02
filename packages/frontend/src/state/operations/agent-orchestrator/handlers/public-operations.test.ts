@@ -162,7 +162,6 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       runtimePolicy: codexRuntimePolicy,
     };
 
@@ -185,7 +184,6 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo-a/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       runtimePolicy: codexRuntimePolicy,
       systemPromptContext: {
         systemPrompt: "Use the repository rules.",
@@ -199,7 +197,6 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo-a/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       runtimePolicy: codexRuntimePolicy,
       systemPromptContext: {
         systemPrompt: "Use the repository rules.",
@@ -223,7 +220,6 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       runtimePolicy: codexRuntimePolicy,
     };
     const listener = mock(() => undefined);

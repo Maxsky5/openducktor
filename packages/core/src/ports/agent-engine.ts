@@ -27,10 +27,12 @@ import type {
   RuntimeKind,
   RuntimePendingInputRequestId,
   RuntimeWorkingDirectoryRef,
+  SessionRef,
 } from "../types/agent-orchestrator";
 
 export type AgentSessionWorkflowScope = { kind: "workflow"; taskId: string; role: AgentRole };
 export type AgentSessionScope = AgentSessionWorkflowScope;
+export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
 export type AgentSessionRuntimePolicy =
   | { kind: "opencode" }
   | { kind: "codex"; policy: CodexEffectivePolicy };
@@ -48,9 +50,12 @@ export const workflowAgentSessionScope = (
 
 export const sessionScopeRole = (scope: AgentSessionScope): AgentRole => scope.role;
 export const requireWorkflowAgentSessionScope = (
-  scope: AgentSessionScope,
-  _action: string,
+  scope: AgentSessionScope | null | undefined,
+  action: string,
 ): AgentSessionWorkflowScope => {
+  if (!scope) {
+    throw new Error(`Cannot ${action} without workflow session context.`);
+  }
   return scope;
 };
 
@@ -78,10 +83,11 @@ export const toAgentRuntimePolicyBinding = (input: {
 
 export type AgentSessionRuntimeRef = AgentSessionRef &
   AgentRuntimePolicyBinding & {
-    sessionScope: AgentSessionScope;
     model?: AgentModelSelection;
     systemPrompt?: string;
   };
+
+export type WorkflowSessionRuntimeRef = AgentSessionRuntimeRef & WorkflowSessionRef;
 
 export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
   AgentRuntimePolicyBinding & {
@@ -90,7 +96,9 @@ export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
     model?: AgentModelSelection;
   };
 
-export type ResumeAgentSessionInput = AgentSessionRuntimeRef;
+export type ResumeAgentSessionInput = AgentSessionRuntimeRef & {
+  sessionScope?: AgentSessionScope;
+};
 
 export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;

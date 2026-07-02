@@ -6,8 +6,6 @@ import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export const toAgentChatThreadSession = (session: AgentSessionState): AgentChatThreadSession => ({
   ...toAgentSessionIdentity(session),
-  taskId: session.taskId,
-  role: session.role,
   ...(session.title ? { title: session.title } : {}),
   activityState: getAgentSessionActivityStateFromSession(session),
   messages: toSessionMessagesState(session),

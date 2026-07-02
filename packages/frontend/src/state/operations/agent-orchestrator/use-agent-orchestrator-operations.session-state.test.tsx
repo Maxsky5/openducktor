@@ -968,7 +968,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: input.sessionScope.role,
+        role: input.sessionScope?.role ?? null,
         status: "idle",
       };
     };

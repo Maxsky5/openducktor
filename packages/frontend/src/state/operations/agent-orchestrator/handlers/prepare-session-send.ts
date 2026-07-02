@@ -10,7 +10,7 @@ import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-ru
 import { resolveAgentSessionRuntimePolicy } from "../support/session-runtime-policy";
 import {
   type ObserveAgentSession,
-  toRuntimeSessionContextRef,
+  toRuntimeSessionRefWithPolicy,
 } from "../support/session-runtime-ref";
 
 type PrepareSessionSendDependencies = {
@@ -90,7 +90,7 @@ export const createPrepareSessionSend = ({
       sessionScope: { kind: "workflow", taskId: session.taskId, role: session.role },
       loadSettingsSnapshot,
     });
-    const sessionRef = toRuntimeSessionContextRef(repoPath, session, runtimePolicy);
+    const sessionRef = toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy);
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,

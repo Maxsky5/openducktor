@@ -75,8 +75,7 @@ export const useSessionRuntimeData = ({
       !hasSelectedRuntimeContext ||
       selectedExternalSessionId === null ||
       selectedRuntimeKind === null ||
-      selectedWorkingDirectory === null ||
-      selectedTaskId === null
+      selectedWorkingDirectory === null
     ) {
       return null;
     }
@@ -85,9 +84,9 @@ export const useSessionRuntimeData = ({
       externalSessionId: selectedExternalSessionId,
       runtimeKind: selectedRuntimeKind,
       workingDirectory: selectedWorkingDirectory,
-      taskId: selectedTaskId,
-      role: selectedRole,
       selectedModel,
+      ...(selectedTaskId !== null ? { taskId: selectedTaskId } : {}),
+      ...(selectedRole !== null ? { role: selectedRole } : {}),
     };
   }, [
     hasSelectedRuntimeContext,
@@ -101,18 +100,19 @@ export const useSessionRuntimeData = ({
   const sessionForRuntimeData =
     stableSelectedSessionRuntimeContext ?? stableSelectedSessionIdentity;
   const runtimePolicyTarget = useMemo(() => {
-    if (
-      stableSelectedSessionRuntimeContext === null ||
-      stableSelectedSessionRuntimeContext.role === null
-    ) {
+    if (stableSelectedSessionRuntimeContext === null) {
       return null;
     }
     return {
       runtimeKind: stableSelectedSessionRuntimeContext.runtimeKind,
-      sessionScope: workflowAgentSessionScope(
-        stableSelectedSessionRuntimeContext.taskId,
-        stableSelectedSessionRuntimeContext.role,
-      ),
+      sessionScope:
+        "taskId" in stableSelectedSessionRuntimeContext &&
+        "role" in stableSelectedSessionRuntimeContext
+          ? workflowAgentSessionScope(
+              stableSelectedSessionRuntimeContext.taskId,
+              stableSelectedSessionRuntimeContext.role,
+            )
+          : null,
     };
   }, [stableSelectedSessionRuntimeContext]);
   const settingsSnapshotQuery = useQuery({

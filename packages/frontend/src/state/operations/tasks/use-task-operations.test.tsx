@@ -1947,7 +1947,6 @@ describe("use-task-operations", () => {
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
           runtimePolicy: { kind: "opencode" },
         },
         turnMetadata: createSessionTurnMetadata(),

@@ -3,6 +3,7 @@ import type {
   AgentSessionRuntimePolicy,
   AgentSessionRuntimeRef,
   RuntimeWorkingDirectoryRef,
+  WorkflowSessionRef,
 } from "@openducktor/core";
 import {
   requireRepoRuntimeRef,
@@ -59,18 +60,29 @@ export const toRuntimeSessionRef = (
   };
 };
 
-export const toRuntimeSessionContextRef = (
+export const toWorkflowSessionRef = (
   repoPath: string,
   session: RuntimeSessionContextSource,
-  runtimePolicy: AgentSessionRuntimePolicy,
-): AgentSessionRuntimeRef => {
+): WorkflowSessionRef => {
   if (!session.role) {
     throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
   }
   return {
     ...toRuntimeSessionRef(repoPath, session),
-    ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
     sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+  };
+};
+
+export const toRuntimeSessionRefWithPolicy = (
+  repoPath: string,
+  session: AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] },
+  runtimePolicy: AgentSessionRuntimePolicy,
+): AgentSessionRuntimeRef => {
+  return {
+    ...toRuntimeSessionRef(repoPath, session),
+    ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
     ...(session.selectedModel ? { model: session.selectedModel } : {}),
   };
 };
+
+export const toRuntimeSessionContextRef = toRuntimeSessionRefWithPolicy;

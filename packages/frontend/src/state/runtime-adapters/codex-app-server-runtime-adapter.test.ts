@@ -267,7 +267,6 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           runtimeKind: "codex",
           workingDirectory: "/repo",
           externalSessionId: "thread-live",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
           runtimePolicy: codexBuildRuntimePolicy,
         },
         (event) => events.push(event),

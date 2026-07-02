@@ -224,7 +224,6 @@ describe("useSessionRuntimeData", () => {
         externalSessionId: "external-1",
         repoPath: "/repo",
         runtimeKind: "opencode",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
         workingDirectory: "/repo",
       });

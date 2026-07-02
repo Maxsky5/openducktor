@@ -4,7 +4,7 @@ import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-ta
 
 export type ParentSessionRuntimeIdentity = Pick<
   AgentSessionTranscriptTarget,
-  "runtimeKind" | "workingDirectory" | "taskId" | "role"
+  "runtimeKind" | "workingDirectory"
 >;
 
 export const toSubagentSessionIdentity = ({
@@ -41,8 +41,6 @@ export const toSubagentTranscriptTarget = ({
 
   return {
     ...identity,
-    taskId: parentSession.taskId,
-    role: parentSession.role,
   };
 };
 

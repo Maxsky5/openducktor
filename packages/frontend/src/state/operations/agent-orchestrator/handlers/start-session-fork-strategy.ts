@@ -6,7 +6,7 @@ import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import { resolveAgentSessionRuntimePolicy } from "../support/session-runtime-policy";
-import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import { toRuntimeSessionRefWithPolicy } from "../support/session-runtime-ref";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -112,14 +112,12 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
-      ...toRuntimeSessionContextRef(
+      ...toRuntimeSessionRefWithPolicy(
         ctx.repoPath,
         {
           externalSessionId: summary.externalSessionId,
           runtimeKind: summary.runtimeKind,
           workingDirectory: summary.workingDirectory,
-          taskId: ctx.taskId,
-          role: ctx.role,
           selectedModel: null,
         },
         runtimePolicy,

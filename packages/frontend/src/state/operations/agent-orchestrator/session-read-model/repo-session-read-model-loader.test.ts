@@ -139,7 +139,6 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     ]);
@@ -183,7 +182,6 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     ]);
@@ -214,7 +212,6 @@ describe("repo session read model loader", () => {
         externalSessionId: "removed-session",
         runtimeKind: "opencode",
         workingDirectory: "/repo/old-worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "opencode" },
       },
     ]);
