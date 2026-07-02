@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRuntimeRef } from "@openducktor/core";
+import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -25,7 +25,7 @@ const buildWorkflowSession = (
 const createPrepareSend = (
   overrides: Partial<Parameters<typeof createPrepareSessionSend>[0]> = {},
 ) => {
-  const observedRefs: AgentSessionRuntimeRef[] = [];
+  const observedRefs: PolicyBoundSessionRef[] = [];
   const ensureRuntimeCalls: unknown[] = [];
   const sessionObserversRef = overrides.sessionObserversRef ?? createSessionObserversRefFixture();
 

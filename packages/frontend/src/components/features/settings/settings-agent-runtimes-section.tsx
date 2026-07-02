@@ -155,7 +155,7 @@ function PolicyOptionCards<T extends string | boolean>({
           disabled={disabled}
           onClick={() => onChange(undefined)}
           className={cn(
-            "rounded-md border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+            "rounded-md border px-3 py-2.5 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
             value === undefined
               ? "border-primary bg-primary/10 text-foreground shadow-sm"
               : "border-border bg-background text-muted-foreground hover:bg-muted/70",
@@ -178,7 +178,7 @@ function PolicyOptionCards<T extends string | boolean>({
             disabled={disabled}
             onClick={() => onChange(option)}
             className={cn(
-              "rounded-md border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              "rounded-md border px-3 py-2.5 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
               active
                 ? "border-primary bg-primary/10 text-foreground shadow-sm"
                 : "border-border bg-background text-muted-foreground hover:bg-muted/70",
@@ -509,7 +509,7 @@ function RoleTabs({
           disabled={disabled}
           onClick={() => onChange(role)}
           className={cn(
-            "rounded-sm px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+            "rounded-sm px-3 py-1.5 text-xs font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
             value === role
               ? "bg-primary text-primary-foreground shadow-sm"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",

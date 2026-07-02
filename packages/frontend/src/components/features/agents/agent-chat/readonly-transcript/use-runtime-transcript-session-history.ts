@@ -2,7 +2,7 @@ import { agentRoleValues } from "@openducktor/contracts";
 import type {
   AgentRole,
   AgentSessionHistoryMessage,
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -144,7 +144,7 @@ export function useRuntimeTranscriptSessionHistory({
     runtimePolicyResult.error ??
     (settingsSnapshotQuery.error instanceof Error ? settingsSnapshotQuery.error.message : null);
   const runtimePolicy = runtimePolicyResult.runtimePolicy;
-  const runtimeSessionRef = useMemo<AgentSessionRuntimeRef | null>(() => {
+  const runtimeSessionRef = useMemo<PolicyBoundSessionRef | null>(() => {
     const policySession = matchingLiveSession ?? stableTarget;
     if (repoPath === null || policySession === null || runtimePolicy === null) {
       return null;

@@ -1,5 +1,5 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionRuntimePolicy, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
@@ -11,7 +11,7 @@ type SessionRuntimeDataSource =
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
   | { kind: "unavailable"; error: string }
-  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: AgentSessionRuntimeRef | null };
+  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: PolicyBoundSessionRef | null };
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;

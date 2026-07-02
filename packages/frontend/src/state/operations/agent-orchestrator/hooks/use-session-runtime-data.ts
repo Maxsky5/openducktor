@@ -1,8 +1,8 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
-  AgentSessionRuntimeRef,
   AgentSessionTodoItem,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
@@ -35,10 +35,10 @@ type UseSessionRuntimeDataArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  readSessionTodos: (session: AgentSessionRuntimeRef) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
-const skippedSessionTodosQueryOptions = (session: AgentSessionRuntimeRef | null) =>
+const skippedSessionTodosQueryOptions = (session: PolicyBoundSessionRef | null) =>
   skippedQueryOptions<AgentSessionTodoItem[]>({
     queryKey: session ? agentSessionTodosQueryKeys.todos(session) : agentSessionTodosQueryKeys.all,
     staleTime: SESSION_TODOS_STALE_TIME_MS,

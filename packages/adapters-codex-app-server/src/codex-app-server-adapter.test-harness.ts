@@ -7,7 +7,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type {
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
@@ -33,7 +33,7 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
 
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
-): AgentSessionRuntimeRef => ({
+): PolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",
@@ -44,8 +44,8 @@ export const codexSessionRef = (
 
 export const codexSessionRuntimeRef = (
   externalSessionId = "thread/start-runtime-live",
-  overrides: Partial<AgentSessionRuntimeRef> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<PolicyBoundSessionRef> = {},
+): PolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",

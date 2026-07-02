@@ -1,12 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
-import type {
-  AgentEvent,
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
-  RuntimeKind,
-} from "@openducktor/core";
+import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
@@ -16,7 +11,7 @@ type TestAdapterInternals = {
   clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
 };
 
-const sessionRef = (externalSessionId = "external-session-1"): AgentSessionRef => ({
+const sessionRef = (externalSessionId = "external-session-1"): SessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",
@@ -25,8 +20,8 @@ const sessionRef = (externalSessionId = "external-session-1"): AgentSessionRef =
 
 const sessionRuntimeRef = (
   externalSessionId = "external-session-1",
-  overrides: Partial<Omit<AgentSessionRuntimeRef, "runtimeKind" | "runtimePolicy">> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<Omit<PolicyBoundSessionRef, "runtimeKind" | "runtimePolicy">> = {},
+): PolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",

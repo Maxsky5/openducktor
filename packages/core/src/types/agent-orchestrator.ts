@@ -80,7 +80,6 @@ export type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
 export type SessionRef = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
 };
-export type AgentSessionRef = SessionRef;
 
 export type AgentFileSearchResultKind =
   | "directory"
@@ -485,5 +484,5 @@ export type AgentEvent = (
       message: string;
     }
 ) & {
-  sessionRef?: AgentSessionRef;
+  sessionRef?: SessionRef;
 };

@@ -1,8 +1,8 @@
 import type {
-  AgentSessionRef,
   AgentSessionRuntimePolicy,
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
   RuntimeWorkingDirectoryRef,
+  SessionRef,
   WorkflowSessionRef,
 } from "@openducktor/core";
 import {
@@ -13,7 +13,7 @@ import {
 } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type ObserveAgentSession = (session: AgentSessionRuntimeRef) => Promise<void>;
+export type ObserveAgentSession = (session: PolicyBoundSessionRef) => Promise<void>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
@@ -48,7 +48,7 @@ export const toRuntimeWorkingDirectoryRef = ({
 export const toRuntimeSessionRef = (
   repoPath: string,
   session: AgentSessionIdentity,
-): AgentSessionRef => {
+): SessionRef => {
   return {
     ...toRuntimeWorkingDirectoryRef({
       repoPath,
@@ -77,7 +77,7 @@ export const toRuntimeSessionRefWithPolicy = (
   repoPath: string,
   session: AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] },
   runtimePolicy: AgentSessionRuntimePolicy,
-): AgentSessionRuntimeRef => {
+): PolicyBoundSessionRef => {
   return {
     ...toRuntimeSessionRef(repoPath, session),
     ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),

@@ -1,8 +1,8 @@
 import {
   type AgentEvent,
-  type AgentSessionRef,
   agentSessionRefKey,
   type EventUnsubscribe,
+  type SessionRef,
 } from "@openducktor/core";
 import { MAX_CODEX_EVENT_BACKLOG_PER_SESSION } from "./codex-app-server-shared";
 
@@ -12,7 +12,7 @@ export class CodexSessionEventBus {
   private readonly listenersBySessionKey = new Map<string, Set<AgentEventListener>>();
   private readonly eventBacklogBySessionKey = new Map<string, AgentEvent[]>();
 
-  subscribe(sessionRef: AgentSessionRef, listener: AgentEventListener): EventUnsubscribe {
+  subscribe(sessionRef: SessionRef, listener: AgentEventListener): EventUnsubscribe {
     const sessionKey = agentSessionRefKey(sessionRef);
     const listeners = this.listenersBySessionKey.get(sessionKey) ?? new Set();
     listeners.add(listener);
@@ -28,7 +28,7 @@ export class CodexSessionEventBus {
     };
   }
 
-  emit(sessionRef: AgentSessionRef, event: AgentEvent): void {
+  emit(sessionRef: SessionRef, event: AgentEvent): void {
     const sessionKey = agentSessionRefKey(sessionRef);
     const listeners = this.listenersBySessionKey.get(sessionKey);
     if (!listeners) {
@@ -41,7 +41,7 @@ export class CodexSessionEventBus {
     }
   }
 
-  clear(sessionRef: AgentSessionRef): void {
+  clear(sessionRef: SessionRef): void {
     const sessionKey = agentSessionRefKey(sessionRef);
     this.listenersBySessionKey.delete(sessionKey);
     this.eventBacklogBySessionKey.delete(sessionKey);

@@ -1,5 +1,5 @@
 import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentEnginePort, PolicyBoundSessionRef } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
@@ -13,9 +13,9 @@ import type { TaskSessionRecords } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
-type ClearSessionObservationState = (sessions: readonly AgentSessionRuntimeRef[]) => void;
+type ClearSessionObservationState = (sessions: readonly PolicyBoundSessionRef[]) => void;
 type SessionObserverFailure = {
-  session: AgentSessionRuntimeRef;
+  session: PolicyBoundSessionRef;
   message: string;
 };
 
@@ -24,7 +24,7 @@ const observeLiveSessions = async ({
   observeAgentSession,
   isStaleRepoOperation,
 }: {
-  sessions: readonly AgentSessionRuntimeRef[];
+  sessions: readonly PolicyBoundSessionRef[];
   observeAgentSession: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionObserverFailure[]> => {
@@ -110,7 +110,7 @@ export const loadRepoSessionReadModel = async ({
   commitSessionCollection: CommitSessionCollection;
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
-  loadLiveSessionHistory: (session: AgentSessionRuntimeRef) => Promise<unknown>;
+  loadLiveSessionHistory: (session: PolicyBoundSessionRef) => Promise<unknown>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {

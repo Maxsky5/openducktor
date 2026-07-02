@@ -1,20 +1,20 @@
 import {
   type AgentEvent,
-  type AgentSessionRef,
   agentSessionRefKey,
   agentSessionRefsShareRuntimeStream,
+  type SessionRef,
 } from "@openducktor/core";
 
 export type StreamEventSessionRoute = {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
   sessionKey: string;
 };
 
 const validateEventSessionRef = (
-  streamSessionRef: AgentSessionRef,
+  streamSessionRef: SessionRef,
   event: AgentEvent,
-  eventSessionRef: AgentSessionRef,
-): AgentSessionRef => {
+  eventSessionRef: SessionRef,
+): SessionRef => {
   if (eventSessionRef.externalSessionId !== event.externalSessionId) {
     throw new Error(
       `Session event '${event.type}' has externalSessionId '${event.externalSessionId}' but carries a sessionRef with externalSessionId '${eventSessionRef.externalSessionId}'.`,
@@ -31,9 +31,9 @@ const validateEventSessionRef = (
 };
 
 export const sessionRefForStreamEvent = (
-  streamSessionRef: AgentSessionRef,
+  streamSessionRef: SessionRef,
   event: AgentEvent,
-): AgentSessionRef => {
+): SessionRef => {
   if (event.sessionRef) {
     return validateEventSessionRef(streamSessionRef, event, event.sessionRef);
   }
@@ -48,7 +48,7 @@ export const sessionRefForStreamEvent = (
 };
 
 export const routeStreamEventSession = (
-  streamSessionRef: AgentSessionRef,
+  streamSessionRef: SessionRef,
   event: AgentEvent,
 ): StreamEventSessionRoute => {
   const sessionRef = sessionRefForStreamEvent(streamSessionRef, event);

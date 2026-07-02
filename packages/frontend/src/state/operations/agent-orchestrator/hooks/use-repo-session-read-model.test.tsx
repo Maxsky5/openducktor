@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
-  type AgentSessionRuntimeRef,
+  type PolicyBoundSessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -47,12 +47,12 @@ const createHarnessState = () => {
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-2"), []);
 
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
-  const observedSessions: AgentSessionRuntimeRef[] = [];
-  const loadedSessionHistories: AgentSessionRuntimeRef[] = [];
-  let observeAgentSessionImpl = async (session: AgentSessionRuntimeRef): Promise<void> => {
+  const observedSessions: PolicyBoundSessionRef[] = [];
+  const loadedSessionHistories: PolicyBoundSessionRef[] = [];
+  let observeAgentSessionImpl = async (session: PolicyBoundSessionRef): Promise<void> => {
     observedSessions.push(session);
   };
-  let loadLiveSessionHistoryImpl = async (session: AgentSessionRuntimeRef): Promise<void> => {
+  let loadLiveSessionHistoryImpl = async (session: PolicyBoundSessionRef): Promise<void> => {
     loadedSessionHistories.push(session);
   };
   const listSessionRuntimeSnapshots = mock(
@@ -68,8 +68,8 @@ const createHarnessState = () => {
     sessionCollection = collection;
     return result;
   };
-  const observeAgentSession = (session: AgentSessionRuntimeRef) => observeAgentSessionImpl(session);
-  const loadLiveSessionHistory = (session: AgentSessionRuntimeRef) =>
+  const observeAgentSession = (session: PolicyBoundSessionRef) => observeAgentSessionImpl(session);
+  const loadLiveSessionHistory = (session: PolicyBoundSessionRef) =>
     loadLiveSessionHistoryImpl(session);
   const clearSessionObservationState = mock(() => undefined);
   const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {

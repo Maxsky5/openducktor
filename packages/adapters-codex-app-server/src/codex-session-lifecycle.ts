@@ -1,8 +1,8 @@
 import type {
   AgentModelSelection,
-  AgentSessionRuntimeRef,
   AgentSessionSummary,
   ForkAgentSessionInput,
+  PolicyBoundSessionRef,
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
@@ -25,7 +25,7 @@ type SessionInput =
   | StartAgentSessionInput
   | ResumeAgentSessionInput
   | ForkAgentSessionInput
-  | AgentSessionRuntimeRef;
+  | PolicyBoundSessionRef;
 
 type SessionStateInput = SessionInput & { sessionScope?: StartAgentSessionInput["sessionScope"] };
 
@@ -54,7 +54,7 @@ const buildSessionState = (
 
 export const applyRuntimeContextToSession = (
   session: CodexSessionState,
-  input: AgentSessionRuntimeRef,
+  input: PolicyBoundSessionRef,
 ): void => {
   const sessionScope = (input as { sessionScope?: StartAgentSessionInput["sessionScope"] })
     .sessionScope;
@@ -117,7 +117,7 @@ export const sessionStateFromThreadFork = (
 };
 
 export const sessionStateFromExistingThread = (
-  input: AgentSessionRuntimeRef,
+  input: PolicyBoundSessionRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
@@ -128,7 +128,7 @@ export const sessionStateFromExistingThread = (
 };
 
 export const sessionStateFromThreadSnapshot = (
-  input: AgentSessionRuntimeRef,
+  input: PolicyBoundSessionRef,
   runtimeId: string,
   threadSnapshot: CodexThreadSnapshot,
 ): CodexSessionState => {
@@ -162,7 +162,7 @@ export const preserveRuntimeContextForExistingThread = (
 };
 
 const sessionStateFromThreadResumeResponse = (
-  input: ResumeAgentSessionInput | AgentSessionRuntimeRef,
+  input: ResumeAgentSessionInput | PolicyBoundSessionRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,

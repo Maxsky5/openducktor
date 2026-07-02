@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRuntimeRef, ResumeAgentSessionInput } from "@openducktor/core";
+import type { PolicyBoundSessionRef, ResumeAgentSessionInput } from "@openducktor/core";
 import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
 import {
   sessionStateFromExistingThread,
@@ -37,7 +37,7 @@ describe("codex session lifecycle", () => {
       threadResumeResponse,
     );
     const existingThreadSession = sessionStateFromExistingThread(
-      sharedInput satisfies AgentSessionRuntimeRef,
+      sharedInput satisfies PolicyBoundSessionRef,
       "runtime-1",
       model,
       threadResumeResponse,
@@ -90,7 +90,7 @@ describe("codex session lifecycle", () => {
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Review the work.",
       externalSessionId: "thread-1",
-    } satisfies AgentSessionRuntimeRef;
+    } satisfies PolicyBoundSessionRef;
 
     const existingThreadSession = sessionStateFromExistingThread(input, "runtime-1", undefined, {
       ...threadResumeResponse,

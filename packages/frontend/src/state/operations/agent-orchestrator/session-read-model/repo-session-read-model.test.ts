@@ -3,7 +3,7 @@ import type { AgentSessionRecord, CodexEffectivePolicy, RuntimeKind } from "@ope
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
-  type AgentSessionRuntimeRef,
+  type PolicyBoundSessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import {
@@ -40,7 +40,7 @@ const expectedRuntimeRef = ({
   externalSessionId: string;
   runtimeKind?: RuntimeKind;
   workingDirectory?: string;
-}): AgentSessionRuntimeRef =>
+}): PolicyBoundSessionRef =>
   runtimeKind === "codex"
     ? {
         repoPath,

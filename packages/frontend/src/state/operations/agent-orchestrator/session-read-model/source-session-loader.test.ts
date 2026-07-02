@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
   AgentSessionRuntimeSnapshot,
+  PolicyBoundSessionRef,
+  SessionRef,
 } from "@openducktor/core";
 import {
   toAgentSessionRuntimeSnapshot,
@@ -38,7 +38,7 @@ const sourceSession = {
 };
 
 const runtimeSnapshot = (
-  ref: AgentSessionRef,
+  ref: SessionRef,
   runtimeActivity: "running" | "idle" = "running",
 ): AgentSessionRuntimeSnapshot =>
   toAgentSessionRuntimeSnapshot({
@@ -74,16 +74,16 @@ const createCommitSessionCollection = (
 const createLoaderHarness = ({
   initialSessionCollection,
   records = [record],
-  readSessionRuntimeSnapshot = async (ref: AgentSessionRef) => runtimeSnapshot(ref),
+  readSessionRuntimeSnapshot = async (ref: SessionRef) => runtimeSnapshot(ref),
 }: {
   initialSessionCollection?: AgentSessionCollection;
   records?: AgentSessionRecord[];
-  readSessionRuntimeSnapshot?: (ref: AgentSessionRef) => Promise<AgentSessionRuntimeSnapshot>;
+  readSessionRuntimeSnapshot?: (ref: SessionRef) => Promise<AgentSessionRuntimeSnapshot>;
 } = {}) => {
   const queryClient = new QueryClient();
   const collection = createCommitSessionCollection(initialSessionCollection);
-  const observedSessions: AgentSessionRuntimeRef[] = [];
-  const runtimeSnapshotReads: AgentSessionRef[] = [];
+  const observedSessions: PolicyBoundSessionRef[] = [];
+  const runtimeSnapshotReads: SessionRef[] = [];
   const persistedSessionReads: string[] = [];
 
   host.agentSessionsList = async (_repoPath, taskId) => {

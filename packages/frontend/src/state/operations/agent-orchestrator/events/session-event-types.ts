@@ -3,9 +3,9 @@ import type {
   AgentEnginePort,
   AgentEvent,
   AgentRole,
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
   AgentSessionTodoItem,
+  PolicyBoundSessionRef,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -39,7 +39,7 @@ export type WorkflowToolAliasesByCanonical = {
   [ToolName in AgentToolName]?: string[] | undefined;
 };
 export type UpdateSessionTodos = (
-  session: AgentSessionRef,
+  session: SessionRef,
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
 ) => void;
 
@@ -51,7 +51,7 @@ export type SessionPart = SessionPartEvent["part"];
 
 export type ObserveAgentSessionParams = {
   adapter: SessionEventAdapter;
-  sessionRef: AgentSessionRuntimeRef;
+  sessionRef: PolicyBoundSessionRef;
   eventBatchWindowMs?: number;
   turnMetadata: SessionTurnMetadata;
   readSession: ReadSession;
@@ -75,7 +75,7 @@ export type ObserveAgentSessionParams = {
 };
 
 type SessionEventContextParams = Omit<ObserveAgentSessionParams, "sessionRef"> & {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
 };
 
 export type SessionEventSessionContext = {

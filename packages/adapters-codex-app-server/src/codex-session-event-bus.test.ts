@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, AgentSessionRef } from "@openducktor/core";
+import type { AgentEvent, SessionRef } from "@openducktor/core";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 
 type SessionErrorEvent = Extract<AgentEvent, { type: "session_error" }>;
 
-const sessionRef: AgentSessionRef = {
+const sessionRef: SessionRef = {
   externalSessionId: "thread-1",
   repoPath: "/repo",
   runtimeKind: "codex",
@@ -52,7 +52,7 @@ describe("CodexSessionEventBus", () => {
   test("does not deliver events to a listener for the same external id in another repo", () => {
     const bus = new CodexSessionEventBus();
     const otherRepoEvents: AgentEvent[] = [];
-    const otherRepoSessionRef: AgentSessionRef = {
+    const otherRepoSessionRef: SessionRef = {
       ...sessionRef,
       repoPath: "/other-repo",
       workingDirectory: "/other-repo",

@@ -1,4 +1,4 @@
-import type { AgentSessionHistoryMessage, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
 import { useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
@@ -30,7 +30,7 @@ type UseRuntimeTranscriptLiveOverlayArgs = {
   shouldObserve: boolean;
   repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
-  sessionRef: AgentSessionRuntimeRef | null;
+  sessionRef: PolicyBoundSessionRef | null;
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];

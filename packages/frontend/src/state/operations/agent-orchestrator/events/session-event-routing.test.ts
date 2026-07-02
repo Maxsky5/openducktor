@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
-  AgentSessionTodoItem,
-} from "@openducktor/core";
+import type { AgentSessionTodoItem, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSessionEventRouter } from "./session-event-router";
 import {
@@ -23,8 +19,8 @@ import {
 } from "./session-events-test-harness";
 
 const routeRef = (
-  overrides: Partial<Omit<AgentSessionRuntimeRef, "runtimeKind" | "runtimePolicy">> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<Omit<PolicyBoundSessionRef, "runtimeKind" | "runtimePolicy">> = {},
+): PolicyBoundSessionRef => ({
   externalSessionId: "session-1",
   repoPath: "/tmp/repo",
   runtimeKind: "opencode",
@@ -40,7 +36,7 @@ const userMessageEvent = ({
 }: {
   message: string;
   messageId: string;
-  sessionRef?: AgentSessionRef;
+  sessionRef?: SessionRef;
 }): Extract<SessionEvent, { type: "user_message" }> => ({
   type: "user_message",
   externalSessionId: sessionRef?.externalSessionId ?? "session-1",
@@ -61,7 +57,7 @@ const assistantPartEvent = ({
   text: string;
   messageId?: string;
   partId?: string;
-  sessionRef?: AgentSessionRef;
+  sessionRef?: SessionRef;
 }): Extract<SessionEvent, { type: "assistant_part" }> => ({
   type: "assistant_part",
   externalSessionId: sessionRef?.externalSessionId ?? "session-1",
@@ -83,7 +79,7 @@ const assistantMessageEvent = ({
 }: {
   message: string;
   messageId?: string;
-  sessionRef?: AgentSessionRef;
+  sessionRef?: SessionRef;
 }): Extract<SessionEvent, { type: "assistant_message" }> => ({
   type: "assistant_message",
   externalSessionId: sessionRef?.externalSessionId ?? "session-1",
@@ -102,10 +98,10 @@ const createRoutingHarness = async ({
 }: {
   eventBatchWindowMs?: number;
   repoPath?: string;
-  sessionRef?: AgentSessionRuntimeRef;
+  sessionRef?: PolicyBoundSessionRef;
   sessions?: AgentSessionState[];
   updateSessionTodos?: (
-    session: AgentSessionRef,
+    session: SessionRef,
     updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
   ) => void;
 } = {}) => {
@@ -117,7 +113,7 @@ const createRoutingHarness = async ({
     },
     replyApproval: async () => {},
   };
-  const sessionTwoRef: AgentSessionRef = {
+  const sessionTwoRef: SessionRef = {
     externalSessionId: "session-2",
     repoPath,
     runtimeKind: "opencode",
@@ -166,7 +162,7 @@ const createDirectRouterContext = ({
   sessions,
   onUpdateSession,
 }: {
-  sessionRef: AgentSessionRuntimeRef;
+  sessionRef: PolicyBoundSessionRef;
   sessions: AgentSessionState[];
   onUpdateSession?: Parameters<typeof createSessionEventRouter>[0]["context"]["updateSession"];
 }) => {
@@ -336,7 +332,7 @@ describe("agent-orchestrator session event routing", () => {
       externalSessionId: "shared-session",
       workingDirectory: "/tmp/repo",
     });
-    const worktreeRef: AgentSessionRef = {
+    const worktreeRef: SessionRef = {
       ...rootRef,
       workingDirectory: "/tmp/repo/worktrees/shared-session",
     };
@@ -420,7 +416,7 @@ describe("agent-orchestrator session event routing", () => {
       externalSessionId: "shared-session",
       workingDirectory: "/tmp/repo",
     });
-    const worktreeRef: AgentSessionRef = {
+    const worktreeRef: SessionRef = {
       ...rootRef,
       workingDirectory: "/tmp/repo/worktrees/shared-session",
     };

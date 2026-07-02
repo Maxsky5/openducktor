@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { SessionRef } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
@@ -46,7 +46,7 @@ const removeObserverIfStale = ({
   sessionObservers,
   isStale,
 }: {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
   sessionObservers: SessionObservers;
   isStale: () => boolean;
 }): void => {

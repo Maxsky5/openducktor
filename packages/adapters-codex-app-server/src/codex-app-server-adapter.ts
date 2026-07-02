@@ -7,8 +7,6 @@ import type {
   AgentModelCatalog,
   AgentSessionHistoryMessage,
   AgentSessionPort,
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
@@ -24,12 +22,14 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SearchAgentFilesInput,
   SendAgentUserMessageInput,
+  SessionRef,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
@@ -441,7 +441,7 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
-  private async ensureSessionState(input: AgentSessionRuntimeRef): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "ensure Codex session state");
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -471,7 +471,7 @@ export class CodexAppServerAdapter
     return summary;
   }
 
-  async releaseSession(input: AgentSessionRef): Promise<void> {
+  async releaseSession(input: SessionRef): Promise<void> {
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) {
       return;
@@ -598,7 +598,7 @@ export class CodexAppServerAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRuntimeRef,
+    input: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     assertCodexRuntimePolicyBinding(input, "subscribe Codex session events");
@@ -646,7 +646,7 @@ export class CodexAppServerAdapter
     return unsubscribe;
   }
 
-  private async prepareLiveSessionSubscription(input: AgentSessionRuntimeRef): Promise<void> {
+  private async prepareLiveSessionSubscription(input: PolicyBoundSessionRef): Promise<void> {
     const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
       "subscribe session events",
@@ -684,7 +684,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
   }
 
-  async stopSession(input: AgentSessionRef): Promise<void> {
+  async stopSession(input: SessionRef): Promise<void> {
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);

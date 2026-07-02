@@ -1,8 +1,8 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR, resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
-  type AgentSessionRuntimeRef,
   type AgentSessionTodoItem,
   buildReadOnlyPermissionRejectionMessage,
+  type PolicyBoundSessionRef,
   workflowAgentSessionScope,
 } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -136,7 +136,7 @@ const runtimeRefForSession = ({
   session: AgentSessionState;
   externalSessionId: string;
   repoPath: string;
-}): AgentSessionRuntimeRef => {
+}): PolicyBoundSessionRef => {
   if (!session.role) {
     throw new Error(`Session '${session.externalSessionId}' is missing a role.`);
   }

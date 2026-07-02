@@ -34,9 +34,9 @@ import {
   type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
+  runtimeInstanceRefSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
-  runtimeRefSchema,
   runtimeTransportSchema,
   slashCommandCatalogSchema,
   taskCardSchema,
@@ -165,7 +165,7 @@ describe("runtime schemas", () => {
   });
 
   test("runtime ref identifies a concrete running runtime", () => {
-    const parsed = runtimeRefSchema.parse({
+    const parsed = runtimeInstanceRefSchema.parse({
       kind: "opencode",
       runtimeId: " runtime-1 ",
     });
@@ -174,7 +174,7 @@ describe("runtime schemas", () => {
       kind: "opencode",
       runtimeId: "runtime-1",
     });
-    expect(() => runtimeRefSchema.parse({ kind: "opencode" })).toThrow();
+    expect(() => runtimeInstanceRefSchema.parse({ kind: "opencode" })).toThrow();
   });
 
   test.each(

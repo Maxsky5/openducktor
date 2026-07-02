@@ -1,10 +1,10 @@
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
-  type AgentSessionRef,
   type AgentSessionRuntimeSnapshot,
   classifyAgentSessionActivity,
   type ReadSessionRuntimeSnapshotInput,
+  type SessionRef,
 } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
@@ -163,7 +163,7 @@ export const toRefreshedRuntimeSnapshot = ({
   return toRuntimeSnapshotFromThread(runtimeSnapshotSource.thread, ref);
 };
 
-export const missingRuntimeSnapshot = (input: AgentSessionRef): AgentSessionRuntimeSnapshot => ({
+export const missingRuntimeSnapshot = (input: SessionRef): AgentSessionRuntimeSnapshot => ({
   availability: "missing",
   classification: "missing",
   ref: input,

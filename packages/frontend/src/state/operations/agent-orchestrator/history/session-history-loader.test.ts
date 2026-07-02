@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -536,7 +536,7 @@ describe("session history loader", () => {
   });
 
   test("does not wait for selected session observation before loading baseline history", async () => {
-    const observedSessions: AgentSessionRuntimeRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const harness = createHistoryLoadHarness();
     const loadSessionHistory = mock(async () => [
       {

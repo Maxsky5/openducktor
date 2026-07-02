@@ -1,12 +1,12 @@
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
-type OpencodeSessionRuntimeRef = Extract<AgentSessionRuntimeRef, { runtimeKind: "opencode" }>;
+type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
 
 export const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 export const buildQueuedSignature = (text: string): string =>
@@ -25,7 +25,7 @@ export const defaultRepoRuntimeInput = {
   runtimePolicy: { kind: "opencode" as const },
 };
 
-export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessionRef => ({
+export const sessionRef = (externalSessionId = "session-opencode-1"): SessionRef => ({
   repoPath: "/repo",
   externalSessionId,
   runtimeKind: "opencode",
@@ -34,8 +34,8 @@ export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessi
 
 export const sessionRuntimeRef = (
   externalSessionId = "session-opencode-1",
-  overrides: Partial<OpencodeSessionRuntimeRef> = {},
-): OpencodeSessionRuntimeRef => ({
+  overrides: Partial<OpencodePolicyBoundSessionRef> = {},
+): OpencodePolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",

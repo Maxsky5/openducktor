@@ -21,11 +21,11 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionHistoryMessage,
-  AgentSessionRuntimeRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
   EventUnsubscribe,
   LoadAgentSessionHistoryInput,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type {
   AgentApprovalRequest,
@@ -180,12 +180,12 @@ export type AgentSessionHistoryLoadContextValue = {
 };
 
 export type AgentOperationsContextValue = {
-  readSessionTodos: (session: AgentSessionRuntimeRef) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
   subscribeSessionEvents: (
-    session: AgentSessionRuntimeRef,
+    session: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ) => Promise<EventUnsubscribe>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;

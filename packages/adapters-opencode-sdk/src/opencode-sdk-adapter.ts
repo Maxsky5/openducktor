@@ -11,9 +11,7 @@ import type {
   AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
-  AgentSessionRef,
   AgentSessionRuntimePolicy,
-  AgentSessionRuntimeRef,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
@@ -26,11 +24,13 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
+  SessionRef,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
@@ -111,13 +111,13 @@ const requireWorkflowRole = (session: SessionRecord): AgentRole => {
   ).role;
 };
 
-const toExistingSessionInput = (input: AgentSessionRuntimeRef): SessionInput => {
+const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
 };
 
 const applyRuntimeContextToSession = (
   session: SessionRecord,
-  input: AgentSessionRuntimeRef,
+  input: PolicyBoundSessionRef,
 ): void => {
   session.input = { ...session.input };
   const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
@@ -294,7 +294,7 @@ export class OpencodeSdkAdapter
     });
   }
 
-  private async ensureSessionState(input: AgentSessionRuntimeRef): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
@@ -363,7 +363,7 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
-  async releaseSession(input: AgentSessionRef): Promise<void> {
+  async releaseSession(input: SessionRef): Promise<void> {
     const session = this.sessions.get(input.externalSessionId);
     if (!session) {
       clearSessionListeners(this.listeners, input);
@@ -697,7 +697,7 @@ export class OpencodeSdkAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRuntimeRef,
+    input: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
@@ -715,7 +715,7 @@ export class OpencodeSdkAdapter
     return subscribeSessionEvents(this.listeners, registeredSessionRef, listener);
   }
 
-  async stopSession(input: AgentSessionRef): Promise<void> {
+  async stopSession(input: SessionRef): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     const sessionRef = opencodeSessionRef(session);
     if (!agentSessionRefsEqual(sessionRef, input)) {

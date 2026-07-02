@@ -7,7 +7,7 @@ import {
 import type {
   AgentEvent,
   AgentSessionHistoryMessage,
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -54,7 +54,7 @@ const readSessionHistory = mock(
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
 const subscribeSessionEvents = mock(
-  async (_sessionRef: AgentSessionRuntimeRef, _listener: (event: AgentEvent) => void) => () =>
+  async (_sessionRef: PolicyBoundSessionRef, _listener: (event: AgentEvent) => void) => () =>
     undefined,
 );
 let settingsChat: ChatSettings = createChatSettingsFixture();
@@ -263,7 +263,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     answerAgentQuestion.mockClear();
     subscribeSessionEvents.mockClear();
     subscribeSessionEvents.mockImplementation(
-      async (_sessionRef: AgentSessionRuntimeRef, _listener: (event: AgentEvent) => void) => () =>
+      async (_sessionRef: PolicyBoundSessionRef, _listener: (event: AgentEvent) => void) => () =>
         undefined,
     );
     sessionStore = createAgentSessionsStore("/repo-a");
@@ -591,7 +591,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const pendingQuestion = makePendingQuestion();
     let subscribedListener: ((event: AgentEvent) => void) | null = null;
     subscribeSessionEvents.mockImplementationOnce(
-      async (_sessionRef: AgentSessionRuntimeRef, listener: (event: AgentEvent) => void) => {
+      async (_sessionRef: PolicyBoundSessionRef, listener: (event: AgentEvent) => void) => {
         subscribedListener = listener;
         return () => undefined;
       },

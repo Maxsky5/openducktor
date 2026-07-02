@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   AgentEvent,
   AgentSessionHistoryMessage,
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -110,14 +110,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
   test("streams runtime events for an unmaterialized read-only transcript session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     const subscribed: {
-      sessionRef: AgentSessionRuntimeRef | null;
+      sessionRef: PolicyBoundSessionRef | null;
       listener: ((event: AgentEvent) => void) | null;
     } = {
       sessionRef: null,
       listener: null,
     };
     const unsubscribe = mock(() => undefined);
-    const subscribeSessionEvents = mock(async (sessionRef: AgentSessionRuntimeRef, listener) => {
+    const subscribeSessionEvents = mock(async (sessionRef: PolicyBoundSessionRef, listener) => {
       subscribed.sessionRef = sessionRef;
       subscribed.listener = listener;
       return unsubscribe;

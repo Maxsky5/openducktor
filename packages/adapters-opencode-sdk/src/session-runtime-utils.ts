@@ -1,8 +1,8 @@
-import type { AgentSessionRuntimeRef, StartAgentSessionInput } from "@openducktor/core";
+import type { PolicyBoundSessionRef, StartAgentSessionInput } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
-type SessionInputSource = StartAgentSessionInput | AgentSessionRuntimeRef;
+type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
   if (typeof value !== "number" || Number.isNaN(value)) {

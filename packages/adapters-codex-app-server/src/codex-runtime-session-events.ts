@@ -2,9 +2,9 @@ import type {
   AcceptedAgentUserMessage,
   AgentEvent,
   AgentModelSelection,
-  AgentSessionRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import {
@@ -79,7 +79,7 @@ type CodexRuntimeSessionHistoryContext = {
 };
 
 type RestoredContextCapture = {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
   tokenUsageByTurnId: Map<string, CodexTokenUsageTotals>;
 };
 
@@ -145,7 +145,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   async captureRestoredContextUsage(
-    sessionRef: AgentSessionRef,
+    sessionRef: SessionRef,
     runtimeId: string,
     restore: () => Promise<void>,
   ): Promise<void> {
@@ -855,7 +855,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitLatestContextUsage(
-    sessionRef: AgentSessionRef,
+    sessionRef: SessionRef,
     tokenUsageByTurnId: ReadonlyMap<string, CodexTokenUsageTotals>,
   ): void {
     let latestTokenUsage: CodexTokenUsageTotals | null = null;

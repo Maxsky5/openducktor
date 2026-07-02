@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentSessionRuntimeRef } from "@openducktor/core";
+import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import {
   type AgentSessionCollection,
@@ -68,9 +68,9 @@ const loadReadModel = async ({
   listSessionRuntimeSnapshots: () => Promise<
     Awaited<ReturnType<typeof toAgentSessionRuntimeSnapshot>>[]
   >;
-  observeAgentSession?: (session: AgentSessionRuntimeRef) => Promise<void>;
-  clearSessionObservationState?: (sessions: readonly AgentSessionRuntimeRef[]) => void;
-  loadLiveSessionHistory?: (session: AgentSessionRuntimeRef) => Promise<unknown>;
+  observeAgentSession?: (session: PolicyBoundSessionRef) => Promise<void>;
+  clearSessionObservationState?: (sessions: readonly PolicyBoundSessionRef[]) => void;
+  loadLiveSessionHistory?: (session: PolicyBoundSessionRef) => Promise<unknown>;
   records?: TaskSessionRecords;
 }) => {
   const collection = createCommitSessionCollection(initialSessionCollection);
@@ -96,7 +96,7 @@ const loadReadModel = async ({
 describe("repo session read model loader", () => {
   test("commits persisted sessions with one runtime snapshot scan", async () => {
     let runtimeSnapshotReads = 0;
-    const observedSessions: AgentSessionRuntimeRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => {
         runtimeSnapshotReads += 1;
@@ -146,7 +146,7 @@ describe("repo session read model loader", () => {
 
   test("preloads detected live session histories after observation", async () => {
     const events: string[] = [];
-    const loadedSessionHistories: AgentSessionRuntimeRef[] = [];
+    const loadedSessionHistories: PolicyBoundSessionRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => [
         toAgentSessionRuntimeSnapshot({
@@ -188,7 +188,7 @@ describe("repo session read model loader", () => {
   });
 
   test("clears observations for mounted sessions no longer listed by persistence", async () => {
-    const cleanedSessions: AgentSessionRuntimeRef[] = [];
+    const cleanedSessions: PolicyBoundSessionRef[] = [];
     const removedSession = createAgentSessionFixture({
       externalSessionId: "removed-session",
       taskId: "task-1",
@@ -218,7 +218,7 @@ describe("repo session read model loader", () => {
   });
 
   test("commits the read model when one live session observer fails", async () => {
-    const observedSessions: AgentSessionRuntimeRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const records: TaskSessionRecords = {
       taskIds: ["task-1", "task-2"],
       records: [
