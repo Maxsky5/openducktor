@@ -7,6 +7,7 @@ type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   isSessionWorking: boolean;
+  canFollowPhysicalBottomRef: MutableRefObject<boolean>;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -14,6 +15,7 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   userScrolledRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
+  stopFollowingTranscript: () => void;
   forceScrollToBottom: () => void;
   refreshScrollState: () => void;
 };
@@ -25,6 +27,7 @@ export function useAgentChatScrollController({
   messagesContainerRef,
   messagesContentRef,
   isSessionWorking,
+  canFollowPhysicalBottomRef,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const [userScrolled, dispatchUserScrolled] = useReducer(
     (_current: boolean, next: boolean) => next,
@@ -79,7 +82,7 @@ export function useAgentChatScrollController({
       !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
     const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
-    if (nearBottom && userScrolledRef.current) {
+    if (nearBottom && canFollowPhysicalBottomRef.current && userScrolledRef.current) {
       applyUserScrolledState(false);
       container.style.overflowAnchor = "none";
     }
@@ -87,6 +90,7 @@ export function useAgentChatScrollController({
     updateNearEdges(nearBottom, nearTop);
   }, [
     canScroll,
+    canFollowPhysicalBottomRef,
     distanceFromBottom,
     messagesContainerRef,
     applyUserScrolledState,
@@ -201,6 +205,16 @@ export function useAgentChatScrollController({
     applyUserScrolledState(true);
   }, [canScroll, messagesContainerRef, applyUserScrolledState]);
 
+  const stopFollowingTranscript = useCallback(() => {
+    userScrollIntentVersionRef.current += 1;
+    applyUserScrolledState(true);
+
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.style.overflowAnchor = "auto";
+    }
+  }, [messagesContainerRef, applyUserScrolledState]);
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
@@ -212,11 +226,11 @@ export function useAgentChatScrollController({
     };
 
     const handleWheel = (event: WheelEvent) => {
+      userScrollIntentVersionRef.current += 1;
+
       if (event.deltaY >= 0) {
         return;
       }
-
-      userScrollIntentVersionRef.current += 1;
 
       const target = event.target instanceof Element ? event.target : undefined;
       const nestedScrollable = target?.closest("[data-scrollable]");
@@ -252,8 +266,10 @@ export function useAgentChatScrollController({
 
       if (nearBottom) {
         if (userScrolledRef.current) {
-          applyUserScrolledState(false);
-          updateOverflowAnchor();
+          if (canFollowPhysicalBottomRef.current) {
+            applyUserScrolledState(false);
+            updateOverflowAnchor();
+          }
         }
         return;
       }
@@ -290,6 +306,7 @@ export function useAgentChatScrollController({
     };
   }, [
     canScroll,
+    canFollowPhysicalBottomRef,
     distanceFromBottom,
     isAutoScrollEvent,
     messagesContainerRef,
@@ -326,6 +343,10 @@ export function useAgentChatScrollController({
 
     const observer = new ResizeObserver(() => {
       refreshScrollState();
+      if (!canFollowPhysicalBottomRef.current) {
+        return;
+      }
+
       if (userScrolledRef.current) {
         return;
       }
@@ -337,16 +358,21 @@ export function useAgentChatScrollController({
     return () => {
       observer.disconnect();
     };
-  }, [messagesContentRef, refreshScrollState, scrollToBottomNow]);
+  }, [messagesContentRef, refreshScrollState, scrollToBottomNow, canFollowPhysicalBottomRef]);
 
   useEffect(() => clearAutoScrollTimer, [clearAutoScrollTimer]);
+
+  const forceScrollToBottom = useCallback(() => {
+    scrollToBottomNow(true);
+  }, [scrollToBottomNow]);
 
   return {
     isNearBottom: buttonState.nearBottom,
     isNearTop: buttonState.nearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
-    forceScrollToBottom: () => scrollToBottomNow(true),
+    stopFollowingTranscript,
+    forceScrollToBottom,
     refreshScrollState,
   };
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createRef, type PropsWithChildren, type ReactElement } from "react";
+import { act, createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
@@ -13,14 +13,24 @@ import { buildMessage, buildSession, buildThreadTranscriptState } from "./agent-
 
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
-let latestDialogProps: {
+type DialogPropsSnapshot = {
   target: AgentSessionIdentity | null;
+  open: boolean;
   title: string;
   description: string;
-} | null = null;
+};
+
+let latestDialogProps: DialogPropsSnapshot | null = null;
+let dialogPropsHistory: DialogPropsSnapshot[] = [];
 
 const transcriptTarget: AgentSessionIdentity = {
   externalSessionId: "session-child-1",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo-a",
+};
+
+const alternateTranscriptTarget: AgentSessionIdentity = {
+  externalSessionId: "session-child-2",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a",
 };
@@ -67,6 +77,37 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
   };
 };
 
+const installAnimationFrameQueue = () => {
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const scheduledFrames = new Map<number, FrameRequestCallback>();
+  let nextFrameId = 1;
+
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    scheduledFrames.set(frameId, callback);
+    return frameId;
+  }) as typeof globalThis.requestAnimationFrame;
+  globalThis.cancelAnimationFrame = ((frameId: number): void => {
+    scheduledFrames.delete(frameId);
+  }) as typeof globalThis.cancelAnimationFrame;
+
+  return {
+    flush: () => {
+      const callbacks = Array.from(scheduledFrames.values());
+      scheduledFrames.clear();
+      for (const callback of callbacks) {
+        callback(globalThis.performance.now());
+      }
+    },
+    restore: () => {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    },
+  };
+};
+
 describe("AgentSessionTranscriptDialogHost", () => {
   beforeAll(async () => {
     actualTranscriptDialog = await import("./agent-session-transcript-dialog");
@@ -74,14 +115,17 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
   beforeEach(() => {
     latestDialogProps = null;
+    dialogPropsHistory = [];
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
         target: AgentSessionIdentity | null;
+        open: boolean;
         title: string;
         description: string;
       }): ReactElement => {
         latestDialogProps = props;
+        dialogPropsHistory.push(props);
         return <div data-testid="session-dialog-props">{props.target?.externalSessionId}</div>;
       },
     }));
@@ -152,6 +196,261 @@ describe("AgentSessionTranscriptDialogHost", () => {
         description: "View what this subagent did.",
       });
     });
+  });
+
+  test("opens the dialog before mounting the deferred transcript target", async () => {
+    const animationFrames = installAnimationFrameQueue();
+
+    try {
+      const { AgentSessionTranscriptDialogHost } = await import(
+        "./use-agent-session-transcript-dialog"
+      );
+      const { useAgentSessionTranscriptDialog } = await import(
+        "./agent-session-transcript-dialog-context"
+      );
+
+      function OpenDialogButton(): ReactElement {
+        const { openSessionTranscript } = useAgentSessionTranscriptDialog();
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              openSessionTranscript({
+                target: transcriptTarget,
+                title: "Subagent activity",
+                description: "View what this subagent did.",
+              });
+            }}
+          >
+            Open
+          </button>
+        );
+      }
+
+      const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+        <ActiveWorkspaceTestProvider>
+          <QueryProvider useIsolatedClient>
+            <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+          </QueryProvider>
+        </ActiveWorkspaceTestProvider>
+      );
+
+      render(<OpenDialogButton />, { wrapper });
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      expect(latestDialogProps).toMatchObject({
+        open: true,
+        target: null,
+        title: "Subagent activity",
+        description: "View what this subagent did.",
+      });
+
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      expect(latestDialogProps).toMatchObject({
+        open: true,
+        target: null,
+      });
+
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      await waitFor(() => {
+        expect(latestDialogProps).toMatchObject({
+          open: true,
+          target: transcriptTarget,
+        });
+      });
+    } finally {
+      animationFrames.restore();
+    }
+  });
+
+  test("does not mount a deferred transcript target after closing before the frame", async () => {
+    const animationFrames = installAnimationFrameQueue();
+
+    try {
+      const { AgentSessionTranscriptDialogHost } = await import(
+        "./use-agent-session-transcript-dialog"
+      );
+      const { useAgentSessionTranscriptDialog } = await import(
+        "./agent-session-transcript-dialog-context"
+      );
+
+      function DialogControls(): ReactElement {
+        const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                openSessionTranscript({ target: transcriptTarget });
+              }}
+            >
+              Open
+            </button>
+            <button type="button" onClick={() => closeSessionTranscript()}>
+              Close
+            </button>
+          </>
+        );
+      }
+
+      const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+        <ActiveWorkspaceTestProvider>
+          <QueryProvider useIsolatedClient>
+            <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+          </QueryProvider>
+        </ActiveWorkspaceTestProvider>
+      );
+
+      render(<DialogControls />, { wrapper });
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(latestDialogProps).toMatchObject({ open: true, target: null });
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(latestDialogProps).toMatchObject({ open: false, target: null });
+
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      expect(latestDialogProps).toMatchObject({ open: false, target: null });
+      expect(dialogPropsHistory).not.toContainEqual(
+        expect.objectContaining({ target: transcriptTarget }),
+      );
+    } finally {
+      animationFrames.restore();
+    }
+  });
+
+  test("mounts only the latest transcript target when requests change before the frame", async () => {
+    const animationFrames = installAnimationFrameQueue();
+
+    try {
+      const { AgentSessionTranscriptDialogHost } = await import(
+        "./use-agent-session-transcript-dialog"
+      );
+      const { useAgentSessionTranscriptDialog } = await import(
+        "./agent-session-transcript-dialog-context"
+      );
+
+      function DialogControls(): ReactElement {
+        const { openSessionTranscript } = useAgentSessionTranscriptDialog();
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                openSessionTranscript({ target: transcriptTarget, title: "First" });
+              }}
+            >
+              Open first
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                openSessionTranscript({ target: alternateTranscriptTarget, title: "Second" });
+              }}
+            >
+              Open second
+            </button>
+          </>
+        );
+      }
+
+      const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+        <ActiveWorkspaceTestProvider>
+          <QueryProvider useIsolatedClient>
+            <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+          </QueryProvider>
+        </ActiveWorkspaceTestProvider>
+      );
+
+      render(<DialogControls />, { wrapper });
+      fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+      fireEvent.click(screen.getByRole("button", { name: "Open second" }));
+
+      expect(latestDialogProps).toMatchObject({
+        open: true,
+        target: null,
+        title: "Second",
+      });
+
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      await waitFor(() => {
+        expect(latestDialogProps).toMatchObject({
+          open: true,
+          target: alternateTranscriptTarget,
+          title: "Second",
+        });
+      });
+      expect(dialogPropsHistory).not.toContainEqual(
+        expect.objectContaining({ target: transcriptTarget }),
+      );
+    } finally {
+      animationFrames.restore();
+    }
+  });
+
+  test("cancels deferred transcript target work when the host unmounts", async () => {
+    const animationFrames = installAnimationFrameQueue();
+
+    try {
+      const { AgentSessionTranscriptDialogHost } = await import(
+        "./use-agent-session-transcript-dialog"
+      );
+      const { useAgentSessionTranscriptDialog } = await import(
+        "./agent-session-transcript-dialog-context"
+      );
+
+      function OpenDialogButton(): ReactElement {
+        const { openSessionTranscript } = useAgentSessionTranscriptDialog();
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              openSessionTranscript({ target: transcriptTarget });
+            }}
+          >
+            Open
+          </button>
+        );
+      }
+
+      const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+        <ActiveWorkspaceTestProvider>
+          <QueryProvider useIsolatedClient>
+            <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+          </QueryProvider>
+        </ActiveWorkspaceTestProvider>
+      );
+
+      const rendered = render(<OpenDialogButton />, { wrapper });
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(latestDialogProps).toMatchObject({ open: true, target: null });
+
+      rendered.unmount();
+      await act(async () => {
+        animationFrames.flush();
+      });
+
+      expect(dialogPropsHistory).not.toContainEqual(
+        expect.objectContaining({ target: transcriptTarget }),
+      );
+    } finally {
+      animationFrames.restore();
+    }
   });
 
   test("clears runtime transcript requests when the dialog closes", async () => {

@@ -1,46 +1,25 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { cn } from "@/lib/utils";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
-import { getSubagentMessageSessionKey } from "./subagent-session-key";
 import {
   type AgentChatRenderedTurn,
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
-type AgentChatThreadMotionRowProps = {
-  row: AgentChatWindowRow;
-  isStreamingAssistantMessage: boolean;
-  sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
-  subagentPendingApprovalCount: number;
-  subagentPendingQuestionCount: number;
-  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-};
-
 type AgentChatTranscriptProps = {
-  activeStreamingAssistantMessageId: string | null;
   emptyState: AgentChatThreadModel["emptyState"];
   isStarting: boolean;
   isSending: boolean;
@@ -52,7 +31,6 @@ type AgentChatTranscriptProps = {
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
-  allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   transcriptNotice: AgentChatThreadModel["transcriptNotice"];
   runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
@@ -151,141 +129,7 @@ type AgentChatBottomStackProps = {
   onToggleTodoPanel: () => void;
 };
 
-const TURN_CONTENT_VISIBILITY_STYLE = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "auto 500px",
-} as const;
-
-const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowRow): boolean => {
-  if (left === right) {
-    return true;
-  }
-  if (left.kind !== right.kind || left.key !== right.key) {
-    return false;
-  }
-  if (left.kind === "turn_duration" && right.kind === "turn_duration") {
-    return left.durationMs === right.durationMs;
-  }
-  return left.kind === "message" && right.kind === "message" && left.message === right.message;
-};
-
-const readSubagentPendingApprovalCount = (
-  row: AgentChatWindowRow,
-  countsBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"],
-  sessionIdentity: AgentSessionIdentity | null,
-): number => {
-  if (row.kind !== "message") {
-    return 0;
-  }
-
-  const sessionKey = getSubagentMessageSessionKey({
-    message: row.message,
-    parentSession: sessionIdentity,
-  });
-  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
-};
-
-const readSubagentPendingQuestionCount = (
-  row: AgentChatWindowRow,
-  countsBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"],
-  sessionIdentity: AgentSessionIdentity | null,
-): number => {
-  if (row.kind !== "message") {
-    return 0;
-  }
-
-  const sessionKey = getSubagentMessageSessionKey({
-    message: row.message,
-    parentSession: sessionIdentity,
-  });
-  return sessionKey ? (countsBySessionKey?.[sessionKey] ?? 0) : 0;
-};
-
-const AgentChatThreadMotionRow = memo(
-  function AgentChatThreadMotionRow({
-    row,
-    isStreamingAssistantMessage,
-    sessionAgentColors,
-    sessionIdentity,
-    subagentPendingApprovalCount,
-    subagentPendingQuestionCount,
-    resolveRowRef,
-  }: AgentChatThreadMotionRowProps): ReactElement {
-    return (
-      <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
-        <AgentChatThreadRow
-          row={row}
-          isStreamingAssistantMessage={isStreamingAssistantMessage}
-          sessionAgentColors={sessionAgentColors}
-          sessionIdentity={sessionIdentity}
-          subagentPendingApprovalCount={subagentPendingApprovalCount}
-          subagentPendingQuestionCount={subagentPendingQuestionCount}
-        />
-      </div>
-    );
-  },
-  (previousProps, nextProps) => {
-    return (
-      previousProps.sessionIdentity === nextProps.sessionIdentity &&
-      previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
-      previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
-      previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
-      previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
-      previousProps.resolveRowRef === nextProps.resolveRowRef &&
-      areChatRowsEquivalent(previousProps.row, nextProps.row)
-    );
-  },
-);
-
-const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
-  turn,
-  activeStreamingAssistantMessageId,
-  sessionAgentColors,
-  sessionIdentity,
-  subagentPendingApprovalCountBySessionKey,
-  subagentPendingQuestionCountBySessionKey,
-  resolveRowRef,
-  allowTurnContainment,
-}: {
-  turn: AgentChatRenderedTurn;
-  activeStreamingAssistantMessageId: string | null;
-  sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
-  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
-  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
-  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  allowTurnContainment: boolean;
-}): ReactElement {
-  return (
-    <div style={!allowTurnContainment || turn.isActive ? undefined : TURN_CONTENT_VISIBILITY_STYLE}>
-      {turn.rows.map((row) => (
-        <AgentChatThreadMotionRow
-          key={row.key}
-          row={row}
-          isStreamingAssistantMessage={
-            row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
-          }
-          sessionAgentColors={sessionAgentColors}
-          sessionIdentity={sessionIdentity}
-          subagentPendingApprovalCount={readSubagentPendingApprovalCount(
-            row,
-            subagentPendingApprovalCountBySessionKey,
-            sessionIdentity,
-          )}
-          subagentPendingQuestionCount={readSubagentPendingQuestionCount(
-            row,
-            subagentPendingQuestionCountBySessionKey,
-            sessionIdentity,
-          )}
-          resolveRowRef={resolveRowRef}
-        />
-      ))}
-    </div>
-  );
-});
-
 const AgentChatTranscript = memo(function AgentChatTranscript({
-  activeStreamingAssistantMessageId,
   emptyState,
   isStarting,
   isSending,
@@ -297,7 +141,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
-  allowTurnContainment,
   resolveRowRef,
   transcriptNotice,
   runtimeReadiness,
@@ -313,7 +156,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
         <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
       ) : null}
 
-      <div ref={messagesContentRef} className="space-y-1">
+      <div ref={messagesContentRef}>
         {!hasSession && !transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>
@@ -342,19 +185,19 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {renderedTurns.map((turn) => (
-          <AgentChatTurnGroup
-            key={turn.key}
-            turn={turn}
-            activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-            sessionAgentColors={sessionAgentColors}
-            sessionIdentity={sessionIdentity}
-            subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-            subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-            resolveRowRef={resolveRowRef}
-            allowTurnContainment={allowTurnContainment}
-          />
-        ))}
+        <div>
+          {renderedTurns.map((turn) => (
+            <AgentChatTurnGroup
+              key={turn.key}
+              turn={turn}
+              sessionAgentColors={sessionAgentColors}
+              sessionIdentity={sessionIdentity}
+              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+              resolveRowRef={resolveRowRef}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -463,15 +306,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const sessionIdentity = useMemo(
-    () => (session ? toAgentSessionIdentity(session) : null),
-    [session],
-  );
+  const sessionIdentity = useStableAgentSessionIdentity(session);
   const {
     messagesContentRef,
     renderedTurns,
-    activeStreamingAssistantMessageId,
-    allowTurnContainment,
     transcriptNotice: renderedTranscriptNotice,
     isNearBottom,
     isNearTop,
@@ -488,8 +326,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   });
 
-  // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
-  // under-measure rich attachment rows and break bottom pinning.
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
   if (rowRefByKeyRef.current === null) {
     rowRefByKeyRef.current = new Map();
@@ -509,14 +345,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         return cached;
       }
 
-      const nextRef = registerRowElement(rowKey);
-      rowRefByKey.set(rowKey, nextRef);
-      return nextRef;
+      const motionRef = registerRowElement(rowKey);
+      rowRefByKey.set(rowKey, motionRef);
+      return motionRef;
     },
     [registerRowElement, rowRefByKey],
   );
-  // Keep the newest turn measured after completion too. Re-applying content-visibility to the
-  // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
 
@@ -565,7 +399,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
-        activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
         emptyState={emptyState}
         isStarting={isStarting}
         isSending={isSending}
@@ -577,7 +410,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={renderedTurns}
-        allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
         transcriptNotice={renderedTranscriptNotice}
         runtimeReadiness={runtimeReadiness}

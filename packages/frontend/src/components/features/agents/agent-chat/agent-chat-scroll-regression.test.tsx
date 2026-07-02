@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
@@ -18,7 +18,7 @@ type MockResizeObserverController = {
   observedElements: Set<Element>;
 };
 
-const createRows = (count: number): AgentChatWindowRow[] =>
+const createRows = (count: number): AgentChatTranscriptRow[] =>
   Array.from({ length: count }, (_, index) => ({
     kind: "message" as const,
     key: `session-1:msg-${index}`,

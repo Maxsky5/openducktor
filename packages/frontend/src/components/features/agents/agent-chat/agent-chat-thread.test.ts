@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   type AgentChatThreadModelInput,
@@ -96,7 +97,6 @@ const createContainer = () => {
     clientHeight: 320,
     removeEventListener: mock(() => {}),
     scrollHeight: 2_000,
-    scrollTo: mock(() => {}),
     scrollTop: 1_680,
   } as unknown as HTMLDivElement;
 };
@@ -106,7 +106,6 @@ type ScrollContainerMock = {
   clientHeight: number;
   removeEventListener: ReturnType<typeof mock>;
   scrollHeight: number;
-  scrollTo: ReturnType<typeof mock>;
   scrollTop: number;
 };
 
@@ -375,6 +374,26 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Already loaded transcript");
     expect(html).not.toContain("OpenCode runtime is unavailable");
     expect(html).not.toContain("Recheck");
+  });
+
+  test("renders transcript rows without untracked vertical gap spacing", () => {
+    render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            messages: [buildMessage("assistant", "Measured transcript row", { id: "loaded-1" })],
+          }),
+        },
+      }),
+    );
+
+    const row = screen.getByText("Measured transcript row").closest(".agent-chat-row-motion");
+    if (!row?.parentElement) {
+      throw new Error("Expected transcript row wrapper");
+    }
+
+    expect(row.parentElement.className).not.toContain("space-y-");
   });
 
   test("renders failed session loading state instead of a blank transcript", () => {
@@ -663,7 +682,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("renders a large attachment transcript through the history window on session switch", async () => {
+  test("shows the loader before rendering an attachment transcript after session switch", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
         buildMessage(
@@ -718,15 +737,17 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
+      expect(rendered.queryByText("Loading session")).not.toBeNull();
+      expect(rendered.queryByText("Attachment message 140")).toBeNull();
 
-      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
-      await animationFrameDriver.flushFrame();
-      await animationFrameDriver.flushTimers();
-
-      await waitFor(() => {
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
         expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
       });
+      expect(
+        rendered.queryByText(`Attachment message ${140 - AGENT_CHAT_ROW_WINDOW_SIZE + 1}`),
+      ).not.toBeNull();
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
@@ -734,7 +755,7 @@ describe("AgentChatThread", () => {
     });
   });
 
-  test("stages a cached large transcript immediately after switching back", async () => {
+  test("shows the loader before rendering cached large transcripts after switching back", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
         buildMessage("user", `Turn ${turnIndex + 1} request`, {
@@ -765,6 +786,7 @@ describe("AgentChatThread", () => {
       );
 
       await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
         await animationFrameDriver.flushTimers();
         expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
       });
@@ -777,7 +799,11 @@ describe("AgentChatThread", () => {
           },
         }),
       );
-      await animationFrameDriver.flushTimers();
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Small transcript")).not.toBeNull();
+      });
 
       rendered.rerender(
         createElement(AgentChatThread, {
@@ -791,25 +817,25 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.queryByText("Loading session")).toBeNull();
-      expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      expect(rendered.queryByText("Loading session")).not.toBeNull();
+      expect(rendered.queryByText("Turn 18 reply 18")).toBeNull();
+
+      await waitFor(async () => {
+        await animationFrameDriver.flushFrames();
+        await animationFrameDriver.flushTimers();
+        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
+      });
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
       expect(immediateRowCount).toBeLessThan(largeMessages.length);
-
-      await animationFrameDriver.flushFrame();
-      await waitFor(() => {
-        expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeGreaterThan(
-          immediateRowCount,
-        );
-      });
+      expect(rendered.queryByText("Turn 1 request")).toBeNull();
 
       rendered.unmount();
     });
   });
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
-    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
+    await withAnimationFrameTestDriver(async () => {
       const initialMessages = [
         buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
       ];
@@ -844,13 +870,13 @@ describe("AgentChatThread", () => {
 
       expect(rendered.queryByText("Loading session")).toBeNull();
       expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
-      expect(animationFrameDriver.pendingFrameCount()).toBeGreaterThan(0);
+      expect(rendered.queryByText("Streaming update")).not.toBeNull();
 
       rendered.unmount();
     });
   });
 
-  test("keeps the latest user turn uncontained after a running session completes", async () => {
+  test("does not apply content-visibility containment after a running session completes", async () => {
     const externalSessionId = "session-completed-scroll";
     const messages = Array.from({ length: 12 }, (_, index) => [
       buildMessage("user", `Command ${index + 1}`, {
@@ -888,7 +914,7 @@ describe("AgentChatThread", () => {
       return turn.getAttribute("style") ?? "";
     };
 
-    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
+    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:22:user-12`);
     expect(runningLatestTurnStyle).not.toBeNull();
     expect(runningLatestTurnStyle).not.toContain("content-visibility");
 
@@ -907,10 +933,10 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-3`);
-    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
+    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:4:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:22:user-12`);
     expect(completedOlderTurnStyle).not.toBeNull();
-    expect(completedOlderTurnStyle).toContain("content-visibility");
+    expect(completedOlderTurnStyle).not.toContain("content-visibility");
     expect(completedLatestTurnStyle).not.toBeNull();
     expect(completedLatestTurnStyle).not.toContain("content-visibility");
 
@@ -1173,13 +1199,6 @@ describe("AgentChatThread", () => {
     if (!containerNode) {
       throw new Error("Expected messages container node");
     }
-    const scrollToMock = mock((options: ScrollToOptions) => {
-      containerNode.scrollTop = Number(options.top ?? containerNode.scrollTop);
-    });
-    Object.defineProperty(containerNode, "scrollTo", {
-      configurable: true,
-      value: scrollToMock,
-    });
     Object.defineProperty(containerNode, "clientHeight", {
       configurable: true,
       value: 320,
@@ -1200,7 +1219,7 @@ describe("AgentChatThread", () => {
     fireEvent.click(scrollToTopButton);
     await act(flush);
 
-    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    expect(containerNode.scrollTop).toBe(0);
 
     fireEvent.click(scrollToBottomButton);
     await act(flush);
