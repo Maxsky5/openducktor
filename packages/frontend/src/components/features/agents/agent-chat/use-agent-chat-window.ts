@@ -39,6 +39,9 @@ export function useAgentChatWindow({
   const composerLayoutSyncFrameRef = useRef<number | null>(null);
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const composerLayoutSyncTokenRef = useRef(0);
+  const idleBottomPinFrameRef = useRef<number | null>(null);
+  const idleBottomPinSettleFrameRef = useRef<number | null>(null);
+  const idleBottomPinTokenRef = useRef(0);
   const prevSessionKeyRef = useRef<string | null>(null);
   const previousIsSessionWorkingRef = useRef(isSessionWorking);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
@@ -76,10 +79,8 @@ export function useAgentChatWindow({
   canFollowPhysicalBottomRef.current = isLatestWindow;
   const pendingTopResetIntentVersionRef = useRef<number | null>(null);
   const pendingBottomResetRef = useRef(false);
-  const visibleWindowKey = `${windowStart}:${visibleRows.length}`;
-  const isFollowingTranscript = useCallback(() => {
-    return !userScrolledRef.current;
-  }, [userScrolledRef]);
+  const visibleRowCount = visibleRows.length;
+  const committedRowWindowVersion = `${windowStart}:${visibleRowCount}`;
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     pendingTopResetIntentVersionRef.current = null;
     if (isLatestWindow) {
@@ -90,6 +91,50 @@ export function useAgentChatWindow({
     pendingBottomResetRef.current = true;
     selectLatestRowWindow();
   }, [forceScrollToBottom, isLatestWindow, selectLatestRowWindow]);
+
+  const cancelScheduledIdleBottomPin = useCallback(() => {
+    idleBottomPinTokenRef.current += 1;
+    if (idleBottomPinFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(idleBottomPinFrameRef.current);
+      idleBottomPinFrameRef.current = null;
+    }
+    if (idleBottomPinSettleFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(idleBottomPinSettleFrameRef.current);
+      idleBottomPinSettleFrameRef.current = null;
+    }
+  }, []);
+
+  const scheduleIdleBottomPinAfterLayout = useCallback(
+    (scheduledUserScrollIntentVersion: number) => {
+      cancelScheduledIdleBottomPin();
+
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        if (userScrollIntentVersionRef.current === scheduledUserScrollIntentVersion) {
+          forceScrollToBottom();
+        }
+        return;
+      }
+
+      const scheduledToken = idleBottomPinTokenRef.current + 1;
+      idleBottomPinTokenRef.current = scheduledToken;
+      idleBottomPinFrameRef.current = requestAnimationFrameFn(() => {
+        idleBottomPinFrameRef.current = null;
+        idleBottomPinSettleFrameRef.current = requestAnimationFrameFn(() => {
+          idleBottomPinSettleFrameRef.current = null;
+          if (idleBottomPinTokenRef.current !== scheduledToken) {
+            return;
+          }
+          if (userScrollIntentVersionRef.current !== scheduledUserScrollIntentVersion) {
+            return;
+          }
+
+          forceScrollToBottom();
+        });
+      });
+    },
+    [cancelScheduledIdleBottomPin, forceScrollToBottom, userScrollIntentVersionRef],
+  );
 
   useLayoutEffect(() => {
     if (prevSessionKeyRef.current === displayedSessionKey) {
@@ -111,8 +156,18 @@ export function useAgentChatWindow({
       return;
     }
 
+    const scheduledUserScrollIntentVersion = userScrollIntentVersionRef.current;
     resetLatestTurnsAndPinBottom();
-  }, [isSessionWorking, resetLatestTurnsAndPinBottom, userScrolledRef]);
+    scheduleIdleBottomPinAfterLayout(scheduledUserScrollIntentVersion);
+  }, [
+    isSessionWorking,
+    resetLatestTurnsAndPinBottom,
+    scheduleIdleBottomPinAfterLayout,
+    userScrollIntentVersionRef,
+    userScrolledRef,
+  ]);
+
+  useEffect(() => cancelScheduledIdleBottomPin, [cancelScheduledIdleBottomPin]);
 
   useLayoutEffect(() => {
     const finishedTranscriptLoad =
@@ -143,7 +198,7 @@ export function useAgentChatWindow({
     };
 
     syncBottomAfterComposerLayoutRef.current = () => {
-      if (!isFollowingTranscript()) {
+      if (userScrolledRef.current) {
         return;
       }
 
@@ -182,13 +237,13 @@ export function useAgentChatWindow({
     };
   }, [
     forceScrollToBottom,
-    isFollowingTranscript,
     syncBottomAfterComposerLayoutRef,
     userScrollIntentVersionRef,
+    userScrolledRef,
   ]);
 
   useLayoutEffect(() => {
-    void visibleWindowKey;
+    void committedRowWindowVersion;
 
     const pendingTopIntentVersion = pendingTopResetIntentVersionRef.current;
     if (pendingTopIntentVersion === null) {
@@ -216,12 +271,12 @@ export function useAgentChatWindow({
     messagesContainerRef,
     refreshScrollState,
     userScrollIntentVersionRef,
-    visibleWindowKey,
+    committedRowWindowVersion,
     windowStart,
   ]);
 
   useLayoutEffect(() => {
-    void visibleWindowKey;
+    void committedRowWindowVersion;
 
     if (!pendingBottomResetRef.current) {
       return;
@@ -229,17 +284,13 @@ export function useAgentChatWindow({
 
     pendingBottomResetRef.current = false;
     forceScrollToBottom();
-  }, [forceScrollToBottom, visibleWindowKey]);
+  }, [committedRowWindowVersion, forceScrollToBottom]);
 
   useLayoutEffect(() => {
-    void visibleWindowKey;
+    void committedRowWindowVersion;
 
     refreshScrollState();
-  }, [refreshScrollState, visibleWindowKey]);
-
-  const scrollToBottom = useCallback(() => {
-    resetLatestTurnsAndPinBottom();
-  }, [resetLatestTurnsAndPinBottom]);
+  }, [committedRowWindowVersion, refreshScrollState]);
 
   const scrollToTop = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -292,7 +343,7 @@ export function useAgentChatWindow({
     windowStart,
     isNearBottom: isNearBottom && isLatestWindow,
     isNearTop: isNearTop && windowStart === 0,
-    scrollToBottom,
+    scrollToBottom: resetLatestTurnsAndPinBottom,
     scrollToTop,
     scrollToBottomOnSend,
   };

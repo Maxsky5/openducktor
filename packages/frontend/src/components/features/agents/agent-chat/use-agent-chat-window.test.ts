@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -230,18 +230,6 @@ const mountHarness = async (
     const container = document.createElement("div");
     const content = document.createElement("div");
     let scrollTopValue = 0;
-    const scrollTo = mock((options: ScrollToOptions) => {
-      if (typeof options.top !== "number") {
-        throw new Error("scrollTo called without explicit top value");
-      }
-
-      container.scrollTop = Number(options.top);
-    });
-
-    Object.defineProperty(container, "scrollTo", {
-      configurable: true,
-      value: scrollTo,
-    });
     Object.defineProperty(container, "clientHeight", {
       configurable: true,
       get: () => options?.containerClientHeight ?? 300,
@@ -345,6 +333,11 @@ const renderMountedRowElements = (
 
 const dispatchWheelUp = async (container: HTMLDivElement): Promise<void> => {
   container.dispatchEvent(new WheelEvent("wheel", { deltaY: -24 }));
+  await flush();
+};
+
+const dispatchWheelDown = async (container: HTMLDivElement): Promise<void> => {
+  container.dispatchEvent(new WheelEvent("wheel", { deltaY: 24 }));
   await flush();
 };
 
@@ -973,7 +966,7 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = 160;
     await act(async () => {
-      await dispatchWheelUp(container);
+      await dispatchWheelDown(container);
       await dispatchScroll(container);
     });
     await animationFrameDriver.flushFrames();
@@ -1191,7 +1184,11 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = getMaxScrollTop(container);
+      await dispatchScroll(container);
+    });
     await act(async () => {
       await dispatchScroll(container);
     });
@@ -1223,7 +1220,11 @@ describe("useAgentChatWindow", () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
-    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = getMaxScrollTop(container);
+      await dispatchScroll(container);
+    });
 
     await act(async () => {
       harness.getLatestResult().scrollToBottomOnSend();
@@ -1287,7 +1288,11 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = getMaxScrollTop(container);
+      await dispatchScroll(container);
+    });
 
     await harness.update({
       rows: nextRows,
@@ -1301,6 +1306,90 @@ describe("useAgentChatWindow", () => {
     );
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("repins bottom after idle layout settles instead of accepting a browser top jump", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = getMaxScrollTop(container);
+      await dispatchScroll(container);
+    });
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: false,
+    });
+
+    await act(async () => {
+      extraContentHeightPx.current = ROW_HEIGHT_PX * 8;
+      container.scrollTop = 0;
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("does not repin bottom after idle if the user intentionally scrolls", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = getMaxScrollTop(container);
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: false,
+    });
+
+    await act(async () => {
+      extraContentHeightPx.current = ROW_HEIGHT_PX * 8;
+      container.scrollTop = 0;
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(container.scrollTop).toBeLessThan(getMaxScrollTop(container));
 
     await harness.unmount();
   });

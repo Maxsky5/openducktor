@@ -226,11 +226,11 @@ export function useAgentChatScrollController({
     };
 
     const handleWheel = (event: WheelEvent) => {
+      userScrollIntentVersionRef.current += 1;
+
       if (event.deltaY >= 0) {
         return;
       }
-
-      userScrollIntentVersionRef.current += 1;
 
       const target = event.target instanceof Element ? event.target : undefined;
       const nestedScrollable = target?.closest("[data-scrollable]");

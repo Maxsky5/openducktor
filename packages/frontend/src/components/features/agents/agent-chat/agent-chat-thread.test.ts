@@ -97,7 +97,6 @@ const createContainer = () => {
     clientHeight: 320,
     removeEventListener: mock(() => {}),
     scrollHeight: 2_000,
-    scrollTo: mock(() => {}),
     scrollTop: 1_680,
   } as unknown as HTMLDivElement;
 };
@@ -107,7 +106,6 @@ type ScrollContainerMock = {
   clientHeight: number;
   removeEventListener: ReturnType<typeof mock>;
   scrollHeight: number;
-  scrollTo: ReturnType<typeof mock>;
   scrollTop: number;
 };
 

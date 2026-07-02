@@ -3,7 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
   AGENT_CHAT_ROW_WINDOW_SIZE,
-  type AgentChatRowWindow,
   selectTurnAnchorsForWindow,
 } from "./agent-chat-row-windows";
 import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
@@ -20,7 +19,6 @@ type UseAgentChatRowWindowInput = {
 
 type UseAgentChatRowWindowResult = {
   windowStart: number;
-  isFirstWindow: boolean;
   isLatestWindow: boolean;
   visibleRows: AgentChatTranscriptRow[];
   visibleTurnAnchors: AgentChatTurnAnchor[];
@@ -77,12 +75,6 @@ const clampRange = (range: RowRange, rowCount: number): RowRange => {
   const endRowExclusive = Math.max(startRow, clampEnd(range.endRowExclusive, rowCount));
   return { startRow, endRowExclusive };
 };
-
-const buildWindowFromRange = (range: RowRange): AgentChatRowWindow => ({
-  index: 0,
-  startRow: range.startRow,
-  endRowExclusive: range.endRowExclusive,
-});
 
 const areRangesEqual = (left: RowRange, right: RowRange): boolean =>
   left.startRow === right.startRow && left.endRowExclusive === right.endRowExclusive;
@@ -387,27 +379,22 @@ export function useAgentChatRowWindow({
   const effectiveRange = clampRange(range, rows.length);
   const effectiveStartRow = effectiveRange.startRow;
   const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
-  const window = useMemo(
-    () =>
-      buildWindowFromRange({
-        startRow: effectiveStartRow,
-        endRowExclusive: effectiveEndRowExclusive,
-      }),
-    [effectiveEndRowExclusive, effectiveStartRow],
-  );
   const visibleRows = useMemo(
     () => rows.slice(effectiveStartRow, effectiveEndRowExclusive),
     [effectiveEndRowExclusive, effectiveStartRow, rows],
   );
   const visibleTurnAnchors = useMemo(
-    () => selectTurnAnchorsForWindow(turnAnchors, window),
-    [turnAnchors, window],
+    () =>
+      selectTurnAnchorsForWindow(turnAnchors, {
+        startRow: effectiveStartRow,
+        endRowExclusive: effectiveEndRowExclusive,
+      }),
+    [effectiveEndRowExclusive, effectiveStartRow, turnAnchors],
   );
 
   return {
-    windowStart: window.startRow,
-    isFirstWindow: window.startRow === 0,
-    isLatestWindow: window.endRowExclusive === rows.length,
+    windowStart: effectiveStartRow,
+    isLatestWindow: effectiveEndRowExclusive === rows.length,
     visibleRows,
     visibleTurnAnchors,
     selectFirstRowWindow,
