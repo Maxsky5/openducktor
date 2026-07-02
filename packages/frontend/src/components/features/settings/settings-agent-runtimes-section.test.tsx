@@ -99,56 +99,76 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
   });
 
-  test("feature role tabs hide non-selected role content and Builder cannot select read-only", () => {
+  test("role override sections start disabled and use dropdown rows", () => {
     const renderer = render(createSection());
 
     try {
       fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
-      fireEvent.click(screen.getAllByRole("tab", { name: "Builder" })[0] as HTMLElement);
 
-      const html = renderer.container.innerHTML;
-      const builderRoleStart = html.indexOf("Uses Workspace-write");
-      const builderRoleEnd = html.indexOf("Effective for Builder", builderRoleStart);
-      const builderRoleHtml = html.slice(builderRoleStart, builderRoleEnd);
-      expect(html).toContain("Inherit default");
-      expect(html).toContain("Effective for Builder");
-      expect(builderRoleHtml).not.toContain("Effective for Spec");
-      expect(builderRoleHtml).not.toContain(
-        "Codex can inspect files but cannot change the workspace.",
+      expect(
+        screen
+          .getByRole("switch", { name: "Enable Sandbox mode role overrides" })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
+      expect(screen.getByRole("button", { name: "Default sandbox mode" }).textContent).toContain(
+        "Workspace-write",
       );
-      expect(builderRoleHtml).toContain("Codex can edit files in the workspace");
-      expect(builderRoleHtml).toContain("Codex runs without sandbox boundaries");
+      expect(screen.getAllByRole("button", { name: "Spec" })[0]?.hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(renderer.container.innerHTML).toContain("Inherits the default value.");
     } finally {
       renderer.unmount();
     }
   });
 
-  test("read-only Codex role overrides present acknowledged dangerous choices", () => {
-    const html = renderCodexSectionHtml();
-    const roleSandboxStart = html.indexOf("Uses Workspace-write");
-    const approvalStart = html.indexOf("Approval prompts");
-    const specSandboxHtml = html.slice(roleSandboxStart, approvalStart);
+  test("enabling role overrides seeds explicit values for every role", () => {
+    const updates: AgentRuntimes[] = [];
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: (updater) => {
+          updates.push(updater(DEFAULT_AGENT_RUNTIMES));
+        },
+      }),
+    );
 
-    expect(specSandboxHtml).toContain("Read-only");
-    expect(specSandboxHtml).toContain("Workspace-write");
-    expect(specSandboxHtml).toContain("Danger full access");
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      fireEvent.click(screen.getByRole("switch", { name: "Enable Sandbox mode role overrides" }));
 
-    const roleApprovalStart = html.indexOf("Uses On request");
-    const reviewerStart = html.indexOf("Prompt reviewer");
-    const specApprovalHtml = html.slice(roleApprovalStart, reviewerStart);
-    expect(specApprovalHtml).toContain("Never");
+      const updatedRuntimes = updates[0];
+      if (!updatedRuntimes) {
+        throw new Error("Expected role override toggle to update agent runtimes.");
+      }
+      expect(updatedRuntimes.codex.roleOverrides.spec?.sandboxMode).toBe("workspace-write");
+      expect(updatedRuntimes.codex.roleOverrides.planner?.sandboxMode).toBe("workspace-write");
+      expect(updatedRuntimes.codex.roleOverrides.build?.sandboxMode).toBe("workspace-write");
+      expect(updatedRuntimes.codex.roleOverrides.qa?.sandboxMode).toBe("workspace-write");
+    } finally {
+      renderer.unmount();
+    }
   });
 
-  test("command network access uses switches instead of option cards", () => {
+  test("command network access uses dropdowns instead of setting switches", () => {
     const renderer = render(createSection());
 
     try {
       fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
 
-      expect(screen.getByRole("switch", { name: "Command network access" })).toBeTruthy();
-      expect(screen.getByRole("switch", { name: "Override command network access" })).toBeTruthy();
-      expect(renderer.container.innerHTML).not.toContain(
-        "Allow network for commands when sandbox mode is workspace-write.</span></button>",
+      expect(
+        screen.getByRole("button", { name: "Default command network access" }).textContent,
+      ).toContain("Off");
+      expect(screen.queryByRole("switch", { name: "Command network access" })).toBeNull();
+      expect(
+        screen.getByRole("switch", { name: "Enable Command network access role overrides" }),
+      ).toBeTruthy();
+      expect(renderer.container.innerHTML).toContain(
+        "Keep command network blocked when sandbox mode is workspace-write.",
       );
     } finally {
       renderer.unmount();
@@ -168,7 +188,6 @@ describe("AgentRuntimesSection", () => {
 
     try {
       fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
-      fireEvent.click(screen.getAllByRole("tab", { name: "Builder" })[0] as HTMLElement);
       const html = renderer.container.innerHTML;
 
       expect(html).toContain(
@@ -204,7 +223,6 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("danger-full-access removes sandbox boundaries");
     expect(html).toContain("never disables approval prompts");
     expect(html).toContain("Approval prompts go to the user");
-    expect(html).toContain("Eligible prompts go through Codex automatic review");
     expect(html).toContain("Acknowledgement required");
     expect(html).toContain("I understand these Codex settings reduce safety protections.");
   });
