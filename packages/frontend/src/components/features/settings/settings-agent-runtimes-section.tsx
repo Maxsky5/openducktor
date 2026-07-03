@@ -364,10 +364,17 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const roleOverrideSwitchId = `codex-${field}-role-overrides`;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-1">
+        <h4 className="text-base font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
+        <p className="text-sm text-muted-foreground">
+          Configure the default value, then opt into role-specific overrides only when needed.
+        </p>
+      </div>
+
       <PolicyInfoPanel field={field} />
 
-      <div className="grid gap-3 border-b border-border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-start">
+      <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-center">
         <div className="flex flex-col gap-1">
           <Label id={defaultLabelId} className="text-sm font-medium text-foreground">
             Default {POLICY_LABELS[field].toLowerCase()}
@@ -387,7 +394,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
 
       <EffectivePolicyNotes config={config} field={field} />
 
-      <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-col gap-3 border-t border-border pt-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
             <Label htmlFor={roleOverrideSwitchId} className="text-sm font-medium text-foreground">
@@ -426,27 +433,24 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
 }): ReactElement {
   const values = defaultValuesForField(field);
   return (
-    <div className="flex flex-col gap-3 border-b border-info-border bg-info-surface px-4 py-3 text-info-surface-foreground">
+    <div className="flex flex-col gap-2 rounded-md border border-info-border bg-info-surface px-3 py-2.5 text-info-surface-foreground">
       <div className="flex flex-col gap-1">
-        <h4 className="text-base font-semibold">{POLICY_LABELS[field]}</h4>
+        <p className="text-sm font-medium">About this setting</p>
         <p className="max-w-3xl text-sm leading-relaxed text-pretty">{FEATURE_HELP[field]}</p>
       </div>
-      <dl className="grid gap-2 sm:grid-cols-2">
+      <dl className="flex flex-col gap-1.5 text-sm">
         {values.map((option) => {
           const key = valueKey(option);
           return (
-            <div
-              key={String(option)}
-              className="rounded-md border border-info-border bg-card/70 px-3 py-2"
-            >
-              <dt className="text-sm font-semibold">{VALUE_LABELS[key]}</dt>
-              <dd className="mt-0.5 text-xs leading-relaxed text-info-muted">{VALUE_HELP[key]}</dd>
+            <div key={String(option)} className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
+              <dt className="font-medium">{VALUE_LABELS[key]}</dt>
+              <dd className="leading-relaxed text-info-muted">{VALUE_HELP[key]}</dd>
             </div>
           );
         })}
-        <div className="rounded-md border border-info-border bg-card/70 px-3 py-2">
-          <dt className="text-sm font-semibold">Inherited</dt>
-          <dd className="mt-0.5 text-xs leading-relaxed text-info-muted">
+        <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
+          <dt className="font-medium">Inherited</dt>
+          <dd className="leading-relaxed text-info-muted">
             Role override only. Leaves the role unset and uses the default value.
           </dd>
         </div>
@@ -471,7 +475,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
   ) => void;
 }): ReactElement {
   return (
-    <div className="grid gap-2">
+    <div className="divide-y divide-border rounded-md border border-border">
       {AGENT_ROLE_ORDER.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
         const overrideValue = config.roleOverrides[role]?.[field] as
@@ -483,7 +487,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
         return (
           <div
             key={role}
-            className="grid gap-2 rounded-md border border-border px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
+            className="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
           >
             <div className="flex flex-col gap-0.5">
               <Label id={roleLabelId} className="text-sm font-medium text-foreground">
@@ -605,7 +609,7 @@ function EffectivePolicyNotes({
   }
 
   return (
-    <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+    <div className="rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
       {notes.map((note) => (
         <p key={note}>{note}</p>
       ))}

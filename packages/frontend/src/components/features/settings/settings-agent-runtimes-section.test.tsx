@@ -100,7 +100,9 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("Inherited");
     expect(html).toContain("Command network access");
     expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
+    expect(html).toContain("About this setting");
     expect(html).toContain("bg-info-surface");
+    expect(html).not.toContain("bg-card/70");
   });
 
   test("role override sections hide role rows until enabled", () => {
