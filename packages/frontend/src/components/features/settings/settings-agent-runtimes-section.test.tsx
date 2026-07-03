@@ -12,18 +12,25 @@ import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
 enableReactActEnvironment();
 
-const createSection = (agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES) =>
+const createSection = (
+  agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES,
+  { requiresCodexDangerAcknowledgement = false } = {},
+) =>
   createElement(AgentRuntimesSection, {
     agentRuntimes,
     runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
     disabled: false,
+    requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged: false,
     onCodexDangerAcknowledgedChange: () => {},
     onUpdateAgentRuntimes: () => {},
   });
 
-const renderCodexSectionHtml = (agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES): string => {
-  const renderer = render(createSection(agentRuntimes));
+const renderCodexSectionHtml = (
+  agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES,
+  { requiresCodexDangerAcknowledgement = false } = {},
+): string => {
+  const renderer = render(createSection(agentRuntimes, { requiresCodexDangerAcknowledgement }));
   try {
     fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
     return renderer.container.innerHTML;
@@ -164,6 +171,7 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
         onUpdateAgentRuntimes: (updater) => {
@@ -238,17 +246,20 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("renders reviewer, network, and risky acknowledgement copy", () => {
-    const html = renderCodexSectionHtml({
-      ...DEFAULT_AGENT_RUNTIMES,
-      codex: {
-        ...DEFAULT_AGENT_RUNTIMES.codex,
-        defaults: {
-          ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
-          approvalPolicy: "never",
-          sandboxMode: "danger-full-access",
+    const html = renderCodexSectionHtml(
+      {
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          defaults: {
+            ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
+            approvalPolicy: "never",
+            sandboxMode: "danger-full-access",
+          },
         },
       },
-    });
+      { requiresCodexDangerAcknowledgement: true },
+    );
 
     expect(html).toContain("has no effect while approval prompts are never");
     expect(html).toContain("Other sandbox modes ignore this switch");
@@ -260,6 +271,32 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("renders risky acknowledgement before policy sections", () => {
+    const html = renderCodexSectionHtml(
+      {
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          defaults: {
+            ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
+            sandboxMode: "danger-full-access",
+          },
+        },
+      },
+      { requiresCodexDangerAcknowledgement: true },
+    );
+
+    expect(html.indexOf("Confirm reduced Codex protections")).toBeLessThan(
+      html.indexOf("Sandbox mode"),
+    );
+  });
+
+  test("hides risky acknowledgement control when Codex selections are safe", () => {
+    const html = renderCodexSectionHtml();
+
+    expect(html).not.toContain("I understand these Codex settings reduce safety protections.");
+  });
+
+  test("hides risky acknowledgement control when risky settings do not require acknowledgement", () => {
     const html = renderCodexSectionHtml({
       ...DEFAULT_AGENT_RUNTIMES,
       codex: {
@@ -271,14 +308,7 @@ describe("AgentRuntimesSection", () => {
       },
     });
 
-    expect(html.indexOf("Confirm reduced Codex protections")).toBeLessThan(
-      html.indexOf("Sandbox mode"),
-    );
-  });
-
-  test("hides risky acknowledgement control when Codex selections are safe", () => {
-    const html = renderCodexSectionHtml();
-
+    expect(html).not.toContain("Confirm reduced Codex protections");
     expect(html).not.toContain("I understand these Codex settings reduce safety protections.");
   });
 
@@ -298,6 +328,7 @@ describe("AgentRuntimesSection", () => {
         },
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresCodexDangerAcknowledgement: true,
         isCodexDangerAcknowledged: acknowledged,
         onCodexDangerAcknowledgedChange: (next) => {
           acknowledged = next;
@@ -322,6 +353,7 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [],
         disabled: false,
+        requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
         onUpdateAgentRuntimes: () => {},
@@ -334,6 +366,7 @@ describe("AgentRuntimesSection", () => {
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
+          requiresCodexDangerAcknowledgement: false,
           isCodexDangerAcknowledged: false,
           onCodexDangerAcknowledgedChange: () => {},
           onUpdateAgentRuntimes: () => {},

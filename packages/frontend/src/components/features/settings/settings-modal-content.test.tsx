@@ -55,6 +55,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   },
   hasRuntimeAvailabilityErrors: false,
   hasUnacknowledgedCodexDangerousSettings: false,
+  requiresCodexDangerAcknowledgement: false,
   isCodexDangerAcknowledged: false,
   selectedRepoRuntimeAvailabilityErrors: [],
   selectedRepoRuntimeAvailabilityErrorCount: 0,

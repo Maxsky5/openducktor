@@ -20,12 +20,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
-import { codexHasDangerousSelection } from "./settings-codex-risk-policy";
 
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
   disabled: boolean;
+  requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
   onCodexDangerAcknowledgedChange: (acknowledged: boolean) => void;
   onUpdateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
@@ -219,12 +219,14 @@ function RuntimeOverview({
 function CodexSettings({
   config,
   disabled,
+  requiresDangerAcknowledgement,
   isDangerAcknowledged,
   onDangerAcknowledgedChange,
   onUpdate,
 }: {
   config: CodexRuntimeConfig;
   disabled: boolean;
+  requiresDangerAcknowledgement: boolean;
   isDangerAcknowledged: boolean;
   onDangerAcknowledgedChange: (acknowledged: boolean) => void;
   onUpdate: (updater: (config: CodexRuntimeConfig) => CodexRuntimeConfig) => void;
@@ -232,7 +234,6 @@ function CodexSettings({
   const [openRoleOverrideFields, setOpenRoleOverrideFields] = useState<
     Partial<Record<CodexPolicyField, boolean>>
   >({});
-  const requiresDangerAcknowledgement = codexHasDangerousSelection(config);
 
   const updateDefault = <Field extends CodexPolicyField>(
     field: Field,
@@ -640,6 +641,7 @@ export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
   disabled,
+  requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
   onCodexDangerAcknowledgedChange,
   onUpdateAgentRuntimes,
@@ -752,6 +754,7 @@ export function AgentRuntimesSection({
                   <CodexSettings
                     config={codexConfigWithDefaults(agentRuntimes.codex)}
                     disabled={disabled}
+                    requiresDangerAcknowledgement={requiresCodexDangerAcknowledgement}
                     isDangerAcknowledged={isCodexDangerAcknowledged}
                     onDangerAcknowledgedChange={onCodexDangerAcknowledgedChange}
                     onUpdate={(updater) =>

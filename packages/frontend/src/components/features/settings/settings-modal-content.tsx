@@ -56,6 +56,7 @@ export function SettingsModalContent({
     snapshotDraft,
     runtimeDefinitions,
     availableRuntimeDefinitions,
+    requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     updateAgentRuntimes,
     setCodexDangerAcknowledged,
@@ -161,6 +162,7 @@ export function SettingsModalContent({
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
         disabled={isInteractionDisabled}
+        requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}
         onCodexDangerAcknowledgedChange={setCodexDangerAcknowledged}
         onUpdateAgentRuntimes={updateAgentRuntimes}

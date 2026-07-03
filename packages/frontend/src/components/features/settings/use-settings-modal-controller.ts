@@ -13,7 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
@@ -22,7 +22,7 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { codexHasDangerousSelection } from "./settings-codex-risk-policy";
+import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
@@ -77,6 +77,7 @@ export type SettingsModalController = {
   runtimeAvailabilityValidationState: RuntimeAvailabilityValidationState;
   hasRuntimeAvailabilityErrors: boolean;
   hasUnacknowledgedCodexDangerousSettings: boolean;
+  requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
   selectedRepoRuntimeAvailabilityErrors: string[];
   selectedRepoRuntimeAvailabilityErrorCount: number;
@@ -230,22 +231,34 @@ export const useSettingsModalController = ({
     snapshotDraft,
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
-  const hasCodexDangerousSettings = snapshotDraft
-    ? codexHasDangerousSelection(snapshotDraft.agentRuntimes.codex)
-    : false;
-  const [isCodexDangerAcknowledged, setCodexDangerAcknowledged] = useState(false);
+  const codexDangerAcknowledgementKey = useMemo(
+    () =>
+      snapshotDraft
+        ? buildNewCodexDangerousSelectionKey({
+            baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
+            draft: snapshotDraft.agentRuntimes.codex,
+          })
+        : "",
+    [loadedSnapshot?.agentRuntimes.codex, snapshotDraft],
+  );
+  const requiresCodexDangerAcknowledgement = codexDangerAcknowledgementKey !== "";
+  const [acknowledgedCodexDangerKey, setAcknowledgedCodexDangerKey] = useState("");
   useEffect(() => {
-    if (!open || loadedSnapshot !== null) {
-      setCodexDangerAcknowledged(false);
+    if (!open || !requiresCodexDangerAcknowledgement) {
+      setAcknowledgedCodexDangerKey("");
     }
-  }, [loadedSnapshot, open]);
-  useEffect(() => {
-    if (!hasCodexDangerousSettings) {
-      setCodexDangerAcknowledged(false);
-    }
-  }, [hasCodexDangerousSettings]);
+  }, [open, requiresCodexDangerAcknowledgement]);
+  const isCodexDangerAcknowledged =
+    requiresCodexDangerAcknowledgement &&
+    acknowledgedCodexDangerKey === codexDangerAcknowledgementKey;
+  const setCodexDangerAcknowledged = useCallback(
+    (acknowledged: boolean) => {
+      setAcknowledgedCodexDangerKey(acknowledged ? codexDangerAcknowledgementKey : "");
+    },
+    [codexDangerAcknowledgementKey],
+  );
   const hasUnacknowledgedCodexDangerousSettings =
-    hasCodexDangerousSettings && !isCodexDangerAcknowledged;
+    requiresCodexDangerAcknowledgement && !isCodexDangerAcknowledged;
   const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
     ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
     : [];
@@ -429,6 +442,7 @@ export const useSettingsModalController = ({
     runtimeAvailabilityValidationState,
     hasRuntimeAvailabilityErrors,
     hasUnacknowledgedCodexDangerousSettings,
+    requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoRuntimeAvailabilityErrorCount,
