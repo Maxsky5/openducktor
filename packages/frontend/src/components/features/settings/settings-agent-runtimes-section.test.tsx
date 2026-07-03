@@ -99,7 +99,7 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
   });
 
-  test("role override sections start disabled and use dropdown rows", () => {
+  test("role override sections hide role rows until enabled", () => {
     const renderer = render(createSection());
 
     try {
@@ -113,10 +113,38 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole("button", { name: "Default sandbox mode" }).textContent).toContain(
         "Workspace-write",
       );
-      expect(screen.getAllByRole("button", { name: "Spec" })[0]?.hasAttribute("disabled")).toBe(
-        true,
+      expect(screen.queryByRole("button", { name: "Spec" })).toBeNull();
+      expect(renderer.container.innerHTML).not.toContain("Inherits the default value.");
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("role override rows render only when a setting has an override", () => {
+    const renderer = render(
+      createSection({
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          roleOverrides: {
+            spec: { sandboxMode: "read-only" },
+          },
+        },
+      }),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+
+      expect(
+        screen
+          .getByRole("switch", { name: "Enable Sandbox mode role overrides" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(screen.getByRole("button", { name: "Spec" }).textContent).toContain("Read-only");
+      expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain(
+        "Workspace-write",
       );
-      expect(renderer.container.innerHTML).toContain("Inherits the default value.");
     } finally {
       renderer.unmount();
     }

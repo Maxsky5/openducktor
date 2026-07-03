@@ -177,7 +177,7 @@ function PolicyValueDropdown<T extends string | boolean>({
   });
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <Combobox
         value={String(value)}
         options={options}
@@ -185,7 +185,7 @@ function PolicyValueDropdown<T extends string | boolean>({
         triggerAriaLabelledBy={labelId}
         searchPlaceholder="Search options..."
         emptyText="No option found."
-        triggerClassName="h-10 bg-background"
+        triggerClassName="h-10"
         wrapOptionLabels
         onValueChange={(nextValue) => onChange(policyValueFromOption(values, nextValue))}
       />
@@ -373,16 +373,16 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const roleOverridesEnabled = hasRoleOverrideForField(config, field);
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-      <div className="rounded-md border border-border bg-background p-3">
-        <h4 className="text-sm font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
-        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex flex-col gap-1 border-b border-border px-4 py-3">
+        <h4 className="text-base font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
+        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground text-pretty">
           {FEATURE_HELP[field]}
         </p>
       </div>
 
-      <div className="grid gap-3 rounded-md border border-border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-center">
-        <div className="space-y-1">
+      <div className="grid gap-3 border-b border-border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-start">
+        <div className="flex flex-col gap-1">
           <Label id={defaultLabelId} className="text-sm font-medium text-foreground">
             Default {POLICY_LABELS[field].toLowerCase()}
           </Label>
@@ -400,9 +400,11 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
         />
       </div>
 
-      <div className="space-y-3 rounded-md border border-border bg-background p-3">
+      <EffectivePolicyNotes config={config} field={field} />
+
+      <div className="flex flex-col gap-3 px-4 py-3">
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label htmlFor={roleOverrideSwitchId} className="text-sm font-medium text-foreground">
               Role overrides
             </Label>
@@ -419,44 +421,66 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           />
         </div>
 
-        <div className={cn("grid gap-2", !roleOverridesEnabled && "opacity-60")}>
-          {AGENT_ROLE_ORDER.map((role) => {
-            const roleLabelId = `codex-${field}-${role}-override-label`;
-            const overrideValue = config.roleOverrides[role]?.[field] as
-              | CodexPolicyFields[Field]
-              | undefined;
-            const selectedValue = overrideValue ?? effectiveValueForRole(config, role, field);
-            const rowDescription = !roleOverridesEnabled
-              ? "Inherits the default value."
-              : overrideValue === undefined
-                ? "Inherits until changed."
-                : "Override set for this role.";
-
-            return (
-              <div
-                key={role}
-                className="grid gap-2 rounded-md border border-border bg-card px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
-              >
-                <div className="space-y-0.5">
-                  <Label id={roleLabelId} className="text-sm font-medium text-foreground">
-                    {AGENT_ROLE_LABELS[role]}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">{rowDescription}</p>
-                </div>
-                <PolicyValueDropdown
-                  value={selectedValue}
-                  values={valuesForRole(field, role)}
-                  disabled={disabled || !roleOverridesEnabled}
-                  labelId={roleLabelId}
-                  onChange={(value) => onOverrideChange(role, field, value)}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        <EffectivePolicyNotes config={config} field={field} />
+        {roleOverridesEnabled ? (
+          <RoleOverrideRows
+            field={field}
+            config={config}
+            disabled={disabled}
+            onOverrideChange={onOverrideChange}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function RoleOverrideRows<Field extends CodexPolicyField>({
+  field,
+  config,
+  disabled,
+  onOverrideChange,
+}: {
+  field: Field;
+  config: CodexRuntimeConfig;
+  disabled: boolean;
+  onOverrideChange: <ChangeField extends CodexPolicyField>(
+    role: AgentRole,
+    field: ChangeField,
+    value: CodexPolicyFields[ChangeField] | undefined,
+  ) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-2">
+      {AGENT_ROLE_ORDER.map((role) => {
+        const roleLabelId = `codex-${field}-${role}-override-label`;
+        const overrideValue = config.roleOverrides[role]?.[field] as
+          | CodexPolicyFields[Field]
+          | undefined;
+        const selectedValue = overrideValue ?? effectiveValueForRole(config, role, field);
+        const rowDescription =
+          overrideValue === undefined ? "Inherits until changed." : "Override set for this role.";
+
+        return (
+          <div
+            key={role}
+            className="grid gap-2 rounded-md border border-border px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
+          >
+            <div className="flex flex-col gap-0.5">
+              <Label id={roleLabelId} className="text-sm font-medium text-foreground">
+                {AGENT_ROLE_LABELS[role]}
+              </Label>
+              <p className="text-xs text-muted-foreground">{rowDescription}</p>
+            </div>
+            <PolicyValueDropdown
+              value={selectedValue}
+              values={valuesForRole(field, role)}
+              disabled={disabled}
+              labelId={roleLabelId}
+              onChange={(value) => onOverrideChange(role, field, value)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -511,7 +535,7 @@ function EffectivePolicyNotes({
   }
 
   return (
-    <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+    <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
       {notes.map((note) => (
         <p key={note}>{note}</p>
       ))}
