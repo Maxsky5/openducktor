@@ -433,24 +433,21 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
 }): ReactElement {
   const values = defaultValuesForField(field);
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-info-border bg-info-surface px-3 py-2.5 text-info-surface-foreground">
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">About this setting</p>
-        <p className="max-w-3xl text-sm leading-relaxed text-pretty">{FEATURE_HELP[field]}</p>
-      </div>
-      <dl className="flex flex-col gap-1.5 text-sm">
+    <div className="flex flex-col gap-2.5 rounded-md border border-info-border bg-info-surface px-3 py-3 text-foreground">
+      <p className="max-w-3xl text-sm leading-6 text-pretty">{FEATURE_HELP[field]}</p>
+      <dl className="grid gap-1.5 border-info-border/70 border-t pt-2 text-sm">
         {values.map((option) => {
           const key = valueKey(option);
           return (
             <div key={String(option)} className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
-              <dt className="font-medium">{VALUE_LABELS[key]}</dt>
-              <dd className="leading-relaxed text-info-muted">{VALUE_HELP[key]}</dd>
+              <dt className="font-semibold">{VALUE_LABELS[key]}</dt>
+              <dd className="leading-relaxed text-foreground/80">{VALUE_HELP[key]}</dd>
             </div>
           );
         })}
         <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
-          <dt className="font-medium">Inherited</dt>
-          <dd className="leading-relaxed text-info-muted">
+          <dt className="font-semibold">Inherited</dt>
+          <dd className="leading-relaxed text-foreground/80">
             Role override only. Leaves the role unset and uses the default value.
           </dd>
         </div>
@@ -481,20 +478,15 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
         const overrideValue = config.roleOverrides[role]?.[field] as
           | CodexPolicyFields[Field]
           | undefined;
-        const rowDescription =
-          overrideValue === undefined ? "Uses the default value." : "Override set for this role.";
 
         return (
           <div
             key={role}
             className="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
           >
-            <div className="flex flex-col gap-0.5">
-              <Label id={roleLabelId} className="text-sm font-medium text-foreground">
-                {AGENT_ROLE_LABELS[role]}
-              </Label>
-              <p className="text-xs text-muted-foreground">{rowDescription}</p>
-            </div>
+            <Label id={roleLabelId} className="text-sm font-medium text-foreground">
+              {AGENT_ROLE_LABELS[role]}
+            </Label>
             <RoleOverrideDropdown
               value={overrideValue}
               values={valuesForRole(field, role)}

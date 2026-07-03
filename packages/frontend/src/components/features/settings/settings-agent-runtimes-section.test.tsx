@@ -100,9 +100,10 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("Inherited");
     expect(html).toContain("Command network access");
     expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
-    expect(html).toContain("About this setting");
     expect(html).toContain("bg-info-surface");
+    expect(html).not.toContain("About this setting");
     expect(html).not.toContain("bg-card/70");
+    expect(html).not.toContain("text-info-muted");
   });
 
   test("role override sections hide role rows until enabled", () => {
@@ -149,6 +150,8 @@ describe("AgentRuntimesSection", () => {
       ).toBe("true");
       expect(screen.getByRole("button", { name: "Spec" }).textContent).toContain("Read-only");
       expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain("Inherited");
+      expect(renderer.container.innerHTML).not.toContain("Uses the default value.");
+      expect(renderer.container.innerHTML).not.toContain("Override set for this role.");
     } finally {
       renderer.unmount();
     }
