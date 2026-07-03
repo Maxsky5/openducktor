@@ -98,7 +98,9 @@ export function SettingsModalFooter({
         !hasReusablePromptValidationErrors &&
         !hasRuntimeAvailabilityErrors &&
         validationSummary.hasUnacknowledgedCodexDangerousSettings ? (
-          <span className="text-destructive-muted">Codex acknowledgement required.</span>
+          <span className="text-destructive-muted">
+            Confirm the Codex safety acknowledgement before saving.
+          </span>
         ) : null}
         {!errors.saveError &&
         !hasPromptValidationErrors &&

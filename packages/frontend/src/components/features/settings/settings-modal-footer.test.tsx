@@ -127,7 +127,9 @@ describe("SettingsModalFooter", () => {
       expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(screen.getByText(/Codex acknowledgement required\./i)).toBeTruthy();
+      expect(
+        screen.getByText(/Confirm the Codex safety acknowledgement before saving\./i),
+      ).toBeTruthy();
     } finally {
       renderer.unmount();
     }

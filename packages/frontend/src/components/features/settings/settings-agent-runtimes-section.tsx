@@ -232,6 +232,7 @@ function CodexSettings({
   const [openRoleOverrideFields, setOpenRoleOverrideFields] = useState<
     Partial<Record<CodexPolicyField, boolean>>
   >({});
+  const requiresDangerAcknowledgement = codexHasDangerousSelection(config);
 
   const updateDefault = <Field extends CodexPolicyField>(
     field: Field,
@@ -294,6 +295,14 @@ function CodexSettings({
 
   return (
     <div className="grid gap-5">
+      {requiresDangerAcknowledgement ? (
+        <CodexDangerAcknowledgement
+          checked={isDangerAcknowledged}
+          disabled={disabled}
+          onCheckedChange={onDangerAcknowledgedChange}
+        />
+      ) : null}
+
       {FEATURE_FIELDS.map((field) => (
         <CodexFeatureGroup
           key={field}
@@ -308,26 +317,39 @@ function CodexSettings({
           onRoleOverridesEnabledChange={updateRoleOverridesEnabled}
         />
       ))}
+    </div>
+  );
+}
 
-      {codexHasDangerousSelection(config) ? (
-        <div className="rounded-lg border border-destructive bg-card p-4 text-xs text-foreground space-y-3">
-          <p>
-            Acknowledgement required: danger-full-access removes sandbox boundaries, and never
-            disables approval prompts. Save only after confirming this is intended.
-          </p>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="codex-danger-acknowledgement"
-              checked={isDangerAcknowledged}
-              disabled={disabled}
-              onCheckedChange={onDangerAcknowledgedChange}
-            />
-            <Label htmlFor="codex-danger-acknowledgement" className="text-xs text-foreground">
-              I understand these Codex settings reduce safety protections.
-            </Label>
-          </div>
-        </div>
-      ) : null}
+function CodexDangerAcknowledgement({
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}): ReactElement {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold">Confirm reduced Codex protections</p>
+        <p className="max-w-3xl text-sm leading-6 text-pretty">
+          Danger full access removes sandbox boundaries. The Never approval prompt option lets Codex
+          proceed without asking. Confirm this only for trusted repositories and tasks.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="codex-danger-acknowledgement"
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={onCheckedChange}
+        />
+        <Label htmlFor="codex-danger-acknowledgement" className="text-sm font-medium">
+          I understand these Codex settings reduce safety protections.
+        </Label>
+      </div>
     </div>
   );
 }

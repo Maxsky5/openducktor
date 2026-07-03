@@ -48,7 +48,7 @@ export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): stri
 };
 
 export const buildCodexDangerousSettingsSaveError = (): string =>
-  "Acknowledge the dangerous Codex runtime settings before saving.";
+  "Confirm the Codex safety acknowledgement before saving.";
 
 export const buildRepoScriptValidationSaveError = ({
   invalidRepoPathsWithDevServerErrors,

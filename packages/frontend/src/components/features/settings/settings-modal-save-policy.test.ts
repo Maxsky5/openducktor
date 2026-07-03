@@ -65,7 +65,7 @@ describe("settings-modal-save-policy", () => {
       "Fix 2 disabled runtime selections before saving.",
     );
     expect(buildCodexDangerousSettingsSaveError()).toBe(
-      "Acknowledge the dangerous Codex runtime settings before saving.",
+      "Confirm the Codex safety acknowledgement before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({

@@ -161,7 +161,7 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe(
-      "Acknowledge the dangerous Codex runtime settings before saving.",
+      "Confirm the Codex safety acknowledgement before saving.",
     );
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 

@@ -252,11 +252,28 @@ describe("AgentRuntimesSection", () => {
 
     expect(html).toContain("has no effect while approval prompts are never");
     expect(html).toContain("Other sandbox modes ignore this switch");
-    expect(html).toContain("danger-full-access removes sandbox boundaries");
-    expect(html).toContain("never disables approval prompts");
+    expect(html).toContain("Confirm reduced Codex protections");
+    expect(html).toContain("Danger full access removes sandbox boundaries");
+    expect(html).toContain("The Never approval prompt option lets Codex proceed without asking");
     expect(html).toContain("Approval prompts go to the user");
-    expect(html).toContain("Acknowledgement required");
     expect(html).toContain("I understand these Codex settings reduce safety protections.");
+  });
+
+  test("renders risky acknowledgement before policy sections", () => {
+    const html = renderCodexSectionHtml({
+      ...DEFAULT_AGENT_RUNTIMES,
+      codex: {
+        ...DEFAULT_AGENT_RUNTIMES.codex,
+        defaults: {
+          ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
+          sandboxMode: "danger-full-access",
+        },
+      },
+    });
+
+    expect(html.indexOf("Confirm reduced Codex protections")).toBeLessThan(
+      html.indexOf("Sandbox mode"),
+    );
   });
 
   test("hides risky acknowledgement control when Codex selections are safe", () => {
