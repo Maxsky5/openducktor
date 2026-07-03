@@ -86,6 +86,8 @@ const FEATURE_FIELDS: CodexPolicyField[] = [
   "workspaceWriteNetworkAccess",
 ];
 
+const INHERIT_ROLE_OVERRIDE_VALUE = "__inherit__";
+
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
 ): CodexPolicyFields[Field][] => {
@@ -143,28 +145,17 @@ const policyValueFromOption = <T extends string | boolean>(values: T[], nextValu
 const hasRoleOverrideForField = (config: CodexRuntimeConfig, field: CodexPolicyField): boolean =>
   AGENT_ROLE_ORDER.some((role) => config.roleOverrides[role]?.[field] !== undefined);
 
-const effectiveValueForRole = <Field extends CodexPolicyField>(
-  config: CodexRuntimeConfig,
-  role: AgentRole,
-  field: Field,
-): CodexPolicyFields[Field] => {
-  const effective = resolveCodexEffectivePolicy(config, role);
-  return effective[field] as CodexPolicyFields[Field];
-};
-
 function PolicyValueDropdown<T extends string | boolean>({
   value,
   values,
   disabled,
   labelId,
-  showHelp = false,
   onChange,
 }: {
   value: T;
   values: T[];
   disabled: boolean;
   labelId: string;
-  showHelp?: boolean;
   onChange: (value: T) => void;
 }): ReactElement {
   const options = values.map((option) => {
@@ -189,11 +180,6 @@ function PolicyValueDropdown<T extends string | boolean>({
         wrapOptionLabels
         onValueChange={(nextValue) => onChange(policyValueFromOption(values, nextValue))}
       />
-      {showHelp ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {VALUE_HELP[valueKey(value)]}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -214,9 +200,6 @@ function RuntimeOverview({
       <div className="min-w-0 space-y-2">
         <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
         <p className="text-xs text-muted-foreground">{definition.description}</p>
-        <p className="text-xs text-muted-foreground">
-          Supports {definition.capabilities.workflow.supportedScopes.join(", ")} workflow scopes.
-        </p>
       </div>
       <div className="flex items-center gap-2 justify-self-start sm:justify-self-end">
         <Label htmlFor={`agent-runtime-${definition.kind}`} className="text-xs">
@@ -246,6 +229,10 @@ function CodexSettings({
   onDangerAcknowledgedChange: (acknowledged: boolean) => void;
   onUpdate: (updater: (config: CodexRuntimeConfig) => CodexRuntimeConfig) => void;
 }): ReactElement {
+  const [openRoleOverrideFields, setOpenRoleOverrideFields] = useState<
+    Partial<Record<CodexPolicyField, boolean>>
+  >({});
+
   const updateDefault = <Field extends CodexPolicyField>(
     field: Field,
     value: CodexPolicyFields[Field],
@@ -280,19 +267,18 @@ function CodexSettings({
   const updateRoleOverridesEnabled = <Field extends CodexPolicyField>(
     field: Field,
     enabled: boolean,
-  ) =>
+  ) => {
+    setOpenRoleOverrideFields((current) => ({ ...current, [field]: enabled }));
+    if (enabled) {
+      return;
+    }
+
     onUpdate((current) => {
       const nextRoleOverrides = { ...current.roleOverrides };
 
       for (const role of AGENT_ROLE_ORDER) {
         const draftRoleOverride = { ...(nextRoleOverrides[role] ?? {}) };
-        if (enabled) {
-          if (draftRoleOverride[field] === undefined) {
-            draftRoleOverride[field] = effectiveValueForRole(current, role, field) as never;
-          }
-        } else {
-          delete draftRoleOverride[field];
-        }
+        delete draftRoleOverride[field];
 
         const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
         if (Object.keys(nextRoleOverride).length === 0) {
@@ -304,6 +290,7 @@ function CodexSettings({
 
       return { ...current, roleOverrides: nextRoleOverrides };
     });
+  };
 
   return (
     <div className="grid gap-5">
@@ -313,6 +300,9 @@ function CodexSettings({
           field={field}
           config={config}
           disabled={disabled}
+          roleOverridesVisible={
+            openRoleOverrideFields[field] === true || hasRoleOverrideForField(config, field)
+          }
           onDefaultChange={updateDefault}
           onOverrideChange={updateOverride}
           onRoleOverridesEnabledChange={updateRoleOverridesEnabled}
@@ -346,6 +336,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   field,
   config,
   disabled,
+  roleOverridesVisible,
   onDefaultChange,
   onOverrideChange,
   onRoleOverridesEnabledChange,
@@ -353,6 +344,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   field: Field;
   config: CodexRuntimeConfig;
   disabled: boolean;
+  roleOverridesVisible: boolean;
   onDefaultChange: <ChangeField extends CodexPolicyField>(
     field: ChangeField,
     value: CodexPolicyFields[ChangeField],
@@ -370,16 +362,10 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const defaultValue = config.defaults[field];
   const defaultLabelId = `codex-${field}-default-label`;
   const roleOverrideSwitchId = `codex-${field}-role-overrides`;
-  const roleOverridesEnabled = hasRoleOverrideForField(config, field);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex flex-col gap-1 border-b border-border px-4 py-3">
-        <h4 className="text-base font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
-        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground text-pretty">
-          {FEATURE_HELP[field]}
-        </p>
-      </div>
+      <PolicyInfoPanel field={field} />
 
       <div className="grid gap-3 border-b border-border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-start">
         <div className="flex flex-col gap-1">
@@ -395,7 +381,6 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           values={defaultValuesForField(field)}
           disabled={disabled}
           labelId={defaultLabelId}
-          showHelp
           onChange={(value) => onDefaultChange(field, value as CodexPolicyFields[Field])}
         />
       </div>
@@ -414,14 +399,14 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           </div>
           <Switch
             id={roleOverrideSwitchId}
-            checked={roleOverridesEnabled}
+            checked={roleOverridesVisible}
             disabled={disabled}
             onCheckedChange={(enabled) => onRoleOverridesEnabledChange(field, enabled)}
             aria-label={`Enable ${POLICY_LABELS[field]} role overrides`}
           />
         </div>
 
-        {roleOverridesEnabled ? (
+        {roleOverridesVisible ? (
           <RoleOverrideRows
             field={field}
             config={config}
@@ -430,6 +415,42 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function PolicyInfoPanel<Field extends CodexPolicyField>({
+  field,
+}: {
+  field: Field;
+}): ReactElement {
+  const values = defaultValuesForField(field);
+  return (
+    <div className="flex flex-col gap-3 border-b border-info-border bg-info-surface px-4 py-3 text-info-surface-foreground">
+      <div className="flex flex-col gap-1">
+        <h4 className="text-base font-semibold">{POLICY_LABELS[field]}</h4>
+        <p className="max-w-3xl text-sm leading-relaxed text-pretty">{FEATURE_HELP[field]}</p>
+      </div>
+      <dl className="grid gap-2 sm:grid-cols-2">
+        {values.map((option) => {
+          const key = valueKey(option);
+          return (
+            <div
+              key={String(option)}
+              className="rounded-md border border-info-border bg-card/70 px-3 py-2"
+            >
+              <dt className="text-sm font-semibold">{VALUE_LABELS[key]}</dt>
+              <dd className="mt-0.5 text-xs leading-relaxed text-info-muted">{VALUE_HELP[key]}</dd>
+            </div>
+          );
+        })}
+        <div className="rounded-md border border-info-border bg-card/70 px-3 py-2">
+          <dt className="text-sm font-semibold">Inherited</dt>
+          <dd className="mt-0.5 text-xs leading-relaxed text-info-muted">
+            Role override only. Leaves the role unset and uses the default value.
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }
@@ -456,9 +477,8 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
         const overrideValue = config.roleOverrides[role]?.[field] as
           | CodexPolicyFields[Field]
           | undefined;
-        const selectedValue = overrideValue ?? effectiveValueForRole(config, role, field);
         const rowDescription =
-          overrideValue === undefined ? "Inherits until changed." : "Override set for this role.";
+          overrideValue === undefined ? "Uses the default value." : "Override set for this role.";
 
         return (
           <div
@@ -471,8 +491,8 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
               </Label>
               <p className="text-xs text-muted-foreground">{rowDescription}</p>
             </div>
-            <PolicyValueDropdown
-              value={selectedValue}
+            <RoleOverrideDropdown
+              value={overrideValue}
               values={valuesForRole(field, role)}
               disabled={disabled}
               labelId={roleLabelId}
@@ -482,6 +502,56 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
         );
       })}
     </div>
+  );
+}
+
+function RoleOverrideDropdown<T extends string | boolean>({
+  value,
+  values,
+  disabled,
+  labelId,
+  onChange,
+}: {
+  value: T | undefined;
+  values: T[];
+  disabled: boolean;
+  labelId: string;
+  onChange: (value: T | undefined) => void;
+}): ReactElement {
+  const options = [
+    {
+      value: INHERIT_ROLE_OVERRIDE_VALUE,
+      label: "Inherited",
+      description: "Use the default value for this role.",
+    },
+    ...values.map((option) => {
+      const key = valueKey(option);
+      return {
+        value: String(option),
+        label: VALUE_LABELS[key],
+        description: VALUE_HELP[key],
+      };
+    }),
+  ];
+
+  return (
+    <Combobox
+      value={value === undefined ? INHERIT_ROLE_OVERRIDE_VALUE : String(value)}
+      options={options}
+      disabled={disabled}
+      triggerAriaLabelledBy={labelId}
+      searchPlaceholder="Search options..."
+      emptyText="No option found."
+      triggerClassName="h-10"
+      wrapOptionLabels
+      onValueChange={(nextValue) => {
+        if (nextValue === INHERIT_ROLE_OVERRIDE_VALUE) {
+          onChange(undefined);
+          return;
+        }
+        onChange(policyValueFromOption(values, nextValue));
+      }}
+    />
   );
 }
 

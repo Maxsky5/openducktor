@@ -47,6 +47,7 @@ describe("AgentRuntimesSection", () => {
       expect(renderer.container.innerHTML).toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
       );
+      expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
       expect(renderer.container.innerHTML).not.toContain("Role override");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
     } finally {
@@ -93,10 +94,13 @@ describe("AgentRuntimesSection", () => {
 
     expect(html).toContain("Role override");
     expect(html).toContain("Workspace-write");
+    expect(html).toContain("Danger full access");
     expect(html).toContain("On request");
     expect(html).toContain("User");
+    expect(html).toContain("Inherited");
     expect(html).toContain("Command network access");
     expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
+    expect(html).toContain("bg-info-surface");
   });
 
   test("role override sections hide role rows until enabled", () => {
@@ -142,15 +146,13 @@ describe("AgentRuntimesSection", () => {
           .getAttribute("aria-checked"),
       ).toBe("true");
       expect(screen.getByRole("button", { name: "Spec" }).textContent).toContain("Read-only");
-      expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain(
-        "Workspace-write",
-      );
+      expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain("Inherited");
     } finally {
       renderer.unmount();
     }
   });
 
-  test("enabling role overrides seeds explicit values for every role", () => {
+  test("enabling role overrides opens inherited rows without writing overrides", () => {
     const updates: AgentRuntimes[] = [];
     const renderer = render(
       createElement(AgentRuntimesSection, {
@@ -169,14 +171,11 @@ describe("AgentRuntimesSection", () => {
       fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
       fireEvent.click(screen.getByRole("switch", { name: "Enable Sandbox mode role overrides" }));
 
-      const updatedRuntimes = updates[0];
-      if (!updatedRuntimes) {
-        throw new Error("Expected role override toggle to update agent runtimes.");
-      }
-      expect(updatedRuntimes.codex.roleOverrides.spec?.sandboxMode).toBe("workspace-write");
-      expect(updatedRuntimes.codex.roleOverrides.planner?.sandboxMode).toBe("workspace-write");
-      expect(updatedRuntimes.codex.roleOverrides.build?.sandboxMode).toBe("workspace-write");
-      expect(updatedRuntimes.codex.roleOverrides.qa?.sandboxMode).toBe("workspace-write");
+      expect(updates).toHaveLength(0);
+      expect(screen.getByRole("button", { name: "Spec" }).textContent).toContain("Inherited");
+      expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain("Inherited");
+      expect(screen.getByRole("button", { name: "Builder" }).textContent).toContain("Inherited");
+      expect(screen.getByRole("button", { name: "QA" }).textContent).toContain("Inherited");
     } finally {
       renderer.unmount();
     }
