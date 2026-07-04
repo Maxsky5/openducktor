@@ -1592,6 +1592,10 @@ describe("HostClient", () => {
       client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
     ).resolves.toEqual(modelListResponse);
     await client.codexAppServerRespond("runtime-1", 7, { ok: true });
+    await client.codexAppServerRespond("runtime-1", "permission-request-1", {
+      permissions: { network: { enabled: true } },
+      scope: "turn",
+    });
     await client.codexAppServerNotifications("runtime-1");
     await client.codexAppServerRequests("runtime-1");
 
@@ -1610,6 +1614,14 @@ describe("HostClient", () => {
           runtimeId: "runtime-1",
           requestId: 7,
           result: { ok: true },
+        },
+      },
+      {
+        command: "codex_app_server_respond",
+        args: {
+          runtimeId: "runtime-1",
+          requestId: "permission-request-1",
+          result: { permissions: { network: { enabled: true } }, scope: "turn" },
         },
       },
       {

@@ -1,8 +1,10 @@
 import type {
   CodexJsonRpcRequest,
   CodexJsonRpcTransportFactory,
+  CodexPolicyLogEntry,
 } from "@openducktor/adapters-codex-app-server";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
+import type { CodexAppServerRequestId } from "@openducktor/contracts";
 import { subscribeCodexAppServerEvents } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { host } from "../operations/shared/host";
@@ -33,6 +35,10 @@ const createCodexHostTransportFactory = (): CodexJsonRpcTransportFactory => {
     request: async <Response = unknown>(request: CodexJsonRpcRequest) =>
       host.codexAppServerRequest(runtimeId, request.method, request.params) as Promise<Response>,
   });
+};
+
+const logCodexSessionPolicy = (entry: CodexPolicyLogEntry): void => {
+  console.info("[OpenDucktor] Codex session policy", entry);
 };
 
 export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
@@ -67,7 +73,13 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
         listener({ runtimeId, kind: event.kind, message: event.message });
       });
     },
-    respondServerRequest: async (runtimeId: string, requestId: number, result, error) => {
+    respondServerRequest: async (
+      runtimeId: string,
+      requestId: CodexAppServerRequestId,
+      result,
+      error,
+    ) => {
       await host.codexAppServerRespond(runtimeId, requestId, result, error);
     },
+    logSessionPolicy: logCodexSessionPolicy,
   });

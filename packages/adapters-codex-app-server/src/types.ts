@@ -3,6 +3,7 @@ import type {
   CodexAppServerAskForApproval,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
+  CodexAppServerRequestId,
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
   RuntimeDescriptor,
@@ -26,6 +27,7 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import type { CodexPolicyLogEntry } from "./codex-session-policy";
 
 export type CodexJsonRpcRequest = {
   method: string;
@@ -39,7 +41,7 @@ export type CodexJsonRpcTransport = {
 export type CodexJsonRpcTransportFactory = (runtimeId: string) => CodexJsonRpcTransport;
 
 export type CodexServerRequestRecord = {
-  id?: number;
+  id?: CodexAppServerRequestId;
   method: string;
   params?: unknown;
 };
@@ -52,7 +54,7 @@ export type CodexNotificationRecord = {
 
 export type CodexServerRequestResponder = (
   runtimeId: string,
-  requestId: number,
+  requestId: CodexAppServerRequestId,
   result?: unknown,
   error?: unknown,
 ) => Promise<void>;
@@ -310,6 +312,7 @@ export type CodexAppServerAdapterOptions = {
     listener: (event: CodexAppServerStreamEvent) => void,
   ) => Promise<() => void> | (() => void);
   respondServerRequest: CodexServerRequestResponder;
+  logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
 export type {
@@ -324,6 +327,7 @@ export type {
   AgentSkillCatalog,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
+  CodexPolicyLogEntry,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   RuntimeDescriptor,

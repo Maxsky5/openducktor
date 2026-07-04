@@ -43,11 +43,55 @@ describe("agent-orchestrator permission auto-rejection", () => {
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(0);
+    const notice = getSessionMessages(sessionsRef).find((message) =>
+      message.content.includes("Auto-rejected mutating approval"),
+    );
+    expect(notice?.content).toContain("Action: write");
+    expect(notice?.content).toContain("Affected paths: edit file");
+  });
+
+  test("keeps unknown command approvals pending for read-only roles", async () => {
+    const curlCommand =
+      "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
+    const replyApproval = mock(async () => {});
+    const sessionsRef = createSessionsRef([buildSession({ role: "spec" })]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "session-1",
+      sessionsRef,
+      replyApproval,
+    });
+
+    handleEvent(
+      approvalRequiredEvent({
+        externalSessionId: "session-1",
+        requestId: "network-curl-approval",
+        requestType: "command_execution",
+        title: "Codex item/commandExecution/requestApproval",
+        summary: "Codex requested item/commandExecution/requestApproval.",
+        action: { name: "Bash" },
+        command: {
+          command: curlCommand,
+        },
+        mutation: "unknown" as const,
+      }),
+    );
+    await flushAutoReject();
+
+    expect(replyApproval).not.toHaveBeenCalled();
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toMatchObject([
+      {
+        requestId: "network-curl-approval",
+        mutation: "unknown",
+        command: {
+          command: curlCommand,
+        },
+      },
+    ]);
     expect(
       getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Auto-rejected mutating approval"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("auto-rejects mutating child permissions mirrored on a read-only parent", async () => {

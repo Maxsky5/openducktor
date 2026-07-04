@@ -7,11 +7,15 @@ import {
   codexUserMessageInput,
   createDeferred,
   createHarness,
+  flushCodexAdapterWork,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
 
+const CURL_NETWORK_COMMAND =
+  "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
+
 describe("CodexAppServerAdapter approvals", () => {
-  test("emits a session error for streamed server requests missing threadId", async () => {
+  test("emits a session error for streamed server requests missing a thread identifier", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
     > = [];
@@ -42,8 +46,290 @@ describe("CodexAppServerAdapter approvals", () => {
         event !== null &&
         (event as { type?: unknown; message?: unknown }).type === "session_error" &&
         typeof (event as { message?: unknown }).message === "string" &&
-        (event as { message: string }).message.includes("missing params.threadId"),
+        (event as { message: string }).message.includes("missing a thread identifier"),
     );
+    unsubscribe();
+  });
+
+  test("surfaces legacy exec command approvals routed by conversationId", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter, respondServerRequest } = createHarness({ subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "legacy-exec-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
+        params: {
+          conversationId: "thread/start-runtime-live",
+          callId: "call-1",
+          approvalId: null,
+          command: ["curl", "-I", "https://example.com"],
+          cwd: "/repo",
+          reason: "Need network access.",
+          parsedCmd: [],
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "legacy-exec-approval-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "legacy-exec-approval-1",
+      requestType: "command_execution",
+      title: "Bash approval requested",
+      summary: "Need network access.",
+      mutation: "unknown",
+      action: { name: "Bash" },
+      command: { command: "curl -I https://example.com", workingDirectory: "/repo" },
+    });
+    expect(approval).not.toHaveProperty("details");
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("surfaces streamed network command approvals from structured command actions", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const drainServerRequests = mock(async () => [] as unknown[]);
+    const { adapter, respondServerRequest } = createHarness({
+      drainServerRequests,
+      subscribeEvents,
+    });
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "network-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-1",
+          itemId: "call-1",
+          startedAtMs: 1,
+          reason:
+            "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+          command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
+          cwd: "/repo",
+          commandActions: [
+            {
+              type: "unknown",
+              command: CURL_NETWORK_COMMAND,
+            },
+          ],
+          networkApprovalContext: {
+            host: "example.com",
+            protocol: "https",
+          },
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "network-approval-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "network-approval-1",
+      requestType: "command_execution",
+      title: "Network access approval requested",
+      summary:
+        "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+      mutation: "unknown",
+      action: { name: "Network access" },
+      command: {
+        command: CURL_NETWORK_COMMAND,
+        workingDirectory: "/repo",
+      },
+    });
+    expect(approval).not.toHaveProperty("details");
+    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("drains retained command approvals once during subscribed live turns", async () => {
+    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
+    const request = {
+      id: "network-approval-1",
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-1",
+        itemId: "call-1",
+        startedAtMs: 1,
+        reason:
+          "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+        command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
+        cwd: "/repo",
+        commandActions: [
+          {
+            type: "unknown",
+            command: CURL_NETWORK_COMMAND,
+          },
+        ],
+        networkApprovalContext: {
+          host: "example.com",
+          protocol: "https",
+        },
+      },
+    };
+    const drainServerRequests = mock(async () => [request] as unknown[]);
+    const { adapter, transports, respondServerRequest } = createHarness(
+      {
+        drainServerRequests,
+        subscribeEvents,
+      },
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Check network with curl" }],
+      }),
+    );
+
+    await flushCodexAdapterWork();
+
+    expect(drainServerRequests).toHaveBeenCalledTimes(1);
+    expect(
+      events.filter((event) => (event as { type?: unknown }).type === "user_message"),
+    ).toHaveLength(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "network-approval-1",
+        title: "Network access approval requested",
+      }),
+    );
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    transports.get("runtime-live")?.turnStartDeferred.resolve({});
+    unsubscribe();
+  });
+
+  test("drains retained command approvals after turn start returns", async () => {
+    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
+    const request = {
+      id: "network-approval-after-start",
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-1",
+        itemId: "call-1",
+        startedAtMs: 1,
+        reason: "Allow terminal network access?",
+        command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
+        cwd: "/repo",
+        commandActions: [
+          {
+            type: "unknown",
+            command: CURL_NETWORK_COMMAND,
+          },
+        ],
+        networkApprovalContext: {
+          host: "example.com",
+          protocol: "https",
+        },
+      },
+    };
+    let requestAvailable = false;
+    const drainServerRequests = mock(async () =>
+      requestAvailable ? ([request] as unknown[]) : ([] as unknown[]),
+    );
+    const { adapter, transports, respondServerRequest } = createHarness(
+      {
+        drainServerRequests,
+        subscribeEvents,
+      },
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Check network with curl" }],
+      }),
+    );
+    await flushCodexAdapterWork();
+    expect(drainServerRequests).toHaveBeenCalledTimes(1);
+
+    requestAvailable = true;
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-1", status: "in_progress" },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "network-approval-after-start",
+    );
+
+    expect(approval).toMatchObject({
+      requestId: "network-approval-after-start",
+      requestType: "command_execution",
+      title: "Network access approval requested",
+    });
+    expect(drainServerRequests).toHaveBeenCalledTimes(2);
+    expect(respondServerRequest).not.toHaveBeenCalled();
     unsubscribe();
   });
 
@@ -183,6 +469,84 @@ describe("CodexAppServerAdapter approvals", () => {
     transport?.turnStartDeferred.resolve({});
   });
 
+  test("surfaces and resolves Codex permission approvals with string request ids", async () => {
+    const requestResolved = createDeferred<void>();
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
+      if (requestId === "permission-request-1") {
+        requestResolved.resolve();
+      }
+    });
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "permission-request-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-permission",
+          itemId: "permission-item-1",
+          startedAtMs: 1,
+          cwd: "/repo",
+          reason: "Need one-time network access.",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "permission-request-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "permission-request-1",
+      requestType: "permission_grant",
+      title: "Permission approval requested",
+      summary: "Need one-time network access.",
+      mutation: "unknown",
+    });
+    expect(approval).not.toHaveProperty("details");
+
+    await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: "permission-request-1",
+      outcome: "approve_once",
+    });
+
+    await requestResolved.promise;
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      "permission-request-1",
+      { permissions: { network: { enabled: true } }, scope: "turn" },
+      undefined,
+    );
+    unsubscribe();
+  });
+
   test("rejects approval replies routed through another session", async () => {
     const { adapter, drainServerRequests, respondServerRequest } = createHarness(
       {},
@@ -234,7 +598,12 @@ describe("CodexAppServerAdapter approvals", () => {
       {
         id: 31,
         method: "approval/request",
-        params: { tool: "network", url: "https://example.com" },
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-approval-initial",
+          tool: "network",
+          url: "https://example.com",
+        },
       },
     ]);
 
@@ -558,10 +927,10 @@ describe("CodexAppServerAdapter approvals", () => {
       adapter.replyApproval({
         ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
-        requestId: "not-a-number",
+        requestId: " ",
         outcome: "approve_once",
       }),
-    ).rejects.toThrow("Codex approval request id 'not-a-number' must be numeric.");
+    ).rejects.toThrow("Codex approval request id must not be empty.");
 
     expect(respondServerRequest).toHaveBeenCalledTimes(0);
   });
@@ -573,17 +942,17 @@ describe("CodexAppServerAdapter approvals", () => {
       adapter.replyQuestion({
         ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
-        requestId: "32.5",
+        requestId: " ",
         answers: [["yes"]],
       }),
-    ).rejects.toThrow("Codex question request id '32.5' must be numeric.");
+    ).rejects.toThrow("Codex question request id must not be empty.");
 
     expect(respondServerRequest).toHaveBeenCalledTimes(0);
   });
 
   test("continues a paused turn from streamed requests after approval replies", async () => {
     const dynamicToolRejected = createDeferred<void>();
-    const respondServerRequest = mock(async (_runtimeId: string, requestId: number) => {
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
       if (requestId === 42) {
         dynamicToolRejected.resolve();
       }
@@ -685,9 +1054,9 @@ describe("CodexAppServerAdapter approvals", () => {
     unsubscribe();
   });
 
-  test("auto-rejects mutating Codex requests for read-only roles", async () => {
+  test("surfaces mutating Codex approvals for read-only roles while rejecting dynamic tools", async () => {
     const dynamicToolRejected = createDeferred<void>();
-    const respondServerRequest = mock(async (_runtimeId: string, requestId: number) => {
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
       if (requestId === 24) {
         dynamicToolRejected.resolve();
       }
@@ -747,12 +1116,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await dynamicToolRejected.promise;
 
-    expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-live",
-      23,
-      { decision: "decline" },
-      undefined,
-    );
+    expect(respondServerRequest.mock.calls.some(([, requestId]) => requestId === 23)).toBe(false);
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
       24,
@@ -769,8 +1133,16 @@ describe("CodexAppServerAdapter approvals", () => {
     );
     expect(events).toContainEqual(
       expect.objectContaining({
+        type: "approval_required",
+        requestId: "23",
+        requestType: "file_change",
+        mutation: "mutating",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
         type: "session_error",
-        message: expect.stringContaining("Rejected mutating Codex request"),
+        message: expect.stringContaining("must use MCP"),
       }),
     );
     expect(drainServerRequests).not.toHaveBeenCalled();

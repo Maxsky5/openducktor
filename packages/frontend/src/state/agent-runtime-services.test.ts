@@ -41,7 +41,7 @@ describe("agent runtime services", () => {
             sandboxMode: "workspace-write",
             approvalPolicy: "on-request",
             approvalsReviewer: "user",
-            workspaceWriteNetworkAccess: false,
+            commandNetworkAccess: false,
             approvalsReviewerApplies: true,
           },
         },

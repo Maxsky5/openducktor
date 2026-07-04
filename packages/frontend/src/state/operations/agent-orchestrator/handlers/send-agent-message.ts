@@ -16,7 +16,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
-import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
+import { appendSessionMessage, upsertUserSessionMessage } from "../support/messages";
 import {
   type ReadSessionSnapshot,
   requireLoadedSession,
@@ -142,7 +142,7 @@ const upsertAcceptedUserMessage = (
 ): void => {
   updateSession(session, (current) => ({
     ...current,
-    messages: upsertSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
+    messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
   }));
 };
 

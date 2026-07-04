@@ -68,6 +68,7 @@ import {
 } from "./codex-session-lifecycle";
 import {
   assertCodexRuntimePolicyBinding,
+  codexPolicyLogEntry,
   codexTransportPolicy,
   requireCodexRuntimePolicy,
 } from "./codex-session-policy";
@@ -181,6 +182,14 @@ export class CodexAppServerAdapter
     const transportModel = toTransportModelSelection(model);
     const policy = requireCodexRuntimePolicy(input.runtimePolicy, "start Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/start",
+        policy,
+        runtimeId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadStart({
       ...codexTransportPolicy(policy),
       cwd: input.workingDirectory,
@@ -210,6 +219,15 @@ export class CodexAppServerAdapter
     await this.models.validate(client, runtimeId, model);
     const policy = requireCodexRuntimePolicy(input.runtimePolicy, "resume Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/resume",
+        policy,
+        runtimeId,
+        threadId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadResume({
       ...codexTransportPolicy(policy),
       threadId: input.externalSessionId,
@@ -234,6 +252,15 @@ export class CodexAppServerAdapter
     await this.models.validate(client, runtimeId, model);
     const policy = requireCodexRuntimePolicy(input.runtimePolicy, "fork Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/fork",
+        policy,
+        runtimeId,
+        threadId: input.parentExternalSessionId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadFork({
       ...codexTransportPolicy(policy),
       threadId: input.parentExternalSessionId,
@@ -742,12 +769,15 @@ export class CodexAppServerAdapter
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
       handlePendingServerRequests: (session, handledRequestKeys) =>
         this.runtimeEvents.handlePendingServerRequests(session, handledRequestKeys),
+      handleRetainedServerRequests: (session, handledRequestKeys) =>
+        this.runtimeEvents.handleRetainedServerRequests(session, handledRequestKeys),
       emitUserMessage: (event, sourceParts) =>
         this.runtimeEvents.emitUserMessage(event, sourceParts),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
+      ...(this.options.logSessionPolicy ? { logSessionPolicy: this.options.logSessionPolicy } : {}),
     };
   }
 

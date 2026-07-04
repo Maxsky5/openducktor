@@ -7,6 +7,7 @@ import type {
 import type {
   CodexAppServerClientRequest,
   CodexAppServerProtocolMessage,
+  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
   CodexAppServerRespondError,
@@ -36,6 +37,7 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
 
 export type {
   CodexAppServerProtocolMessage,
+  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
 };
@@ -43,7 +45,7 @@ export type {
 export type CodexAppServerRequestInput = { runtimeId: string } & CodexAppServerClientRequest;
 export type CodexAppServerRespondInput = {
   runtimeId: string;
-  requestId: number;
+  requestId: CodexAppServerRequestId;
   result?: CodexAppServerRespondResult;
   error?: CodexAppServerRespondError;
 };

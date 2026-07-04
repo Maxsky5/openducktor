@@ -80,7 +80,7 @@ export const toAgentRuntimePolicyBinding = (input: {
   return input as AgentRuntimePolicyBinding;
 };
 
-export type PolicyBoundSessionRef = SessionRef &
+export type PolicyBoundSessionRef = (SessionRef | WorkflowSessionRef) &
   AgentRuntimePolicyBinding & {
     model?: AgentModelSelection;
     systemPrompt?: string;

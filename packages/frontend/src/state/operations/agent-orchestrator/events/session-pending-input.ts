@@ -121,6 +121,32 @@ const shouldAutoRejectApproval = (
   return context.approvals.readOnlyApprovalAutoRejectSafe;
 };
 
+const formatAutoRejectedApprovalNotice = (
+  event: ApprovalRequiredEvent,
+  role: AgentRole,
+): string => {
+  const lines = [`Auto-rejected mutating approval for ${role} session.`, "", event.title];
+  if (event.summary) {
+    lines.push(event.summary);
+  }
+  if (event.command?.command) {
+    lines.push(`Command: ${event.command.command}`);
+  }
+  if (event.action?.name) {
+    lines.push(`Action: ${event.action.name}`);
+  }
+  if (event.tool?.name) {
+    lines.push(`Tool: ${event.tool.name}`);
+  }
+  if (event.affectedPaths?.length) {
+    lines.push(`Affected paths: ${event.affectedPaths.join(", ")}`);
+  }
+  if (event.details) {
+    lines.push("", "Details:", event.details);
+  }
+  return lines.filter((line) => line.length > 0).join("\n");
+};
+
 const readLoadedPendingInputTarget = (
   context: SessionLifecycleEventContext,
   target: PendingInputRecordTarget,
@@ -236,7 +262,7 @@ const autoRejectMutatingApproval = (
             messages: appendSessionMessage(current, {
               id: crypto.randomUUID(),
               role: "system",
-              content: `Auto-rejected mutating approval (${event.title}) for ${role} session.`,
+              content: formatAutoRejectedApprovalNotice(event, role),
               timestamp: event.timestamp,
             }),
           }),

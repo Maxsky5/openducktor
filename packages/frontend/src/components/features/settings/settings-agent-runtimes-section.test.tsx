@@ -106,7 +106,7 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("User");
     expect(html).toContain("Inherited");
     expect(html).toContain("Command network access");
-    expect(html).toContain("Keep command network blocked when sandbox mode is workspace-write.");
+    expect(html).toContain("Keep command network blocked in sandboxed Codex turns.");
     expect(html).toContain("bg-info-surface");
     expect(html).not.toContain("About this setting");
     expect(html).not.toContain("bg-card/70");
@@ -208,7 +208,7 @@ describe("AgentRuntimesSection", () => {
         screen.getByRole("switch", { name: "Enable Command network access role overrides" }),
       ).toBeTruthy();
       expect(renderer.container.innerHTML).toContain(
-        "Keep command network blocked when sandbox mode is workspace-write.",
+        "Keep command network blocked in sandboxed Codex turns.",
       );
     } finally {
       renderer.unmount();
@@ -262,7 +262,7 @@ describe("AgentRuntimesSection", () => {
     );
 
     expect(html).toContain("has no effect while approval prompts are never");
-    expect(html).toContain("Other sandbox modes ignore this switch");
+    expect(html).toContain("Danger full access is unrestricted");
     expect(html).toContain("Confirm reduced Codex protections");
     expect(html).toContain("Danger full access removes sandbox boundaries");
     expect(html).toContain("The Never approval prompt option lets Codex proceed without asking");

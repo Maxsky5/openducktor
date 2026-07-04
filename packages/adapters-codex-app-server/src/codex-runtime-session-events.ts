@@ -231,9 +231,20 @@ export class CodexRuntimeSessionEvents {
     handledRequestKeys: Set<string>,
   ): Promise<boolean> {
     await this.handlePendingNotifications(session);
+    return this.handleRetainedServerRequests(session, handledRequestKeys);
+  }
+
+  async handleRetainedServerRequests(
+    session: CodexSessionState,
+    handledRequestKeys: Set<string>,
+  ): Promise<boolean> {
     const requests = await this.deps.drainServerRequests(session.runtimeId);
-    const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
-    return hasPendingInput || requests.length > 0;
+    return this.processDrainedServerRequests(
+      session.runtimeId,
+      requests,
+      session,
+      handledRequestKeys,
+    );
   }
 
   emitUserMessage(
@@ -609,7 +620,7 @@ export class CodexRuntimeSessionEvents {
 
   private emitUnroutableRuntimeServerRequest(
     runtimeId: string,
-    message = "Cannot route Codex app-server request because it is missing params.threadId.",
+    message = "Cannot route Codex app-server request because it is missing a thread identifier.",
   ): void {
     for (const session of this.deps.sessions.values()) {
       if (session.runtimeId !== runtimeId) {
@@ -638,13 +649,17 @@ export class CodexRuntimeSessionEvents {
   private async processServerRequestsForSession(
     session: CodexSessionState,
     requests: CodexServerRequestRecord[],
-  ): Promise<void> {
+    handledRequestKeysOverride?: Set<string>,
+  ): Promise<boolean> {
     const ownerThreadIds = new Set(
       requests.map((request) => extractThreadIdFromParams(request.params) ?? session.threadId),
     );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
     const handledRequestKeys =
-      this.handledStreamRequestKeysByThreadId.get(session.threadId) ?? new Set();
+      handledRequestKeysOverride ??
+      activeTurn?.handledRequestKeys ??
+      this.handledStreamRequestKeysByThreadId.get(session.threadId) ??
+      new Set();
     this.handledStreamRequestKeysByThreadId.set(session.threadId, handledRequestKeys);
     const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
     for (const ownerThreadId of ownerThreadIds) {
@@ -653,6 +668,100 @@ export class CodexRuntimeSessionEvents {
     if (hasPendingInput && activeTurn && !activeTurn.isTurnSettled()) {
       this.bindPendingInputToActiveTurn(session.threadId, activeTurn);
     }
+    return hasPendingInput;
+  }
+
+  private async processDrainedServerRequests(
+    runtimeId: string,
+    requests: unknown[],
+    preferredSession: CodexSessionState,
+    preferredHandledRequestKeys: Set<string>,
+  ): Promise<boolean> {
+    let hasPendingInput = false;
+    const groupedRequests = new Map<string, CodexServerRequestRecord[]>();
+
+    for (const rawRequest of requests) {
+      const request = parseServerRequestRecord(rawRequest);
+      const threadId = extractThreadIdFromParams(request.params);
+      if (!threadId) {
+        this.emitUnroutableRuntimeServerRequest(runtimeId);
+        continue;
+      }
+
+      const targetSession = this.sessionForDrainedRequest(runtimeId, threadId, preferredSession);
+      if (!targetSession) {
+        this.bufferRuntimeStreamEvent(threadId, {
+          runtimeId,
+          kind: "server_request",
+          message: request,
+        });
+        continue;
+      }
+
+      const sessionRequests = groupedRequests.get(targetSession.threadId) ?? [];
+      sessionRequests.push(request);
+      groupedRequests.set(targetSession.threadId, sessionRequests);
+    }
+
+    for (const [threadId, sessionRequests] of groupedRequests) {
+      const session =
+        threadId === preferredSession.threadId
+          ? preferredSession
+          : this.deps.sessions.get(threadId);
+      if (!session) {
+        continue;
+      }
+      const handledRequestKeys =
+        session.threadId === preferredSession.threadId ? preferredHandledRequestKeys : undefined;
+      hasPendingInput =
+        (await this.processServerRequestsForSession(
+          session,
+          sessionRequests,
+          handledRequestKeys,
+        )) || hasPendingInput;
+    }
+
+    return hasPendingInput;
+  }
+
+  private sessionForDrainedRequest(
+    runtimeId: string,
+    threadId: string,
+    preferredSession: CodexSessionState,
+  ): CodexSessionState | null {
+    if (threadId === preferredSession.threadId && preferredSession.runtimeId === runtimeId) {
+      return preferredSession;
+    }
+
+    const ownerSession = this.deps.sessions.get(threadId);
+    if (ownerSession) {
+      if (ownerSession.runtimeId === runtimeId) {
+        return ownerSession;
+      }
+      this.emitCrossRuntimeRouteError(
+        runtimeId,
+        threadId,
+        ownerSession.runtimeId,
+        ownerSession.threadId,
+      );
+      return null;
+    }
+
+    const route = this.deps.subagents.routeForChild(threadId, runtimeId);
+    const parentSession = route ? this.deps.sessions.get(route.parentExternalSessionId) : undefined;
+    if (!parentSession) {
+      return null;
+    }
+    if (parentSession.runtimeId !== runtimeId) {
+      this.emitCrossRuntimeRouteError(
+        runtimeId,
+        threadId,
+        parentSession.runtimeId,
+        parentSession.threadId,
+      );
+      return null;
+    }
+    return parentSession;
   }
 
   private async handleServerRequests(

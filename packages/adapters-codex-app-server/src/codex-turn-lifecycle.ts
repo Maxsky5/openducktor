@@ -12,10 +12,18 @@ import {
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
-import { codexApprovalsReviewer, codexSandboxPolicy } from "./codex-session-policy";
+import {
+  type CodexPolicyLogEntry,
+  codexApprovalsReviewer,
+  codexPolicyLogEntry,
+  codexSandboxPolicy,
+} from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
+
+const RETAINED_SERVER_REQUEST_DRAIN_INTERVAL_MS = 250;
+const RETAINED_SERVER_REQUEST_DRAIN_MAX_ATTEMPTS = 120;
 
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
@@ -36,12 +44,17 @@ export type CodexTurnLifecycleContext = {
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
   ): Promise<boolean>;
+  handleRetainedServerRequests(
+    session: CodexSessionState,
+    handledRequestKeys: Set<string>,
+  ): Promise<boolean>;
   emitUserMessage(
     event: AcceptedAgentUserMessage,
     sourceParts: AgentUserMessagePart[],
   ): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
+  logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
 const flushQueuedUserMessages = async (
@@ -129,6 +142,67 @@ const emitTurnStartErrorLater = (
   });
 };
 
+const waitForRetainedServerRequestDrain = (): Promise<void> =>
+  new Promise((resolve) => {
+    const timeout = setTimeout(resolve, RETAINED_SERVER_REQUEST_DRAIN_INTERVAL_MS);
+    if (typeof timeout === "object" && timeout !== null && "unref" in timeout) {
+      timeout.unref();
+    }
+  });
+
+const drainRetainedServerRequestsForActiveTurn = async (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+  activeTurn: ActiveCodexTurn,
+): Promise<boolean> => {
+  const hasPendingInput = await context.handleRetainedServerRequests(
+    session,
+    activeTurn.handledRequestKeys,
+  );
+  if (hasPendingInput && !activeTurn.isTurnSettled()) {
+    context.bindPendingInputToActiveTurn(session.threadId, activeTurn);
+    return true;
+  }
+  return false;
+};
+
+const recoverRetainedServerRequestsLater = (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+  activeTurn: ActiveCodexTurn,
+): void => {
+  void (async () => {
+    if (await drainRetainedServerRequestsForActiveTurn(context, session, activeTurn)) {
+      return;
+    }
+
+    try {
+      await activeTurn.turnStartPromise;
+    } catch {
+      return;
+    }
+
+    for (let attempt = 0; attempt < RETAINED_SERVER_REQUEST_DRAIN_MAX_ATTEMPTS; attempt += 1) {
+      if (activeTurn.isTurnSettled()) {
+        return;
+      }
+
+      if (await drainRetainedServerRequestsForActiveTurn(context, session, activeTurn)) {
+        return;
+      }
+
+      await waitForRetainedServerRequestDrain();
+    }
+  })().catch((error) => {
+    context.emitSessionEvent(session.threadId, {
+      type: "session_error",
+      externalSessionId: session.threadId,
+      timestamp: new Date().toISOString(),
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+};
+
 export const startCodexTurnForSession = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
@@ -200,13 +274,24 @@ export const startCodexTurnForSession = async (
     throw error;
   }
 
+  const sandboxPolicy = codexSandboxPolicy(policy, session.workingDirectory);
+  context.logSessionPolicy?.(
+    codexPolicyLogEntry({
+      operation: "turn/start",
+      policy,
+      runtimeId: session.runtimeId,
+      threadId: session.threadId,
+      workingDirectory: session.workingDirectory,
+    }),
+  );
+
   const turnStartPromise = client
     .turnStart({
       approvalPolicy: policy.approvalPolicy,
       approvalsReviewer: codexApprovalsReviewer(policy),
       threadId: session.threadId,
       input,
-      sandboxPolicy: codexSandboxPolicy(policy, session.workingDirectory),
+      sandboxPolicy,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     })
@@ -233,6 +318,7 @@ export const startCodexTurnForSession = async (
 
   if (context.subscribeEvents) {
     context.emitUserMessage(acceptedUserMessage, parts);
+    recoverRetainedServerRequestsLater(context, session, activeTurnState);
     emitTurnStartErrorLater(context, session, turnStartPromise);
     return acceptedUserMessage;
   }

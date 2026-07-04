@@ -95,6 +95,40 @@ const updateMessageAtIndex = (
   return createDerivedState(previous, nextMessages);
 };
 
+const CODEX_SYNTHETIC_USER_MESSAGE_CONFIRMATION_WINDOW_MS = 10_000;
+
+const isCodexSyntheticUserMessageId = (messageId: string): boolean =>
+  messageId.startsWith("codex-user-");
+
+const timestampMs = (timestamp: string): number | null => {
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const confirmsCodexSyntheticUserMessage = (
+  existing: AgentChatMessage,
+  incoming: AgentChatMessage & { role: "user" },
+): boolean => {
+  if (
+    existing.role !== "user" ||
+    existing.content !== incoming.content ||
+    isCodexSyntheticUserMessageId(existing.id) === isCodexSyntheticUserMessageId(incoming.id)
+  ) {
+    return false;
+  }
+
+  const existingTimestampMs = timestampMs(existing.timestamp);
+  const incomingTimestampMs = timestampMs(incoming.timestamp);
+  if (existingTimestampMs === null || incomingTimestampMs === null) {
+    return false;
+  }
+
+  return (
+    Math.abs(existingTimestampMs - incomingTimestampMs) <=
+    CODEX_SYNTHETIC_USER_MESSAGE_CONFIRMATION_WINDOW_MS
+  );
+};
+
 export const createSessionMessagesState = (
   externalSessionId: string,
   messages: readonly AgentChatMessage[] = [],
@@ -356,6 +390,30 @@ export const upsertSessionMessage = (
   }
 
   return mergeAtIndex(previous, index, message);
+};
+
+export const upsertUserSessionMessage = (
+  owner: SessionMessageOwner,
+  message: AgentChatMessage & { role: "user" },
+): SessionMessagesState => {
+  const previous = getSessionState(owner);
+  const idIndex = findMessageIndexById(owner, message.id);
+  if (idIndex >= 0) {
+    return mergeAtIndex(previous, idIndex, message);
+  }
+
+  const equivalentIndex = findLastMessageIndexByRole(
+    owner,
+    "user",
+    (existing) =>
+      (existing.content === message.content && existing.timestamp === message.timestamp) ||
+      confirmsCodexSyntheticUserMessage(existing, message),
+  );
+  if (equivalentIndex >= 0) {
+    return mergeAtIndex(previous, equivalentIndex, message);
+  }
+
+  return createDerivedState(previous, [...previous.items, message]);
 };
 
 export const findFirstChangedSessionMessageIndex = (

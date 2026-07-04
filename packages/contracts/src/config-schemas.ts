@@ -40,7 +40,7 @@ export const DEFAULT_CODEX_RUNTIME_POLICY = {
   sandboxMode: "workspace-write",
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
-  workspaceWriteNetworkAccess: false,
+  commandNetworkAccess: false,
 } as const;
 
 const createDefaultCodexRuntimePolicy = (): CodexPolicyFields => ({
@@ -91,9 +91,7 @@ export const codexPolicyFieldsSchema = z
     approvalsReviewer: codexApprovalsReviewerSchema.default(
       DEFAULT_CODEX_RUNTIME_POLICY.approvalsReviewer,
     ),
-    workspaceWriteNetworkAccess: z
-      .boolean()
-      .default(DEFAULT_CODEX_RUNTIME_POLICY.workspaceWriteNetworkAccess),
+    commandNetworkAccess: z.boolean().default(DEFAULT_CODEX_RUNTIME_POLICY.commandNetworkAccess),
   })
   .strict();
 export type CodexPolicyFields = z.infer<typeof codexPolicyFieldsSchema>;
@@ -103,7 +101,7 @@ const codexRoleOverrideSchema = z
     sandboxMode: codexSandboxModeSchema.optional(),
     approvalPolicy: codexApprovalPolicySchema.optional(),
     approvalsReviewer: codexApprovalsReviewerSchema.optional(),
-    workspaceWriteNetworkAccess: z.boolean().optional(),
+    commandNetworkAccess: z.boolean().optional(),
   })
   .strict();
 const codexRoleOverridesSchema = z
@@ -194,8 +192,7 @@ export const resolveCodexEffectivePolicy = (
     sandboxMode: override.sandboxMode ?? config.defaults.sandboxMode,
     approvalPolicy: override.approvalPolicy ?? config.defaults.approvalPolicy,
     approvalsReviewer: override.approvalsReviewer ?? config.defaults.approvalsReviewer,
-    workspaceWriteNetworkAccess:
-      override.workspaceWriteNetworkAccess ?? config.defaults.workspaceWriteNetworkAccess,
+    commandNetworkAccess: override.commandNetworkAccess ?? config.defaults.commandNetworkAccess,
   };
 
   const adjustmentReason =
@@ -208,8 +205,8 @@ export const resolveCodexEffectivePolicy = (
     ...policy,
     sandboxMode,
     approvalsReviewerApplies: policy.approvalPolicy !== "never",
-    workspaceWriteNetworkAccess:
-      sandboxMode === "workspace-write" ? policy.workspaceWriteNetworkAccess : false,
+    commandNetworkAccess:
+      sandboxMode === "danger-full-access" ? false : policy.commandNetworkAccess,
     ...(adjustmentReason ? { adjustmentReason } : {}),
   };
 };

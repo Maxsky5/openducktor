@@ -176,6 +176,52 @@ describe("handleCodexServerRequest", () => {
     );
   });
 
+  test("surfaces managed network command approvals for read-only roles", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        createSession("spec"),
+        {
+          id: "network-command-approval-1",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {
+            threadId: "thread-spec",
+            turnId: "turn-spec",
+            itemId: "call-1",
+            startedAtMs: 1,
+            command: "curl -I https://example.com",
+            cwd: "/repo",
+            reason: "Need network access.",
+            networkApprovalContext: { host: "example.com" },
+          },
+        },
+        new Set(),
+      ),
+    ).resolves.toBe(true);
+
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    expect(pendingInput.approval("network-command-approval-1")).toMatchObject({
+      runtimeId: "runtime-live",
+      threadId: "thread-spec",
+      request: {
+        requestId: "network-command-approval-1",
+        requestType: "command_execution",
+        mutation: "unknown",
+      },
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "network-command-approval-1",
+        mutation: "unknown",
+      }),
+    );
+  });
+
   test("does not apply OpenDucktor workflow policy to other MCP servers", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();

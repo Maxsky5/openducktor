@@ -23,7 +23,7 @@ const codexPolicy: CodexEffectivePolicy = {
   sandboxMode: "workspace-write",
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
-  workspaceWriteNetworkAccess: false,
+  commandNetworkAccess: false,
   approvalsReviewerApplies: true,
 };
 const resolveTestRuntimePolicy = ({ runtimeKind }: { runtimeKind: RuntimeKind }) =>

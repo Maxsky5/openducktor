@@ -17,10 +17,6 @@ export const classifyCodexPermissionRequestMutation = (
     return "unknown";
   }
 
-  if (permissions.network?.enabled === true) {
-    return "mutating";
-  }
-
   const fileSystem = permissions.fileSystem;
   if (fileSystem === null) {
     return "unknown";

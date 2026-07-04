@@ -169,6 +169,65 @@ describe("CodexRuntimeSessionEvents", () => {
     });
   });
 
+  test("emits network command approval requests from the live server-request stream", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-network");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      pendingInput,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "network-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread-network",
+          turnId: "turn-network",
+          itemId: "call-network-1",
+          startedAtMs: 1_783_109_994_463,
+          environmentId: "local",
+          reason:
+            "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+          networkApprovalContext: {
+            host: "example.com",
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.approval("network-approval-1")).toMatchObject({
+      threadId: "thread-network",
+      request: {
+        requestId: "network-approval-1",
+        requestType: "command_execution",
+        title: "Network access approval requested",
+      },
+    });
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "thread-network",
+        requestId: "network-approval-1",
+        title: "Network access approval requested",
+      }),
+    );
+  });
+
   test("reprocesses child server requests buffered before a parent subagent link is learned", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
@@ -430,7 +489,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "parent-thread",
-        message: expect.stringContaining("missing params.threadId"),
+        message: expect.stringContaining("missing a thread identifier"),
       }),
     );
   });

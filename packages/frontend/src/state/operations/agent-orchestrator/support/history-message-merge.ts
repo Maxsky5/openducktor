@@ -76,7 +76,7 @@ const isUserMessage = (
   meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 } => message.role === "user" && message.meta?.kind === "user";
 
-const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 2_000;
+const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 10_000;
 
 const timestampMs = (timestamp: string): number | null => {
   const parsed = Date.parse(timestamp);

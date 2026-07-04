@@ -168,6 +168,7 @@ describe("source session loader", () => {
         runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
         runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
   });

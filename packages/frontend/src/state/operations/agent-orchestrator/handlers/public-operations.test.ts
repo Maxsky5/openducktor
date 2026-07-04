@@ -26,7 +26,7 @@ const codexRuntimePolicy = {
     sandboxMode: "workspace-write" as const,
     approvalPolicy: "on-request" as const,
     approvalsReviewer: "user" as const,
-    workspaceWriteNetworkAccess: false,
+    commandNetworkAccess: false,
     approvalsReviewerApplies: true,
   },
 };

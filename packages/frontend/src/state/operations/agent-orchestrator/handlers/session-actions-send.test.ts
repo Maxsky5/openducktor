@@ -154,6 +154,147 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
+  test("stores a live accepted user message only once when send returns an equivalent event", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const originalSubscribeEvents = adapter.subscribeEvents;
+    const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
+    adapter.subscribeEvents = async (_sessionRef, handler) => {
+      handlers.push(handler);
+      return () => {};
+    };
+    adapter.sendUserMessage = async (input) => {
+      const event = acceptedUserMessage(input);
+      for (const handler of handlers) {
+        handler({
+          ...event,
+          messageId: "live-user-message",
+        });
+      }
+      return event;
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "loaded",
+      }),
+    ]);
+
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      sessionsRef,
+      updateSession: createEventSessionUpdater(sessionsRef),
+      externalSessionId: "session-1",
+      repoPath: "/tmp/repo",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      const userMessages = sessionMessagesToArray(getSession(sessionsRef)).filter(
+        (message) => message.role === "user",
+      );
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]).toEqual(
+        expect.objectContaining({
+          id: "accepted-user-message",
+          role: "user",
+          content: "hello",
+        }),
+      );
+    } finally {
+      unsubscribe();
+      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.subscribeEvents = originalSubscribeEvents;
+    }
+  });
+
+  test("stores a Codex accepted user message only once when runtime confirmation has a nearby timestamp", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const originalSubscribeEvents = adapter.subscribeEvents;
+    const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
+    adapter.subscribeEvents = async (_sessionRef, handler) => {
+      handlers.push(handler);
+      return () => {};
+    };
+    adapter.sendUserMessage = async (input) => {
+      const event = {
+        ...acceptedUserMessage(input, "codex-user-1772355601000-1"),
+        timestamp: "2026-02-22T08:00:01.000Z",
+      };
+      for (const handler of handlers) {
+        handler({
+          ...event,
+          messageId: "runtime-user-confirmed",
+          timestamp: "2026-02-22T08:00:06.000Z",
+        });
+      }
+      return event;
+    };
+
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "loaded",
+      }),
+    ]);
+
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      sessionsRef,
+      updateSession: createEventSessionUpdater(sessionsRef),
+      externalSessionId: "session-1",
+      repoPath: "/tmp/repo",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      const userMessages = sessionMessagesToArray(getSession(sessionsRef)).filter(
+        (message) => message.role === "user",
+      );
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]).toEqual(
+        expect.objectContaining({
+          id: "codex-user-1772355601000-1",
+          role: "user",
+          content: "hello",
+          timestamp: "2026-02-22T08:00:01.000Z",
+        }),
+      );
+    } finally {
+      unsubscribe();
+      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.subscribeEvents = originalSubscribeEvents;
+    }
+  });
+
   test("releases held starting sessions to running when sending starts", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;

@@ -27,9 +27,9 @@ export const codexSandboxPolicy = (
 ): CodexAppServerSandboxPolicy => {
   switch (policy.sandboxMode) {
     case "workspace-write":
-      return codexWorkspaceWriteSandboxPolicy(workingDirectory, policy.workspaceWriteNetworkAccess);
+      return codexWorkspaceWriteSandboxPolicy(workingDirectory, policy.commandNetworkAccess);
     case "read-only":
-      return { type: "readOnly", networkAccess: false };
+      return { type: "readOnly", networkAccess: policy.commandNetworkAccess };
     case "danger-full-access":
       return { type: "dangerFullAccess" };
   }
@@ -38,6 +38,53 @@ export const codexSandboxPolicy = (
 export const codexApprovalsReviewer = (
   policy: CodexEffectivePolicy,
 ): CodexAppServerApprovalsReviewer | null => policy.approvalsReviewer;
+
+export type CodexPolicyLogOperation =
+  | "thread/start"
+  | "thread/resume"
+  | "thread/fork"
+  | "turn/start";
+
+export type CodexNetworkAccessLogValue = boolean | "unrestricted";
+
+export type CodexPolicyLogEntry = {
+  operation: CodexPolicyLogOperation;
+  runtimeId: string;
+  threadId?: string;
+  workingDirectory: string;
+  sandboxMode: CodexAppServerSandboxMode;
+  approvalPolicy: CodexAppServerAskForApproval;
+  promptReviewer: CodexAppServerApprovalsReviewer | null;
+  networkAccess: CodexNetworkAccessLogValue;
+};
+
+export const codexNetworkAccessLogValue = (
+  policy: CodexEffectivePolicy,
+): CodexNetworkAccessLogValue =>
+  policy.sandboxMode === "danger-full-access" ? "unrestricted" : policy.commandNetworkAccess;
+
+export const codexPolicyLogEntry = ({
+  operation,
+  policy,
+  runtimeId,
+  threadId,
+  workingDirectory,
+}: {
+  operation: CodexPolicyLogOperation;
+  policy: CodexEffectivePolicy;
+  runtimeId: string;
+  threadId?: string;
+  workingDirectory: string;
+}): CodexPolicyLogEntry => ({
+  operation,
+  runtimeId,
+  ...(threadId ? { threadId } : {}),
+  workingDirectory,
+  sandboxMode: policy.sandboxMode,
+  approvalPolicy: policy.approvalPolicy,
+  promptReviewer: codexApprovalsReviewer(policy),
+  networkAccess: codexNetworkAccessLogValue(policy),
+});
 
 export type CodexTransportPolicy = {
   approvalPolicy: CodexAppServerAskForApproval;

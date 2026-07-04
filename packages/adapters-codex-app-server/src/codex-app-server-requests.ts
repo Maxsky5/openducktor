@@ -4,6 +4,7 @@ import {
   isCodexAppServerFileMutationRequestMethod,
   isCodexAppServerMcpServerElicitationRequestParams,
   isCodexAppServerPermissionRequestMethod,
+  type RuntimeApprovalReplyOutcome,
   type RuntimeApprovalRequestType,
 } from "@openducktor/contracts";
 import type {
@@ -28,14 +29,26 @@ const MCP_APPROVAL_TOOL_NAME_KEY = "tool_name";
 const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
 const MCP_APPROVAL_TOOL_TITLE_KEY = "tool_title";
 
+type SupportedApprovalOutcomes = NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]>;
+
+const APPROVE_ONCE_AND_REJECT = ["approve_once", "reject"] as const satisfies readonly [
+  RuntimeApprovalReplyOutcome,
+  RuntimeApprovalReplyOutcome,
+];
+const APPROVE_ONCE_SESSION_AND_REJECT = [
+  "approve_once",
+  "approve_session",
+  "reject",
+] as const satisfies readonly RuntimeApprovalReplyOutcome[];
+
 export const parseServerRequestRecord = (value: unknown): CodexServerRequestRecord => {
   if (!isPlainObject(value)) {
     throw new Error("Codex app-server server request must be an object.");
   }
 
   const { id, method, params } = value;
-  if (id !== undefined && typeof id !== "number") {
-    throw new Error("Codex app-server server request id must be numeric when present.");
+  if (id !== undefined && typeof id !== "number" && typeof id !== "string") {
+    throw new Error("Codex app-server server request id must be a string or number when present.");
   }
   if (typeof method !== "string" || method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
@@ -67,6 +80,16 @@ export const classifyCodexRequestMutation = (
 const classifyApprovalRequestType = (
   request: CodexServerRequestRecord,
 ): RuntimeApprovalRequestType => {
+  if (isCodexAppServerPermissionRequestMethod(request.method)) {
+    return "permission_grant";
+  }
+  if (isCodexAppServerCommandRequestMethod(request.method)) {
+    return "command_execution";
+  }
+  if (isCodexAppServerFileMutationRequestMethod(request.method)) {
+    return "file_change";
+  }
+
   const haystack = `${request.method} ${JSON.stringify(request.params ?? {})}`.toLowerCase();
   if (haystack.includes("command") || haystack.includes("exec") || haystack.includes("shell")) {
     return "command_execution";
@@ -80,22 +103,194 @@ const classifyApprovalRequestType = (
   return "runtime_tool";
 };
 
+const extractCommandText = (params: unknown): string | null => {
+  if (!isPlainObject(params)) {
+    return null;
+  }
+  const commandActions = Array.isArray(params.commandActions)
+    ? params.commandActions
+    : Array.isArray(params.parsedCmd)
+      ? params.parsedCmd
+      : null;
+  if (commandActions) {
+    const actionCommands = commandActions
+      .map((action) => {
+        if (!isPlainObject(action)) {
+          return null;
+        }
+        const command = action.command ?? action.cmd;
+        return typeof command === "string" && command.trim().length > 0 ? command : null;
+      })
+      .filter((command): command is string => command !== null);
+    if (actionCommands.length === 1) {
+      return actionCommands[0] ?? null;
+    }
+    if (actionCommands.length > 1) {
+      return actionCommands.join("; ");
+    }
+  }
+
+  const command = params.command;
+  if (typeof command === "string" && command.trim().length > 0) {
+    return command;
+  }
+  if (Array.isArray(command)) {
+    const parts = command.filter((part): part is string => typeof part === "string");
+    return parts.length > 0 ? parts.join(" ") : null;
+  }
+  return null;
+};
+
+const extractCommandWorkingDirectory = (params: unknown): string | null =>
+  isPlainObject(params) ? extractStringField(params, ["cwd"]) : null;
+
+const hasNetworkApprovalContext = (request: CodexServerRequestRecord): boolean =>
+  request.method ===
+    CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL &&
+  isPlainObject(request.params) &&
+  request.params.networkApprovalContext !== undefined &&
+  request.params.networkApprovalContext !== null;
+
+const isDecisionObject = (value: unknown, key: string): boolean =>
+  isPlainObject(value) && key in value;
+
+const commandApprovalSupportedReplyOutcomes = (
+  request: CodexServerRequestRecord,
+): SupportedApprovalOutcomes => {
+  if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {
+    return [...APPROVE_ONCE_SESSION_AND_REJECT];
+  }
+  if (
+    request.method !==
+      CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL ||
+    !isPlainObject(request.params)
+  ) {
+    return [...APPROVE_ONCE_AND_REJECT];
+  }
+
+  const decisions = Array.isArray(request.params.availableDecisions)
+    ? request.params.availableDecisions
+    : null;
+  if (!decisions) {
+    if (hasNetworkApprovalContext(request)) {
+      return [...APPROVE_ONCE_SESSION_AND_REJECT];
+    }
+    return [...APPROVE_ONCE_AND_REJECT];
+  }
+
+  const outcomes: RuntimeApprovalReplyOutcome[] = [];
+  if (decisions.some((decision) => decision === "accept")) {
+    outcomes.push("approve_once");
+  }
+  if (decisions.some((decision) => decision === "acceptForSession")) {
+    outcomes.push("approve_session");
+  }
+  if (
+    decisions.some(
+      (decision) =>
+        decision === "decline" ||
+        decision === "cancel" ||
+        isDecisionObject(decision, "applyNetworkPolicyAmendment"),
+    )
+  ) {
+    outcomes.push("reject");
+  }
+
+  return outcomes.length > 0 ? outcomes : [...APPROVE_ONCE_AND_REJECT];
+};
+
+const supportedReplyOutcomesForRequest = (
+  request: CodexServerRequestRecord,
+): SupportedApprovalOutcomes => {
+  if (isCodexAppServerCommandRequestMethod(request.method)) {
+    return commandApprovalSupportedReplyOutcomes(request);
+  }
+  if (
+    request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL ||
+    request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL
+  ) {
+    return [...APPROVE_ONCE_SESSION_AND_REJECT];
+  }
+  return [...APPROVE_ONCE_AND_REJECT];
+};
+
+const commandApprovalFields = (
+  request: CodexServerRequestRecord,
+): Pick<AgentPendingApprovalRequest, "action" | "command"> => {
+  if (!isCodexAppServerCommandRequestMethod(request.method)) {
+    return {};
+  }
+  const command = extractCommandText(request.params);
+  const workingDirectory = extractCommandWorkingDirectory(request.params);
+  return {
+    action: { name: hasNetworkApprovalContext(request) ? "Network access" : "Bash" },
+    ...(command
+      ? {
+          command: {
+            command,
+            ...(workingDirectory ? { workingDirectory } : {}),
+          },
+        }
+      : {}),
+  };
+};
+
+const approvalContentFields = (
+  request: CodexServerRequestRecord,
+): Pick<AgentPendingApprovalRequest, "details" | "summary" | "title"> => {
+  if (isCodexAppServerCommandRequestMethod(request.method)) {
+    const reason = isPlainObject(request.params)
+      ? extractStringField(request.params, ["reason"])
+      : null;
+    if (hasNetworkApprovalContext(request)) {
+      return {
+        title: "Network access approval requested",
+        summary: reason ?? "Codex wants to access the network from the shell.",
+      };
+    }
+    return {
+      title: "Bash approval requested",
+      summary: reason ?? "Codex wants to run a shell command.",
+    };
+  }
+  if (isCodexAppServerPermissionRequestMethod(request.method)) {
+    const reason = isPlainObject(request.params)
+      ? extractStringField(request.params, ["reason"])
+      : null;
+    return {
+      title: "Permission approval requested",
+      summary: reason ?? "Codex requests additional permissions.",
+    };
+  }
+  if (isCodexAppServerFileMutationRequestMethod(request.method)) {
+    return {
+      title: "File change approval requested",
+      summary: "Codex wants to change files.",
+    };
+  }
+
+  return {
+    title: `Codex ${request.method}`,
+    summary: `Codex requested ${request.method}.`,
+    details: JSON.stringify(request.params ?? {}, null, 2),
+  };
+};
+
 export const toApprovalRequest = (
   request: CodexServerRequestRecord,
   role: AgentRole,
 ): AgentPendingApprovalRequest => {
   if (request.id === undefined) {
-    throw new Error("Codex app-server approval request is missing a numeric id.");
+    throw new Error("Codex app-server approval request is missing an id.");
   }
 
   return {
     requestId: String(request.id),
     requestType: classifyApprovalRequestType(request),
-    title: `Codex ${request.method}`,
-    summary: `Codex requested ${request.method}.`,
-    details: JSON.stringify(request.params ?? {}, null, 2),
+    ...approvalContentFields(request),
     mutation: classifyCodexRequestMutation(request),
-    supportedReplyOutcomes: ["approve_once", "reject"],
+    supportedReplyOutcomes: supportedReplyOutcomesForRequest(request),
+    ...commandApprovalFields(request),
     metadata: {
       codexMethod: request.method,
       role,
@@ -153,7 +348,7 @@ export const toMcpElicitationApprovalRequest = (
     return null;
   }
   if (request.id === undefined) {
-    throw new Error("Codex MCP elicitation request is missing a numeric id.");
+    throw new Error("Codex MCP elicitation request is missing an id.");
   }
 
   const meta = mcpToolApprovalMeta(request);
@@ -203,7 +398,7 @@ export const extractTurnId = (value: unknown): string | null => {
 };
 
 export const extractThreadIdFromParams = (value: unknown): string | null => {
-  return extractStringField(value, ["threadId", "thread_id"]);
+  return extractStringField(value, ["threadId", "thread_id", "conversationId"]);
 };
 
 export const codexTurnKey = (threadId: string, turnId: string): string => `${threadId}:${turnId}`;
@@ -225,7 +420,7 @@ export const parseQuestionRequest = (
   questionIds: string[];
 } => {
   if (request.id === undefined) {
-    throw new Error("Codex app-server question request is missing a numeric id.");
+    throw new Error("Codex app-server question request is missing an id.");
   }
   if (!isPlainObject(request.params)) {
     throw new Error("Codex app-server question request params must be an object.");

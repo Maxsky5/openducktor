@@ -187,13 +187,13 @@ describe("config-schemas", () => {
         sandboxMode: "workspace-write",
         approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
-        workspaceWriteNetworkAccess: true,
+        commandNetworkAccess: true,
       },
       roleOverrides: {
         spec: { sandboxMode: "read-only", approvalPolicy: "untrusted" },
         planner: { approvalsReviewer: "user" },
         build: { sandboxMode: "workspace-write" },
-        qa: { workspaceWriteNetworkAccess: false },
+        qa: { commandNetworkAccess: false },
       },
     });
 
@@ -207,10 +207,10 @@ describe("config-schemas", () => {
         sandboxMode: "read-only",
         approvalPolicy: "untrusted",
         approvalsReviewer: "auto_review",
-        workspaceWriteNetworkAccess: true,
+        commandNetworkAccess: true,
       },
       roleOverrides: {
-        qa: { sandboxMode: "workspace-write", workspaceWriteNetworkAccess: true },
+        qa: { sandboxMode: "workspace-write", commandNetworkAccess: true },
       },
     });
 
@@ -219,21 +219,21 @@ describe("config-schemas", () => {
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
-      workspaceWriteNetworkAccess: true,
+      commandNetworkAccess: true,
     });
     expect(resolveCodexEffectivePolicy(config, "spec")).toEqual({
       sandboxMode: "read-only",
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
-      workspaceWriteNetworkAccess: false,
+      commandNetworkAccess: true,
     });
     expect(resolveCodexEffectivePolicy(config, "build")).toEqual({
       sandboxMode: "workspace-write",
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
-      workspaceWriteNetworkAccess: true,
+      commandNetworkAccess: true,
       adjustmentReason:
         "Build role requires workspace-write when sandboxMode is inherited from read-only.",
     });
@@ -246,7 +246,7 @@ describe("config-schemas", () => {
         sandboxMode: "workspace-write",
         approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
-        workspaceWriteNetworkAccess: true,
+        commandNetworkAccess: true,
       },
       roleOverrides: {
         qa: { sandboxMode: "read-only", approvalsReviewer: "user" },
@@ -258,7 +258,7 @@ describe("config-schemas", () => {
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
-      workspaceWriteNetworkAccess: true,
+      commandNetworkAccess: true,
     });
   });
 
@@ -277,7 +277,7 @@ describe("config-schemas", () => {
     });
     expect(resolveCodexEffectivePolicy(config, "qa")).toMatchObject({
       sandboxMode: "danger-full-access",
-      workspaceWriteNetworkAccess: false,
+      commandNetworkAccess: false,
     });
   });
 
@@ -288,7 +288,7 @@ describe("config-schemas", () => {
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
         approvalsReviewer: "user",
-        workspaceWriteNetworkAccess: false,
+        commandNetworkAccess: false,
       },
     });
 

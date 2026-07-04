@@ -591,7 +591,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     }
   });
 
-  test("emits Codex app-server stream events and keeps notifications available for drain polling", async () => {
+  test("emits Codex app-server stream events and keeps records available for recovery drain", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-events-"));
     try {
       const repo = join(root, "repo");
@@ -670,7 +670,21 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       ]);
       await expect(
         Effect.runPromise(promiseCodexAppServer.drainServerRequests("runtime-events")),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([
+        {
+          id: 99,
+          method: "execCommandApproval",
+          params: {
+            conversationId: "thread-1",
+            callId: "call-1",
+            approvalId: null,
+            command: ["true"],
+            cwd: "/repo",
+            reason: null,
+            parsedCmd: [],
+          },
+        },
+      ]);
       await Effect.runPromise(handle.stop());
     } finally {
       await removeTestDirectory(root);

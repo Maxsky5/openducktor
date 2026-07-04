@@ -101,7 +101,15 @@ export const codexApprovalResponseForRequest = ({
             : "accept",
       };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL:
-      return { decision: approved ? "accept" : "decline" };
+      if (!approved) {
+        return { decision: "decline" };
+      }
+      return {
+        decision:
+          outcome === "approve_session" || outcome === "approve_always"
+            ? "acceptForSession"
+            : "accept",
+      };
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST:
       return mcpElicitationResponse(outcome);
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL:

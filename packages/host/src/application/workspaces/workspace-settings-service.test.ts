@@ -362,7 +362,7 @@ describe("createWorkspaceSettingsService", () => {
               sandboxMode: "danger-full-access",
               approvalPolicy: "never",
               approvalsReviewer: "auto_review",
-              workspaceWriteNetworkAccess: true,
+              commandNetworkAccess: true,
             },
             roleOverrides: {
               spec: { sandboxMode: "read-only", approvalPolicy: "on-request" },
@@ -370,7 +370,7 @@ describe("createWorkspaceSettingsService", () => {
               build: {
                 sandboxMode: "workspace-write",
                 approvalPolicy: "untrusted",
-                workspaceWriteNetworkAccess: true,
+                commandNetworkAccess: true,
               },
               qa: {
                 sandboxMode: "read-only",
@@ -407,7 +407,7 @@ describe("createWorkspaceSettingsService", () => {
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
         approvalsReviewer: "auto_review",
-        workspaceWriteNetworkAccess: true,
+        commandNetworkAccess: true,
       },
       roleOverrides: {
         spec: { sandboxMode: "read-only", approvalPolicy: "on-request" },
@@ -415,7 +415,7 @@ describe("createWorkspaceSettingsService", () => {
         build: {
           sandboxMode: "workspace-write",
           approvalPolicy: "untrusted",
-          workspaceWriteNetworkAccess: true,
+          commandNetworkAccess: true,
         },
         qa: {
           sandboxMode: "read-only",

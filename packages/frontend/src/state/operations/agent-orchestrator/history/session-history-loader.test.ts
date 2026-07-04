@@ -570,6 +570,7 @@ describe("session history loader", () => {
         runtimeKind: sessionTarget.runtimeKind,
         workingDirectory: sessionTarget.workingDirectory,
         runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
   }, 500);

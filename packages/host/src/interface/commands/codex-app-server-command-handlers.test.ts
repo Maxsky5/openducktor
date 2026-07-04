@@ -1,7 +1,10 @@
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
+import type {
+  CodexAppServerProtocolMessage,
+  CodexAppServerRequestResult,
+} from "../../ports/codex-app-server-port";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -19,6 +22,133 @@ const codexStatusNotification = {
 } satisfies CodexAppServerProtocolMessage;
 
 describe("createCodexAppServerCommandHandlers", () => {
+  test("logs Codex policy-bearing requests through the host logger", async () => {
+    const infos: string[] = [];
+    const service: CodexAppServerService = {
+      request(input) {
+        if (input.method === "thread/start") {
+          return Effect.succeed({
+            approvalPolicy: "on-request",
+            approvalsReviewer: "user",
+            cwd: "/repo",
+            instructionSources: [],
+            model: "gpt-5",
+            modelProvider: "openai",
+            reasoningEffort: "medium",
+            sandbox: {
+              type: "workspaceWrite",
+              writableRoots: ["/repo"],
+              networkAccess: true,
+              excludeTmpdirEnvVar: true,
+              excludeSlashTmp: true,
+            },
+            serviceTier: null,
+            thread: {
+              id: "thread-1",
+              cwd: "/repo",
+              createdAt: 1,
+              updatedAt: 1,
+              title: null,
+              status: { type: "active", activeFlags: [] },
+            },
+          } as unknown as CodexAppServerRequestResult);
+        }
+        if (input.method === "turn/start") {
+          return Effect.succeed({
+            turn: {
+              id: "turn-1",
+              startedAt: 1,
+              completedAt: null,
+              durationMs: null,
+              error: null,
+              items: [],
+              itemsView: "full",
+              status: { type: "active" },
+            },
+          } as CodexAppServerRequestResult);
+        }
+        return Effect.succeed({ data: [], nextCursor: null } as CodexAppServerRequestResult);
+      },
+      listLoadedThreads() {
+        return Effect.succeed({ data: [], nextCursor: null });
+      },
+      listThreads() {
+        return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+      },
+      notifications() {
+        return Effect.succeed([]);
+      },
+      requests() {
+        return Effect.succeed([]);
+      },
+      respond() {
+        return Effect.void;
+      },
+    };
+    const router = createHostCommandRouter({
+      handlers: createCodexAppServerCommandHandlers(service, {
+        logger: {
+          info: (message) => infos.push(message),
+        },
+      }),
+    });
+
+    await router.invoke("codex_app_server_request", {
+      runtimeId: "runtime-1",
+      method: "thread/start",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        cwd: "/repo",
+        developerInstructions: "Use the repo rules.",
+        sandbox: "workspace-write",
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+    await router.invoke("codex_app_server_request", {
+      runtimeId: "runtime-1",
+      method: "turn/start",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        threadId: "thread-1",
+        input: [{ type: "text", text: "check network" }],
+        sandboxPolicy: {
+          type: "workspaceWrite",
+          writableRoots: ["/repo"],
+          networkAccess: true,
+          excludeTmpdirEnvVar: true,
+          excludeSlashTmp: true,
+        },
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+    await router.invoke("codex_app_server_request", {
+      runtimeId: "runtime-1",
+      method: "turn/start",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        threadId: "thread-1",
+        input: [{ type: "text", text: "check read-only network" }],
+        sandboxPolicy: {
+          type: "readOnly",
+          networkAccess: true,
+        },
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+
+    expect(infos).toEqual([
+      "Codex session policy thread/start runtime=runtime-1 thread=thread-1 cwd=/repo sandboxMode=workspace-write approvalPolicy=on-request promptReviewer=user networkAccess=true",
+      "Codex session policy turn/start runtime=runtime-1 thread=thread-1 cwd=/repo sandboxMode=workspace-write approvalPolicy=on-request promptReviewer=user networkAccess=true",
+      "Codex session policy turn/start runtime=runtime-1 thread=thread-1 cwd=unknown sandboxMode=read-only approvalPolicy=on-request promptReviewer=user networkAccess=true",
+    ]);
+  });
+
   test("routes Codex app-server commands to the service", async () => {
     const calls: Array<{
       method: keyof CodexAppServerService;
@@ -105,6 +235,13 @@ describe("createCodexAppServerCommandHandlers", () => {
         result: { decision: "approved" },
       }),
     ).resolves.toBeUndefined();
+    await expect(
+      router.invoke("codex_app_server_respond", {
+        runtimeId: "runtime-1",
+        requestId: "permission-request-1",
+        result: { permissions: { network: { enabled: true } }, scope: "turn" },
+      }),
+    ).resolves.toBeUndefined();
     expect(calls).toEqual([
       {
         method: "request",
@@ -156,6 +293,14 @@ describe("createCodexAppServerCommandHandlers", () => {
           runtimeId: "runtime-1",
           requestId: 7,
           result: { decision: "approved" },
+        },
+      },
+      {
+        method: "respond",
+        input: {
+          runtimeId: "runtime-1",
+          requestId: "permission-request-1",
+          result: { permissions: { network: { enabled: true } }, scope: "turn" },
         },
       },
     ]);
@@ -220,7 +365,7 @@ describe("createCodexAppServerCommandHandlers", () => {
     ).rejects.toThrow("Unsupported Codex app-server request method: fuzzyFileSearch/sessionStart");
     await expect(
       router.invoke("codex_app_server_respond", { runtimeId: "runtime-1", requestId: 1.5 }),
-    ).rejects.toThrow("requestId must be a non-negative integer.");
+    ).rejects.toThrow("requestId must be a non-empty string or non-negative integer.");
     await expect(
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",

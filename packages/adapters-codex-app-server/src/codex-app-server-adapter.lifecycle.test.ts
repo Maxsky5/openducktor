@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
   codexSessionRef,
@@ -164,7 +164,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("resumes and forks sessions through the live runtime id", async () => {
-    const { adapter, transports, requireRepoRuntime } = createHarness();
+    const logSessionPolicy = mock(() => {});
+    const { adapter, transports, requireRepoRuntime } = createHarness({ logSessionPolicy });
 
     await adapter.resumeSession({
       repoPath: "/repo",
@@ -219,6 +220,26 @@ describe("CodexAppServerAdapter lifecycle", () => {
         name: "QA task-1",
       },
     });
+    expect(logSessionPolicy).toHaveBeenNthCalledWith(1, {
+      operation: "thread/resume",
+      runtimeId: "runtime-live",
+      threadId: "thread-9",
+      workingDirectory: "/repo",
+      sandboxMode: "workspace-write",
+      approvalPolicy: "on-request",
+      promptReviewer: "user",
+      networkAccess: false,
+    });
+    expect(logSessionPolicy).toHaveBeenNthCalledWith(2, {
+      operation: "thread/fork",
+      runtimeId: "runtime-live",
+      threadId: "thread-7",
+      workingDirectory: "/repo",
+      sandboxMode: "workspace-write",
+      approvalPolicy: "on-request",
+      promptReviewer: "user",
+      networkAccess: false,
+    });
   });
 
   test("sends user parts through turn/start on the live runtime id", async () => {
@@ -268,7 +289,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     config.roleOverrides.build = {
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
-      workspaceWriteNetworkAccess: true,
+      commandNetworkAccess: true,
     };
     const runtimePolicy = codexPolicy(config, "build");
 
@@ -308,6 +329,57 @@ describe("CodexAppServerAdapter lifecycle", () => {
       input: [{ type: "text", text: "Build it" }],
       model: "gpt-5",
       effort: "medium",
+    });
+  });
+
+  test("logs effective Codex policy for session and turn requests", async () => {
+    const logSessionPolicy = mock(() => {});
+    const { adapter } = createHarness({ logSessionPolicy });
+    const config = defaultCodexRuntimeConfig();
+    config.roleOverrides.build = {
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      commandNetworkAccess: true,
+    };
+    const runtimePolicy = codexPolicy(config, "build");
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy,
+        parts: [{ kind: "text", text: "Build it" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    expect(logSessionPolicy).toHaveBeenNthCalledWith(1, {
+      operation: "thread/start",
+      runtimeId: "runtime-live",
+      workingDirectory: "/repo",
+      sandboxMode: "workspace-write",
+      approvalPolicy: "untrusted",
+      promptReviewer: "auto_review",
+      networkAccess: true,
+    });
+    expect(logSessionPolicy).toHaveBeenNthCalledWith(2, {
+      operation: "turn/start",
+      runtimeId: "runtime-live",
+      threadId: "thread/start-runtime-live",
+      workingDirectory: "/repo",
+      sandboxMode: "workspace-write",
+      approvalPolicy: "untrusted",
+      promptReviewer: "auto_review",
+      networkAccess: true,
     });
   });
 
@@ -373,6 +445,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("maps explicit spec read-only policy to no writable roots for turns", async () => {
     const { adapter, transports } = createHarness();
     const config = defaultCodexRuntimeConfig();
+    config.defaults.commandNetworkAccess = true;
     config.roleOverrides.spec = { sandboxMode: "read-only" };
     const runtimePolicy = codexPolicy(config, "spec");
 
@@ -399,7 +472,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       sandbox: "read-only",
     });
     expect(transports.get("runtime-live")?.calls[3]?.params).toMatchObject({
-      sandboxPolicy: { type: "readOnly", networkAccess: false },
+      sandboxPolicy: { type: "readOnly", networkAccess: true },
     });
   });
 

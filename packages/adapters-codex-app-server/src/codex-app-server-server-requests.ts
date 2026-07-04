@@ -290,9 +290,7 @@ export const handleCodexServerRequest = async (
     }
 
     const isMutatingRequest = requestMutation === "mutating";
-    const shouldRejectForRole =
-      !routeContext.policySession.role ||
-      (isMutatingRequest && READ_ONLY_ROLES.has(routeContext.policySession.role));
+    const shouldRejectForRole = !routeContext.policySession.role;
     if (shouldRejectForRole) {
       const roleReason = routeContext.policySession.role
         ? `role '${routeContext.policySession.role}' is read-only`
@@ -337,7 +335,7 @@ export const handleCodexServerRequest = async (
   }
 
   if (requestId === undefined) {
-    throw new Error("Codex app-server tool request is missing a numeric id.");
+    throw new Error("Codex app-server tool request is missing an id.");
   }
 
   // Dynamic Codex tool calls are never approved here; OpenDucktor workflow tools are exposed

@@ -1,7 +1,16 @@
-export const requireCodexServerRequestId = (requestId: string, requestType: string): number => {
+import type { CodexAppServerRequestId } from "@openducktor/contracts";
+
+export const requireCodexServerRequestId = (
+  requestId: string,
+  requestType: string,
+): CodexAppServerRequestId => {
   const trimmed = requestId.trim();
+  if (trimmed.length === 0) {
+    throw new Error(`Codex ${requestType} request id must not be empty.`);
+  }
+
   if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`Codex ${requestType} request id '${requestId}' must be numeric.`);
+    return trimmed;
   }
 
   const parsed = Number(trimmed);

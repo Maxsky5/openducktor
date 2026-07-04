@@ -13,6 +13,7 @@ export type {
   CodexAppServerMcpServerElicitationRequestParams,
   CodexAppServerPermissionsRequestApprovalParams,
   CodexAppServerProtocolMessage,
+  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestParams,
   CodexAppServerRequestPermissionProfile,

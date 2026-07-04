@@ -3,6 +3,7 @@ import {
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
+  type CodexAppServerRequestId,
   type DevServerGroupState,
   devServerGroupStateSchema,
   type FailureKind,
@@ -263,7 +264,7 @@ const codexAppServerRequest = async (
 const codexAppServerRespond = async (
   invokeFn: InvokeFn,
   runtimeId: string,
-  requestId: number,
+  requestId: CodexAppServerRequestId,
   result?: unknown,
   error?: unknown,
 ): Promise<void> => {
@@ -581,7 +582,7 @@ export class HostAgentClient {
 
   async codexAppServerRespond(
     runtimeId: string,
-    requestId: number,
+    requestId: CodexAppServerRequestId,
     result?: unknown,
     error?: unknown,
   ): Promise<void> {

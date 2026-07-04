@@ -105,9 +105,11 @@ describe("createCodexAppServerRuntimeAdapter", () => {
     const originalRuntimeRequire = host.runtimeRequire;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+    const originalConsoleInfo = console.info;
     const runtimeEnsureCalls: unknown[][] = [];
     const runtimeRequireCalls: unknown[][] = [];
     const codexRequestCalls: unknown[][] = [];
+    const consoleInfoCalls: unknown[][] = [];
 
     host.runtimeEnsure = mock(async (...args: unknown[]) => {
       runtimeEnsureCalls.push(args);
@@ -134,6 +136,9 @@ describe("createCodexAppServerRuntimeAdapter", () => {
     host.workspaceGetSettingsSnapshot = mock(async () =>
       createSettingsSnapshotFixture(),
     ) as typeof host.workspaceGetSettingsSnapshot;
+    console.info = mock((...args: unknown[]) => {
+      consoleInfoCalls.push(args);
+    }) as typeof console.info;
     configureCodexTestShellBridge();
 
     try {
@@ -172,11 +177,24 @@ describe("createCodexAppServerRuntimeAdapter", () => {
         threadId: "thread-codex",
         name: "BUILD task-1",
       });
+      expect(consoleInfoCalls).toContainEqual([
+        "[OpenDucktor] Codex session policy",
+        {
+          operation: "thread/start",
+          runtimeId: "runtime-codex-live",
+          workingDirectory: "/repo",
+          sandboxMode: codexQaRuntimePolicy.policy.sandboxMode,
+          approvalPolicy: codexQaRuntimePolicy.policy.approvalPolicy,
+          promptReviewer: codexQaRuntimePolicy.policy.approvalsReviewer,
+          networkAccess: false,
+        },
+      ]);
     } finally {
       host.runtimeEnsure = originalRuntimeEnsure;
       host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
       host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+      console.info = originalConsoleInfo;
       configureShellBridge(createUnavailableShellBridge());
     }
   });

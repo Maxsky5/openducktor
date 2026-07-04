@@ -39,7 +39,7 @@ const POLICY_LABELS = {
   sandboxMode: "Sandbox mode",
   approvalPolicy: "Approval prompts",
   approvalsReviewer: "Prompt reviewer",
-  workspaceWriteNetworkAccess: "Command network access",
+  commandNetworkAccess: "Command network access",
 } satisfies Record<CodexPolicyField, string>;
 
 const VALUE_LABELS = {
@@ -64,8 +64,8 @@ const VALUE_HELP = {
   never: "Codex does not ask for approval prompts.",
   user: "Approval prompts go to the user.",
   auto_review: "Eligible prompts go through Codex automatic review.",
-  true: "Allow network for commands when sandbox mode is workspace-write.",
-  false: "Keep command network blocked when sandbox mode is workspace-write.",
+  true: "Allow network for commands in sandboxed Codex turns.",
+  false: "Keep command network blocked in sandboxed Codex turns.",
 } satisfies Record<string, string>;
 
 const FEATURE_HELP = {
@@ -75,15 +75,15 @@ const FEATURE_HELP = {
     "Choose when Codex asks before proceeding. Never removes approval prompts and requires acknowledgement before saving.",
   approvalsReviewer:
     "Choose who reviews approval prompts. This setting is ignored while approval policy is never.",
-  workspaceWriteNetworkAccess:
-    "Allow commands launched inside workspace-write to use the network. Other sandbox modes ignore this switch.",
+  commandNetworkAccess:
+    "Allow commands launched by Codex inside sandboxed turns to use the network. Danger full access is unrestricted.",
 } satisfies Record<CodexPolicyField, string>;
 
 const FEATURE_FIELDS: CodexPolicyField[] = [
   "sandboxMode",
   "approvalPolicy",
   "approvalsReviewer",
-  "workspaceWriteNetworkAccess",
+  "commandNetworkAccess",
 ];
 
 const INHERIT_ROLE_OVERRIDE_VALUE = "__inherit__";
@@ -468,12 +468,6 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
             </div>
           );
         })}
-        <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
-          <dt className="font-semibold">Inherited</dt>
-          <dd className="leading-relaxed text-foreground/80">
-            Role override only. Leaves the role unset and uses the default value.
-          </dd>
-        </div>
       </dl>
     </div>
   );
