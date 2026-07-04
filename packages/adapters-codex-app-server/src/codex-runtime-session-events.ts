@@ -98,6 +98,7 @@ export class CodexRuntimeSessionEvents {
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
+  private readonly startedItemTimestampsByKey = new Map<string, number>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly restoredContextCapturesByKey = new Map<string, RestoredContextCapture>();
   private readonly bufferedResolvedServerRequestIdsByThreadId = new Map<
@@ -737,6 +738,7 @@ export class CodexRuntimeSessionEvents {
       ...(this.deps.drainNotifications ? { drainNotifications: this.deps.drainNotifications } : {}),
       bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
+      startedItemTimestampsByKey: this.startedItemTimestampsByKey,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,

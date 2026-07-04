@@ -848,6 +848,28 @@ describe("agent-chat-message-card-model", () => {
           "not-a-date",
         ),
       ).toBeNull();
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            startedAtMs: Number.NaN,
+            endedAtMs: 300,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBeNull();
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            startedAtMs: 100,
+            endedAtMs: Number.POSITIVE_INFINITY,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBeNull();
     });
   });
 

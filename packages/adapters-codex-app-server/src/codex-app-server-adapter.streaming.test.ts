@@ -165,7 +165,7 @@ describe("CodexAppServerAdapter streaming", () => {
             completedAtMs: 1_777_766_402_500,
             item: {
               type: "commandExecution",
-              id: "cmd-failed-1",
+              id: "cmd-1",
               command: "bun test",
               cwd: "/repo",
               status: "failed",
@@ -338,10 +338,12 @@ describe("CodexAppServerAdapter streaming", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "tool",
-          partId: "cmd-failed-1",
+          partId: "cmd-1",
           tool: "bash",
           toolType: "bash",
           status: "error",
+          startedAtMs: 1_777_766_401_000,
+          endedAtMs: 1_777_766_402_500,
           error: "exit code 1",
         }),
       }),

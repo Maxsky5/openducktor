@@ -70,7 +70,7 @@ const parseCodexTimestampString = (timestamp: string | null | undefined): number
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const codexItemCompletedAtMs = (item: Record<string, unknown>): number | null => {
+const codexItemCompletedAtMs = (item: Record<string, unknown>): number | null => {
   const millis = extractNumberField(item, CODEX_COMPLETION_MS_KEYS);
   if (millis !== null) {
     return millis;
