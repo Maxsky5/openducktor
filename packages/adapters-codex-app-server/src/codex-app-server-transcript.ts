@@ -196,6 +196,14 @@ const selectCodexFinalAgentMessage = (
   );
 };
 
+const withCompletedAtMs = (
+  item: Record<string, unknown>,
+  timestamp: string,
+): Record<string, unknown> => {
+  const completedAtMs = Date.parse(timestamp);
+  return Number.isFinite(completedAtMs) ? { ...item, completedAtMs } : item;
+};
+
 export const shouldReplaceCodexBufferedFinalAgentMessage = (
   current: Record<string, unknown>,
   next: Record<string, unknown>,
@@ -322,7 +330,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : {}),
     };
   }
-  const parts = toStreamPart(item, messageId, messageId);
+  const parts = toStreamPart(withCompletedAtMs(item, messageTimestamp), messageId, messageId);
   if (parts.length > 0) {
     return {
       messageId,

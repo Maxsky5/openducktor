@@ -146,6 +146,15 @@ const consumeSyntheticUserMessage = (
 const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
+const withLifecycleTimestamp = (
+  item: Record<string, unknown>,
+  key: "startedAtMs" | "completedAtMs",
+  timestamp: string,
+): Record<string, unknown> => {
+  const timestampMs = Date.parse(timestamp);
+  return Number.isFinite(timestampMs) ? { ...item, [key]: timestampMs } : item;
+};
+
 let lastAcceptedUserMessageTimestamp = 0;
 let acceptedUserMessageCounter = 0;
 
@@ -240,7 +249,7 @@ const emitStartedItem = (
     return;
   }
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_started", item },
+    { kind: "item_started", item: withLifecycleTimestamp(item, "startedAtMs", timestamp) },
     { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
   );
   for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
@@ -331,7 +340,7 @@ const emitCompletedItem = (
   }
 
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_completed", item },
+    { kind: "item_completed", item: withLifecycleTimestamp(item, "completedAtMs", timestamp) },
     {
       source: "live",
       runtimeId: session.runtimeId,

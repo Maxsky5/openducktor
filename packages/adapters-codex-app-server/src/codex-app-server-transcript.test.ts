@@ -36,6 +36,35 @@ describe("Codex App Server transcript parsing", () => {
     ).toBeNull();
   });
 
+  test("derives tool timing from Codex duration and the existing item timestamp", () => {
+    const timestamp = "2026-05-07T00:00:10.000Z";
+    const message = toHistoryMessage(
+      {
+        id: "tool-1",
+        type: "mcpToolCall",
+        server: "openducktor",
+        tool: "odt_read_task",
+        status: "completed",
+        arguments: { taskId: "task-1" },
+        result: { content: [{ type: "text", text: "ok" }] },
+        durationMs: 8,
+      },
+      "fallback-id",
+      undefined,
+      timestamp,
+    );
+
+    expect(message?.parts).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        startedAtMs: Date.parse(timestamp) - 8,
+      }),
+    ]);
+    expect(message?.parts[0]).not.toEqual(
+      expect.objectContaining({ endedAtMs: expect.any(Number) }),
+    );
+  });
+
   test("maps skill message parts to structured Codex skill input", () => {
     const skill = {
       id: "/skills/review/SKILL.md",
