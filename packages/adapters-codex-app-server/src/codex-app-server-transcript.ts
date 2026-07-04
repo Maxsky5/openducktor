@@ -35,6 +35,13 @@ import {
   statusFromCodexStatus,
 } from "./codex-tool-normalizer";
 import {
+  type CodexToolTimingOptions,
+  codexItemTimestamp,
+  codexToolTimingFields,
+  safeCodexTimestampFromMilliseconds,
+  withCodexItemCompletedAtMs,
+} from "./codex-tool-timing";
+import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
 } from "./codex-user-input-display";
@@ -44,27 +51,6 @@ import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./ev
 export type CodexTokenUsageTotals = {
   totalTokens: number;
   contextWindow?: number;
-};
-
-const extractOptionalFiniteNumberField = (
-  value: Record<string, unknown>,
-  keys: string[],
-  label: string,
-): number | null => {
-  for (const key of keys) {
-    if (!Object.hasOwn(value, key)) {
-      continue;
-    }
-    const candidate = value[key];
-    if (candidate === null || candidate === undefined) {
-      return null;
-    }
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
-    }
-    throw new Error(`Codex commandExecution ${label} must be a finite number when present.`);
-  }
-  return null;
 };
 
 export type CodexTurnTiming = {
@@ -99,7 +85,7 @@ export const timestampFromCodexParams = (params: unknown): string | null => {
     "startedAtMs",
     "started_at_ms",
   ]);
-  return millis !== null ? new Date(millis).toISOString() : null;
+  return safeCodexTimestampFromMilliseconds(millis);
 };
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
@@ -249,9 +235,10 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
       } else {
         timestampSeconds = completedAtSeconds ?? startedAtSeconds;
       }
-      const timestamp = codexTimestampFromSeconds(timestampSeconds) ?? null;
+      const timestamp =
+        codexItemTimestamp(item) ?? codexTimestampFromSeconds(timestampSeconds) ?? null;
       return {
-        item,
+        item: withCodexItemCompletedAtMs(item),
         turnId,
         timestamp,
         isFinalAgentMessage: itemIsFinalAgentMessage,
@@ -322,7 +309,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : {}),
     };
   }
-  const parts = toStreamPart(item, messageId, messageId);
+  const parts = toStreamPart(withCodexItemCompletedAtMs(item), messageId, messageId);
   if (parts.length > 0) {
     return {
       messageId,
@@ -667,6 +654,7 @@ const codexCommandExecutionStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const command = codexCommandText(value.command) ?? "command";
   const cwd = extractStringField(value, ["cwd"]);
@@ -677,20 +665,7 @@ const codexCommandExecutionStreamParts = (
   const explicitError = stringifyJsonValue(value.error);
   const status = statusFromCodexStatus(value.status);
   const error = explicitError ?? (status === "error" ? output : null);
-  const startedAtMs = extractOptionalFiniteNumberField(
-    value,
-    ["startedAtMs", "started_at_ms"],
-    "startedAtMs",
-  );
-  const durationMs = extractOptionalFiniteNumberField(
-    value,
-    ["durationMs", "duration_ms"],
-    "durationMs",
-  );
-  const endedAtMs =
-    typeof startedAtMs === "number" && typeof durationMs === "number"
-      ? startedAtMs + durationMs
-      : null;
+  const timing = codexToolTimingFields(value, timingOptions);
 
   return normalizedCodexToolPart({
     messageId,
@@ -702,8 +677,7 @@ const codexCommandExecutionStreamParts = (
     input,
     output,
     error,
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    ...timing,
     metadata: { codexItem: value },
   });
 };
@@ -745,6 +719,7 @@ const codexMcpToolCallStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const server = extractStringField(value, ["server"]);
   const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
@@ -760,6 +735,7 @@ const codexMcpToolCallStreamParts = (
     ...(args ? { input: args } : {}),
     output: error ? null : output,
     error,
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value, ...(server ? { server } : {}) },
   });
 };
@@ -799,14 +775,18 @@ const codexDynamicToolCallStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const todoResult = todoMapper.fromThreadItemObject(value, {
     source: "thread_read",
     threadId: messageId,
   });
   if (todoResult.handled) {
+    const timing = codexToolTimingFields(value, timingOptions);
     return projectCodexCanonicalEvents(todoResult.events).flatMap((event) =>
-      event.type === "assistant_part" ? [event.part] : [],
+      event.type === "assistant_part"
+        ? [event.part.kind === "tool" ? { ...event.part, ...timing } : event.part]
+        : [],
     );
   }
 
@@ -839,6 +819,7 @@ const codexDynamicToolCallStreamParts = (
     output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
     fileDiffs,
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value },
   });
 };
@@ -847,6 +828,7 @@ const codexWebSearchStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const input = webSearchInput(value);
   const output = stringifyJsonValue(
@@ -861,6 +843,7 @@ const codexWebSearchStreamParts = (
     ...(input ? { input } : {}),
     ...(output ? { output } : {}),
     ...(input ? { preview: Object.values(input).join(" ") } : {}),
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value },
   });
 };
@@ -869,6 +852,7 @@ export const toStreamPart = (
   value: Record<string, unknown>,
   messageId: string,
   fallbackPartId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const partId = codexItemId(value, fallbackPartId);
   if (codexItemTypeMatches(value, "reasoning")) {
@@ -878,13 +862,13 @@ export const toStreamPart = (
     return codexPlanStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "commandExecution")) {
-    return codexCommandExecutionStreamParts(value, messageId, partId);
+    return codexCommandExecutionStreamParts(value, messageId, partId, timingOptions);
   }
   if (codexItemTypeMatches(value, "fileChange")) {
     return codexFileChangeStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "mcpToolCall")) {
-    return codexMcpToolCallStreamParts(value, messageId, partId);
+    return codexMcpToolCallStreamParts(value, messageId, partId, timingOptions);
   }
   if (
     codexItemTypeMatches(value, "collabAgentToolCall") ||
@@ -893,10 +877,10 @@ export const toStreamPart = (
     return codexCollabAgentToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "dynamicToolCall")) {
-    return codexDynamicToolCallStreamParts(value, messageId, partId);
+    return codexDynamicToolCallStreamParts(value, messageId, partId, timingOptions);
   }
   if (codexItemTypeMatches(value, "webSearch")) {
-    return codexWebSearchStreamParts(value, messageId, partId);
+    return codexWebSearchStreamParts(value, messageId, partId, timingOptions);
   }
   return [];
 };

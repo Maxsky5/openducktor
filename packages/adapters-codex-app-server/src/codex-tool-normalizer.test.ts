@@ -459,6 +459,26 @@ function AuthConsumer() {}
     );
   });
 
+  test("keeps start-only timing only when the live start path opts in", () => {
+    const item = {
+      type: "commandExecution",
+      id: "cmd-1",
+      command: "true",
+      cwd: "/repo",
+      status: "running",
+      commandActions: [],
+      aggregatedOutput: "",
+      startedAtMs: 1000,
+    };
+
+    expect(toStreamPart(item, "message-history", "cmd-1")[0]).not.toEqual(
+      expect.objectContaining({ startedAtMs: expect.any(Number) }),
+    );
+    expect(toStreamPart(item, "message-live", "cmd-1", { allowStartedAtOnly: true })[0]).toEqual(
+      expect.objectContaining({ startedAtMs: 1000 }),
+    );
+  });
+
   test("rejects malformed command timing fields when Codex provides them", () => {
     expect(() =>
       toStreamPart(
@@ -475,7 +495,7 @@ function AuthConsumer() {}
         "message-live",
         "cmd-1",
       ),
-    ).toThrow("Codex commandExecution durationMs must be a finite number when present.");
+    ).toThrow("Codex tool durationMs must be a finite number when present.");
   });
 
   test("uses Codex web search action details when top-level query is absent", () => {

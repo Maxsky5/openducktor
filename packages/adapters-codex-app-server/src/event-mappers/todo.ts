@@ -17,6 +17,7 @@ import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexLiveInput, CodexThreadItemInput } from "../codex-event-mapper";
 import { codexDynamicToolErrorFromItem } from "../codex-tool-error-extractor";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
+import { type CodexToolTimingFields, codexToolTimingFields } from "../codex-tool-timing";
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   if (isPlainObject(value)) return value;
@@ -156,7 +157,12 @@ const todoToolCanonicalEvents = (
   update: CodexTodoUpdate,
   input: Record<string, unknown>,
   ctx: CodexMappingContext,
-  ids: { messageId: string; partId: string; callId: string; rawToolName: string },
+  ids: {
+    messageId: string;
+    partId: string;
+    callId: string;
+    rawToolName: string;
+  } & CodexToolTimingFields,
   raw: unknown,
 ): CodexCanonicalEvent[] => [
   {
@@ -220,13 +226,14 @@ const completedDynamicToolCallEvents = (
   }
   const displayInput = codexTodoToolInputFromPayload(input) ?? input;
   const partId = codexItemId(item, fallbackId);
+  const timing = codexToolTimingFields(item);
   return {
     handled: true,
     events: todoToolCanonicalEvents(
       update,
       displayInput,
       ctx,
-      { messageId: partId, partId, callId: partId, rawToolName },
+      { messageId: partId, partId, callId: partId, rawToolName, ...timing },
       item,
     ),
   };
@@ -245,13 +252,14 @@ const planItemEvents = (
     return emptyCodexMappingResult();
   }
   const partId = codexItemId(item, `${ctx.threadId}-plan`);
+  const timing = codexToolTimingFields(item);
   return {
     handled: true,
     events: todoToolCanonicalEvents(
       update,
       input,
       ctx,
-      { messageId: partId, partId, callId: partId, rawToolName: "update_plan" },
+      { messageId: partId, partId, callId: partId, rawToolName: "update_plan", ...timing },
       item,
     ),
   };

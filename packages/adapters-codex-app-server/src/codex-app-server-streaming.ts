@@ -58,6 +58,7 @@ export type CodexStreamingContext = {
   drainNotifications?: (runtimeId: string) => Promise<unknown[]>;
   bufferedNotificationsByThreadId: Map<string, CodexNotificationRecord[]>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
+  startedItemTimestampsByKey: Map<string, number>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
@@ -145,6 +146,60 @@ const consumeSyntheticUserMessage = (
 
 const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
+
+const withLifecycleTimestamp = (
+  item: Record<string, unknown>,
+  key: "startedAtMs" | "completedAtMs",
+  timestamp: string,
+): Record<string, unknown> => {
+  const timestampMs = Date.parse(timestamp);
+  return Number.isFinite(timestampMs) ? { ...item, [key]: timestampMs } : item;
+};
+
+const lifecycleItemKey = (
+  session: CodexSessionState,
+  item: Record<string, unknown>,
+): string | null => {
+  const itemId = extractStringField(item, ["id"]);
+  return itemId ? `${session.runtimeId}:${session.threadId}:${itemId}` : null;
+};
+
+const recordStartedItemTimestamp = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  item: Record<string, unknown>,
+  timestamp: string,
+): void => {
+  const itemKey = lifecycleItemKey(session, item);
+  if (!itemKey) {
+    return;
+  }
+  const startedAtMs = Date.parse(timestamp);
+  if (Number.isFinite(startedAtMs)) {
+    context.startedItemTimestampsByKey.set(itemKey, startedAtMs);
+  }
+};
+
+const withRecordedStartedItemTimestamp = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  item: Record<string, unknown>,
+): Record<string, unknown> => {
+  const itemKey = lifecycleItemKey(session, item);
+  if (!itemKey) {
+    return item;
+  }
+  const startedAtMs = context.startedItemTimestampsByKey.get(itemKey);
+  context.startedItemTimestampsByKey.delete(itemKey);
+  if (
+    typeof startedAtMs !== "number" ||
+    Object.hasOwn(item, "startedAtMs") ||
+    Object.hasOwn(item, "started_at_ms")
+  ) {
+    return item;
+  }
+  return { ...item, startedAtMs };
+};
 
 let lastAcceptedUserMessageTimestamp = 0;
 let acceptedUserMessageCounter = 0;
@@ -239,8 +294,10 @@ const emitStartedItem = (
   ) {
     return;
   }
+  const startedItem = withLifecycleTimestamp(item, "startedAtMs", timestamp);
+  recordStartedItemTimestamp(context, session, startedItem, timestamp);
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_started", item },
+    { kind: "item_started", item: startedItem },
     { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
   );
   for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
@@ -330,8 +387,13 @@ const emitCompletedItem = (
     return;
   }
 
+  const completedItem = withLifecycleTimestamp(
+    withRecordedStartedItemTimestamp(context, session, item),
+    "completedAtMs",
+    timestamp,
+  );
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_completed", item },
+    { kind: "item_completed", item: completedItem },
     {
       source: "live",
       runtimeId: session.runtimeId,
@@ -345,7 +407,7 @@ const emitCompletedItem = (
     return;
   }
 
-  const parts = toStreamPart(item, itemId, itemId);
+  const parts = toStreamPart(completedItem, itemId, itemId);
   for (const part of parts) {
     emitCodexSessionEvent(context, session.threadId, {
       type: "assistant_part",
