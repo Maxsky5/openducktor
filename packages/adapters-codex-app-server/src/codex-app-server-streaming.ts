@@ -354,7 +354,11 @@ const emitCompletedItem = (
     return;
   }
 
-  const parts = toStreamPart(item, itemId, itemId);
+  const parts = toStreamPart(
+    withLifecycleTimestamp(item, "completedAtMs", timestamp),
+    itemId,
+    itemId,
+  );
   for (const part of parts) {
     emitCodexSessionEvent(context, session.threadId, {
       type: "assistant_part",

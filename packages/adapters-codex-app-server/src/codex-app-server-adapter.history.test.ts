@@ -1096,6 +1096,7 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("reuses todos discovered while loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const completedAtMs = Date.parse("2026-05-20T10:00:02.000Z");
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -1138,6 +1139,8 @@ describe("CodexAppServerAdapter history loading", () => {
                           { step: "Reuse todos", status: "inProgress" },
                         ],
                       },
+                      durationMs: 25,
+                      completedAtMs,
                     },
                   ],
                 },
@@ -1153,13 +1156,25 @@ describe("CodexAppServerAdapter history loading", () => {
     };
     const adapter = createAdapterWithTransport(transport);
 
-    await adapter.loadSessionHistory({
+    const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-history-todos",
     });
 
+    expect(history).toContainEqual(
+      expect.objectContaining({
+        messageId: "todo-call-1",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            startedAtMs: completedAtMs - 25,
+            endedAtMs: completedAtMs,
+          }),
+        ],
+      }),
+    );
     expect(calls.filter((call) => call.method === "thread/read")).toHaveLength(1);
     expect(calls.some((call) => call.method === "thread/resume")).toBe(false);
     calls.length = 0;

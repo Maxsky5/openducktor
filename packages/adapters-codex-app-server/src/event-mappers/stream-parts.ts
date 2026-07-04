@@ -4,6 +4,7 @@ import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
+import type { CodexToolTimingOptions } from "../codex-tool-timing";
 import { emptyMapper } from "./empty";
 
 const streamPartEvents = (
@@ -14,9 +15,10 @@ const streamPartEvents = (
   messageId: string,
   partId: string,
   timestamp?: string,
+  timingOptions?: CodexToolTimingOptions,
 ): CodexMappingResult => ({
   handled: true,
-  events: toStreamPart(item, messageId, partId).map((part) => {
+  events: toStreamPart(item, messageId, partId, timingOptions).map((part) => {
     const eventTimestamp = ctx.timestamp ?? timestamp;
     return {
       kind: "stream_part",
@@ -43,7 +45,9 @@ const streamPartMapper = (name: string, itemType: string): CodexEventMapper => (
     }
     const itemId =
       typeof input.item.id === "string" ? input.item.id : `${ctx.threadId}-${name}-${Date.now()}`;
-    return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId);
+    return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId, undefined, {
+      allowStartedAtOnly: input.kind === "item_started",
+    });
   },
   fromThreadItem(input, ctx): CodexMappingResult {
     if (!codexItemTypeMatches(input.item, itemType)) {

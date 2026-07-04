@@ -35,96 +35,22 @@ import {
   statusFromCodexStatus,
 } from "./codex-tool-normalizer";
 import {
+  type CodexToolTimingOptions,
+  codexItemTimestamp,
+  codexToolTimingFields,
+  safeCodexTimestampFromMilliseconds,
+  withCodexItemCompletedAtMs,
+} from "./codex-tool-timing";
+import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 
-const CODEX_DURATION_MS_KEYS = ["durationMs", "duration_ms"];
-const CODEX_STARTED_MS_KEYS = ["startedAtMs", "started_at_ms"];
-const CODEX_ENDED_MS_KEYS = ["endedAtMs", "ended_at_ms"];
-const CODEX_COMPLETED_MS_KEYS = ["completedAtMs", "completed_at_ms"];
-const CODEX_COMPLETION_MS_KEYS = [...CODEX_COMPLETED_MS_KEYS, ...CODEX_ENDED_MS_KEYS];
-const CODEX_COMPLETION_STRING_KEYS = ["completedAt", "completed_at", "endedAt", "ended_at"];
-const CODEX_DISPLAY_TIMESTAMP_MS_KEYS = [
-  "timestampMs",
-  "timestamp_ms",
-  "occurredAtMs",
-  "occurred_at_ms",
-];
-const CODEX_DISPLAY_TIMESTAMP_STRING_KEYS = [
-  "timestamp",
-  "createdAt",
-  "created_at",
-  "startedAt",
-  "started_at",
-];
-
 export type CodexTokenUsageTotals = {
   totalTokens: number;
   contextWindow?: number;
-};
-
-const extractOptionalFiniteNumberField = (
-  value: Record<string, unknown>,
-  keys: string[],
-  label: string,
-): number | null => {
-  for (const key of keys) {
-    if (!Object.hasOwn(value, key)) {
-      continue;
-    }
-    const candidate = value[key];
-    if (candidate === null || candidate === undefined) {
-      return null;
-    }
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
-    }
-    throw new Error(`Codex tool ${label} must be a finite number when present.`);
-  }
-  return null;
-};
-
-const hasOwnField = (value: Record<string, unknown>, keys: string[]): boolean =>
-  keys.some((key) => Object.hasOwn(value, key));
-
-const codexToolTimingFields = (
-  value: Record<string, unknown>,
-): Pick<NormalizedCodexToolInvocation, "startedAtMs" | "endedAtMs"> => {
-  const durationMs = extractOptionalFiniteNumberField(value, CODEX_DURATION_MS_KEYS, "durationMs");
-  const explicitStartedAtMs = extractOptionalFiniteNumberField(
-    value,
-    CODEX_STARTED_MS_KEYS,
-    "startedAtMs",
-  );
-  const explicitEndedAtMs = extractOptionalFiniteNumberField(
-    value,
-    CODEX_ENDED_MS_KEYS,
-    "endedAtMs",
-  );
-  const completedAtMs = extractOptionalFiniteNumberField(
-    value,
-    CODEX_COMPLETED_MS_KEYS,
-    "completedAtMs",
-  );
-  const endedAtMs =
-    explicitEndedAtMs ??
-    completedAtMs ??
-    (typeof explicitStartedAtMs === "number" && typeof durationMs === "number"
-      ? explicitStartedAtMs + durationMs
-      : null);
-  const startedAtMs =
-    explicitStartedAtMs ??
-    (typeof durationMs === "number" && typeof endedAtMs === "number"
-      ? Math.max(0, endedAtMs - durationMs)
-      : null);
-
-  return {
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
-  };
 };
 
 export type CodexTurnTiming = {
@@ -159,7 +85,7 @@ export const timestampFromCodexParams = (params: unknown): string | null => {
     "startedAtMs",
     "started_at_ms",
   ]);
-  return millis !== null ? new Date(millis).toISOString() : null;
+  return safeCodexTimestampFromMilliseconds(millis);
 };
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
@@ -256,57 +182,6 @@ const selectCodexFinalAgentMessage = (
   );
 };
 
-const parseCodexTimestampString = (timestamp: string | null | undefined): number | null => {
-  if (!timestamp) {
-    return null;
-  }
-  const parsed = Date.parse(timestamp);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const codexItemCompletedAtMs = (item: Record<string, unknown>): number | null => {
-  const millis = extractNumberField(item, CODEX_COMPLETION_MS_KEYS);
-  if (millis !== null) {
-    return millis;
-  }
-
-  const timestamp = extractStringField(item, CODEX_COMPLETION_STRING_KEYS);
-  return parseCodexTimestampString(timestamp);
-};
-
-const codexItemTimestampMs = (item: Record<string, unknown>): number | null => {
-  const completionTimestamp = codexItemCompletedAtMs(item);
-  if (completionTimestamp !== null) {
-    return completionTimestamp;
-  }
-
-  const itemTimestampMs = extractNumberField(item, CODEX_DISPLAY_TIMESTAMP_MS_KEYS);
-  if (itemTimestampMs !== null) {
-    return itemTimestampMs;
-  }
-
-  const startedAtMs = extractNumberField(item, CODEX_STARTED_MS_KEYS);
-  if (startedAtMs !== null) {
-    return startedAtMs;
-  }
-
-  const timestamp = extractStringField(item, CODEX_DISPLAY_TIMESTAMP_STRING_KEYS);
-  return parseCodexTimestampString(timestamp);
-};
-
-const codexItemTimestamp = (item: Record<string, unknown>): string | null => {
-  const millis = codexItemTimestampMs(item);
-  return millis !== null ? new Date(millis).toISOString() : null;
-};
-
-const withItemCompletedAtMs = (item: Record<string, unknown>): Record<string, unknown> => {
-  if (hasOwnField(item, CODEX_COMPLETION_MS_KEYS)) {
-    return item;
-  }
-  const completedAtMs = codexItemCompletedAtMs(item);
-  return completedAtMs !== null ? { ...item, completedAtMs } : item;
-};
-
 export const shouldReplaceCodexBufferedFinalAgentMessage = (
   current: Record<string, unknown>,
   next: Record<string, unknown>,
@@ -363,7 +238,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
       const timestamp =
         codexItemTimestamp(item) ?? codexTimestampFromSeconds(timestampSeconds) ?? null;
       return {
-        item: withItemCompletedAtMs(item),
+        item: withCodexItemCompletedAtMs(item),
         turnId,
         timestamp,
         isFinalAgentMessage: itemIsFinalAgentMessage,
@@ -434,7 +309,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : {}),
     };
   }
-  const parts = toStreamPart(withItemCompletedAtMs(item), messageId, messageId);
+  const parts = toStreamPart(withCodexItemCompletedAtMs(item), messageId, messageId);
   if (parts.length > 0) {
     return {
       messageId,
@@ -779,6 +654,7 @@ const codexCommandExecutionStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const command = codexCommandText(value.command) ?? "command";
   const cwd = extractStringField(value, ["cwd"]);
@@ -789,7 +665,7 @@ const codexCommandExecutionStreamParts = (
   const explicitError = stringifyJsonValue(value.error);
   const status = statusFromCodexStatus(value.status);
   const error = explicitError ?? (status === "error" ? output : null);
-  const timing = codexToolTimingFields(value);
+  const timing = codexToolTimingFields(value, timingOptions);
 
   return normalizedCodexToolPart({
     messageId,
@@ -843,6 +719,7 @@ const codexMcpToolCallStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const server = extractStringField(value, ["server"]);
   const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
@@ -858,7 +735,7 @@ const codexMcpToolCallStreamParts = (
     ...(args ? { input: args } : {}),
     output: error ? null : output,
     error,
-    ...codexToolTimingFields(value),
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value, ...(server ? { server } : {}) },
   });
 };
@@ -898,13 +775,14 @@ const codexDynamicToolCallStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const todoResult = todoMapper.fromThreadItemObject(value, {
     source: "thread_read",
     threadId: messageId,
   });
   if (todoResult.handled) {
-    const timing = codexToolTimingFields(value);
+    const timing = codexToolTimingFields(value, timingOptions);
     return projectCodexCanonicalEvents(todoResult.events).flatMap((event) =>
       event.type === "assistant_part"
         ? [event.part.kind === "tool" ? { ...event.part, ...timing } : event.part]
@@ -941,7 +819,7 @@ const codexDynamicToolCallStreamParts = (
     output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
     fileDiffs,
-    ...codexToolTimingFields(value),
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value },
   });
 };
@@ -950,6 +828,7 @@ const codexWebSearchStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const input = webSearchInput(value);
   const output = stringifyJsonValue(
@@ -964,7 +843,7 @@ const codexWebSearchStreamParts = (
     ...(input ? { input } : {}),
     ...(output ? { output } : {}),
     ...(input ? { preview: Object.values(input).join(" ") } : {}),
-    ...codexToolTimingFields(value),
+    ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value },
   });
 };
@@ -973,6 +852,7 @@ export const toStreamPart = (
   value: Record<string, unknown>,
   messageId: string,
   fallbackPartId: string,
+  timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const partId = codexItemId(value, fallbackPartId);
   if (codexItemTypeMatches(value, "reasoning")) {
@@ -982,13 +862,13 @@ export const toStreamPart = (
     return codexPlanStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "commandExecution")) {
-    return codexCommandExecutionStreamParts(value, messageId, partId);
+    return codexCommandExecutionStreamParts(value, messageId, partId, timingOptions);
   }
   if (codexItemTypeMatches(value, "fileChange")) {
     return codexFileChangeStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "mcpToolCall")) {
-    return codexMcpToolCallStreamParts(value, messageId, partId);
+    return codexMcpToolCallStreamParts(value, messageId, partId, timingOptions);
   }
   if (
     codexItemTypeMatches(value, "collabAgentToolCall") ||
@@ -997,10 +877,10 @@ export const toStreamPart = (
     return codexCollabAgentToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "dynamicToolCall")) {
-    return codexDynamicToolCallStreamParts(value, messageId, partId);
+    return codexDynamicToolCallStreamParts(value, messageId, partId, timingOptions);
   }
   if (codexItemTypeMatches(value, "webSearch")) {
-    return codexWebSearchStreamParts(value, messageId, partId);
+    return codexWebSearchStreamParts(value, messageId, partId, timingOptions);
   }
   return [];
 };

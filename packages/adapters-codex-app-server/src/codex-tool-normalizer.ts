@@ -12,6 +12,7 @@ import {
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
+import { codexToolTimingFields } from "./codex-tool-timing";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -304,18 +305,11 @@ export const normalizeCodexToolInvocation = ({
   const resolvedOutput = output && output.trim().length > 0 ? output : null;
   const resolvedPreview = preview ?? toolPreviewFromInput(toolType, resolvedInput);
   const item = isPlainObject(metadata?.codexItem) ? metadata.codexItem : {};
-  const durationMs = typeof item.durationMs === "number" ? item.durationMs : item.duration_ms;
-  const endedAtMs = typeof item.endedAtMs === "number" ? item.endedAtMs : item.completedAtMs;
-  const startedAtMs =
-    typeof item.startedAtMs === "number"
-      ? item.startedAtMs
-      : typeof durationMs === "number" && typeof endedAtMs === "number"
-        ? endedAtMs - durationMs
-        : undefined;
+  const metadataTiming = codexToolTimingFields(item);
   return {
     kind: "tool",
+    ...metadataTiming,
     ...ids,
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
     tool,
     toolType,
     title: title ?? defaultTitle(tool),
