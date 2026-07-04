@@ -5,6 +5,8 @@ import {
   timestampFromCodexTurn,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
+import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import {
   codexUserInputsFromItem,
@@ -36,7 +38,7 @@ describe("Codex App Server transcript parsing", () => {
     ).toBeNull();
   });
 
-  test("derives tool timing from Codex duration and the existing item timestamp", () => {
+  test("does not derive tool timing from generic message timestamps", () => {
     const timestamp = "2026-05-07T00:00:10.000Z";
     const message = toHistoryMessage(
       {
@@ -57,12 +59,40 @@ describe("Codex App Server transcript parsing", () => {
     expect(message?.parts).toEqual([
       expect.objectContaining({
         kind: "tool",
-        startedAtMs: Date.parse(timestamp) - 8,
       }),
     ]);
     expect(message?.parts[0]).not.toEqual(
+      expect.objectContaining({ startedAtMs: expect.any(Number) }),
+    );
+    expect(message?.parts[0]).not.toEqual(
       expect.objectContaining({ endedAtMs: expect.any(Number) }),
     );
+  });
+
+  test("derives tool timing from Codex duration and explicit completion timestamp", () => {
+    const completedAtMs = Date.parse("2026-05-07T00:00:10.000Z");
+    const message = toHistoryMessage(
+      {
+        id: "tool-1",
+        type: "mcpToolCall",
+        server: "openducktor",
+        tool: "odt_read_task",
+        status: "completed",
+        arguments: { taskId: "task-1" },
+        result: { content: [{ type: "text", text: "ok" }] },
+        durationMs: 8,
+        completedAtMs,
+      },
+      "fallback-id",
+    );
+
+    expect(message?.parts).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        startedAtMs: completedAtMs - 8,
+        endedAtMs: completedAtMs,
+      }),
+    ]);
   });
 
   test("maps skill message parts to structured Codex skill input", () => {
@@ -873,6 +903,86 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]?.model).toBeUndefined();
+  });
+
+  test("prefers item timestamp evidence over turn completion timestamps", () => {
+    const itemTimestampMs = Date.parse("2026-05-20T10:00:02.000Z");
+    const items = codexTurnItemsFromThreadRead({
+      thread: {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            startedAt: 1_779_270_000,
+            completedAt: 1_779_270_030,
+            items: [
+              {
+                id: "tool-1",
+                type: "mcpToolCall",
+                server: "openducktor",
+                tool: "odt_read_task",
+                status: "completed",
+                arguments: { taskId: "task-1" },
+                result: { content: [{ type: "text", text: "ok" }] },
+                timestampMs: itemTimestampMs,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(items[0]?.timestamp).toBe("2026-05-20T10:00:02.000Z");
+    expect(items[0]?.item).not.toEqual(
+      expect.objectContaining({ completedAtMs: expect.any(Number) }),
+    );
+  });
+
+  test("hydrates thread-read tool duration through the canonical event mapper path", () => {
+    const completedAtMs = Date.parse("2026-05-20T10:00:02.000Z");
+    const [threadItem] = codexTurnItemsFromThreadRead({
+      thread: {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            completedAt: 1_779_270_030,
+            items: [
+              {
+                id: "tool-1",
+                type: "mcpToolCall",
+                server: "openducktor",
+                tool: "odt_read_task",
+                status: "completed",
+                arguments: { taskId: "task-1" },
+                result: { content: [{ type: "text", text: "ok" }] },
+                durationMs: 8,
+                completedAtMs,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (!threadItem) {
+      throw new Error("Expected Codex thread item");
+    }
+
+    const events = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item: threadItem.item, index: 0, timestamp: threadItem.timestamp ?? undefined },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    const tool = events.find((event) => event.type === "assistant_part")?.part;
+    expect(tool).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        startedAtMs: completedAtMs - 8,
+        endedAtMs: completedAtMs,
+      }),
+    );
   });
 
   test("hydrates local images as attachment display parts", () => {

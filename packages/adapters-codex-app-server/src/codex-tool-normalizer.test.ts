@@ -475,7 +475,7 @@ function AuthConsumer() {}
         "message-live",
         "cmd-1",
       ),
-    ).toThrow("Codex commandExecution durationMs must be a finite number when present.");
+    ).toThrow("Codex tool durationMs must be a finite number when present.");
   });
 
   test("uses Codex web search action details when top-level query is absent", () => {
