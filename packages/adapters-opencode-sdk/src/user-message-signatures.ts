@@ -18,6 +18,16 @@ type ComparableNonTextPart =
       };
     }
   | {
+      kind: "subagent_reference";
+      id: string;
+      name: string;
+      sourceText?: {
+        value: string;
+        start: number;
+        end: number;
+      };
+    }
+  | {
       kind: "attachment";
       path: string;
       name: string;
@@ -69,6 +79,12 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
       kind: "file_reference" as const,
       path: file.path,
       name: file.name,
+      sourceText,
+    })),
+    ...promptText.subagentReferences.map(({ subagent, sourceText }) => ({
+      kind: "subagent_reference" as const,
+      id: subagent.id,
+      name: subagent.name,
       sourceText,
     })),
     ...normalizedParts.flatMap((part) => {
@@ -138,6 +154,16 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
           name: part.attachment.name,
           attachmentKind: part.attachment.kind,
           ...(part.attachment.mime ? { mime: part.attachment.mime } : {}),
+        },
+      ];
+    }
+    if (part.kind === "subagent_reference") {
+      return [
+        {
+          kind: "subagent_reference",
+          id: part.subagent.id,
+          name: part.subagent.name,
+          ...(part.sourceText ? { sourceText: part.sourceText } : {}),
         },
       ];
     }

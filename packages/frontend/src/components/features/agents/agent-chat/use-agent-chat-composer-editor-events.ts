@@ -2,6 +2,7 @@ import type {
   AgentFileSearchResult,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import {
   type MutableRefObject,
@@ -138,6 +139,7 @@ type UseAgentChatComposerEditorEventsArgs = {
   skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
+  filteredSubagents: AgentSubagentReference[];
   activeSlashIndex: number;
   activeSkillIndex: number;
   activeFileIndex: number;
@@ -156,6 +158,7 @@ type UseAgentChatComposerEditorEventsArgs = {
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   selectSkillReference: (skill: AgentSkillReference) => void;
+  selectSubagentReference: (subagent: AgentSubagentReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
 };
 
@@ -172,6 +175,7 @@ export const useAgentChatComposerEditorEvents = ({
   skillMenuState,
   filteredSlashCommands,
   filteredSkills,
+  filteredSubagents,
   activeSlashIndex,
   activeSkillIndex,
   activeFileIndex,
@@ -187,6 +191,7 @@ export const useAgentChatComposerEditorEvents = ({
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
   selectSkillReference,
+  selectSubagentReference,
   selectFileSearchResult,
 }: UseAgentChatComposerEditorEventsArgs) => {
   const handleEditorInput = useCallback(
@@ -420,6 +425,7 @@ export const useAgentChatComposerEditorEvents = ({
         skillMenuState,
         filteredSlashCommands,
         filteredSkills,
+        filteredSubagents,
         activeSlashIndex,
         activeSkillIndex,
         activeFileIndex,
@@ -434,6 +440,7 @@ export const useAgentChatComposerEditorEvents = ({
         insertNewlineAtSelectionTarget,
         selectSlashCommand,
         selectSkillReference,
+        selectSubagentReference,
         selectFileSearchResult,
         applyEditResult,
       });
@@ -451,6 +458,7 @@ export const useAgentChatComposerEditorEvents = ({
       fileMenuState,
       filteredSlashCommands,
       filteredSkills,
+      filteredSubagents,
       insertNewlineAtSelectionTarget,
       latestDraftRef,
       moveActiveFileIndex,
@@ -460,6 +468,7 @@ export const useAgentChatComposerEditorEvents = ({
       selectFileSearchResult,
       selectSlashCommand,
       selectSkillReference,
+      selectSubagentReference,
       selection,
       skillMenuState,
       slashMenuState,

@@ -51,6 +51,7 @@ const createHookHarness = (
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
     loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 

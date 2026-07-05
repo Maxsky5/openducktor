@@ -68,6 +68,7 @@ export type AgentChatComposerConfig = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommandCatalog: AgentChatComposerModel["slashCommandCatalog"];
   slashCommands: AgentChatComposerModel["slashCommands"];
   slashCommandsError: string | null;
@@ -76,6 +77,10 @@ export type AgentChatComposerConfig = {
   skills: AgentChatComposerModel["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  subagentCatalog: AgentChatComposerModel["subagentCatalog"];
+  subagents: AgentChatComposerModel["subagents"];
+  subagentsError: string | null;
+  isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -223,6 +228,7 @@ export function useAgentChatComposerModel({
       supportsSlashCommands: composer.supportsSlashCommands,
       supportsFileSearch: composer.supportsFileSearch,
       supportsSkillReferences: composer.supportsSkillReferences,
+      supportsSubagentReferences: composer.supportsSubagentReferences,
       slashCommandCatalog: composer.slashCommandCatalog,
       slashCommands: composer.slashCommands,
       slashCommandsError: composer.slashCommandsError,
@@ -231,6 +237,10 @@ export function useAgentChatComposerModel({
       skills: composer.skills,
       skillsError: composer.skillsError,
       isSkillsLoading: composer.isSkillsLoading,
+      subagentCatalog: composer.subagentCatalog,
+      subagents: composer.subagents,
+      subagentsError: composer.subagentsError,
+      isSubagentsLoading: composer.isSubagentsLoading,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
       modelOptions: composer.modelOptions,

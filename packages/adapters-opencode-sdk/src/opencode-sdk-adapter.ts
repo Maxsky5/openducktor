@@ -42,7 +42,12 @@ import {
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
-import { listAvailableModels, listAvailableSlashCommands, searchFiles } from "./catalog-and-mcp";
+import {
+  listAvailableModels,
+  listAvailableSlashCommands,
+  listAvailableSubagents,
+  searchFiles,
+} from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
@@ -597,6 +602,15 @@ export class OpencodeSdkAdapter
     _: import("@openducktor/core").ListAgentSkillsInput,
   ): Promise<import("@openducktor/core").AgentSkillCatalog> {
     throw new Error("OpenCode does not support skill reference catalogs.");
+  }
+
+  async listAvailableSubagents(
+    input: import("@openducktor/core").ListAgentSubagentsInput,
+  ): Promise<import("@openducktor/core").AgentSubagentCatalog> {
+    return listAvailableSubagents(
+      this.createClient,
+      await this.resolveRuntimeClientInput(input, "list available subagents"),
+    );
   }
 
   async searchFiles(

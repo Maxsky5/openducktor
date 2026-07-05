@@ -10,6 +10,8 @@ import type {
   AgentSkillReference,
   AgentSlashCommand,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
@@ -119,6 +121,7 @@ export type AgentChatComposerModel = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
@@ -127,6 +130,10 @@ export type AgentChatComposerModel = {
   skills: AgentSkillReference[];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  subagentCatalog: AgentSubagentCatalog | null;
+  subagents: AgentSubagentReference[];
+  subagentsError: string | null;
+  isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];

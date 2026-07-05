@@ -111,6 +111,21 @@ describe("Codex App Server transcript parsing", () => {
     expect(codexUserInputListToText(inputs)).toBe("$review");
   });
 
+  test("rejects subagent references because the Codex app-server input contract lacks them", () => {
+    const subagent = {
+      id: "reviewer",
+      name: "reviewer",
+      label: "Reviewer",
+    };
+
+    expect(() => toCodexUserInputList([{ kind: "subagent_reference", subagent }])).toThrow(
+      "Codex app-server does not support 'subagent_reference' user message parts.",
+    );
+    expect(() => toCodexTurnInputList([{ kind: "subagent_reference", subagent }])).toThrow(
+      "Codex app-server does not support 'subagent_reference' user message parts.",
+    );
+  });
+
   test("maps file references to structured Codex mention input", () => {
     const inputs = toCodexUserInputList([
       {

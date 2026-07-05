@@ -8,6 +8,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,9 @@ type AppRuntimeProviderProps = PropsWithChildren<{
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
   loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
+  loadRepoRuntimeSubagents: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSubagentCatalog>;
   loadRepoRuntimeFileSearch: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -38,6 +42,7 @@ export function AppRuntimeProvider({
   loadRepoRuntimeCatalog,
   loadRepoRuntimeSlashCommands,
   loadRepoRuntimeSkills,
+  loadRepoRuntimeSubagents,
   loadRepoRuntimeFileSearch,
 }: AppRuntimeProviderProps): ReactElement {
   const [activeWorkspace, setActiveWorkspace] =
@@ -98,6 +103,7 @@ export function AppRuntimeProvider({
       loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands,
       loadRepoRuntimeSkills,
+      loadRepoRuntimeSubagents,
       loadRepoRuntimeFileSearch,
     }),
     [
@@ -107,6 +113,7 @@ export function AppRuntimeProvider({
       loadRepoRuntimeFileSearch,
       loadRepoRuntimeSlashCommands,
       loadRepoRuntimeSkills,
+      loadRepoRuntimeSubagents,
       isLoadingRuntimeDefinitions,
       isLoadingSettingsSnapshot,
       queryClient,

@@ -104,6 +104,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "supportsSlashCommands"
   | "supportsFileSearch"
   | "supportsSkillReferences"
+  | "supportsSubagentReferences"
   | "slashCommandCatalog"
   | "slashCommands"
   | "slashCommandsError"
@@ -112,6 +113,10 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "skills"
   | "skillsError"
   | "isSkillsLoading"
+  | "subagentCatalog"
+  | "subagents"
+  | "subagentsError"
+  | "isSubagentsLoading"
   | "searchFiles"
   | "agentProfileOptions"
   | "modelOptions"
@@ -241,6 +246,7 @@ export function useAgentStudioOrchestrationController({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
@@ -249,6 +255,10 @@ export function useAgentStudioOrchestrationController({
     skills,
     skillsError,
     isSkillsLoading,
+    subagentCatalog,
+    subagents,
+    subagentsError,
+    isSubagentsLoading,
     searchFiles,
     agentProfileOptions,
     modelOptions,
@@ -404,6 +414,7 @@ export function useAgentStudioOrchestrationController({
       supportsSlashCommands,
       supportsFileSearch,
       supportsSkillReferences,
+      supportsSubagentReferences,
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
@@ -412,6 +423,10 @@ export function useAgentStudioOrchestrationController({
       skills,
       skillsError,
       isSkillsLoading,
+      subagentCatalog,
+      subagents,
+      subagentsError,
+      isSubagentsLoading,
       searchFiles,
       agentProfileOptions,
       modelOptions,

@@ -109,6 +109,7 @@ export const runtimePromptInputPartTypeValues = [
   "file_reference",
   "folder_reference",
   "skill_mention",
+  "subagent_reference",
   "app_mention",
   "plugin_mention",
   "runtime_specific",
@@ -233,6 +234,7 @@ export const runtimePromptInputCapabilitiesSchema = z
     supportsSlashCommands: z.boolean(),
     supportsFileSearch: z.boolean(),
     supportsSkillReferences: z.boolean(),
+    supportsSubagentReferences: z.boolean(),
   })
   .strict();
 export type RuntimePromptInputCapabilities = z.infer<typeof runtimePromptInputCapabilitiesSchema>;
@@ -501,6 +503,22 @@ export const runtimeCapabilitiesSchema = z
       );
     }
 
+    const supportsSubagentReferences = capabilities.promptInput.supportsSubagentReferences;
+    const declaresSubagentReference =
+      capabilities.promptInput.supportedParts.includes("subagent_reference");
+    if (supportsSubagentReferences && !declaresSubagentReference) {
+      addIssue(
+        ["promptInput", "supportedParts"],
+        "Runtime descriptors that support subagent references must declare subagent reference prompt parts.",
+      );
+    }
+    if (!supportsSubagentReferences && declaresSubagentReference) {
+      addIssue(
+        ["promptInput", "supportedParts"],
+        "Runtime descriptors that do not support subagent references must not declare subagent reference prompt parts.",
+      );
+    }
+
     if (
       !capabilities.optionalSurfaces.supportsSubagents &&
       capabilities.optionalSurfaces.supportedSubagentExecutionModes.length > 0
@@ -529,6 +547,7 @@ export const runtimeCapabilityKeyValues = [
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
   "promptInput.supportsSkillReferences",
+  "promptInput.supportsSubagentReferences",
   "optionalSurfaces.supportsProfiles",
   "optionalSurfaces.supportsVariants",
   "optionalSurfaces.supportsTodos",
@@ -558,6 +577,7 @@ export const optionalRuntimeCapabilityKeys = [
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
   "promptInput.supportsSkillReferences",
+  "promptInput.supportsSubagentReferences",
   "optionalSurfaces.supportsProfiles",
   "optionalSurfaces.supportsVariants",
   "optionalSurfaces.supportsTodos",
@@ -613,6 +633,7 @@ export const runtimeCapabilityClasses = {
   "promptInput.supportsSlashCommands": "optional_enhancement",
   "promptInput.supportsFileSearch": "optional_enhancement",
   "promptInput.supportsSkillReferences": "optional_enhancement",
+  "promptInput.supportsSubagentReferences": "optional_enhancement",
   "optionalSurfaces.supportsProfiles": "optional_enhancement",
   "optionalSurfaces.supportsVariants": "optional_enhancement",
   "optionalSurfaces.supportsTodos": "optional_enhancement",
@@ -670,7 +691,12 @@ export const classifyRuntimeDescriptorSchemaIssue = ({
     return "launch_scoped";
   }
   if (capabilityPath.startsWith("promptInput.supportedParts")) {
-    if (message.includes("slash commands") || message.includes("file search")) {
+    if (
+      message.includes("slash commands") ||
+      message.includes("file search") ||
+      message.includes("skill references") ||
+      message.includes("subagent references")
+    ) {
       return "optional_enhancement";
     }
   }

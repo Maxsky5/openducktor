@@ -875,6 +875,37 @@ describe("opencode-sdk-adapter", () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {
+    const agents = mock(async () => ({
+      data: [{ name: "reviewer", description: "Review changes", mode: "subagent" }],
+      error: undefined,
+    }));
+    const createClient = mock(() => ({ app: { agents } })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+
+    const catalog = await adapter.listAvailableSubagents({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+    });
+
+    expect(createClient).toHaveBeenCalledWith({
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+    expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
+    expect(catalog).toEqual({
+      subagents: [
+        {
+          id: "reviewer",
+          name: "reviewer",
+          label: "reviewer",
+          description: "Review changes",
+        },
+      ],
+    });
+  });
+
   test("searchFiles forwards runtime inputs to the catalog loader", async () => {
     const files = mock(async () => ({
       data: ["src/", "src/index.ts"],

@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { type QueryKey, queryOptions } from "@tanstack/react-query";
@@ -27,6 +28,14 @@ export const runtimeCatalogQueryKeys = {
     [
       ...runtimeCatalogQueryKeys.all,
       "skills",
+      normalizeWorkingDirectory(repoPath),
+      runtimeKind,
+      normalizeWorkingDirectory(workingDirectory),
+    ] as const,
+  repoSubagents: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
+    [
+      ...runtimeCatalogQueryKeys.all,
+      "subagents",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
@@ -80,6 +89,18 @@ export const repoRuntimeSkillsQueryOptions = (
   queryOptions<AgentSkillCatalog, Error, AgentSkillCatalog, QueryKey>({
     queryKey: runtimeCatalogQueryKeys.repoSkills(runtimeRef),
     queryFn: (): Promise<AgentSkillCatalog> => loadRepoRuntimeSkills(runtimeRef),
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
+export const repoRuntimeSubagentsQueryOptions = (
+  runtimeRef: RuntimeWorkingDirectoryRef,
+  loadRepoRuntimeSubagents: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSubagentCatalog>,
+) =>
+  queryOptions<AgentSubagentCatalog, Error, AgentSubagentCatalog, QueryKey>({
+    queryKey: runtimeCatalogQueryKeys.repoSubagents(runtimeRef),
+    queryFn: (): Promise<AgentSubagentCatalog> => loadRepoRuntimeSubagents(runtimeRef),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 

@@ -24,6 +24,7 @@ const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
         },
         loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
         loadRepoRuntimeSkills: async () => ({ skills: [] }),
+        loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
         loadRepoRuntimeFileSearch: async () => [],
       },
       children,

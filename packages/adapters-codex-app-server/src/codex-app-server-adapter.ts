@@ -17,6 +17,7 @@ import type {
   ListAgentModelsInput,
   ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
+  ListAgentSubagentsInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -325,6 +326,10 @@ export class CodexAppServerAdapter
         forceReload: false,
       }),
     );
+  }
+
+  async listAvailableSubagents(_: ListAgentSubagentsInput) {
+    return unsupported("listAvailableSubagents");
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

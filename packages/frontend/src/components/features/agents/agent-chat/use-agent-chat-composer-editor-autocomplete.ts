@@ -2,6 +2,7 @@ import type {
   AgentFileSearchResult,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -50,6 +51,7 @@ type AutocompleteAvailabilityContext = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
 };
 
 type InternalSlashMenuState = SlashMenuState & {
@@ -139,13 +141,37 @@ const moveActiveIndex = (
   return true;
 };
 
+const filterSubagents = (
+  subagents: AgentSubagentReference[],
+  query: string,
+): AgentSubagentReference[] => {
+  const normalizedQuery = query.trim().toLowerCase();
+  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
+  const sortedSubagents = [...subagents].sort((left, right) => {
+    const leftLabel = left.label ?? left.name;
+    const rightLabel = right.label ?? right.name;
+    return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
+  });
+  if (normalizedQuery.length === 0) {
+    return sortedSubagents;
+  }
+
+  return sortedSubagents.filter((subagent) =>
+    [subagent.name, subagent.label, subagent.description]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(normalizedQuery)),
+  );
+};
+
 type UseAgentChatComposerEditorAutocompleteArgs = {
   disabled: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommands: AgentSlashCommand[];
   skills: AgentSkillReference[];
+  subagents: AgentSubagentReference[];
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -155,6 +181,7 @@ export type UseAgentChatComposerEditorAutocompleteResult = {
   skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
+  filteredSubagents: AgentSubagentReference[];
   activeSlashIndex: number;
   activeSkillIndex: number;
   showSlashMenu: boolean;
@@ -181,8 +208,10 @@ export const useAgentChatComposerEditorAutocomplete = ({
   supportsSlashCommands,
   supportsFileSearch,
   supportsSkillReferences,
+  supportsSubagentReferences,
   slashCommands,
   skills,
+  subagents,
   searchFiles,
 }: UseAgentChatComposerEditorAutocompleteArgs): UseAgentChatComposerEditorAutocompleteResult => {
   const [slashMenuState, setSlashMenuState] = useState<InternalSlashMenuState | null>(null);
@@ -198,8 +227,15 @@ export const useAgentChatComposerEditorAutocomplete = ({
       supportsSlashCommands,
       supportsFileSearch,
       supportsSkillReferences,
+      supportsSubagentReferences,
     }),
-    [disabled, supportsFileSearch, supportsSkillReferences, supportsSlashCommands],
+    [
+      disabled,
+      supportsFileSearch,
+      supportsSkillReferences,
+      supportsSlashCommands,
+      supportsSubagentReferences,
+    ],
   );
 
   const effectiveSlashMenuState =
@@ -209,7 +245,9 @@ export const useAgentChatComposerEditorAutocomplete = ({
       ? null
       : slashMenuState;
   const effectiveFileMenuState =
-    disabled || !supportsFileSearch || fileMenuState?.availabilityContext !== availabilityContext
+    disabled ||
+    (!supportsFileSearch && !supportsSubagentReferences) ||
+    fileMenuState?.availabilityContext !== availabilityContext
       ? null
       : fileMenuState;
   const effectiveSkillMenuState =
@@ -232,6 +270,13 @@ export const useAgentChatComposerEditorAutocomplete = ({
     }
     return filterSkills(skills, effectiveSkillMenuState.query);
   }, [effectiveSkillMenuState, skills]);
+
+  const filteredSubagents = useMemo(() => {
+    if (!effectiveFileMenuState || !supportsSubagentReferences) {
+      return [];
+    }
+    return filterSubagents(subagents, effectiveFileMenuState.query);
+  }, [effectiveFileMenuState, subagents, supportsSubagentReferences]);
 
   const closeSlashMenu = useCallback(() => {
     setSlashMenuState(null);
@@ -287,7 +332,11 @@ export const useAgentChatComposerEditorAutocomplete = ({
       text: string,
       caretOffset: number | null,
     ) => {
-      if (disabled || !supportsFileSearch || caretOffset === null) {
+      if (
+        disabled ||
+        (!supportsFileSearch && !supportsSubagentReferences) ||
+        caretOffset === null
+      ) {
         closeFileMenu();
         return;
       }
@@ -318,6 +367,21 @@ export const useAgentChatComposerEditorAutocomplete = ({
         availabilityContext: requestAvailabilityContext,
         requestId,
       }));
+
+      if (!supportsFileSearch) {
+        setFileMenuState({
+          textSegmentId: segmentId,
+          query: match.query,
+          rangeStart: match.rangeStart,
+          rangeEnd: match.rangeEnd,
+          results: [],
+          isLoading: false,
+          error: null,
+          availabilityContext: requestAvailabilityContext,
+          requestId,
+        });
+        return;
+      }
 
       void searchFiles(match.query)
         .then((results) => {
@@ -360,6 +424,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
       effectiveFileMenuState,
       searchFiles,
       supportsFileSearch,
+      supportsSubagentReferences,
     ],
   );
 
@@ -438,12 +503,12 @@ export const useAgentChatComposerEditorAutocomplete = ({
   const moveActiveFileIndex = useCallback(
     (direction: 1 | -1) => {
       return moveActiveIndex(
-        effectiveFileMenuState?.results.length ?? 0,
+        (effectiveFileMenuState?.results.length ?? 0) + filteredSubagents.length,
         direction,
         setActiveFileIndex,
       );
     },
-    [effectiveFileMenuState],
+    [effectiveFileMenuState, filteredSubagents],
   );
 
   const moveActiveSlashIndex = useCallback(
@@ -466,6 +531,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
     skillMenuState: effectiveSkillMenuState,
     filteredSlashCommands,
     filteredSkills,
+    filteredSubagents,
     activeSlashIndex: effectiveSlashMenuState ? activeSlashIndex : 0,
     activeSkillIndex: effectiveSkillMenuState ? activeSkillIndex : 0,
     showSlashMenu: effectiveSlashMenuState !== null,

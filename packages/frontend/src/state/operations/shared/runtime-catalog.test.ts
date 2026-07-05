@@ -6,6 +6,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
 } from "@openducktor/core";
 import { host } from "./host";
 import { createHostRuntimeCatalogOperations } from "./runtime-catalog";
@@ -96,6 +97,16 @@ const skillCatalogFixture: AgentSkillCatalog = {
   ],
 };
 
+const subagentCatalogFixture: AgentSubagentCatalog = {
+  subagents: [
+    {
+      id: "reviewer",
+      name: "reviewer",
+      label: "Reviewer",
+    },
+  ],
+};
+
 const fileSearchResultsFixture: AgentFileSearchResult[] = [
   {
     id: "src/main.ts",
@@ -109,6 +120,7 @@ const createAdapter = (overrides: Partial<AgentCatalogPort> = {}): AgentCatalogP
   listAvailableModels: async () => catalogFixture,
   listAvailableSlashCommands: async () => slashCommandCatalogFixture,
   listAvailableSkills: async () => skillCatalogFixture,
+  listAvailableSubagents: async () => subagentCatalogFixture,
   searchFiles: async () => fileSearchResultsFixture,
   ...overrides,
 });
@@ -200,6 +212,28 @@ describe("runtime-catalog", () => {
       }),
     ).resolves.toEqual(skillCatalogFixture);
     expect(listAvailableSkills).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
+  test("loads subagents from runtime working-directory coordinates", async () => {
+    const listAvailableSubagents = mock(async () => subagentCatalogFixture);
+    const operations = createOperations(
+      createAdapter({
+        listAvailableSubagents,
+      }),
+    );
+
+    await expect(
+      operations.loadRepoRuntimeSubagents({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    ).resolves.toEqual(subagentCatalogFixture);
+    expect(listAvailableSubagents).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",

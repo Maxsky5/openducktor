@@ -44,6 +44,21 @@ const skills = [
   },
 ];
 
+const subagents = [
+  {
+    id: "reviewer",
+    name: "reviewer",
+    label: "Reviewer",
+    description: "Review code",
+  },
+  {
+    id: "docs",
+    name: "docs",
+    label: "Docs",
+    description: "Update docs",
+  },
+];
+
 type AutocompleteProps = Parameters<typeof useAgentChatComposerEditorAutocomplete>[0];
 
 const createAutocompleteProps = (
@@ -51,18 +66,25 @@ const createAutocompleteProps = (
   options: Partial<
     Pick<
       AutocompleteProps,
-      "disabled" | "supportsSlashCommands" | "supportsFileSearch" | "supportsSkillReferences"
+      | "disabled"
+      | "supportsSlashCommands"
+      | "supportsFileSearch"
+      | "supportsSkillReferences"
+      | "supportsSubagentReferences"
     >
   > & {
     skills?: typeof skills;
+    subagents?: typeof subagents;
   } = {},
 ): AutocompleteProps => ({
   disabled: options.disabled ?? false,
   supportsSlashCommands: options.supportsSlashCommands ?? true,
   supportsFileSearch: options.supportsFileSearch ?? true,
   supportsSkillReferences: options.supportsSkillReferences ?? false,
+  supportsSubagentReferences: options.supportsSubagentReferences ?? false,
   slashCommands: [...slashCommands],
   skills: options.skills ? [...options.skills] : [],
+  subagents: options.subagents ? [...options.subagents] : [],
   searchFiles,
 });
 
@@ -235,6 +257,58 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().fileSearchResults.map((result) => result.path)).toEqual([
       "src/ab.ts",
     ]);
+
+    await harness.unmount();
+  });
+
+  test("filters subagents from the file reference trigger", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles, {
+      supportsSubagentReferences: true,
+      subagents,
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@rev"), {
+        segmentId: "segment-1",
+        offset: 4,
+      });
+    });
+
+    await harness.waitFor((state) => state.isFileSearchLoading === false);
+
+    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().filteredSubagents.map((subagent) => subagent.name)).toEqual([
+      "reviewer",
+    ]);
+    expect(searchFiles).toHaveBeenCalledWith("rev");
+
+    await harness.unmount();
+  });
+
+  test("opens the @ menu for subagents without searching files when file search is unsupported", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles, {
+      supportsFileSearch: false,
+      supportsSubagentReferences: true,
+      subagents,
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@doc"), {
+        segmentId: "segment-1",
+        offset: 4,
+      });
+    });
+
+    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
+    expect(harness.getLatest().filteredSubagents.map((subagent) => subagent.name)).toEqual([
+      "docs",
+    ]);
+    expect(searchFiles).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

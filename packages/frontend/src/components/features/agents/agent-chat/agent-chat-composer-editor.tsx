@@ -2,6 +2,7 @@ import type {
   AgentFileSearchResult,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import { type ReactElement, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -31,6 +32,12 @@ import {
   AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME,
   getAgentChatSkillReferenceIconMarkup,
 } from "./agent-chat-skill-reference-chip-markup";
+import {
+  AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_BASE_CLASS_NAME,
+  AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_ICON_CLASS_NAME,
+  AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_LABEL_CLASS_NAME,
+  getAgentChatSubagentReferenceIconMarkup,
+} from "./agent-chat-subagent-reference-chip-markup";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const escapeHtml = (value: string): string => {
@@ -62,6 +69,15 @@ const buildComposerSkillReferenceChipMarkup = (
   return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-skill-reference-name="${escapeHtml(skill.name)}" class="${escapeHtml(
     cn(AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME, "mx-0.5 mr-2 max-w-48 align-middle"),
   )}"><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatSkillReferenceIconMarkup()}</span><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(skill.name)}</span></span>`;
+};
+
+const buildComposerSubagentReferenceChipMarkup = (
+  subagent: AgentSubagentReference,
+  segmentId: string,
+): string => {
+  return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-subagent-reference-name="${escapeHtml(subagent.name)}" class="${escapeHtml(
+    cn(AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_BASE_CLASS_NAME, "mx-0.5 mr-2 max-w-48 align-middle"),
+  )}"><span class="${escapeHtml(AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatSubagentReferenceIconMarkup()}</span><span class="${escapeHtml(AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(subagent.name)}</span></span>`;
 };
 
 const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
@@ -146,6 +162,10 @@ const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string
 
       if (segment.kind === "skill_mention") {
         return buildComposerSkillReferenceChipMarkup(segment.skill, segment.id);
+      }
+
+      if (segment.kind === "subagent_reference") {
+        return buildComposerSubagentReferenceChipMarkup(segment.subagent, segment.id);
       }
 
       if (segment.kind === "slash_command") {
@@ -242,6 +262,14 @@ const syncComposerDomInPlace = (
         );
       }
 
+      if (segment.kind === "subagent_reference") {
+        return (
+          node.dataset.chipSegmentId === segment.id &&
+          node.dataset.subagentReferenceName === segment.subagent.name &&
+          node.textContent === segment.subagent.name
+        );
+      }
+
       return (
         node.dataset.chipSegmentId === segment.id &&
         node.dataset.fileReferencePath === segment.file.path &&
@@ -286,12 +314,16 @@ type AgentChatComposerEditorProps = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
   skills: AgentSkillReference[];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  subagents: AgentSubagentReference[];
+  subagentsError: string | null;
+  isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -307,12 +339,16 @@ export function AgentChatComposerEditor({
   supportsSlashCommands,
   supportsFileSearch,
   supportsSkillReferences,
+  supportsSubagentReferences,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
   skills,
   skillsError,
   isSkillsLoading,
+  subagents,
+  subagentsError,
+  isSubagentsLoading,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
   const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =
@@ -322,6 +358,7 @@ export function AgentChatComposerEditor({
     activeSlashIndex,
     filteredSkills,
     activeSkillIndex,
+    filteredSubagents,
     showSlashMenu,
     showSkillMenu,
     fileSearchResults,
@@ -332,6 +369,7 @@ export function AgentChatComposerEditor({
     focusLastTextSegment,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,
@@ -351,8 +389,10 @@ export function AgentChatComposerEditor({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommands,
     skills,
+    subagents,
     searchFiles,
   });
   const draftSegments = draft.segments;
@@ -414,10 +454,15 @@ export function AgentChatComposerEditor({
       {showFileMenu ? (
         <AgentChatComposerFileMenu
           results={fileSearchResults}
+          subagents={filteredSubagents}
           activeIndex={activeFileIndex}
           fileSearchError={fileSearchError}
           isFileSearchLoading={isFileSearchLoading}
+          supportsSubagentReferences={supportsSubagentReferences}
+          subagentsError={subagentsError}
+          isSubagentsLoading={isSubagentsLoading}
           onSelectFile={selectFileSearchResult}
+          onSelectSubagent={selectSubagentReference}
         />
       ) : null}
       {showSlashMenu ? (

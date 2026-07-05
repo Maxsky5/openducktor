@@ -291,12 +291,16 @@ function AgentChatComposerFormView({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
     skills,
     skillsError,
     isSkillsLoading,
+    subagents,
+    subagentsError,
+    isSubagentsLoading,
     searchFiles,
     agentOptions,
     modelOptions,
@@ -392,12 +396,16 @@ function AgentChatComposerFormView({
             supportsSlashCommands={supportsSlashCommands}
             supportsFileSearch={supportsFileSearch}
             supportsSkillReferences={supportsSkillReferences}
+            supportsSubagentReferences={supportsSubagentReferences}
             slashCommands={slashCommands}
             slashCommandsError={slashCommandsError}
             isSlashCommandsLoading={isSlashCommandsLoading}
             skills={skills}
             skillsError={skillsError}
             isSkillsLoading={isSkillsLoading}
+            subagents={subagents}
+            subagentsError={subagentsError}
+            isSubagentsLoading={isSubagentsLoading}
             searchFiles={searchFiles}
           />
 
@@ -541,7 +549,9 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -738,9 +748,15 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
+  let referencePlaceholder = "@ for files";
+  if (supportsFileSearch && supportsSubagentReferences) {
+    referencePlaceholder = "@ for files and subagents";
+  } else if (supportsSubagentReferences) {
+    referencePlaceholder = "@ for subagents";
+  }
   let composerPlaceholder = supportsSkillReferences
-    ? "@ for files; / for commands; $ for skills"
-    : "@ for files; / for commands";
+    ? `${referencePlaceholder}; / for commands; $ for skills`
+    : `${referencePlaceholder}; / for commands`;
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }

@@ -2,6 +2,7 @@ import type {
   AgentFileSearchResult,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
@@ -43,6 +44,7 @@ type HandleComposerEditorKeyDownArgs = {
   skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
+  filteredSubagents: AgentSubagentReference[];
   activeSlashIndex: number;
   activeSkillIndex: number;
   activeFileIndex: number;
@@ -57,6 +59,7 @@ type HandleComposerEditorKeyDownArgs = {
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   selectSkillReference: (skill: AgentSkillReference) => void;
+  selectSubagentReference: (subagent: AgentSubagentReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
 };
@@ -85,12 +88,16 @@ const handleFileMenuKeyDown = ({
   activeFileIndex,
   moveActiveFileIndex,
   selectFileSearchResult,
+  filteredSubagents,
+  selectSubagentReference,
 }: {
   event: ReactKeyboardEvent<HTMLDivElement>;
   fileMenuState: FileMenuState | null;
   activeFileIndex: number;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
+  filteredSubagents: AgentSubagentReference[];
+  selectSubagentReference: (subagent: AgentSubagentReference) => void;
 }): boolean => {
   if (!fileMenuState) {
     return false;
@@ -108,7 +115,14 @@ const handleFileMenuKeyDown = ({
 
   if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
     event.preventDefault();
-    const result = fileMenuState.results[activeFileIndex] ?? fileMenuState.results[0];
+    const subagent = filteredSubagents[activeFileIndex];
+    if (subagent) {
+      selectSubagentReference(subagent);
+      return true;
+    }
+
+    const fileIndex = Math.max(0, activeFileIndex - filteredSubagents.length);
+    const result = fileMenuState.results[fileIndex] ?? fileMenuState.results[0];
     if (result) {
       selectFileSearchResult(result);
     }
@@ -201,13 +215,20 @@ const handleSkillMenuKeyDown = ({
 };
 
 const removeChipEditType = (
-  kind: "slash_command" | "file_reference" | "skill_mention",
-): "remove_slash_command" | "remove_file_reference" | "remove_skill_reference" => {
+  kind: "slash_command" | "file_reference" | "skill_mention" | "subagent_reference",
+):
+  | "remove_slash_command"
+  | "remove_file_reference"
+  | "remove_skill_reference"
+  | "remove_subagent_reference" => {
   if (kind === "slash_command") {
     return "remove_slash_command";
   }
   if (kind === "file_reference") {
     return "remove_file_reference";
+  }
+  if (kind === "subagent_reference") {
+    return "remove_subagent_reference";
   }
   return "remove_skill_reference";
 };
@@ -240,7 +261,8 @@ const removeAdjacentChip = ({
   if (
     previousSegment?.kind !== "slash_command" &&
     previousSegment?.kind !== "file_reference" &&
-    previousSegment?.kind !== "skill_mention"
+    previousSegment?.kind !== "skill_mention" &&
+    previousSegment?.kind !== "subagent_reference"
   ) {
     return false;
   }
@@ -449,6 +471,7 @@ export const handleComposerEditorKeyDown = ({
   skillMenuState,
   filteredSlashCommands,
   filteredSkills,
+  filteredSubagents,
   activeSlashIndex,
   activeSkillIndex,
   activeFileIndex,
@@ -463,6 +486,7 @@ export const handleComposerEditorKeyDown = ({
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
   selectSkillReference,
+  selectSubagentReference,
   selectFileSearchResult,
   applyEditResult,
 }: HandleComposerEditorKeyDownArgs): boolean => {
@@ -489,6 +513,8 @@ export const handleComposerEditorKeyDown = ({
       activeFileIndex,
       moveActiveFileIndex,
       selectFileSearchResult,
+      filteredSubagents,
+      selectSubagentReference,
     })
   ) {
     return true;

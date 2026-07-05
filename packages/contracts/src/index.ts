@@ -19,5 +19,6 @@ export * from "./session-todo-parsing";
 export * from "./skill-schemas";
 export * from "./slash-command-schemas";
 export * from "./spec-template";
+export * from "./subagent-schemas";
 export * from "./system-open-schemas";
 export * from "./task-schemas";

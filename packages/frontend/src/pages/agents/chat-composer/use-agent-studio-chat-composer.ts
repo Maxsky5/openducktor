@@ -6,6 +6,7 @@ import type {
   AgentRole,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ import { createChatComposerFileSearch } from "@/features/agent-chat-composer/pro
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
+import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -56,6 +58,7 @@ type UseAgentStudioChatComposerArgs = {
   loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   loadSlashCommands?: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
   loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
+  loadSubagents?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSubagentCatalog>;
   loadFileSearch?: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -72,6 +75,7 @@ type AgentStudioChatComposerState = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
@@ -80,6 +84,10 @@ type AgentStudioChatComposerState = {
   skills: AgentSkillCatalog["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  subagentCatalog: AgentSubagentCatalog;
+  subagents: AgentSubagentCatalog["subagents"];
+  subagentsError: string | null;
+  isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -110,6 +118,7 @@ export function useAgentStudioChatComposer({
   loadCatalog,
   loadSlashCommands,
   loadSkills,
+  loadSubagents,
   loadFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const {
@@ -118,12 +127,14 @@ export function useAgentStudioChatComposer({
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
     loadRepoRuntimeSkills,
+    loadRepoRuntimeSubagents,
     loadRepoRuntimeFileSearch,
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const loadSkillsForRepo = loadSkills ?? loadRepoRuntimeSkills;
+  const loadSubagentsForRepo = loadSubagents ?? loadRepoRuntimeSubagents;
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
@@ -199,7 +210,12 @@ export function useAgentStudioChatComposer({
     promptInputRuntime.state === "available"
       ? promptInputRuntime.runtimeRef.runtimeKind
       : promptInputRuntime.runtimeKind;
-  const { runtimeSupportsSlashCommands, supportsFileSearch, supportsSkillReferences } = useMemo(
+  const {
+    runtimeSupportsSlashCommands,
+    supportsFileSearch,
+    supportsSkillReferences,
+    supportsSubagentReferences,
+  } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: selectedTargetRuntimeDefinitions,
@@ -244,6 +260,12 @@ export function useAgentStudioChatComposer({
     supportsSkillReferences,
     loadSkillsForRepo,
   });
+  const { subagentCatalog, subagents, subagentsError, isSubagentsLoading } =
+    useChatComposerSubagents({
+      promptInputRuntime,
+      supportsSubagentReferences,
+      loadSubagentsForRepo,
+    });
   useEffect(() => {
     syncDraftSelection({
       composerCatalog,
@@ -352,6 +374,7 @@ export function useAgentStudioChatComposer({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
@@ -360,6 +383,10 @@ export function useAgentStudioChatComposer({
     skills,
     skillsError,
     isSkillsLoading,
+    subagentCatalog,
+    subagents,
+    subagentsError,
+    isSubagentsLoading,
     searchFiles,
     agentProfileOptions,
     modelOptions,

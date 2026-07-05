@@ -76,6 +76,7 @@ const createAgentEngine = (
     listAvailableSlashCommands: (input) =>
       getAdapter(input.runtimeKind).listAvailableSlashCommands(input),
     listAvailableSkills: (input) => getAdapter(input.runtimeKind).listAvailableSkills(input),
+    listAvailableSubagents: (input) => getAdapter(input.runtimeKind).listAvailableSubagents(input),
     searchFiles: (input) => getAdapter(input.runtimeKind).searchFiles(input),
     listSessionRuntimeSnapshots: (input) =>
       getAdapter(input.runtimeKind).listSessionRuntimeSnapshots(input),

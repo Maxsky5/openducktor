@@ -63,6 +63,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRepoRuntimeCatalog}
       loadRepoRuntimeSlashCommands={runtimeCatalogOperations.loadRepoRuntimeSlashCommands}
       loadRepoRuntimeSkills={runtimeCatalogOperations.loadRepoRuntimeSkills}
+      loadRepoRuntimeSubagents={runtimeCatalogOperations.loadRepoRuntimeSubagents}
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
       <SpecStateProvider>

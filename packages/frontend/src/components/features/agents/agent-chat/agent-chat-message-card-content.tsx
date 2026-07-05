@@ -32,6 +32,7 @@ import {
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
+import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-chip";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
@@ -281,7 +282,10 @@ const AssistantMessage = ({
 };
 
 type UserMessageInlineReferenceRange = {
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>;
+  part: Extract<
+    AgentUserMessageDisplayPart,
+    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
+  >;
   start: number;
   end: number;
 };
@@ -305,7 +309,10 @@ const readRenderableUserMessageText = (
   if (
     parts.some(
       (part) =>
-        (part.kind === "file_reference" || part.kind === "skill_mention") && part.sourceText,
+        (part.kind === "file_reference" ||
+          part.kind === "skill_mention" ||
+          part.kind === "subagent_reference") &&
+        part.sourceText,
     )
   ) {
     return fallbackText;
@@ -319,10 +326,16 @@ const readRenderableUserMessageText = (
 
 const userMessageTextContainsReferenceMarker = (
   text: string,
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+  part: Extract<
+    AgentUserMessageDisplayPart,
+    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
+  >,
 ): boolean => {
   if (part.kind === "skill_mention") {
     return text.includes(`$${part.skill.name}`);
+  }
+  if (part.kind === "subagent_reference") {
+    return text.includes(`@${part.subagent.name}`);
   }
   return text.includes(`@${part.file.path}`) || text.includes(`@${part.file.name}`);
 };
@@ -335,7 +348,11 @@ const canRenderOrderedUserMessageParts = (parts: AgentUserMessageDisplayPart[]):
 
   let hasReference = false;
   for (const part of parts) {
-    if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
+    if (
+      part.kind !== "file_reference" &&
+      part.kind !== "skill_mention" &&
+      part.kind !== "subagent_reference"
+    ) {
       continue;
     }
     hasReference = true;
@@ -367,7 +384,11 @@ const renderUserMessagePartSequence = (
       continue;
     }
 
-    if (part.kind === "file_reference" || part.kind === "skill_mention") {
+    if (
+      part.kind === "file_reference" ||
+      part.kind === "skill_mention" ||
+      part.kind === "subagent_reference"
+    ) {
       nodes.push(renderUserMessageReferenceChip(part, nextSequenceKey(`reference-${part.kind}`)));
     }
   }
@@ -385,13 +406,24 @@ const readInlineUserReferenceRanges = (
 ): UserMessageInlineReferenceRange[] => {
   const ranges: UserMessageInlineReferenceRange[] = [];
   for (const part of parts) {
-    if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
+    if (
+      part.kind !== "file_reference" &&
+      part.kind !== "skill_mention" &&
+      part.kind !== "subagent_reference"
+    ) {
       continue;
     }
     const sourceText = part.sourceText;
     if (!sourceText) {
       if (part.kind === "skill_mention") {
         const marker = `$${part.skill.name}`;
+        const start = rawText.indexOf(marker);
+        if (start >= 0) {
+          ranges.push({ part, start, end: start + marker.length });
+        }
+      }
+      if (part.kind === "subagent_reference") {
+        const marker = `@${part.subagent.name}`;
         const start = rawText.indexOf(marker);
         if (start >= 0) {
           ranges.push({ part, start, end: start + marker.length });
@@ -419,7 +451,10 @@ const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string):
 };
 
 function renderUserMessageReferenceChip(
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+  part: Extract<
+    AgentUserMessageDisplayPart,
+    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
+  >,
   key: string,
 ): ReactElement {
   if (part.kind === "skill_mention") {
@@ -427,6 +462,16 @@ function renderUserMessageReferenceChip(
       <AgentChatSkillReferenceChip
         key={key}
         skill={part.skill}
+        className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
+      />
+    );
+  }
+
+  if (part.kind === "subagent_reference") {
+    return (
+      <AgentChatSubagentReferenceChip
+        key={key}
+        subagent={part.subagent}
         className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
       />
     );
@@ -476,9 +521,11 @@ const renderUserMessageInlineContent = (
 
   for (const part of parts) {
     if (
-      (part.kind !== "file_reference" && part.kind !== "skill_mention") ||
+      (part.kind !== "file_reference" &&
+        part.kind !== "skill_mention" &&
+        part.kind !== "subagent_reference") ||
       renderedInlineReferences.has(part) ||
-      (part.kind === "skill_mention" &&
+      ((part.kind === "skill_mention" || part.kind === "subagent_reference") &&
         !part.sourceText &&
         userMessageTextContainsReferenceMarker(rawText, part))
     ) {

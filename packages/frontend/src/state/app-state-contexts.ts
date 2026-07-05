@@ -11,6 +11,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import {
@@ -69,6 +70,9 @@ export type RuntimeDefinitionsContextValue = {
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
   loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
+  loadRepoRuntimeSubagents: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSubagentCatalog>;
   loadRepoRuntimeFileSearch: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -167,6 +171,7 @@ export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue
       loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
       loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills,
+      loadRepoRuntimeSubagents: runtimeContext.loadRepoRuntimeSubagents,
       loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
     }),
     [runtimeContext],

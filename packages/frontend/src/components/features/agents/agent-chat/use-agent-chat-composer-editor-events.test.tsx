@@ -110,6 +110,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
   const selectSkillReference = mock(() => {});
+  const selectSubagentReference = mock(() => {});
   const selectFileSearchResult = mock(() => {});
 
   const args: EventsHookArgs = {
@@ -125,6 +126,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     skillMenuState: null,
     filteredSlashCommands: [],
     filteredSkills: [],
+    filteredSubagents: [],
     activeSlashIndex: 0,
     activeSkillIndex: 0,
     activeFileIndex: 0,
@@ -140,6 +142,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
   };
 

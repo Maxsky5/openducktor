@@ -174,6 +174,8 @@ export const createRuntimeDefinitionsContextValue = (
     loadRepoRuntimeSlashCommands:
       overrides.loadRepoRuntimeSlashCommands ?? (async () => ({ commands: [] })),
     loadRepoRuntimeSkills: overrides.loadRepoRuntimeSkills ?? (async () => ({ skills: [] })),
+    loadRepoRuntimeSubagents:
+      overrides.loadRepoRuntimeSubagents ?? (async () => ({ subagents: [] })),
     loadRepoRuntimeFileSearch: overrides.loadRepoRuntimeFileSearch ?? (async () => []),
   };
 };

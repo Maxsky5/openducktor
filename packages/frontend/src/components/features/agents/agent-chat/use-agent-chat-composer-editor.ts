@@ -2,6 +2,7 @@ import type {
   AgentFileSearchResult,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
 } from "@openducktor/core";
 import {
   type ClipboardEvent as ReactClipboardEvent,
@@ -38,14 +39,17 @@ type UseAgentChatComposerEditorArgs = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommands: AgentSlashCommand[];
   skills: AgentSkillReference[];
+  subagents: AgentSubagentReference[];
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
 type UseAgentChatComposerEditorResult = {
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
+  filteredSubagents: AgentSubagentReference[];
   activeSlashIndex: number;
   activeSkillIndex: number;
   showSlashMenu: boolean;
@@ -58,6 +62,7 @@ type UseAgentChatComposerEditorResult = {
   focusLastTextSegment: () => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   selectSkillReference: (skill: AgentSkillReference) => void;
+  selectSubagentReference: (subagent: AgentSubagentReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   handleEditorInput: (root: HTMLDivElement) => void;
   handleEditorBeforeInput: (event: ReactFormEvent<HTMLDivElement>) => void;
@@ -79,8 +84,10 @@ export const useAgentChatComposerEditor = ({
   supportsSlashCommands,
   supportsFileSearch,
   supportsSkillReferences,
+  supportsSubagentReferences,
   slashCommands,
   skills,
+  subagents,
   searchFiles,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const latestDraftRef = useRef(draft);
@@ -101,8 +108,10 @@ export const useAgentChatComposerEditor = ({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommands,
     skills,
+    subagents,
     searchFiles,
   });
   const {
@@ -111,6 +120,7 @@ export const useAgentChatComposerEditor = ({
     skillMenuState,
     filteredSlashCommands,
     filteredSkills,
+    filteredSubagents,
     activeSlashIndex,
     activeSkillIndex,
     activeFileIndex,
@@ -284,6 +294,28 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, closeSkillMenu, skillMenuState],
   );
 
+  const selectSubagentReference = useCallback(
+    (subagent: AgentSubagentReference) => {
+      if (!fileMenuState) {
+        return;
+      }
+
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(latestDraftRef.current, {
+          type: "insert_subagent_reference",
+          textSegmentId: fileMenuState.textSegmentId,
+          rangeStart: fileMenuState.rangeStart,
+          rangeEnd: fileMenuState.rangeEnd,
+          subagent,
+        }),
+      );
+      if (didApply) {
+        closeFileMenu();
+      }
+    },
+    [applyEditResult, closeFileMenu, fileMenuState],
+  );
+
   const {
     handleEditorInput,
     handleEditorBeforeInput,
@@ -305,6 +337,7 @@ export const useAgentChatComposerEditor = ({
     skillMenuState,
     filteredSlashCommands,
     filteredSkills,
+    filteredSubagents,
     activeSlashIndex,
     activeSkillIndex,
     activeFileIndex,
@@ -320,6 +353,7 @@ export const useAgentChatComposerEditor = ({
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
   });
 
@@ -330,6 +364,7 @@ export const useAgentChatComposerEditor = ({
   return {
     filteredSlashCommands,
     filteredSkills,
+    filteredSubagents,
     activeSlashIndex,
     activeSkillIndex,
     showSlashMenu,
@@ -342,6 +377,7 @@ export const useAgentChatComposerEditor = ({
     focusLastTextSegment,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,

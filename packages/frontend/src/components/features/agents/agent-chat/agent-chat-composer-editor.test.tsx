@@ -151,14 +151,34 @@ const SKILL_ANALYZE = {
 
 const SKILLS = [SKILL_REVIEW, SKILL_ANALYZE];
 
+const SUBAGENT_REVIEWER = {
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+  description: "Review the selected change.",
+};
+
+const SUBAGENT_DOCS = {
+  id: "docs",
+  name: "docs",
+  label: "Docs",
+  description: "Update documentation.",
+};
+
+const SUBAGENTS = [SUBAGENT_REVIEWER, SUBAGENT_DOCS];
+
 const EditorHarness = ({
   slashCommandsError,
   slashCommands,
   supportsFileSearch = true,
   supportsSkillReferences = false,
+  supportsSubagentReferences = false,
   skills = [],
   skillsError = null,
   isSkillsLoading = false,
+  subagents = [],
+  subagentsError = null,
+  isSubagentsLoading = false,
   searchFiles = async () => [],
   onSend,
   initialDraft = createComposerDraft(""),
@@ -169,9 +189,13 @@ const EditorHarness = ({
   slashCommands: typeof COMMANDS;
   supportsFileSearch?: boolean;
   supportsSkillReferences?: boolean;
+  supportsSubagentReferences?: boolean;
   skills?: typeof SKILLS;
   skillsError?: string | null;
   isSkillsLoading?: boolean;
+  subagents?: typeof SUBAGENTS;
+  subagentsError?: string | null;
+  isSubagentsLoading?: boolean;
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
@@ -196,6 +220,7 @@ const EditorHarness = ({
         onSend={onSend ?? (() => {})}
         supportsSlashCommands={true}
         supportsFileSearch={supportsFileSearch}
+        supportsSubagentReferences={supportsSubagentReferences}
         slashCommands={slashCommands}
         slashCommandsError={slashCommandsError}
         isSlashCommandsLoading={false}
@@ -204,6 +229,9 @@ const EditorHarness = ({
         skills={skills}
         skillsError={skillsError}
         isSkillsLoading={isSkillsLoading}
+        subagents={subagents}
+        subagentsError={subagentsError}
+        isSubagentsLoading={isSubagentsLoading}
         onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>
@@ -1051,6 +1079,79 @@ describe("AgentChatComposerEditor", () => {
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(searchFiles).toHaveBeenCalledWith("");
+  });
+
+  test("shows subagents in the @ menu alongside files", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSubagentReferences={true}
+        subagents={SUBAGENTS}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@rev");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+    });
+    expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /@reviewer/i }).querySelector(".lucide-bot"),
+    ).toBeDefined();
+  });
+
+  test("selects a subagent reference without submitting the message", async () => {
+    const onSend = mock(() => {});
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSubagentReferences={true}
+        subagents={[SUBAGENT_REVIEWER]}
+        searchFiles={searchFiles}
+        onSend={onSend}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "ask @rev");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const chip = rendered.container.querySelector("[data-chip-segment-id]");
+      expect(chip?.textContent).toContain("reviewer");
+      expect(chip?.getAttribute("data-subagent-reference-name")).toBe("reviewer");
+    });
+    expect(screen.getByTestId("draft-state").textContent).toContain('"kind":"subagent_reference"');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(searchFiles).toHaveBeenCalledWith("rev");
+  });
+
+  test("shows subagents without searching files when only subagent references are supported", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsFileSearch={false}
+        supportsSubagentReferences={true}
+        subagents={[SUBAGENT_REVIEWER]}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@rev");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+    });
+    expect(searchFiles).not.toHaveBeenCalled();
   });
 
   test("shows the full file path in a hover tooltip for composer file chips", async () => {

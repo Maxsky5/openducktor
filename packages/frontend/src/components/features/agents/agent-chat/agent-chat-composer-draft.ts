@@ -3,6 +3,7 @@ import type {
   AgentFileReference,
   AgentSkillReference,
   AgentSlashCommand,
+  AgentSubagentReference,
   AgentUserMessagePart,
 } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
@@ -31,11 +32,18 @@ export type AgentChatComposerSkillReferenceSegment = {
   skill: AgentSkillReference;
 };
 
+export type AgentChatComposerSubagentReferenceSegment = {
+  id: string;
+  kind: "subagent_reference";
+  subagent: AgentSubagentReference;
+};
+
 export type AgentChatComposerSegment =
   | AgentChatComposerTextSegment
   | AgentChatComposerSlashCommandSegment
   | AgentChatComposerFileReferenceSegment
-  | AgentChatComposerSkillReferenceSegment;
+  | AgentChatComposerSkillReferenceSegment
+  | AgentChatComposerSubagentReferenceSegment;
 
 export type AgentChatComposerAttachment = {
   id: string;
@@ -127,6 +135,13 @@ export type AgentChatComposerDraftEdit =
       skill: AgentSkillReference;
     }
   | {
+      type: "insert_subagent_reference";
+      textSegmentId: string;
+      rangeStart: number;
+      rangeEnd: number;
+      subagent: AgentSubagentReference;
+    }
+  | {
       type: "remove_slash_command";
       segmentId: string;
     }
@@ -136,6 +151,10 @@ export type AgentChatComposerDraftEdit =
     }
   | {
       type: "remove_skill_reference";
+      segmentId: string;
+    }
+  | {
+      type: "remove_subagent_reference";
       segmentId: string;
     }
   | {
@@ -192,6 +211,15 @@ export const createSkillReferenceSegment = (
   id,
   kind: "skill_mention",
   skill,
+});
+
+export const createSubagentReferenceSegment = (
+  subagent: AgentSubagentReference,
+  id = createSegmentId(),
+): AgentChatComposerSubagentReferenceSegment => ({
+  id,
+  kind: "subagent_reference",
+  subagent,
 });
 
 export const createComposerAttachment = (
@@ -358,6 +386,13 @@ const removeSkillReferenceSegmentFromDraft = (
   return removeNonTextSegmentFromDraft(draft, segmentId, "skill_mention");
 };
 
+const removeSubagentReferenceSegmentFromDraft = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): AgentChatComposerDraftEditResult | null => {
+  return removeNonTextSegmentFromDraft(draft, segmentId, "subagent_reference");
+};
+
 const removeSegmentRangeFromDraft = (
   draft: AgentChatComposerDraft,
   startTextSegmentId: string,
@@ -501,6 +536,22 @@ const replaceTextRangeWithSkillReference = (
   );
 };
 
+const replaceTextRangeWithSubagentReference = (
+  draft: AgentChatComposerDraft,
+  textSegmentId: string,
+  rangeStart: number,
+  rangeEnd: number,
+  subagent: AgentSubagentReference,
+): AgentChatComposerDraftEditResult | null => {
+  return replaceTextRangeWithSegment(
+    draft,
+    textSegmentId,
+    rangeStart,
+    rangeEnd,
+    createSubagentReferenceSegment(subagent),
+  );
+};
+
 export const applyComposerDraftEdit = (
   draft: AgentChatComposerDraft,
   edit: AgentChatComposerDraftEdit,
@@ -544,12 +595,22 @@ export const applyComposerDraftEdit = (
         edit.rangeEnd,
         edit.skill,
       );
+    case "insert_subagent_reference":
+      return replaceTextRangeWithSubagentReference(
+        draft,
+        edit.textSegmentId,
+        edit.rangeStart,
+        edit.rangeEnd,
+        edit.subagent,
+      );
     case "remove_slash_command":
       return removeSlashCommandSegmentFromDraft(draft, edit.segmentId);
     case "remove_file_reference":
       return removeFileReferenceSegmentFromDraft(draft, edit.segmentId);
     case "remove_skill_reference":
       return removeSkillReferenceSegmentFromDraft(draft, edit.segmentId);
+    case "remove_subagent_reference":
+      return removeSubagentReferenceSegmentFromDraft(draft, edit.segmentId);
     case "remove_segment_range":
       return removeSegmentRangeFromDraft(
         draft,
@@ -575,6 +636,10 @@ const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessag
 
       if (segment.kind === "skill_mention") {
         return [{ kind: "skill_mention", skill: segment.skill }];
+      }
+
+      if (segment.kind === "subagent_reference") {
+        return [{ kind: "subagent_reference", subagent: segment.subagent }];
       }
 
       return [{ kind: "slash_command", command: segment.command }];

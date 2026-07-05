@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSkillReference, AgentSlashCommand } from "@openducktor/core";
+import type {
+  AgentSkillReference,
+  AgentSlashCommand,
+  AgentSubagentReference,
+} from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createFileReferenceSegment,
@@ -28,6 +32,7 @@ type KeyDownTestSetupOverrides = {
   } | null;
   filteredSlashCommands?: AgentSlashCommand[];
   filteredSkills?: AgentSkillReference[];
+  filteredSubagents?: AgentSubagentReference[];
   activeSlashIndex?: number;
   activeSkillIndex?: number;
   activeFileIndex?: number;
@@ -123,6 +128,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
   const selectSkillReference = mock(() => {});
+  const selectSubagentReference = mock(() => {});
   const selectFileSearchResult = mock(() => {});
   const applyEditResult = mock(() => overrides.applyEditResult ?? true);
 
@@ -140,6 +146,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
     applyEditResult,
     selectComposerContents,
@@ -159,6 +166,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         skillMenuState: overrides.skillMenuState ?? null,
         filteredSlashCommands: overrides.filteredSlashCommands ?? [slashCommand],
         filteredSkills: overrides.filteredSkills ?? [],
+        filteredSubagents: overrides.filteredSubagents ?? [],
         activeSlashIndex: overrides.activeSlashIndex ?? 0,
         activeSkillIndex: overrides.activeSkillIndex ?? 0,
         activeFileIndex: overrides.activeFileIndex ?? 0,
@@ -173,6 +181,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         insertNewlineAtSelectionTarget,
         selectSlashCommand,
         selectSkillReference,
+        selectSubagentReference,
         selectFileSearchResult,
         applyEditResult,
       }),
@@ -201,6 +210,34 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.handled()).toBe(true);
     expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
     expect(setup.selectFileSearchResult).toHaveBeenCalledWith(results[1]);
+    expect(setup.onSend).not.toHaveBeenCalled();
+  });
+
+  test("prefers subagent selection over file selection when subagent rows are active", () => {
+    const subagent: AgentSubagentReference = {
+      id: "reviewer",
+      name: "reviewer",
+      label: "Reviewer",
+    };
+    const result = buildFileSearchResult({ path: "src/a.ts", name: "a.ts" });
+    const setup = createKeyDownTestSetup({
+      fileMenuState: {
+        query: "rev",
+        textSegmentId: "segment-1",
+        rangeStart: 0,
+        rangeEnd: 4,
+        results: [result],
+        isLoading: false,
+        error: null,
+      },
+      filteredSubagents: [subagent],
+      activeFileIndex: 0,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.selectSubagentReference).toHaveBeenCalledWith(subagent);
+    expect(setup.selectFileSearchResult).not.toHaveBeenCalled();
     expect(setup.onSend).not.toHaveBeenCalled();
   });
 

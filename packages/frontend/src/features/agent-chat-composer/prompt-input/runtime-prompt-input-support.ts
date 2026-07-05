@@ -3,7 +3,11 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 const runtimeSupportsPromptInput = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeKind: RuntimeKind | null,
-  capability: "supportsSlashCommands" | "supportsFileSearch" | "supportsSkillReferences",
+  capability:
+    | "supportsSlashCommands"
+    | "supportsFileSearch"
+    | "supportsSkillReferences"
+    | "supportsSubagentReferences",
 ): boolean => {
   if (!runtimeKind) {
     return false;
@@ -24,6 +28,7 @@ export const resolveRuntimePromptInputSupport = ({
   runtimeSupportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
 } => {
   return {
     runtimeSupportsSlashCommands: runtimeSupportsPromptInput(
@@ -40,6 +45,11 @@ export const resolveRuntimePromptInputSupport = ({
       runtimeDefinitions,
       runtimeKind,
       "supportsSkillReferences",
+    ),
+    supportsSubagentReferences: runtimeSupportsPromptInput(
+      runtimeDefinitions,
+      runtimeKind,
+      "supportsSubagentReferences",
     ),
   };
 };

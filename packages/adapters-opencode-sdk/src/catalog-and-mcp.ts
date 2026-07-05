@@ -1,9 +1,10 @@
-import { slashCommandCatalogSchema } from "@openducktor/contracts";
+import { slashCommandCatalogSchema, subagentCatalogSchema } from "@openducktor/contracts";
 import type {
   AgentDescriptor,
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
@@ -40,6 +41,17 @@ type FindFilesClient = {
   };
 };
 
+type AgentsClient = {
+  app?: {
+    agents?: (input: { directory: string }) => Promise<{
+      data?: unknown;
+      error?: { message?: string } | unknown;
+    }>;
+  };
+};
+
+type AgentListMode = "optional" | "required";
+
 const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
   value === "subagent" || value === "primary" || value === "all";
 
@@ -58,6 +70,26 @@ const resolveAgentColor = (
 
   const normalizedName = agentName.trim().toLowerCase();
   return OPENCODE_DEFAULT_AGENT_COLORS[normalizedName];
+};
+
+const readAgentList = async (
+  client: AgentsClient,
+  workingDirectory: string,
+  mode: AgentListMode,
+): Promise<unknown[]> => {
+  const app = client.app;
+  if (!app || typeof app.agents !== "function") {
+    if (mode === "optional") {
+      return [];
+    }
+    throw new Error("OpenCode runtime does not expose the agent listing API.");
+  }
+
+  const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
+  if (!Array.isArray(payload)) {
+    throw new Error("Invalid agent payload: expected an array.");
+  }
+  return payload;
 };
 
 const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
@@ -111,60 +143,95 @@ export const listAvailableModels = async (
     directory: input.workingDirectory,
   });
   const providerData = unwrapData(response, "list configured providers");
-  const agentsData = await (async () => {
-    const app = (client as { app?: { agents?: unknown } }).app;
-    if (!app || typeof app.agents !== "function") {
-      return [];
-    }
-
-    const payload = await app.agents({
-      directory: input.workingDirectory,
-    } as {
-      directory: string;
-    });
-    return unwrapData(
-      payload as { data?: unknown; error?: { message?: string } | unknown },
-      "list agents",
-    );
-  })();
+  const agentsData = await readAgentList(
+    client as AgentsClient,
+    input.workingDirectory,
+    "optional",
+  );
   const baseCatalog = mapProviderListToCatalog(providerData);
-  const rawAgents = Array.isArray(agentsData)
-    ? agentsData
-        .map((rawEntry) => {
-          const entry = asUnknownRecord(rawEntry);
-          const name = entry ? readStringProp(entry, ["name"]) : undefined;
-          if (!entry || !name || name.trim().length === 0) {
-            return undefined;
-          }
+  const rawAgents = agentsData
+    .map((rawEntry) => {
+      const entry = asUnknownRecord(rawEntry);
+      const name = entry ? readStringProp(entry, ["name"]) : undefined;
+      if (!entry || !name || name.trim().length === 0) {
+        return undefined;
+      }
 
-          const mode = readStringProp(entry, ["mode"]);
-          if (!isAgentMode(mode)) {
-            return undefined;
-          }
+      const mode = readStringProp(entry, ["mode"]);
+      if (!isAgentMode(mode)) {
+        return undefined;
+      }
 
-          const description = readStringProp(entry, ["description"]);
-          const hidden = typeof entry.hidden === "boolean" ? entry.hidden : undefined;
-          const native = typeof entry.native === "boolean" ? entry.native : undefined;
+      const description = readStringProp(entry, ["description"]);
+      const hidden = typeof entry.hidden === "boolean" ? entry.hidden : undefined;
+      const native = typeof entry.native === "boolean" ? entry.native : undefined;
 
-          const resolvedColor = resolveAgentColor(name, entry.color, native);
-          return {
-            id: name,
-            label: name,
-            ...(description ? { description } : {}),
-            mode,
-            ...(hidden !== undefined ? { hidden } : {}),
-            ...(native !== undefined ? { native } : {}),
-            ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
-          };
-        })
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
-        .sort((a, b) => a.label.localeCompare(b.label))
-    : [];
+      const resolvedColor = resolveAgentColor(name, entry.color, native);
+      return {
+        id: name,
+        label: name,
+        ...(description ? { description } : {}),
+        mode,
+        ...(hidden !== undefined ? { hidden } : {}),
+        ...(native !== undefined ? { native } : {}),
+        ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return {
     ...baseCatalog,
     profiles: rawAgents,
   };
+};
+
+export const listAvailableSubagents = async (
+  createClient: ClientFactory,
+  input: OpencodeRuntimeClientInput,
+): Promise<AgentSubagentCatalog> => {
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const agentsData = await readAgentList(
+      client as AgentsClient,
+      input.workingDirectory,
+      "required",
+    );
+    const subagents = agentsData
+      .map((rawEntry, index) => {
+        const entry = asUnknownRecord(rawEntry);
+        const name = entry ? readStringProp(entry, ["name"]) : undefined;
+        if (!entry || !name || name.trim().length === 0) {
+          throw new Error(`Invalid agent payload: expected agent ${index} to include a name.`);
+        }
+
+        const mode = readStringProp(entry, ["mode"]);
+        const hidden = typeof entry.hidden === "boolean" ? entry.hidden : undefined;
+        if (hidden === true || mode === "primary") {
+          return null;
+        }
+
+        const description = readStringProp(entry, ["description"]);
+        const native = typeof entry.native === "boolean" ? entry.native : undefined;
+        const resolvedColor = resolveAgentColor(name, entry.color, native);
+        return {
+          id: name,
+          name,
+          label: name,
+          ...(description ? { description } : {}),
+          ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    return subagentCatalogSchema.parse({ subagents });
+  } catch (error) {
+    throw toOpenCodeRequestError("list subagents", error);
+  }
 };
 
 export const listAvailableSlashCommands = async (
