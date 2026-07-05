@@ -123,8 +123,9 @@ describe("settings modal content", () => {
   });
 
   test("renders chat section with SettingsChatSection when section is chat", () => {
+    const defaultSnapshot = createMockSnapshot();
     const snapshot = createMockSnapshot({
-      chat: { showThinkingMessages: true, expandFileDiffsByDefault: true },
+      chat: { ...defaultSnapshot.chat, showThinkingMessages: true, expandFileDiffsByDefault: true },
     });
     const controller = createMockController(snapshot);
 

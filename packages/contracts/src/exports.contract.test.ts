@@ -20,6 +20,11 @@ import type {
   AutopilotRule,
   AutopilotSettings,
   BuildSessionBootstrap,
+  ChatDiffHeight,
+  ChatDiffIndicators,
+  ChatDiffStyle,
+  ChatHunkSeparators,
+  ChatLineOverflow,
   ChatSettings,
   CodexReasoningEffort,
   CommitsAheadBehind,
@@ -204,6 +209,11 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "formatRuntimeDescriptorSchemaIssue",
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
+  "CHAT_DIFF_HEIGHT_VALUES",
+  "CHAT_DIFF_INDICATOR_VALUES",
+  "CHAT_DIFF_STYLE_VALUES",
+  "CHAT_HUNK_SEPARATOR_VALUES",
+  "CHAT_LINE_OVERFLOW_VALUES",
   "chatSettingsSchema",
   "CODEX_APPROVAL_POLICY_VALUES",
   "CODEX_APPROVALS_REVIEWER_VALUES",
@@ -478,6 +488,11 @@ type ExportedTypeContract = {
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildSessionBootstrap: BuildSessionBootstrap;
+  ChatDiffHeight: ChatDiffHeight;
+  ChatDiffIndicators: ChatDiffIndicators;
+  ChatDiffStyle: ChatDiffStyle;
+  ChatHunkSeparators: ChatHunkSeparators;
+  ChatLineOverflow: ChatLineOverflow;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;

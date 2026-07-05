@@ -41,7 +41,8 @@ const DEFAULT_CONFIG = {
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
 }: AgentChatFileEditCardProps): ReactElement {
-  const { expandFileDiffsByDefault } = useAgentChatSettings();
+  const chatSettings = useAgentChatSettings();
+  const { expandFileDiffsByDefault } = chatSettings;
   const hasContent = data.kind !== "path";
   const [isExpanded, setIsExpanded] = useState(hasContent && expandFileDiffsByDefault);
   const hasSyncedInitialDefaultRef = useRef(false);
@@ -111,7 +112,15 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       </button>
 
       {isExpanded && data.kind === "diff" ? (
-        <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />
+        <PierreDiffViewer
+          patch={data.diff}
+          filePath={data.filePath}
+          diffStyle={chatSettings.diffStyle}
+          diffIndicators={chatSettings.diffIndicators}
+          heightMode={chatSettings.diffHeight}
+          lineOverflow={chatSettings.lineOverflow}
+          hunkSeparators={chatSettings.hunkSeparators}
+        />
       ) : null}
       {isExpanded && data.kind === "content" ? (
         <PierreFileViewer filePath={data.filePath} content={data.content} />

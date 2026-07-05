@@ -1,4 +1,9 @@
-import type { DiffLineAnnotation, FileContents, SelectedLineRange } from "@pierre/diffs";
+import type {
+  BaseDiffOptions,
+  DiffLineAnnotation,
+  FileContents,
+  SelectedLineRange,
+} from "@pierre/diffs";
 import {
   File as PierreReactFile,
   FileDiff as PierreReactFileDiff,
@@ -26,7 +31,14 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-export type PierreDiffStyle = "split" | "unified";
+export type PierreDiffStyle = NonNullable<BaseDiffOptions["diffStyle"]>;
+export type PierreDiffIndicators = NonNullable<BaseDiffOptions["diffIndicators"]>;
+export type PierreLineOverflow = NonNullable<BaseDiffOptions["overflow"]>;
+export type PierreHunkSeparators = Exclude<
+  NonNullable<BaseDiffOptions["hunkSeparators"]>,
+  "custom"
+>;
+export type PierreDiffHeightMode = "full" | "scroll";
 export type { PierreDiffSelection } from "./pierre-diff-viewer-model";
 
 type PierreDiffViewerProps = {
@@ -35,6 +47,10 @@ type PierreDiffViewerProps = {
   filePath: string;
   /** Split (side-by-side) or unified (single-column) view. */
   diffStyle?: PierreDiffStyle;
+  diffIndicators?: PierreDiffIndicators;
+  lineOverflow?: PierreLineOverflow;
+  hunkSeparators?: PierreHunkSeparators;
+  heightMode?: PierreDiffHeightMode;
   /** Enable click-to-select on line numbers. */
   enableLineSelection?: boolean;
   enableGutterUtility?: boolean;
@@ -66,8 +82,8 @@ const DIFF_WRAPPER_STYLE = {
   "--diffs-line-height": "1.5",
   "--diffs-tab-size": 2,
 } as CSSProperties;
-const RAW_DIFF_FALLBACK_CLASS_NAME =
-  "whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
+const RAW_DIFF_FALLBACK_BASE_CLASS_NAME =
+  "px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
@@ -93,6 +109,15 @@ const HUNK_RESET_FLOATING_CSS = `
   background-color: transparent !important;
 }
 `;
+
+const getPierreViewerContainerClassName = (heightMode: PierreDiffHeightMode): string =>
+  cn("min-w-0", heightMode === "scroll" && PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME);
+
+const getRawDiffFallbackClassName = (lineOverflow: PierreLineOverflow): string =>
+  cn(
+    RAW_DIFF_FALLBACK_BASE_CLASS_NAME,
+    lineOverflow === "wrap" ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-pre",
+  );
 
 const contentHash = (value: string): string => {
   let hash = 0x811c9dc5;
@@ -163,6 +188,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   patch,
   filePath,
   diffStyle = "split",
+  diffIndicators = "bars",
+  lineOverflow = "wrap",
+  hunkSeparators = "line-info",
+  heightMode = "scroll",
   enableLineSelection = false,
   enableGutterUtility = false,
   enableHunkReset = false,
@@ -228,10 +257,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       theme: DIFF_THEME,
       themeType: theme,
       diffStyle,
-      diffIndicators: "bars" as const,
-      hunkSeparators: "line-info" as const,
+      diffIndicators,
+      hunkSeparators,
       lineDiffType,
-      overflow: "wrap" as const,
+      overflow: lineOverflow,
       disableFileHeader: true,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
@@ -247,11 +276,14 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     }),
     [
       diffStyle,
+      diffIndicators,
       enableHunkReset,
       enableLineSelection,
       handleGutterUtilityClick,
       handleLineSelectionChange,
       handleLineSelectionEnd,
+      hunkSeparators,
+      lineOverflow,
       lineDiffType,
       theme,
     ],
@@ -301,7 +333,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 
   let content: ReactElement;
   if (fileDiff == null) {
-    content = <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>;
+    content = <pre className={getRawDiffFallbackClassName(lineOverflow)}>{fallbackPatch}</pre>;
   } else {
     content = (
       <PierreReactFileDiff
@@ -316,7 +348,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
-      <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>{content}</div>
+      <div className={getPierreViewerContainerClassName(heightMode)}>{content}</div>
     </div>
   );
 });

@@ -64,6 +64,11 @@ describe("shared test fixtures", () => {
     expect(createChatSettingsFixture({ expandFileDiffsByDefault: false })).toEqual({
       showThinkingMessages: false,
       expandFileDiffsByDefault: false,
+      diffStyle: "split",
+      diffIndicators: "bars",
+      diffHeight: "full",
+      lineOverflow: "wrap",
+      hunkSeparators: "line-info",
     });
   });
 

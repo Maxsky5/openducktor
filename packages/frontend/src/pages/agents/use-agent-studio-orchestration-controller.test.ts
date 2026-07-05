@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -140,10 +141,10 @@ const baseArgs: BuildArgs = {
     agentAccentColorsByProfileId: {},
     selectedSessionContextUsage: null,
   },
-  chatSettings: {
+  chatSettings: createChatSettingsFixture({
     showThinkingMessages: true,
     expandFileDiffsByDefault: false,
-  },
+  }),
   composer: {
     draftScope: {
       taskId: "task-1",

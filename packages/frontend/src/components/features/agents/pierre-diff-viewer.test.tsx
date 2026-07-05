@@ -60,9 +60,14 @@ beforeEach(async () => {
           ),
           FileDiff: (props: {
             options?: {
+              diffIndicators?: string;
+              diffStyle?: string;
+              hunkSeparators?: string;
+              lineDiffType?: string;
               onGutterUtilityClick?: (range: unknown) => void;
               onLineSelectionChange?: (range: unknown) => void;
               onLineSelectionStart?: (range: unknown) => void;
+              overflow?: string;
             };
             selectedLines?: unknown;
           }) => {
@@ -71,7 +76,14 @@ beforeEach(async () => {
               ? JSON.stringify(props.selectedLines)
               : OMITTED_SELECTED_LINES_LABEL;
             return (
-              <div>
+              <div
+                data-testid="pierre-file-diff"
+                data-diff-indicators={String(options?.diffIndicators ?? "")}
+                data-diff-style={String(options?.diffStyle ?? "")}
+                data-hunk-separators={String(options?.hunkSeparators ?? "")}
+                data-line-diff-type={String(options?.lineDiffType ?? "")}
+                data-overflow={String(options?.overflow ?? "")}
+              >
                 <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
                 <button
                   type="button"
@@ -290,6 +302,46 @@ describe("PierreDiffViewer", () => {
     });
   });
 
+  test("forwards default diff rendering options and keeps the capped scroll container", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(<PierreDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
+
+    const diff = screen.getByTestId("pierre-file-diff");
+    expect(diff.getAttribute("data-diff-style")).toBe("split");
+    expect(diff.getAttribute("data-diff-indicators")).toBe("bars");
+    expect(diff.getAttribute("data-hunk-separators")).toBe("line-info");
+    expect(diff.getAttribute("data-line-diff-type")).toBe("word-alt");
+    expect(diff.getAttribute("data-overflow")).toBe("wrap");
+    expect(diff.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
+    expect(diff.parentElement?.className).toContain("overflow-auto");
+  });
+
+  test("forwards explicit diff rendering options and supports full-height parsed diffs", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        diffStyle="unified"
+        diffIndicators="classic"
+        hunkSeparators="metadata"
+        lineOverflow="scroll"
+        heightMode="full"
+      />,
+    );
+
+    const diff = screen.getByTestId("pierre-file-diff");
+    expect(diff.getAttribute("data-diff-style")).toBe("unified");
+    expect(diff.getAttribute("data-diff-indicators")).toBe("classic");
+    expect(diff.getAttribute("data-hunk-separators")).toBe("metadata");
+    expect(diff.getAttribute("data-line-diff-type")).toBe("none");
+    expect(diff.getAttribute("data-overflow")).toBe("scroll");
+    expect(diff.parentElement?.className).not.toContain("max-h-[min(50vh,32rem)]");
+    expect(diff.parentElement?.className).not.toContain("overflow-auto");
+  });
+
   test("renders plain file content through Pierre File with a worker cache key", () => {
     const { PierreFileViewer } = pierreViewerModule;
     const { rerender } = render(
@@ -346,6 +398,46 @@ describe("PierreDiffViewer", () => {
     const fallback = screen.getByText(/invalid diff body/);
     expect(fallback.parentElement?.className).toContain("overflow-auto");
     expect(fallback.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
+    expect(fallback.className).toContain("whitespace-pre-wrap");
+    expect(fallback.className).toContain("break-words");
+  });
+
+  test("renders full-height raw fallback diffs with horizontal line scrolling", async () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+      await withCapturedConsoleMethods(
+        ["debug", "error", "info", "log", "warn"],
+        async (consoleCalls) => {
+          render(
+            <PierreDiffViewer
+              patch="Index: src/app.ts\n=====\ninvalid diff body"
+              filePath="src/app.ts"
+              heightMode="full"
+              lineOverflow="scroll"
+            />,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          for (const calls of Object.values(consoleCalls)) {
+            for (const call of calls) {
+              expect(call).toEqual([[]]);
+            }
+          }
+        },
+      );
+
+      for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+        expect(chunk).toBe("[]\n");
+      }
+    });
+
+    const fallback = screen.getByText(/invalid diff body/);
+    expect(fallback.parentElement?.className).not.toContain("max-h-[min(50vh,32rem)]");
+    expect(fallback.parentElement?.className).not.toContain("overflow-auto");
+    expect(fallback.className).toContain("whitespace-pre");
+    expect(fallback.className).toContain("overflow-x-auto");
+    expect(fallback.className).not.toContain("break-words");
   });
 });
 
