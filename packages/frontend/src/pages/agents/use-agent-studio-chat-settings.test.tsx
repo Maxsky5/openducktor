@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS, type SettingsSnapshot } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
@@ -260,15 +260,14 @@ describe("useAgentStudioChatSettings", () => {
 
     await harness.mount();
     await harness.waitFor((state) => state.chatSettings.showThinkingMessages === true);
-    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(true);
-    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
-    expect(harness.getLatest().chatSettings.diffHeight).toBe("full");
+    expect(harness.getLatest().chatSettings).toEqual({
+      ...DEFAULT_CHAT_SETTINGS,
+      showThinkingMessages: true,
+    });
 
     await harness.update({ workspaceRepoPath: null });
 
-    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(false);
-    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
-    expect(harness.getLatest().chatSettings.diffHeight).toBe("full");
+    expect(harness.getLatest().chatSettings).toEqual(DEFAULT_CHAT_SETTINGS);
     expect(harness.getLatest().reusablePrompts).toEqual([]);
 
     await harness.unmount();

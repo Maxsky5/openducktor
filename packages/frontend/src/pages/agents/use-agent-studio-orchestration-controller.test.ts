@@ -79,6 +79,15 @@ const baseActiveSessionRuntimeData = {
   isLoadingModelCatalog: false,
   error: null,
 };
+const baseChatSettings = createChatSettingsFixture({
+  showThinkingMessages: true,
+  expandFileDiffsByDefault: false,
+  diffStyle: "unified",
+  diffIndicators: "none",
+  diffHeight: "scroll",
+  lineOverflow: "scroll",
+  hunkSeparators: "simple",
+});
 
 const baseArgs: BuildArgs = {
   view: {
@@ -141,10 +150,7 @@ const baseArgs: BuildArgs = {
     agentAccentColorsByProfileId: {},
     selectedSessionContextUsage: null,
   },
-  chatSettings: createChatSettingsFixture({
-    showThinkingMessages: true,
-    expandFileDiffsByDefault: false,
-  }),
+  chatSettings: baseChatSettings,
   composer: {
     draftScope: {
       taskId: "task-1",
@@ -172,8 +178,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
-    expect(mapped.chatSettings.showThinkingMessages).toBe(true);
-    expect(mapped.chatSettings.expandFileDiffsByDefault).toBe(false);
+    expect(mapped.chatSettings).toEqual(baseChatSettings);
     expect(mapped.composer.draftScope).toEqual({
       taskId: "task-1",
       role: "planner",

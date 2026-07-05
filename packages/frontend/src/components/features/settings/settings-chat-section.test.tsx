@@ -132,6 +132,15 @@ describe("settings chat section", () => {
     ]);
   });
 
+  test("uses wrapping segmented controls for variable option counts", () => {
+    const chatSettings = createChatSettings();
+
+    renderSettingsChatSection(chatSettings);
+
+    expect(screen.getByRole("group", { name: "Diff Indicators" }).className).toContain("flex-wrap");
+    expect(screen.getByRole("group", { name: "Hunk Separators" }).className).toContain("flex-wrap");
+  });
+
   test("marks saved transcript diff setting values as active", () => {
     const chatSettings = createChatSettings({
       diffStyle: "unified",
@@ -178,6 +187,16 @@ describe("settings chat section", () => {
     const optionButtons = screen.getAllByRole("button");
     expect(optionButtons).toHaveLength(13);
     expect(optionButtons.every((control) => control.hasAttribute("disabled"))).toBe(true);
+  });
+
+  test("does not update chat settings when clicking the active segmented option", () => {
+    const chatSettings = createChatSettings();
+    const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
+
+    clickSegmentedOption("Diff Style", "Split");
+
+    expect(onUpdateChat).not.toHaveBeenCalled();
+    expect(getLatestChat()).toEqual(chatSettings);
   });
 
   test("updates transcript diff settings without dropping unrelated chat settings", () => {

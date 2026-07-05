@@ -32,7 +32,7 @@ export function SettingsSegmentedOptionRow<Value extends string>({
       <SegmentedControlRoot
         size="sm"
         aria-label={title}
-        className="grid h-auto w-full grid-cols-2 items-stretch rounded-lg sm:inline-flex sm:h-9 sm:w-auto"
+        className="flex h-auto w-full flex-wrap items-stretch rounded-lg sm:h-9 sm:w-auto sm:flex-nowrap"
       >
         {options.map((option) => (
           <SegmentedControlItem
@@ -40,7 +40,12 @@ export function SettingsSegmentedOptionRow<Value extends string>({
             active={value === option.value}
             size="sm"
             disabled={disabled}
-            onClick={() => onValueChange(option.value)}
+            onClick={() => {
+              if (value === option.value) {
+                return;
+              }
+              onValueChange(option.value);
+            }}
           >
             {option.label}
           </SegmentedControlItem>
