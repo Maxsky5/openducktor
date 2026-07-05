@@ -39,7 +39,10 @@ import {
   requireWorkflowAgentSessionScope,
   withAgentSessionRef,
 } from "@openducktor/core";
-import { requireCodexServerRequestId } from "./codex-app-server-approvals";
+import {
+  requireCodexPendingRequestKey,
+  requireCodexServerResponseRequestId,
+} from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
@@ -526,7 +529,7 @@ export class CodexAppServerAdapter
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex approval");
-    const requestId = requireCodexServerRequestId(input.requestId, "approval");
+    requireCodexPendingRequestKey(input.requestId, "approval");
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -545,6 +548,7 @@ export class CodexAppServerAdapter
       );
     }
     const metadata = isPlainObject(pending.request.metadata) ? pending.request.metadata : {};
+    const requestId = requireCodexServerResponseRequestId(input.requestId, metadata, "approval");
     const requestMethod =
       typeof metadata.codexMethod === "string" ? metadata.codexMethod : "approval/request";
     const requestParams = metadata.params;
@@ -570,7 +574,7 @@ export class CodexAppServerAdapter
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
-    const requestId = requireCodexServerRequestId(input.requestId, "question");
+    requireCodexPendingRequestKey(input.requestId, "question");
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -592,6 +596,11 @@ export class CodexAppServerAdapter
         questionId,
         { answers: input.answers[index] },
       ]),
+    );
+    const requestId = requireCodexServerResponseRequestId(
+      input.requestId,
+      pending.input,
+      "question",
     );
     const output = JSON.stringify({ answers });
     await this.options.respondServerRequest(pending.runtimeId, requestId, { answers }, undefined);

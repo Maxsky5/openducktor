@@ -585,6 +585,42 @@ describe("CodexAppServerAdapter approvals", () => {
     unsubscribe();
   });
 
+  test("preserves numeric string server request ids when replying to approvals", async () => {
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
+        id: "53",
+        method: "approval/request",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-approval-string-id",
+          tool: "network",
+          url: "https://example.com",
+        },
+      }),
+    ]);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Need approval" }],
+      }),
+    );
+
+    await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: "53",
+      outcome: "reject",
+    });
+
+    expect(respondServerRequest.mock.calls[0]?.[1]).toBe("53");
+  });
+
   test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
     const { adapter, takeBufferedEvents } = createHarness({}, { deferTurnStart: true });
     takeBufferedEvents.mockImplementationOnce(async () => [
@@ -685,12 +721,12 @@ describe("CodexAppServerAdapter approvals", () => {
         tool: "request_user_input",
         title: "Question",
         preview: "Pick a mode",
-        input: {
+        input: expect.objectContaining({
           requestId: "32",
           questions: [
             expect.objectContaining({ header: "Mode", question: "Pick a mode", custom: true }),
           ],
-        },
+        }),
       }),
     });
 
@@ -755,6 +791,49 @@ describe("CodexAppServerAdapter approvals", () => {
         }),
       }),
     });
+  });
+
+  test("preserves numeric string server request ids when replying to questions", async () => {
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
+        id: "54",
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-question-string-id",
+          itemId: "item-1",
+          questions: [
+            {
+              id: "question-1",
+              header: "Mode",
+              question: "Pick a mode",
+              options: ["Safe"],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
+
+    await adapter.replyQuestion({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: "54",
+      answers: [["Safe"]],
+    });
+
+    expect(respondServerRequest.mock.calls[0]?.[1]).toBe("54");
   });
 
   test("resolves Codex MCP tool approvals with session persistence metadata", async () => {

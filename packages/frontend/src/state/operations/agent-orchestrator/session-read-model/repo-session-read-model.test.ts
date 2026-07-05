@@ -3,6 +3,7 @@ import type { AgentSessionRecord, CodexEffectivePolicy, RuntimeKind } from "@ope
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
+  type AgentRole,
   type PolicyBoundSessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
@@ -33,29 +34,39 @@ const resolveTestRuntimePolicy = ({ runtimeKind }: { runtimeKind: RuntimeKind })
 const expectedRuntimeRef = ({
   repoPath = "/repo",
   externalSessionId,
+  role = "build",
   runtimeKind = "opencode",
+  taskId = "task-1",
   workingDirectory = "/repo/worktree",
 }: {
   repoPath?: string;
   externalSessionId: string;
+  role?: AgentRole;
   runtimeKind?: RuntimeKind;
+  taskId?: string;
   workingDirectory?: string;
-}): PolicyBoundSessionRef =>
-  runtimeKind === "codex"
-    ? {
-        repoPath,
-        externalSessionId,
-        runtimeKind,
-        workingDirectory,
-        runtimePolicy: { kind: "codex", policy: codexPolicy },
-      }
-    : {
-        repoPath,
-        externalSessionId,
-        runtimeKind,
-        workingDirectory,
-        runtimePolicy: { kind: "opencode" },
-      };
+}): PolicyBoundSessionRef => {
+  const base = {
+    repoPath,
+    externalSessionId,
+    workingDirectory,
+    sessionScope: { kind: "workflow", taskId, role },
+  } as const;
+
+  if (runtimeKind === "codex") {
+    return {
+      ...base,
+      runtimeKind,
+      runtimePolicy: { kind: "codex", policy: codexPolicy },
+    };
+  }
+
+  return {
+    ...base,
+    runtimeKind,
+    runtimePolicy: { kind: "opencode" },
+  };
+};
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
   listAgentSessions(readModel.sessionCollection).find(

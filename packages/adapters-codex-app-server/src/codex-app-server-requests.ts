@@ -1,5 +1,6 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerRequestId,
   isCodexAppServerCommandRequestMethod,
   isCodexAppServerFileMutationRequestMethod,
   isCodexAppServerMcpServerElicitationRequestParams,
@@ -8,6 +9,7 @@ import {
   type RuntimeApprovalRequestType,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
+import { codexServerRequestIdMetadata } from "./codex-app-server-approvals";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
@@ -287,6 +289,7 @@ export const toApprovalRequest = (
     supportedReplyOutcomes: supportedReplyOutcomesForRequest(request),
     ...commandApprovalFields(request),
     metadata: {
+      ...codexServerRequestIdMetadata(request.id),
       codexMethod: request.method,
       params: request.params,
     },
@@ -372,6 +375,7 @@ export const toMcpElicitationApprovalRequest = (
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
     metadata: {
+      ...codexServerRequestIdMetadata(request.id),
       codexMethod: request.method,
       params: request.params,
       serverName: request.params.serverName,
@@ -412,6 +416,7 @@ export const parseQuestionRequest = (
   threadId: string;
   turnId: string;
   questionIds: string[];
+  serverRequestId: CodexAppServerRequestId;
 } => {
   if (request.id === undefined) {
     throw new Error("Codex app-server question request is missing an id.");
@@ -487,6 +492,7 @@ export const parseQuestionRequest = (
     threadId,
     turnId,
     questionIds,
+    serverRequestId: request.id,
   };
 };
 

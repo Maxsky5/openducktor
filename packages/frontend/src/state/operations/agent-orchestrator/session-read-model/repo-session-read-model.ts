@@ -60,11 +60,28 @@ export const buildRepoSessionReadModel = ({
   const carriedSessions: AgentSessionState[] = [];
   const unlistedSessionRefs: PolicyBoundSessionRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
-  const runtimePolicyForSession = (session: AgentSessionState): AgentSessionRuntimePolicy => {
+  const workflowScopeForSession = (session: AgentSessionState): AgentSessionScope | null => {
+    return session.role ? workflowAgentSessionScope(session.taskId, session.role) : null;
+  };
+  const runtimePolicyForSession = (
+    session: AgentSessionState,
+    sessionScope = workflowScopeForSession(session),
+  ): AgentSessionRuntimePolicy => {
     return resolveSessionRuntimePolicy({
       runtimeKind: session.runtimeKind,
-      sessionScope: session.role ? workflowAgentSessionScope(session.taskId, session.role) : null,
+      sessionScope,
     });
+  };
+  const policyBoundSessionRefForSession = (session: AgentSessionState): PolicyBoundSessionRef => {
+    const sessionScope = workflowScopeForSession(session);
+    return {
+      ...toRuntimeSessionRefWithPolicy(
+        repoPath,
+        session,
+        runtimePolicyForSession(session, sessionScope),
+      ),
+      ...(sessionScope ? { sessionScope } : {}),
+    };
   };
 
   for (const session of listAgentSessions(currentSessions)) {
@@ -78,9 +95,7 @@ export const buildRepoSessionReadModel = ({
     }
 
     if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
-      unlistedSessionRefs.push(
-        toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicyForSession(session)),
-      );
+      unlistedSessionRefs.push(policyBoundSessionRefForSession(session));
     }
   }
 
@@ -111,9 +126,7 @@ export const buildRepoSessionReadModel = ({
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
       projectedPendingInput.hasProjectedChildPendingInput
     ) {
-      liveSessionRefs.push(
-        toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicyForSession(session)),
-      );
+      liveSessionRefs.push(policyBoundSessionRefForSession(session));
     }
   }
 

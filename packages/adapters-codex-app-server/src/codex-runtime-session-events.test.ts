@@ -227,6 +227,49 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
+  test("preserves buffered request resolution ordering", async () => {
+    const session = createSession("thread-buffered-order");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        {
+          runtimeId: "runtime-1",
+          kind: "server_request",
+          message: {
+            id: "buffered-approval-1",
+            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+            params: {
+              threadId: "thread-buffered-order",
+              turnId: "turn-buffered-order",
+              itemId: "call-buffered-order",
+              command: "curl -I https://example.com",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "serverRequest/resolved",
+            params: {
+              threadId: "thread-buffered-order",
+              requestId: "buffered-approval-1",
+            },
+          },
+        },
+      ],
+      sessions,
+      pendingInput,
+    });
+
+    const hasPendingInput = await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(hasPendingInput).toBe(false);
+    expect(pendingInput.approval("buffered-approval-1")).toBeUndefined();
+    expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
+  });
+
   test("reprocesses child server requests buffered before a parent subagent link is learned", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");

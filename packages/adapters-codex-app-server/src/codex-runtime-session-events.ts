@@ -230,14 +230,10 @@ export class CodexRuntimeSessionEvents {
     handledRequestKeys: Set<string>,
   ): Promise<boolean> {
     const events = await this.deps.takeBufferedEvents(session.runtimeId);
-    const { notifications, requests } = this.partitionBufferedRuntimeEvents(events);
-    await this.handlePendingNotifications(session, notifications);
-    return this.processBufferedServerRequests(
-      session.runtimeId,
-      requests,
-      session,
-      handledRequestKeys,
-    );
+    for (const event of events) {
+      await this.processBufferedRuntimeEvent(session, handledRequestKeys, event);
+    }
+    return this.hasPendingInputForSession(session.threadId);
   }
 
   emitUserMessage(
@@ -664,56 +660,64 @@ export class CodexRuntimeSessionEvents {
     return hasPendingInput;
   }
 
-  private async processBufferedServerRequests(
-    runtimeId: string,
-    requests: CodexServerRequestRecord[],
+  private async processBufferedRuntimeEvent(
     preferredSession: CodexSessionState,
     preferredHandledRequestKeys: Set<string>,
-  ): Promise<boolean> {
-    let hasPendingInput = false;
-    const groupedRequests = new Map<string, CodexServerRequestRecord[]>();
-
-    for (const request of requests) {
-      const threadId = extractThreadIdFromParams(request.params);
-      if (!threadId) {
-        this.emitUnroutableRuntimeServerRequest(runtimeId);
-        continue;
-      }
-
-      const targetSession = this.sessionForBufferedRequest(runtimeId, threadId, preferredSession);
-      if (!targetSession) {
-        this.bufferRuntimeStreamEvent(threadId, {
-          runtimeId,
-          kind: "server_request",
-          message: request,
-        });
-        continue;
-      }
-
-      const sessionRequests = groupedRequests.get(targetSession.threadId) ?? [];
-      sessionRequests.push(request);
-      groupedRequests.set(targetSession.threadId, sessionRequests);
+    event: CodexRuntimeStreamEvent,
+  ): Promise<void> {
+    const threadId = threadIdFromRuntimeStreamEvent(event);
+    if (event.kind === "notification") {
+      await this.processBufferedNotification(preferredSession, threadId, event);
+      return;
     }
-
-    for (const [threadId, sessionRequests] of groupedRequests) {
-      const session =
-        threadId === preferredSession.threadId
-          ? preferredSession
-          : this.deps.sessions.get(threadId);
-      if (!session) {
-        continue;
-      }
-      const handledRequestKeys =
-        session.threadId === preferredSession.threadId ? preferredHandledRequestKeys : undefined;
-      hasPendingInput =
-        (await this.processServerRequestsForSession(
-          session,
-          sessionRequests,
-          handledRequestKeys,
-        )) || hasPendingInput;
+    if (!threadId) {
+      this.emitUnroutableRuntimeServerRequest(event.runtimeId);
+      return;
     }
+    const targetSession = this.sessionForBufferedRequest(
+      event.runtimeId,
+      threadId,
+      preferredSession,
+    );
+    if (!targetSession) {
+      this.bufferRuntimeStreamEvent(threadId, event);
+      return;
+    }
+    const handledRequestKeys =
+      targetSession.threadId === preferredSession.threadId
+        ? preferredHandledRequestKeys
+        : undefined;
+    await this.processServerRequestsForSession(
+      targetSession,
+      [parseServerRequestRecord(event.message)],
+      handledRequestKeys,
+    );
+  }
 
-    return hasPendingInput;
+  private async processBufferedNotification(
+    preferredSession: CodexSessionState,
+    threadId: string | null,
+    event: CodexRuntimeStreamEvent,
+  ): Promise<void> {
+    const notification = parseNotificationRecord(event.message);
+    if (notification.method === "serverRequest/resolved") {
+      this.handleServerRequestResolvedNotification(event.runtimeId, notification);
+      return;
+    }
+    if (!threadId) {
+      await this.handlePendingNotifications(preferredSession, [notification]);
+      return;
+    }
+    const targetSession =
+      threadId === preferredSession.threadId ? preferredSession : this.deps.sessions.get(threadId);
+    if (!targetSession) {
+      this.bufferRuntimeStreamEvent(threadId, event);
+      return;
+    }
+    if (targetSession.runtimeId !== event.runtimeId) {
+      return;
+    }
+    await this.handlePendingNotifications(targetSession, [notification]);
   }
 
   private sessionForBufferedRequest(
@@ -771,6 +775,13 @@ export class CodexRuntimeSessionEvents {
         )) || hasPendingInput;
     }
     return hasPendingInput;
+  }
+
+  private hasPendingInputForSession(threadId: string): boolean {
+    return (
+      this.deps.pendingInput.pendingApprovalEventsForSession(threadId).length > 0 ||
+      this.deps.pendingInput.pendingQuestionEventsForSession(threadId).length > 0
+    );
   }
 
   private async handlePendingNotifications(

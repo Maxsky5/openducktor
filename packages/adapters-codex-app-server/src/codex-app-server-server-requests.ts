@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   normalizeOdtWorkflowToolName,
 } from "@openducktor/core";
+import { codexServerRequestIdMetadata } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -231,6 +232,7 @@ export const handleCodexServerRequest = async (
     const questionInput = {
       requestId: parsed.request.requestId,
       questions: parsed.request.questions,
+      ...codexServerRequestIdMetadata(parsed.serverRequestId),
     };
     context.pendingInput.addQuestion({
       runtimeId: routeContext.runtimeId,

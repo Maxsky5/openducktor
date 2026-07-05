@@ -128,6 +128,7 @@ describe("handleCodexServerRequest", () => {
     });
     expect(pendingInput.approval("29")?.request.metadata).toEqual({
       codexMethod: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      codexServerRequestId: 29,
       params: expect.any(Object),
     });
     expect(events).toContainEqual(
