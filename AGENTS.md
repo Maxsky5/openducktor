@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Project
+
+OpenDucktor is a **Bun monorepo** for an **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with a workspace-scoped **SQLite task store** as task source-of-truth.
+
+Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
+
 ## Critical Notice — No Fallbacks
 
 - NEVER implement fallback logic to mask failures.
@@ -22,12 +28,6 @@
 
 - NEVER change database schemas, migration files, persisted record schemas, or durable SQLite/task-store record shapes without explicit human validation.
 - If a fix appears to require persisting new data or changing durable storage shape, stop and ask for approval first.
-
-## Project
-
-OpenDucktor is a **Bun monorepo** for a macOS-first **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with a workspace-scoped **SQLite task store** as task source-of-truth.
-
-Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 
 ### Monorepo Map
 
@@ -94,12 +94,7 @@ bun run build                # build all workspaces
 Package-level targets for focused iteration:
 
 ```sh
-bun run --filter @openducktor/core test
-bun run --filter @openducktor/electron test
-bun run --filter @openducktor/electron typecheck
-bun run --filter @openducktor/electron lint
 bun run --filter @openducktor/frontend test
-bun run --filter @openducktor/host test
 ```
 
 ## Styling & Theming (Critical)
@@ -172,15 +167,9 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 
 ## SQLite Task Store & Task Model
 
-- The SQLite task store is the sole source of truth for tasks in V1.
-- Lifecycle state is task `status` (not labels/phases).
+- The SQLite task store is the sole source of truth for tasks.
 - Task-store records must store durable task/workflow state only. Do not persist transient runtime or session interaction state there.
 - Never serialize pending permissions, pending questions, live runtime routes, in-progress transcripts, tool streaming state, or other recoverable live-only values into task-store records. Rehydrate those from the live runtime, event stream, or runtime-owned history instead.
-- Canonical statuses:
-  - built-in: `open`, `in_progress`, `blocked`, `closed`
-  - custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
-- UI label mapping: `open` → Backlog, `closed` → Done.
-- Agent-authored docs are task documents: `spec`, `implementationPlan`, `qaReports` (UI surfaces latest entries).
 - Task actions defined in `packages/contracts/src/task-schemas.ts` (`taskActionSchema`).
 - Detailed workflow docs: `docs/task-workflow-*.md`
 
@@ -196,7 +185,6 @@ Keep this contract stable. If you change any item below, update all related laye
 - Workflow tool normalization: `packages/core/src/services/odt-workflow-tools.ts`.
 - Agent Studio root: `packages/frontend/src/pages/agents/agents-page.tsx`; orchestration in `use-agent-studio-*.ts` hooks.
 - Runtime/session orchestration: `packages/frontend/src/state/operations/use-agent-orchestrator-operations.ts`.
-- Read-only roles (`spec`, `planner`, `qa`) must keep mutating permission auto-rejection.
 - Do not rename `odt_*` tools or change role allowlists in a single layer — update MCP, core, adapter, and frontend together.
 
 ## Testing
