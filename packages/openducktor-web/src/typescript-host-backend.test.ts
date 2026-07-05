@@ -218,6 +218,71 @@ describe("TypeScript web host backend", () => {
     }
   });
 
+  test("does not replay Codex app-server requests after resolved notifications", () => {
+    const eventBus = new BufferedHostEventBus();
+    eventBus.publish("openducktor://codex-app-server-event", {
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "approval-1",
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+    });
+    eventBus.publish("openducktor://codex-app-server-event", {
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "serverRequest/resolved",
+        params: { requestId: "approval-1" },
+      },
+    });
+
+    const replay = eventBus
+      .streamFor("openducktor://codex-app-server-event")
+      .replayAfter(null, { includeRecentWhenNoLastEventId: true });
+
+    expect(replay).toHaveLength(1);
+    expect(replay[0]?.payload).toContain('"method":"serverRequest/resolved"');
+    expect(replay[0]?.payload).not.toContain('"kind":"server_request"');
+  });
+
+  test("does not replay Codex app-server requests after explicit responses", async () => {
+    const eventBus = new BufferedHostEventBus();
+    eventBus.publish("openducktor://codex-app-server-event", {
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: 53,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+    });
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/codex_app_server_respond", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({
+          runtimeId: "runtime-live",
+          requestId: 53,
+          result: { decision: "approved" },
+        }),
+      }),
+      { eventBus },
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      eventBus
+        .streamFor("openducktor://codex-app-server-event")
+        .replayAfter(null, { includeRecentWhenNoLastEventId: true }),
+    ).toEqual([]);
+  });
+
   test("rejects malformed invoke command URI components as typed host request errors", async () => {
     const response = await handleTestRequest(
       new Request("http://127.0.0.1/invoke/%E0%A4%A", {
@@ -313,9 +378,11 @@ describe("TypeScript web host backend", () => {
       message: "Missing OpenDucktor web host app token.",
     });
 
-    const previewInvalid = await handleTestRequest(
-      new Request(previewUrl, { headers: { cookie: "openducktor_web_session=wrong" } }),
-    );
+    const previewInvalid = await handleTestRequest({
+      headers: new Headers([["cookie", "openducktor_web_session=wrong"]]),
+      method: "GET",
+      url: previewUrl,
+    } as Request);
     expect(previewInvalid.status).toBe(403);
     expect(await previewInvalid.json()).toEqual({
       error: "Invalid OpenDucktor web host app token.",

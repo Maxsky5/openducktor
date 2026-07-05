@@ -30,6 +30,9 @@ const hasEntries = <T>(value: readonly T[] | null | undefined): boolean =>
 const hasNetworkApprovalContext = (value: Record<string, unknown>): boolean =>
   value.networkApprovalContext !== undefined && value.networkApprovalContext !== null;
 
+const hasAdditionalNetworkPermissions = (value: unknown): boolean =>
+  isCodexAppServerRequestPermissionProfile(value) && value.network !== null;
+
 const classifyAdditionalPermissions = (value: unknown): AgentApprovalMutation => {
   if (value === undefined || value === null) {
     return "unknown";
@@ -84,6 +87,12 @@ export const classifyCodexCommandRequestMutation = (
   const additionalPermissions = classifyAdditionalPermissions(request.params.additionalPermissions);
   if (additionalPermissions === "mutating") {
     return additionalPermissions;
+  }
+  if (
+    hasNetworkApprovalContext(request.params) ||
+    hasAdditionalNetworkPermissions(request.params.additionalPermissions)
+  ) {
+    return "unknown";
   }
 
   if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {

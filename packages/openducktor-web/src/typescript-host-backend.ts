@@ -319,6 +319,23 @@ const webHostRequestErrorResponse = (
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
+const isJsonRpcRequestId = (value: unknown): value is string | number =>
+  typeof value === "string" || typeof value === "number";
+
+const forgetRespondedCodexAppServerRequest = (
+  eventBus: BufferedHostEventBus,
+  command: string,
+  args: Record<string, unknown>,
+): void => {
+  if (command !== "codex_app_server_respond") {
+    return;
+  }
+  const { runtimeId, requestId } = args;
+  if (typeof runtimeId !== "string" || !isJsonRpcRequestId(requestId)) {
+    return;
+  }
+  eventBus.forgetCodexAppServerRequest(runtimeId, requestId);
+};
 
 const parseJsonObjectBody = (
   request: Request,
@@ -527,6 +544,7 @@ const routeCorsRequest = ({
       const result = yield* hostCommandRouter
         .invoke(decodedCommand, args)
         .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
+      forgetRespondedCodexAppServerRequest(eventBus, decodedCommand, args);
       return jsonResponse(result, undefined, corsHeaders);
     }
 

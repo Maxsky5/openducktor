@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { SessionRef } from "@openducktor/core";
+import { type SessionRef, workflowAgentSessionScope } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
@@ -85,12 +85,16 @@ export const createPrepareSessionSend = ({
 
     assertNotStale();
     const task = findSessionTask(taskRef.current, session);
+    const sessionScope = workflowAgentSessionScope(session.taskId, session.role);
     const runtimePolicy = await resolveAgentSessionRuntimePolicy({
       runtimeKind: session.runtimeKind,
-      sessionScope: { kind: "workflow", taskId: session.taskId, role: session.role },
+      sessionScope,
       loadSettingsSnapshot,
     });
-    const sessionRef = toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy);
+    const sessionRef = {
+      ...toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy),
+      sessionScope,
+    };
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,

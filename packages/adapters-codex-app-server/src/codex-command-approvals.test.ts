@@ -61,6 +61,22 @@ describe("classifyCodexCommandRequestMutation", () => {
     ).toBe("unknown");
   });
 
+  test("keeps read-only command actions with managed network approvals actionable", () => {
+    expect(
+      classifyCodexCommandRequestMutation({
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          command: "cat README.md",
+          commandActions: [{ type: "read", command: "cat README.md", path: "README.md" }],
+          networkApprovalContext: {
+            host: "example.com",
+            protocol: "https",
+          },
+        },
+      }),
+    ).toBe("unknown");
+  });
+
   test("keeps network-only additional permissions actionable", () => {
     expect(
       classifyCodexCommandRequestMutation({
@@ -70,6 +86,22 @@ describe("classifyCodexCommandRequestMutation", () => {
           commandActions: [
             { type: "unknown", command: "curl -I --max-time 5 https://example.com" },
           ],
+          additionalPermissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      }),
+    ).toBe("unknown");
+  });
+
+  test("keeps read-only command actions with network-only additional permissions actionable", () => {
+    expect(
+      classifyCodexCommandRequestMutation({
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          command: "cat README.md",
+          commandActions: [{ type: "read", command: "cat README.md", path: "README.md" }],
           additionalPermissions: {
             network: { enabled: true },
             fileSystem: null,
