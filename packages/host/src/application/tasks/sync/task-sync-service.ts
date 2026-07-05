@@ -124,7 +124,7 @@ export const createTaskSyncService = ({
       ).pipe(
         Effect.map((fiber) => ({
           stop() {
-            return Fiber.interrupt(fiber).pipe(Effect.asVoid);
+            return Fiber.interruptFork(fiber);
           },
         })),
       );

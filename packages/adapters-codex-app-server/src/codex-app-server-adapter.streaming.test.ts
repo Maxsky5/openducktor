@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  bufferedNotificationEvent,
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexUserMessageInput,
@@ -7,6 +8,9 @@ import {
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexAppServerAdapter } from "./index";
+
+const bufferedNotifications = (messages: unknown[]) =>
+  messages.map((message) => bufferedNotificationEvent(message));
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -22,8 +26,8 @@ const observeSessionState = async (
 
 describe("CodexAppServerAdapter streaming", () => {
   test("emits transcript events from Codex notifications", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
 
@@ -31,9 +35,9 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
-    drainNotifications.mockImplementationOnce(async () => {
+    takeBufferedEvents.mockImplementationOnce(async () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({ turn: { id: "turn-1" } });
-      return [
+      return bufferedNotifications([
         {
           method: "turn/started",
           params: { threadId: "thread/start-runtime-live", turn: { id: "turn-1" } },
@@ -184,7 +188,7 @@ describe("CodexAppServerAdapter streaming", () => {
             turn: { id: "turn-1", status: "completed", completedAt: 1_777_766_403 },
           },
         },
-      ];
+      ]);
     });
 
     await adapter.sendUserMessage(
@@ -351,8 +355,8 @@ describe("CodexAppServerAdapter streaming", () => {
   test("streams native Codex tool calls with hydration-compatible names", async () => {
     const patch =
       "*** Begin Patch\n*** Update File: /repo/src/app.ts\n@@\n-old\n+new\n*** End Patch\n";
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
 
@@ -360,9 +364,9 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
-    drainNotifications.mockImplementationOnce(async () => {
+    takeBufferedEvents.mockImplementationOnce(async () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({ turn: { id: "turn-tools" } });
-      return [
+      return bufferedNotifications([
         {
           method: "turn/started",
           params: { threadId: "thread/start-runtime-live", turn: { id: "turn-tools" } },
@@ -456,7 +460,7 @@ describe("CodexAppServerAdapter streaming", () => {
             turn: { id: "turn-tools", completedAt: 1_777_766_415 },
           },
         },
-      ];
+      ]);
     });
 
     await adapter.sendUserMessage(
@@ -502,8 +506,8 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("preserves turn model when item notifications reveal the turn id before turn started", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
     adapter.updateSessionModel({
@@ -516,13 +520,13 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
-    drainNotifications.mockImplementationOnce(async () => {
+    takeBufferedEvents.mockImplementationOnce(async () => {
       setTimeout(() => {
         transports.get("runtime-live")?.turnStartDeferred.resolve({
           turn: { id: "turn-notification-first", status: "completed" },
         });
       }, 0);
-      return [
+      return bufferedNotifications([
         {
           method: "item/completed",
           params: {
@@ -555,7 +559,7 @@ describe("CodexAppServerAdapter streaming", () => {
             },
           },
         },
-      ];
+      ]);
     });
 
     await adapter.sendUserMessage(
@@ -581,8 +585,8 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("uses active turn model for completed user messages without turn id", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
 
@@ -590,7 +594,7 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
-    drainNotifications.mockImplementationOnce(async () => {
+    takeBufferedEvents.mockImplementationOnce(async () => {
       adapter.updateSessionModel({
         ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
@@ -601,7 +605,7 @@ describe("CodexAppServerAdapter streaming", () => {
           turn: { id: "turn-without-item-id", status: "completed" },
         });
       }, 0);
-      return [
+      return bufferedNotifications([
         {
           method: "item/completed",
           params: {
@@ -614,7 +618,7 @@ describe("CodexAppServerAdapter streaming", () => {
             },
           },
         },
-      ];
+      ]);
     });
 
     await adapter.sendUserMessage(
@@ -640,20 +644,19 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("ignores notifications for other Codex threads", async () => {
-    const drainNotifications = mock(
-      async (_runtimeId: string) =>
-        [
-          {
-            method: "item/completed",
-            params: {
-              threadId: "other-thread",
-              turnId: "turn-foreign",
-              item: { type: "agentMessage", id: "agent-foreign", text: "Wrong session" },
-            },
+    const takeBufferedEvents = mock(async (_runtimeId: string) =>
+      bufferedNotifications([
+        {
+          method: "item/completed",
+          params: {
+            threadId: "other-thread",
+            turnId: "turn-foreign",
+            item: { type: "agentMessage", id: "agent-foreign", text: "Wrong session" },
           },
-        ] as unknown[],
+        },
+      ]),
     );
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
     const events: unknown[] = [];
@@ -677,20 +680,20 @@ describe("CodexAppServerAdapter streaming", () => {
     );
   });
 
-  test("ignores threadless global Codex notifications while draining a session", async () => {
+  test("ignores threadless global Codex notifications while replaying buffered session events", async () => {
     let resolveTurnStart: (() => void) | null = null;
-    const drainNotifications = mock(async (_runtimeId: string) => {
+    const takeBufferedEvents = mock(async (_runtimeId: string) => {
       resolveTurnStart?.();
-      return [
+      return bufferedNotifications([
         {
           method: "fs/changed",
           params: {
             paths: ["/repo/src/file.ts"],
           },
         },
-      ] as unknown[];
+      ]);
     });
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
     resolveTurnStart = () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({
         turn: { id: "turn-1", status: "completed" },
@@ -710,11 +713,11 @@ describe("CodexAppServerAdapter streaming", () => {
     ).resolves.toMatchObject({ type: "user_message", message: "Hello Codex" });
   });
 
-  test("rejects thread-scoped drained notifications without a thread id", async () => {
+  test("rejects thread-scoped buffered notifications without a thread id", async () => {
     let resolveTurnStart: (() => void) | null = null;
-    const drainNotifications = mock(async (_runtimeId: string) => {
+    const takeBufferedEvents = mock(async (_runtimeId: string) => {
       resolveTurnStart?.();
-      return [
+      return bufferedNotifications([
         {
           method: "item/completed",
           params: {
@@ -722,9 +725,9 @@ describe("CodexAppServerAdapter streaming", () => {
             item: { type: "agentMessage", id: "agent-unscoped", text: "Wrong session" },
           },
         },
-      ] as unknown[];
+      ]);
     });
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
     resolveTurnStart = () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({
         turn: { id: "turn-1", status: "completed" },
@@ -746,9 +749,9 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("rejects timestamped Codex lifecycle notifications without runtime timestamps", async () => {
     let resolveTurnStart: (() => void) | null = null;
-    const drainNotifications = mock(async (_runtimeId: string) => {
+    const takeBufferedEvents = mock(async (_runtimeId: string) => {
       resolveTurnStart?.();
-      return [
+      return bufferedNotifications([
         {
           method: "item/completed",
           params: {
@@ -757,9 +760,9 @@ describe("CodexAppServerAdapter streaming", () => {
             item: { type: "agentMessage", id: "agent-missing-time", text: "Wrong time" },
           },
         },
-      ] as unknown[];
+      ]);
     });
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
     resolveTurnStart = () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({
         turn: { id: "turn-1", status: "completed" },
@@ -780,8 +783,8 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("settles a Codex turn from a terminal turn/start response", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
     transports.get("runtime-live")?.turnStartDeferred.resolve({
@@ -813,23 +816,25 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("keeps the active turn open when a different turn completes", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [
-      {
-        method: "turn/started",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turn: { id: "turn-active" },
+    const takeBufferedEvents = mock(async (_runtimeId: string) =>
+      bufferedNotifications([
+        {
+          method: "turn/started",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turn: { id: "turn-active" },
+          },
         },
-      },
-      {
-        method: "turn/completed",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turn: { id: "turn-other", status: "completed" },
+        {
+          method: "turn/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turn: { id: "turn-other", status: "completed" },
+          },
         },
-      },
-    ]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+      ]),
+    );
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
     transports.get("runtime-live")?.turnStartDeferred.resolve({
@@ -1432,8 +1437,8 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("maps completed update_plan dynamic tool calls into live session todos", async () => {
-    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
-    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
 
@@ -1441,9 +1446,9 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
-    drainNotifications.mockImplementationOnce(async () => {
+    takeBufferedEvents.mockImplementationOnce(async () => {
       transports.get("runtime-live")?.turnStartDeferred.resolve({ turn: { id: "turn-todos" } });
-      return [
+      return bufferedNotifications([
         {
           method: "turn/started",
           params: { threadId: "thread/start-runtime-live", turn: { id: "turn-todos" } },
@@ -1471,7 +1476,7 @@ describe("CodexAppServerAdapter streaming", () => {
             },
           },
         },
-      ];
+      ]);
     });
 
     await adapter.sendUserMessage(

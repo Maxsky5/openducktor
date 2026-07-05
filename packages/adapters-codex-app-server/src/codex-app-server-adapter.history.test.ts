@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  bufferedNotificationEvent,
   createAdapterWithTransport,
   createDeferred,
   createHarness,
@@ -23,7 +24,7 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 
 describe("CodexAppServerAdapter history loading", () => {
   test("loads Codex history and diff from App Server reads", async () => {
-    const { adapter, drainNotifications, transports } = createHarness();
+    const { adapter, takeBufferedEvents, transports } = createHarness();
 
     await adapter.startSession({
       repoPath: "/repo",
@@ -35,8 +36,8 @@ describe("CodexAppServerAdapter history loading", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    drainNotifications.mockImplementation(async () => [
-      restoredTokenUsageNotification("thread/start-runtime-live"),
+    takeBufferedEvents.mockImplementation(async () => [
+      bufferedNotificationEvent(restoredTokenUsageNotification("thread/start-runtime-live")),
     ]);
 
     const history = await adapter.loadSessionHistory({
@@ -502,9 +503,9 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("loads idle history through the fast read path before restoring context", async () => {
-    const { adapter, drainNotifications, transports } = createHarness();
+    const { adapter, takeBufferedEvents, transports } = createHarness();
 
-    drainNotifications.mockImplementation(async () => {
+    takeBufferedEvents.mockImplementation(async () => {
       const didRequestRestoredUsage = transports
         .get("runtime-live")
         ?.calls.some(
@@ -513,7 +514,9 @@ describe("CodexAppServerAdapter history loading", () => {
             (call.params as { threadId?: string }).threadId === "thread-idle" &&
             (call.params as { excludeTurns?: boolean }).excludeTurns === false,
         );
-      return didRequestRestoredUsage ? [restoredTokenUsageNotification("thread-idle")] : [];
+      return didRequestRestoredUsage
+        ? [bufferedNotificationEvent(restoredTokenUsageNotification("thread-idle"))]
+        : [];
     });
 
     const history = await adapter.loadSessionHistory({
@@ -609,9 +612,9 @@ describe("CodexAppServerAdapter history loading", () => {
       },
     };
     const adapter = createAdapterWithTransport(transport, {
-      drainNotifications: async () =>
+      takeBufferedEvents: async () =>
         calls.some((call) => call.method === "thread/resume")
-          ? [restoredTokenUsageNotification("thread-unloaded-idle")]
+          ? [bufferedNotificationEvent(restoredTokenUsageNotification("thread-unloaded-idle"))]
           : [],
     });
 

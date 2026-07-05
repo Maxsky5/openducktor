@@ -746,7 +746,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         },
       },
       transportFactory: () => new RecordingTransport("runtime-live", false),
-      drainServerRequests: async () => [],
+      takeBufferedEvents: async () => [],
       respondServerRequest: async () => {},
     });
 
@@ -765,7 +765,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         }),
       },
       transportFactory: () => transport,
-      drainServerRequests: async () => [],
+      takeBufferedEvents: async () => [],
       respondServerRequest: async () => {},
     });
 

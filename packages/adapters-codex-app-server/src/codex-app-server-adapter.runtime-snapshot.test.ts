@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  bufferedNotificationEvent,
   codexSessionRef,
   codexSessionRuntimeRef,
   codexUserMessageInput,
@@ -544,7 +545,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   test("does not let background Codex context restore status mark a loaded idle session running", async () => {
     const transport = new StoredIdleHistoryTransport("runtime-live", false);
     let didDrainHistoryResumeNotifications = false;
-    const drainNotifications = mock(async () => {
+    const takeBufferedEvents = mock(async () => {
       const didResumeForHistory = transport.calls.some(
         (call) =>
           call.method === "thread/resume" &&
@@ -556,14 +557,14 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       }
       didDrainHistoryResumeNotifications = true;
       return [
-        {
+        bufferedNotificationEvent({
           method: "thread/status/changed",
           params: {
             threadId: "thread-idle",
             status: { type: "active", activeFlags: [] },
           },
-        },
-        {
+        }),
+        bufferedNotificationEvent({
           method: "thread/tokenUsage/updated",
           params: {
             threadId: "thread-idle",
@@ -574,11 +575,11 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
               modelContextWindow: 200_000,
             },
           },
-        },
+        }),
       ];
     });
     const { adapter } = createHarness({
-      drainNotifications,
+      takeBufferedEvents,
       transportFactory: mock(() => transport),
     });
 
@@ -625,7 +626,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       return () => {};
     });
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -884,12 +885,10 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainNotifications = mock(async () => [] as unknown[]);
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const transport = new MutableThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -957,8 +956,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         externalSessionId: "thread-saved",
       }),
     ).resolves.toMatchObject({ classification: "idle" });
-    expect(drainNotifications).not.toHaveBeenCalled();
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     unsubscribe();
   });
 
@@ -972,8 +971,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
     const transport = new ChildThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
-      drainServerRequests: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1019,8 +1017,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
     const transport = new MutableThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
-      drainServerRequests: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1117,8 +1114,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
     const transport = new ParentWithChildThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
-      drainServerRequests: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1219,8 +1215,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
     const transport = new MutableThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
-      drainServerRequests: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1266,8 +1261,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
     const transport = new MutableThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications: mock(async () => [] as unknown[]),
-      drainServerRequests: mock(async () => [] as unknown[]),
+      takeBufferedEvents: mock(async () => [] as unknown[]),
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1304,12 +1298,10 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainNotifications = mock(async () => [] as unknown[]);
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const transport = new MutableThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
-      drainNotifications,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
       transportFactory: mock(() => transport),
     });
@@ -1358,8 +1350,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         externalSessionId: "thread-saved",
       }),
     ).resolves.toMatchObject({ classification: "idle" });
-    expect(drainNotifications).not.toHaveBeenCalled();
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     unsubscribe();
   });
 });

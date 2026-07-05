@@ -28,8 +28,7 @@ const createRuntimeEvents = (
 ) =>
   new CodexRuntimeSessionEvents({
     subscribeEvents: undefined,
-    drainServerRequests: async () => [],
-    drainNotifications: undefined,
+    takeBufferedEvents: undefined,
     respondServerRequest: async () => undefined,
     sessions: new Map(),
     activeTurnsBySessionId: new Map(),
@@ -315,7 +314,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(1);
   });
 
-  test("does not let history projection drain live buffered child requests", async () => {
+  test("does not let history projection consume live buffered child requests", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
@@ -542,7 +541,7 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
-  test("does not drain buffered child requests across runtimes", async () => {
+  test("does not process buffered child requests across runtimes", async () => {
     const listeners = new Map<string, RuntimeListener>();
     const parentSession = createSessionForRuntime("parent-thread", "runtime-1");
     const runtimeTwoSession = createSessionForRuntime("runtime-two-thread", "runtime-2");
@@ -627,7 +626,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(runtimeTwoEvents).toEqual([]);
   });
 
-  test("drains buffered child approvals when an inventory route is known before parent load", async () => {
+  test("processes buffered child approvals when an inventory route is known before parent load", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map<string, CodexSessionState>();
@@ -673,7 +672,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.approval("52")).toBeUndefined();
 
     sessions.set(parentSession.threadId, parentSession);
-    await runtimeEvents.drainBufferedStreamEvents(parentSession.threadId);
+    await runtimeEvents.replayBufferedStreamEvents(parentSession.threadId);
 
     expect(pendingInput.approval("52")).toMatchObject({
       threadId: "child-thread",

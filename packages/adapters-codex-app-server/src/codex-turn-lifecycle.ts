@@ -22,12 +22,9 @@ import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
-const RETAINED_SERVER_REQUEST_DRAIN_INTERVAL_MS = 250;
-const RETAINED_SERVER_REQUEST_DRAIN_MAX_ATTEMPTS = 120;
-
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
-  shouldDrainNotifications: boolean;
+  shouldTakeBufferedEvents: boolean;
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -40,11 +37,7 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  handlePendingServerRequests(
-    session: CodexSessionState,
-    handledRequestKeys: Set<string>,
-  ): Promise<boolean>;
-  handleRetainedServerRequests(
+  handleBufferedRuntimeEvents(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
   ): Promise<boolean>;
@@ -82,7 +75,7 @@ const emitAcceptedUserMessage = (
   acceptedUserMessage: AcceptedAgentUserMessage,
   parts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  if (!context.subscribeEvents && context.shouldDrainNotifications) {
+  if (!context.subscribeEvents && context.shouldTakeBufferedEvents) {
     return acceptedUserMessage;
   }
   return context.emitUserMessage(acceptedUserMessage, parts);
@@ -110,7 +103,7 @@ const steerActiveTurn = async (
 ): Promise<AcceptedAgentUserMessage | null> => {
   const input = toCodexTurnInputList(parts);
   if (!activeTurn.turnId && !context.subscribeEvents) {
-    await context.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
+    await context.handleBufferedRuntimeEvents(activeTurn.session, activeTurn.handledRequestKeys);
   }
   if (activeTurn.isTurnSettled()) {
     return null;
@@ -133,67 +126,6 @@ const emitTurnStartErrorLater = (
   turnStartPromise: Promise<unknown>,
 ): void => {
   void turnStartPromise.catch((error) => {
-    context.emitSessionEvent(session.threadId, {
-      type: "session_error",
-      externalSessionId: session.threadId,
-      timestamp: new Date().toISOString(),
-      message: error instanceof Error ? error.message : String(error),
-    });
-  });
-};
-
-const waitForRetainedServerRequestDrain = (): Promise<void> =>
-  new Promise((resolve) => {
-    const timeout = setTimeout(resolve, RETAINED_SERVER_REQUEST_DRAIN_INTERVAL_MS);
-    if (typeof timeout === "object" && timeout !== null && "unref" in timeout) {
-      timeout.unref();
-    }
-  });
-
-const drainRetainedServerRequestsForActiveTurn = async (
-  context: CodexTurnLifecycleContext,
-  session: CodexSessionState,
-  activeTurn: ActiveCodexTurn,
-): Promise<boolean> => {
-  const hasPendingInput = await context.handleRetainedServerRequests(
-    session,
-    activeTurn.handledRequestKeys,
-  );
-  if (hasPendingInput && !activeTurn.isTurnSettled()) {
-    context.bindPendingInputToActiveTurn(session.threadId, activeTurn);
-    return true;
-  }
-  return false;
-};
-
-const recoverRetainedServerRequestsLater = (
-  context: CodexTurnLifecycleContext,
-  session: CodexSessionState,
-  activeTurn: ActiveCodexTurn,
-): void => {
-  void (async () => {
-    if (await drainRetainedServerRequestsForActiveTurn(context, session, activeTurn)) {
-      return;
-    }
-
-    try {
-      await activeTurn.turnStartPromise;
-    } catch {
-      return;
-    }
-
-    for (let attempt = 0; attempt < RETAINED_SERVER_REQUEST_DRAIN_MAX_ATTEMPTS; attempt += 1) {
-      if (activeTurn.isTurnSettled()) {
-        return;
-      }
-
-      if (await drainRetainedServerRequestsForActiveTurn(context, session, activeTurn)) {
-        return;
-      }
-
-      await waitForRetainedServerRequestDrain();
-    }
-  })().catch((error) => {
     context.emitSessionEvent(session.threadId, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -301,7 +233,7 @@ export const startCodexTurnForSession = async (
         context.bindActiveTurnId(activeTurnState, turnId);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (!context.subscribeEvents && !context.shouldDrainNotifications) {
+      if (!context.subscribeEvents && !context.shouldTakeBufferedEvents) {
         context.emitUserMessage(acceptedUserMessage, parts);
         activeTurnState.markTurnSettled();
       } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
@@ -318,12 +250,11 @@ export const startCodexTurnForSession = async (
 
   if (context.subscribeEvents) {
     context.emitUserMessage(acceptedUserMessage, parts);
-    recoverRetainedServerRequestsLater(context, session, activeTurnState);
     emitTurnStartErrorLater(context, session, turnStartPromise);
     return acceptedUserMessage;
   }
 
-  const hasPendingInput = await context.handlePendingServerRequests(session, handledRequestKeys);
+  const hasPendingInput = await context.handleBufferedRuntimeEvents(session, handledRequestKeys);
   if (hasPendingInput && !turnSettled) {
     context.bindPendingInputToActiveTurn(session.threadId, activeTurnState);
     emitTurnStartErrorLater(context, session, turnStartPromise);

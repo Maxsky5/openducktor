@@ -7,11 +7,7 @@ import {
   type RuntimeApprovalReplyOutcome,
   type RuntimeApprovalRequestType,
 } from "@openducktor/contracts";
-import type {
-  AgentApprovalMutation,
-  AgentPendingApprovalRequest,
-  AgentRole,
-} from "@openducktor/core";
+import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
@@ -278,7 +274,6 @@ const approvalContentFields = (
 
 export const toApprovalRequest = (
   request: CodexServerRequestRecord,
-  role: AgentRole,
 ): AgentPendingApprovalRequest => {
   if (request.id === undefined) {
     throw new Error("Codex app-server approval request is missing an id.");
@@ -293,7 +288,6 @@ export const toApprovalRequest = (
     ...commandApprovalFields(request),
     metadata: {
       codexMethod: request.method,
-      role,
       params: request.params,
     },
   };

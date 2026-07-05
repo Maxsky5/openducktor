@@ -238,9 +238,9 @@ export const createCodexAppServerCommandHandlers = (
         ),
       );
   },
-  codex_app_server_notifications: (args) =>
-    codexAppServerService.notifications(parseRuntimeInput(args, "codex_app_server_notifications")),
-  codex_app_server_requests: (args) =>
-    codexAppServerService.requests(parseRuntimeInput(args, "codex_app_server_requests")),
+  codex_app_server_take_buffered_events: (args) =>
+    codexAppServerService.takeBufferedEvents(
+      parseRuntimeInput(args, "codex_app_server_take_buffered_events"),
+    ),
   codex_app_server_respond: (args) => codexAppServerService.respond(parseRespondInput(args)),
 });

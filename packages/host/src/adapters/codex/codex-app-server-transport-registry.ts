@@ -6,10 +6,10 @@ import {
 } from "../../effect/host-errors";
 import type {
   CodexAppServerPort,
-  CodexAppServerProtocolMessage,
   CodexAppServerRequestInput,
   CodexAppServerRequestResult,
   CodexAppServerRespondInput,
+  CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
 import {
@@ -24,8 +24,7 @@ export type CodexAppServerTransport = {
   request(
     input: CodexAppServerClientRequest,
   ): Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportError>;
-  drainNotifications(): Effect.Effect<CodexAppServerProtocolMessage[], never>;
-  drainServerRequests(): Effect.Effect<CodexAppServerProtocolMessage[], never>;
+  takeBufferedEvents(): Effect.Effect<CodexAppServerStreamEvent[], never>;
   respond(
     input: Omit<CodexAppServerRespondInput, "runtimeId">,
   ): Effect.Effect<void, CodexAppServerTransportError>;
@@ -121,16 +120,10 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
         });
       });
     },
-    drainNotifications(runtimeId) {
+    takeBufferedEvents(runtimeId) {
       return Effect.gen(function* () {
         const transport = yield* requireTransport(runtimeId);
-        return yield* transport.drainNotifications();
-      });
-    },
-    drainServerRequests(runtimeId) {
-      return Effect.gen(function* () {
-        const transport = yield* requireTransport(runtimeId);
-        return yield* transport.drainServerRequests();
+        return yield* transport.takeBufferedEvents();
       });
     },
     respond({ runtimeId, requestId, result, error }) {

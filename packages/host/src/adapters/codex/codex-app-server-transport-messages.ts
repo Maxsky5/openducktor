@@ -104,10 +104,7 @@ export const resolveAfterQueuedMessages = (
   setImmediate(() => resolve(value));
 };
 
-export const pushBoundedMessage = (
-  messages: CodexAppServerProtocolMessage[],
-  message: CodexAppServerProtocolMessage,
-): void => {
+export const pushBoundedMessage = <Message>(messages: Message[], message: Message): void => {
   messages.push(message);
   if (messages.length > MAX_BUFFERED_STREAM_MESSAGES) {
     messages.splice(0, messages.length - MAX_BUFFERED_STREAM_MESSAGES);

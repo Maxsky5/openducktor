@@ -35,7 +35,7 @@ type CodexSessionHistoryInput = {
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
   tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
-  drainThreadReadTokenUsage: (
+  collectThreadReadTokenUsage: (
     runtimeId: string,
     threadId: string,
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
@@ -167,7 +167,7 @@ export const loadCodexSessionHistory = async ({
   eventMapperPipeline,
   modelByTurnKey,
   tokenUsageByTurnKey,
-  drainThreadReadTokenUsage,
+  collectThreadReadTokenUsage,
   rememberTodos,
   threadResumePolicy,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
@@ -195,7 +195,7 @@ export const loadCodexSessionHistory = async ({
     return [];
   }
   rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
-  const tokenUsageByTurnId = await drainThreadReadTokenUsage(runtimeId, input.externalSessionId);
+  const tokenUsageByTurnId = await collectThreadReadTokenUsage(runtimeId, input.externalSessionId);
   return projectCodexThreadReadToHistory({
     input,
     session,

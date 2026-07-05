@@ -6,7 +6,7 @@ import type {
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
-import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
+import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import type {
   CodexAppServerClientNotification,
   CodexAppServerRequestMethod,
@@ -23,13 +23,8 @@ export type CodexAppServerChildTransport = CodexAppServerTransport & {
   notify(
     notification: CodexAppServerClientNotification,
   ): Effect.Effect<void, CodexAppServerTransportError>;
+  rejectPendingRequestsForShutdown(): Effect.Effect<void, never>;
   close(): Effect.Effect<void, never>;
-};
-
-export type CodexAppServerStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  message: CodexAppServerProtocolMessage;
 };
 
 export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => void;

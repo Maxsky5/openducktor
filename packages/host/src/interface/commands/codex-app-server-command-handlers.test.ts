@@ -75,10 +75,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       listThreads() {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
-      notifications() {
-        return Effect.succeed([]);
-      },
-      requests() {
+      takeBufferedEvents() {
         return Effect.succeed([]);
       },
       respond() {
@@ -171,13 +168,15 @@ describe("createCodexAppServerCommandHandlers", () => {
         calls.push({ method: "listThreads", input });
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
-      notifications(input) {
-        calls.push({ method: "notifications", input });
-        return Effect.succeed([codexStatusNotification]);
-      },
-      requests(input) {
-        calls.push({ method: "requests", input });
-        return Effect.succeed([]);
+      takeBufferedEvents(input) {
+        calls.push({ method: "takeBufferedEvents", input });
+        return Effect.succeed([
+          {
+            runtimeId: input.runtimeId,
+            kind: "notification" as const,
+            message: codexStatusNotification,
+          },
+        ]);
       },
       respond(input) {
         calls.push({ method: "respond", input });
@@ -223,11 +222,10 @@ describe("createCodexAppServerCommandHandlers", () => {
       }),
     ).resolves.toEqual({});
     await expect(
-      router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([codexStatusNotification]);
-    await expect(
-      router.invoke("codex_app_server_requests", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([]);
+      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
+    ).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
+    ]);
     await expect(
       router.invoke("codex_app_server_respond", {
         runtimeId: "runtime-1",
@@ -280,11 +278,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         },
       },
       {
-        method: "notifications",
-        input: { runtimeId: "runtime-1" },
-      },
-      {
-        method: "requests",
+        method: "takeBufferedEvents",
         input: { runtimeId: "runtime-1" },
       },
       {
@@ -340,10 +334,7 @@ describe("createCodexAppServerCommandHandlers", () => {
           }),
         );
       },
-      notifications(input) {
-        return unexpectedCall(input);
-      },
-      requests(input) {
+      takeBufferedEvents(input) {
         return unexpectedCall(input);
       },
       respond(input) {
@@ -380,8 +371,8 @@ describe("createCodexAppServerCommandHandlers", () => {
         result: { omitted: undefined },
       }),
     ).rejects.toThrow("result must be JSON-serializable.");
-    await expect(router.invoke("codex_app_server_notifications")).rejects.toThrow(
-      "codex_app_server_notifications input must be an object.",
+    await expect(router.invoke("codex_app_server_take_buffered_events")).rejects.toThrow(
+      "codex_app_server_take_buffered_events input must be an object.",
     );
     expect(calls).toEqual([]);
   });

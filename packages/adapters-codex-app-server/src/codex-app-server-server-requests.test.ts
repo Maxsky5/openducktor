@@ -89,52 +89,62 @@ const mcpToolApprovalRequest = ({
 });
 
 describe("handleCodexServerRequest", () => {
-  test("rejects mutating requests when the session role is unknown", async () => {
+  test("surfaces command approvals when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
     const events: unknown[] = [];
 
     await expect(
       handleCodexServerRequest(
-        createRequestContext({ events, respondServerRequest }),
+        createRequestContext({ events, pendingInput, respondServerRequest }),
         createSession(null),
         {
           id: 29,
-          method: "approval/request",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
           params: {
             threadId: "thread-unknown-role",
             turnId: "turn-unknown-role",
-            tool: "network",
-            url: "https://example.com",
+            itemId: "call-1",
+            startedAtMs: 1,
+            command: "curl -I https://example.com",
+            cwd: "/repo",
+            reason: "Need network access.",
+            networkApprovalContext: { host: "example.com" },
           },
         },
         new Set(),
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
 
-    expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-live",
-      29,
-      expect.objectContaining({
-        approved: false,
-        outcome: "reject",
-        message: expect.stringContaining("session role is unknown"),
-      }),
-      undefined,
-    );
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    expect(pendingInput.approval("29")).toMatchObject({
+      runtimeId: "runtime-live",
+      threadId: "thread-unknown-role",
+      request: {
+        requestId: "29",
+        requestType: "command_execution",
+        title: "Network access approval requested",
+      },
+    });
+    expect(pendingInput.approval("29")?.request.metadata).toEqual({
+      codexMethod: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: expect.any(Object),
+    });
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("session role is unknown"),
+        type: "approval_required",
+        requestId: "29",
       }),
     );
   });
 
-  test("does not call non-mutating unknown-role rejections mutating", async () => {
+  test("surfaces unknown approval-like requests when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
     const events: unknown[] = [];
 
     await handleCodexServerRequest(
-      createRequestContext({ events, respondServerRequest }),
+      createRequestContext({ events, pendingInput, respondServerRequest }),
       createSession(null),
       {
         id: 30,
@@ -144,10 +154,17 @@ describe("handleCodexServerRequest", () => {
       new Set(),
     );
 
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    expect(pendingInput.approval("30")).toMatchObject({
+      request: {
+        requestId: "30",
+        title: "Codex status/check",
+      },
+    });
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "session_error",
-        message: "Rejected Codex request 'status/check' because the session role is unknown.",
+        type: "approval_required",
+        requestId: "30",
       }),
     );
   });

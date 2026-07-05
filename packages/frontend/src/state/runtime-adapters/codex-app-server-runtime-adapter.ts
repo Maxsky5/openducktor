@@ -45,11 +45,8 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
   new CodexAppServerAdapter({
     repoRuntimeResolver: hostRepoRuntimeResolver,
     transportFactory: createCodexHostTransportFactory(),
-    drainServerRequests: async (runtimeId: string) => {
-      return host.codexAppServerRequests(runtimeId) as Promise<unknown[]>;
-    },
-    drainNotifications: async (runtimeId: string) => {
-      return host.codexAppServerNotifications(runtimeId) as Promise<unknown[]>;
+    takeBufferedEvents: async (runtimeId: string) => {
+      return host.takeCodexAppServerBufferedEvents(runtimeId);
     },
     subscribeEvents: (runtimeId, listener) => {
       const subscribe = subscribeCodexAppServerEvents;

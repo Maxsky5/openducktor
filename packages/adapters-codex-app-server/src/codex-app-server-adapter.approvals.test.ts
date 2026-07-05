@@ -14,6 +14,12 @@ import {
 const CURL_NETWORK_COMMAND =
   "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
 
+const bufferedServerRequest = (message: unknown) => ({
+  runtimeId: "runtime-live",
+  kind: "server_request" as const,
+  message,
+});
+
 describe("CodexAppServerAdapter approvals", () => {
   test("emits a session error for streamed server requests missing a thread identifier", async () => {
     const streamListeners: Array<
@@ -117,9 +123,9 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter, respondServerRequest } = createHarness({
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
 
@@ -182,111 +188,27 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     });
     expect(approval).not.toHaveProperty("details");
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     expect(respondServerRequest).not.toHaveBeenCalled();
     unsubscribe();
   });
 
-  test("drains retained command approvals once during subscribed live turns", async () => {
-    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
-    const request = {
-      id: "network-approval-1",
-      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-      params: {
-        threadId: "thread/start-runtime-live",
-        turnId: "turn-1",
-        itemId: "call-1",
-        startedAtMs: 1,
-        reason:
-          "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
-        command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
-        cwd: "/repo",
-        commandActions: [
-          {
-            type: "unknown",
-            command: CURL_NETWORK_COMMAND,
-          },
-        ],
-        networkApprovalContext: {
-          host: "example.com",
-          protocol: "https",
-        },
-      },
-    };
-    const drainServerRequests = mock(async () => [request] as unknown[]);
-    const { adapter, transports, respondServerRequest } = createHarness(
+  test("requires a server request to create command approvals", async () => {
+    const streamListeners: Array<
+      (event: {
+        runtimeId: string;
+        kind: "notification" | "server_request";
+        message: unknown;
+      }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
+    const { adapter } = createHarness(
       {
-        drainServerRequests,
-        subscribeEvents,
-      },
-      { deferTurnStart: true },
-    );
-
-    await adapter.startSession(codexStartSessionInput());
-
-    const events: unknown[] = [];
-    const unsubscribe = await adapter.subscribeEvents(
-      codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => events.push(event),
-    );
-
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-live",
-        parts: [{ kind: "text", text: "Check network with curl" }],
-      }),
-    );
-
-    await flushCodexAdapterWork();
-
-    expect(drainServerRequests).toHaveBeenCalledTimes(1);
-    expect(
-      events.filter((event) => (event as { type?: unknown }).type === "user_message"),
-    ).toHaveLength(1);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "approval_required",
-        requestId: "network-approval-1",
-        title: "Network access approval requested",
-      }),
-    );
-    expect(respondServerRequest).not.toHaveBeenCalled();
-    transports.get("runtime-live")?.turnStartDeferred.resolve({});
-    unsubscribe();
-  });
-
-  test("drains retained command approvals after turn start returns", async () => {
-    const subscribeEvents = mock((_runtimeId: string, _listener) => () => {});
-    const request = {
-      id: "network-approval-after-start",
-      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-      params: {
-        threadId: "thread/start-runtime-live",
-        turnId: "turn-1",
-        itemId: "call-1",
-        startedAtMs: 1,
-        reason: "Allow terminal network access?",
-        command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
-        cwd: "/repo",
-        commandActions: [
-          {
-            type: "unknown",
-            command: CURL_NETWORK_COMMAND,
-          },
-        ],
-        networkApprovalContext: {
-          host: "example.com",
-          protocol: "https",
-        },
-      },
-    };
-    let requestAvailable = false;
-    const drainServerRequests = mock(async () =>
-      requestAvailable ? ([request] as unknown[]) : ([] as unknown[]),
-    );
-    const { adapter, transports, respondServerRequest } = createHarness(
-      {
-        drainServerRequests,
+        takeBufferedEvents,
         subscribeEvents,
       },
       { deferTurnStart: true },
@@ -307,11 +229,81 @@ describe("CodexAppServerAdapter approvals", () => {
       }),
     );
     await flushCodexAdapterWork();
-    expect(drainServerRequests).toHaveBeenCalledTimes(1);
 
-    requestAvailable = true;
-    transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-1", status: "in_progress" },
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "thread/status/changed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          status: {
+            type: "active",
+            activeFlags: ["waitingOnApproval"],
+          },
+        },
+      },
+    });
+
+    await flushCodexAdapterWork();
+
+    expect(events.some((event) => (event as { type?: unknown }).type === "approval_required")).toBe(
+      false,
+    );
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("surfaces live command approvals before turn start settles", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
+    const { adapter, transports, respondServerRequest } = createHarness(
+      {
+        takeBufferedEvents,
+        subscribeEvents,
+      },
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Check network with curl" }],
+      }),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "network-approval-live",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-1",
+          itemId: "call-1",
+          startedAtMs: 1,
+          reason: "Allow terminal network access?",
+          networkApprovalContext: {
+            host: "example.com",
+            protocol: "https",
+          },
+        },
+      },
     });
 
     const approval = await waitForEvent(
@@ -320,16 +312,17 @@ describe("CodexAppServerAdapter approvals", () => {
         typeof event === "object" &&
         event !== null &&
         (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
-        (event as { requestId?: unknown }).requestId === "network-approval-after-start",
+        (event as { requestId?: unknown }).requestId === "network-approval-live",
     );
 
     expect(approval).toMatchObject({
-      requestId: "network-approval-after-start",
+      requestId: "network-approval-live",
       requestType: "command_execution",
       title: "Network access approval requested",
     });
-    expect(drainServerRequests).toHaveBeenCalledTimes(2);
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     expect(respondServerRequest).not.toHaveBeenCalled();
+    transports.get("runtime-live")?.turnStartDeferred.resolve({});
     unsubscribe();
   });
 
@@ -341,9 +334,9 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter, respondServerRequest } = createHarness({
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
 
@@ -394,7 +387,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
       undefined,
     );
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "session_error",
@@ -405,7 +398,7 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces unknown Codex server methods as approval requests", async () => {
-    const { adapter, transports, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, transports, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
@@ -413,8 +406,8 @@ describe("CodexAppServerAdapter approvals", () => {
     await adapter.startSession(codexStartSessionInput());
 
     const transport = transports.get("runtime-live");
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 19,
         method: "item/unknown",
         params: {
@@ -424,7 +417,7 @@ describe("CodexAppServerAdapter approvals", () => {
           tool: "odt_read_task",
           arguments: { taskId: "task-1" },
         },
-      },
+      }),
     ]);
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -548,15 +541,15 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("rejects approval replies routed through another session", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
 
     await adapter.startSession(codexStartSessionInput());
 
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 33,
         method: "approval/request",
         params: {
@@ -565,7 +558,7 @@ describe("CodexAppServerAdapter approvals", () => {
           tool: "network",
           url: "https://example.com",
         },
-      },
+      }),
     ]);
 
     await adapter.sendUserMessage(
@@ -593,9 +586,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
-    const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    const { adapter, takeBufferedEvents } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 31,
         method: "approval/request",
         params: {
@@ -604,7 +597,7 @@ describe("CodexAppServerAdapter approvals", () => {
           tool: "network",
           url: "https://example.com",
         },
-      },
+      }),
     ]);
 
     await adapter.startSession(codexStartSessionInput());
@@ -638,13 +631,13 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces and resolves Codex user-input question requests", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
     const events: unknown[] = [];
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 32,
         method: "item/tool/requestUserInput",
         params: {
@@ -661,7 +654,7 @@ describe("CodexAppServerAdapter approvals", () => {
             },
           ],
         },
-      },
+      }),
     ]);
 
     await adapter.startSession(codexStartSessionInput());
@@ -765,12 +758,12 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("resolves Codex MCP tool approvals with session persistence metadata", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 37,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
         params: {
@@ -786,7 +779,7 @@ describe("CodexAppServerAdapter approvals", () => {
             persist: ["session", "always"],
           },
         },
-      },
+      }),
     ]);
 
     await adapter.startSession(codexStartSessionInput());
@@ -831,9 +824,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("clears pending Codex input state when local stop cleanup runs", async () => {
-    const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    const { adapter, takeBufferedEvents } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 36,
         method: "item/tool/requestUserInput",
         params: {
@@ -842,7 +835,7 @@ describe("CodexAppServerAdapter approvals", () => {
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
         },
-      },
+      }),
     ]);
 
     await adapter.startSession(codexStartSessionInput());
@@ -878,12 +871,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("steers active Codex turns for queued user messages", async () => {
-    const { adapter, drainServerRequests, transports } = createHarness(
-      {},
-      { deferTurnStart: true },
-    );
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    const { adapter, takeBufferedEvents, transports } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 33,
         method: "item/tool/requestUserInput",
         params: {
@@ -892,7 +882,7 @@ describe("CodexAppServerAdapter approvals", () => {
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
         },
-      },
+      }),
     ]);
 
     await adapter.startSession(codexStartSessionInput());
@@ -964,10 +954,10 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter } = createHarness({
       respondServerRequest,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
     const approvalRequest = {
@@ -1068,10 +1058,10 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter } = createHarness({
       respondServerRequest,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
 
@@ -1145,7 +1135,7 @@ describe("CodexAppServerAdapter approvals", () => {
         message: expect.stringContaining("must use MCP"),
       }),
     );
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     unsubscribe();
   });
 });

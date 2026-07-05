@@ -56,9 +56,12 @@ export class BufferedHostEventStream {
     }
   }
 
-  replayAfter(lastSeenId: number | null): BufferedHostEvent[] {
+  replayAfter(
+    lastSeenId: number | null,
+    options: { includeRecentWhenNoLastEventId?: boolean } = {},
+  ): BufferedHostEvent[] {
     if (lastSeenId === null) {
-      return [];
+      return options.includeRecentWhenNoLastEventId ? [...this.recent] : [];
     }
     return this.recent.filter((event) => event.id > lastSeenId);
   }

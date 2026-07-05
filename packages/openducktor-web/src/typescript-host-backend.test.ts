@@ -57,6 +57,7 @@ const handleTestRequest = (
   options: Partial<{
     appToken: string;
     controlToken: string;
+    eventBus: BufferedHostEventBus;
     hostCommandRouter: EffectHostCommandRouter;
     beginShutdown: () => void;
     shutdownStarted: boolean;
@@ -68,7 +69,7 @@ const handleTestRequest = (
       allowedOrigins: new Set(),
       appToken: options.appToken ?? APP_TOKEN,
       controlToken: options.controlToken ?? CONTROL_TOKEN,
-      eventBus: new BufferedHostEventBus(),
+      eventBus: options.eventBus ?? new BufferedHostEventBus(),
       hostCommandRouter: options.hostCommandRouter ?? createTestHostCommandRouter(),
       localAttachments: createLocalAttachmentAdapter(),
       request,
@@ -179,6 +180,42 @@ describe("TypeScript web host backend", () => {
       failureKind: "timeout",
       message: "Failed to invoke runtime_ensure.",
     });
+  });
+
+  test("replays recent Codex app-server events to first SSE subscribers", async () => {
+    const eventBus = new BufferedHostEventBus();
+    eventBus.publish("openducktor://codex-app-server-event", {
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "approval-1",
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+    });
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/codex-app-server-events", {
+        method: "GET",
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      }),
+      { eventBus },
+    );
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Expected SSE response body.");
+    }
+    try {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      expect(new TextDecoder().decode(chunk.value)).toContain(
+        'data: {"runtimeId":"runtime-live","kind":"server_request"',
+      );
+    } finally {
+      await reader.cancel();
+    }
   });
 
   test("rejects malformed invoke command URI components as typed host request errors", async () => {

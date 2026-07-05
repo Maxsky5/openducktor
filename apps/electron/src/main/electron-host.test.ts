@@ -739,15 +739,21 @@ describe("createElectronHostCommandRouter", () => {
           calls.push({ method: "request", input });
           return modelListResponse;
         }),
-      drainNotifications: (runtimeId) =>
+      takeBufferedEvents: (runtimeId) =>
         Effect.sync(() => {
-          calls.push({ method: "drainNotifications", runtimeId });
-          return [{ method: "codex/app-server/ready" }];
-        }),
-      drainServerRequests: (runtimeId) =>
-        Effect.sync(() => {
-          calls.push({ method: "drainServerRequests", runtimeId });
-          return [{ id: 7, method: "approval/request" }];
+          calls.push({ method: "takeBufferedEvents", runtimeId });
+          return [
+            {
+              runtimeId,
+              kind: "notification" as const,
+              message: { method: "codex/app-server/ready" },
+            },
+            {
+              runtimeId,
+              kind: "server_request" as const,
+              message: { id: 7, method: "approval/request" },
+            },
+          ];
         }),
       respond: (input) =>
         Effect.sync(() => {
@@ -770,11 +776,19 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toEqual(modelListResponse);
     await expect(
-      router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([{ method: "codex/app-server/ready" }]);
-    await expect(
-      router.invoke("codex_app_server_requests", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([{ id: 7, method: "approval/request" }]);
+      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
+    ).resolves.toEqual([
+      {
+        runtimeId: "runtime-1",
+        kind: "notification",
+        message: { method: "codex/app-server/ready" },
+      },
+      {
+        runtimeId: "runtime-1",
+        kind: "server_request",
+        message: { id: 7, method: "approval/request" },
+      },
+    ]);
     await expect(
       router.invoke("codex_app_server_respond", {
         runtimeId: "runtime-1",
@@ -792,8 +806,7 @@ describe("createElectronHostCommandRouter", () => {
           params: { request: "catalog" },
         },
       },
-      { method: "drainNotifications", runtimeId: "runtime-1" },
-      { method: "drainServerRequests", runtimeId: "runtime-1" },
+      { method: "takeBufferedEvents", runtimeId: "runtime-1" },
       {
         method: "respond",
         input: {
@@ -814,7 +827,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
+      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
   });
 

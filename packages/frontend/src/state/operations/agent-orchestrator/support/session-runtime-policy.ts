@@ -77,5 +77,8 @@ export const resolveRuntimeSessionContextRef = async (
     sessionScope,
     loadSettingsSnapshot,
   });
-  return toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy);
+  return {
+    ...toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy),
+    ...(sessionScope ? { sessionScope } : {}),
+  };
 };

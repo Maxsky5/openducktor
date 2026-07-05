@@ -90,11 +90,13 @@ const createFakeCodex = async (
     childPidPath,
     emitStreamEvents = false,
     exitBeforeInitialize,
+    hangRequestMethods = [],
     runtimePidPath,
   }: {
     childPidPath?: string;
     emitStreamEvents?: boolean;
     exitBeforeInitialize?: { code: number; stderr: string };
+    hangRequestMethods?: string[];
     runtimePidPath?: string;
   } = {},
 ): Promise<string> => {
@@ -109,6 +111,7 @@ const capturePath = process.env.CODEX_CAPTURE_PATH;
 const childPidPath = ${JSON.stringify(childPidPath ?? null)};
 const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
 const exitBeforeInitialize = ${JSON.stringify(exitBeforeInitialize ?? null)};
+const hangRequestMethods = new Set(${JSON.stringify(hangRequestMethods)});
 const runtimePidPath = ${JSON.stringify(runtimePidPath ?? null)};
 const capture = {
   args: process.argv.slice(2),
@@ -188,6 +191,9 @@ lines.on("line", (line) => {
     return;
   }
   if (message.id !== undefined) {
+    if (hangRequestMethods.has(message.method)) {
+      return;
+    }
     if (message.method === "thread/loaded/list") {
       process.stdout.write(JSON.stringify({
         jsonrpc: "2.0",
@@ -523,6 +529,97 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     }
   });
 
+  test("rejects pending Codex transport requests before waiting on process-tree cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-codex-transport-first-"));
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const runtimeId = "runtime-transport-first";
+      const codexBinary = await createFakeCodex(root, {
+        hangRequestMethods: ["thread/loaded/list"],
+      });
+      const codexAppServer = createCodexAppServerTransportRegistry();
+      let pendingRequestSettled = false;
+      let requestTimeoutClearedBeforeProcessCleanup = false;
+      let requestTimeout: ReturnType<typeof setTimeout> | null = null;
+      let requestTimeoutCleared = false;
+
+      const starter = createCodexWorkspaceRuntimeStarter({
+        codexAppServer,
+        processEnv: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` },
+        processTreeTerminator: () =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() => Promise.resolve());
+            requestTimeoutClearedBeforeProcessCleanup = requestTimeoutCleared;
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "process-tree.stop",
+                message: "process tree stayed alive",
+              }),
+            );
+          }),
+        requestTimeoutMs: 4_000,
+        runtimeId: () => runtimeId,
+        stopTimeoutMs: 25,
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:4123",
+            hostToken: "bridge-token",
+          }),
+      });
+
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      );
+
+      globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number) => {
+        const timer = originalSetTimeout(handler, timeout);
+        if (timeout === 4_000) {
+          requestTimeout = timer;
+        }
+        return timer;
+      }) as typeof setTimeout;
+      globalThis.clearTimeout = ((timer) => {
+        if (timer === requestTimeout) {
+          requestTimeoutCleared = true;
+        }
+        return originalClearTimeout(timer as Parameters<typeof originalClearTimeout>[0]);
+      }) as typeof clearTimeout;
+
+      const requestPromise = Effect.runPromise(
+        codexAppServer.request({
+          runtimeId,
+          method: "thread/loaded/list",
+        }),
+      ).catch((error) => {
+        pendingRequestSettled = true;
+        return error;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(pendingRequestSettled).toBe(false);
+
+      await expect(Effect.runPromise(handle.stop())).rejects.toThrow(
+        "process tree: process tree stayed alive",
+      );
+      expect(requestTimeoutClearedBeforeProcessCleanup).toBe(true);
+      await expect(requestPromise).resolves.toBeInstanceOf(Error);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+      await removeTestDirectory(root);
+    }
+  });
+
   test("starts a Windows PATH-discovered cmd Codex app-server runtime", async () => {
     if (process.platform !== "win32") {
       return;
@@ -591,7 +688,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     }
   });
 
-  test("emits Codex app-server stream events and keeps records available for recovery drain", async () => {
+  test("emits Codex app-server stream events and keeps records available for recovery replay", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-events-"));
     try {
       const repo = join(root, "repo");
@@ -661,27 +758,31 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         },
       ]);
       await expect(
-        Effect.runPromise(promiseCodexAppServer.drainNotifications("runtime-events")),
+        Effect.runPromise(promiseCodexAppServer.takeBufferedEvents("runtime-events")),
       ).resolves.toEqual([
         {
-          method: "thread/status/changed",
-          params: { threadId: "thread-1", status: { type: "idle" } },
+          runtimeId: "runtime-events",
+          kind: "notification",
+          message: {
+            method: "thread/status/changed",
+            params: { threadId: "thread-1", status: { type: "idle" } },
+          },
         },
-      ]);
-      await expect(
-        Effect.runPromise(promiseCodexAppServer.drainServerRequests("runtime-events")),
-      ).resolves.toEqual([
         {
-          id: 99,
-          method: "execCommandApproval",
-          params: {
-            conversationId: "thread-1",
-            callId: "call-1",
-            approvalId: null,
-            command: ["true"],
-            cwd: "/repo",
-            reason: null,
-            parsedCmd: [],
+          runtimeId: "runtime-events",
+          kind: "server_request",
+          message: {
+            id: 99,
+            method: "execCommandApproval",
+            params: {
+              conversationId: "thread-1",
+              callId: "call-1",
+              approvalId: null,
+              command: ["true"],
+              cwd: "/repo",
+              reason: null,
+              parsedCmd: [],
+            },
           },
         },
       ]);

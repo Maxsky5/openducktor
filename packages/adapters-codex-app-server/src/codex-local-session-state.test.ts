@@ -26,7 +26,7 @@ const createStore = () => {
   const clearedRuntimeEvents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedSubagents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
-  const drainedRuntimeEvents: string[] = [];
+  const replayedRuntimeEvents: string[] = [];
   const stoppedRuntimeSubscriptions: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
@@ -47,8 +47,8 @@ const createStore = () => {
     runtimeEvents: {
       clearSession: (externalSessionId, runtimeId) =>
         clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
-      drainBufferedStreamEvents: async (externalSessionId) => {
-        drainedRuntimeEvents.push(externalSessionId);
+      replayBufferedStreamEvents: async (externalSessionId) => {
+        replayedRuntimeEvents.push(externalSessionId);
       },
       stopRuntimeEventSubscription: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
     },
@@ -61,14 +61,14 @@ const createStore = () => {
     clearedRuntimeEvents,
     clearedSubagents,
     clearedThreadStatusOverrides,
-    drainedRuntimeEvents,
+    replayedRuntimeEvents,
     stoppedRuntimeSubscriptions,
   };
 };
 
 describe("CodexLocalSessionState", () => {
-  test("remembers sessions and drains buffered runtime events", async () => {
-    const { store, drainedRuntimeEvents } = createStore();
+  test("remembers sessions and replays buffered runtime events", async () => {
+    const { store, replayedRuntimeEvents } = createStore();
     store.remember(session("thread-1", "runtime-1"));
     store.remember(session("thread-2", "runtime-2"));
     await Promise.resolve();
@@ -76,7 +76,7 @@ describe("CodexLocalSessionState", () => {
     expect(store.get("thread-1")?.runtimeId).toBe("runtime-1");
     expect(store.has("thread-2")).toBe(true);
     expect([...store.values()].map((entry) => entry.threadId)).toEqual(["thread-1", "thread-2"]);
-    expect(drainedRuntimeEvents).toEqual(["thread-1", "thread-2"]);
+    expect(replayedRuntimeEvents).toEqual(["thread-1", "thread-2"]);
   });
 
   test("clears local session-scoped state without touching other sessions", () => {

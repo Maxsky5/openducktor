@@ -35,7 +35,7 @@ const recordClearTimeouts = () => {
 };
 
 describe("createCodexAppServerTransport", () => {
-  test("keeps emitted notifications drainable after a request response", async () => {
+  test("keeps emitted notifications available as buffered events after a request response", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -81,8 +81,8 @@ describe("createCodexAppServerTransport", () => {
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
-    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
-      notification,
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
 
     await Effect.runPromise(transport.close());
@@ -110,14 +110,14 @@ describe("createCodexAppServerTransport", () => {
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
-    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
-      notification,
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
 
     await Effect.runPromise(transport.close());
   });
 
-  test("does not retain emitted server requests for later drain polling", async () => {
+  test("keeps emitted server requests available as buffered events until OpenDucktor responds", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -135,12 +135,19 @@ describe("createCodexAppServerTransport", () => {
         reason: null,
         parsedCmd: [],
       },
-    };
+    } satisfies CodexAppServerProtocolMessage;
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
     expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
-    await expect(Effect.runPromise(transport.drainServerRequests())).resolves.toEqual([]);
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: request },
+    ]);
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+    await waitForStreamEvents();
+    await Effect.runPromise(transport.respond({ requestId: 1, result: { decision: "denied" } }));
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([]);
 
     await Effect.runPromise(transport.close());
   });

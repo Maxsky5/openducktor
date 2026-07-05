@@ -31,6 +31,18 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
 
+export const bufferedNotificationEvent = (message: unknown, runtimeId = "runtime-live") => ({
+  runtimeId,
+  kind: "notification" as const,
+  message,
+});
+
+export const bufferedServerRequestEvent = (message: unknown, runtimeId = "runtime-live") => ({
+  runtimeId,
+  kind: "server_request" as const,
+  message,
+});
+
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
 ): PolicyBoundSessionRef => ({
@@ -456,8 +468,7 @@ export const createAdapterWithTransport = (
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
-    drainServerRequests: async () => [],
-    drainNotifications: async () => [],
+    takeBufferedEvents: async () => [],
     respondServerRequest: async () => {},
     ...overrides,
   });
@@ -482,8 +493,7 @@ export const createHarness = (
     kind: runtimeKind,
     runtimeId: "runtime-live",
   }));
-  const drainServerRequests = mock(async (_runtimeId: string) => [] as unknown[]);
-  const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
+  const takeBufferedEvents = mock(async (_runtimeId: string) => []);
   const respondServerRequest = mock(async () => {});
 
   const adapter = new CodexAppServerAdapter({
@@ -491,8 +501,7 @@ export const createHarness = (
       requireRepoRuntime,
     },
     transportFactory,
-    drainServerRequests,
-    drainNotifications,
+    takeBufferedEvents,
     respondServerRequest,
     ...overrides,
   });
@@ -502,8 +511,7 @@ export const createHarness = (
     transports,
     transportFactory,
     requireRepoRuntime,
-    drainServerRequests,
-    drainNotifications,
+    takeBufferedEvents,
     respondServerRequest,
   };
 };

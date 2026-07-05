@@ -289,36 +289,7 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
-    const isMutatingRequest = requestMutation === "mutating";
-    const shouldRejectForRole = !routeContext.policySession.role;
-    if (shouldRejectForRole) {
-      const roleReason = routeContext.policySession.role
-        ? `role '${routeContext.policySession.role}' is read-only`
-        : "the session role is unknown";
-      await context.respondServerRequest(
-        routeContext.runtimeId,
-        requestId,
-        codexApprovalResponseForRequest({
-          outcome: "reject",
-          request: rawRequest,
-          message: `Codex request '${rawRequest.method}' was rejected because ${roleReason}.`,
-        }),
-        undefined,
-      );
-      context.emitSessionEvent(routeContext.policySession.threadId, {
-        type: "session_error",
-        externalSessionId: routeContext.policySession.threadId,
-        timestamp: new Date().toISOString(),
-        message: `Rejected ${isMutatingRequest ? "mutating " : ""}Codex request '${rawRequest.method}' because ${roleReason}.`,
-      });
-      return false;
-    }
-
-    const role = routeContext.policySession.role;
-    if (!role) {
-      throw new Error("Codex approval request cannot be created without a session role.");
-    }
-    const approval = toApprovalRequest(rawRequest, role);
+    const approval = toApprovalRequest(rawRequest);
     context.pendingInput.addApproval({
       runtimeId: routeContext.runtimeId,
       threadId: routeContext.ownerThreadId,

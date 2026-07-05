@@ -107,6 +107,11 @@ const cleanupCodexRuntime = ({
     const errors: string[] = [];
     codexAppServer.unregisterTransport(nextRuntimeId);
 
+    const pendingRequestExit = yield* Effect.exit(transport.rejectPendingRequestsForShutdown());
+    if (pendingRequestExit._tag === "Failure") {
+      errors.push(`pending requests: ${pendingRequestExit.cause}`);
+    }
+
     const processExit = yield* Effect.either(
       processTreeTerminator({
         pid,

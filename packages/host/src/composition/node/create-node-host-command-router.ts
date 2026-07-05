@@ -263,6 +263,7 @@ export const createNodeEffectHostCommandRouter = (
       }
 
       yield* pullRequestSyncLoop.stop();
+      pullRequestSyncLoop = null;
       lifecycleLogger.info("Pull request sync loop stopped");
     });
 

@@ -114,8 +114,7 @@ export class CodexAppServerAdapter
     this.runtimeClients = new CodexRuntimeClientResolver(options);
     this.runtimeEvents = new CodexRuntimeSessionEvents({
       subscribeEvents: options.subscribeEvents,
-      drainServerRequests: options.drainServerRequests,
-      drainNotifications: options.drainNotifications,
+      takeBufferedEvents: options.takeBufferedEvents,
       respondServerRequest: options.respondServerRequest,
       sessions: {
         get: (externalSessionId) => this.localSessions.get(externalSessionId),
@@ -669,7 +668,7 @@ export class CodexAppServerAdapter
         }),
       );
     }
-    void this.runtimeEvents.drainBufferedStreamEvents(externalSessionId);
+    void this.runtimeEvents.replayBufferedStreamEvents(externalSessionId);
     return unsubscribe;
   }
 
@@ -754,7 +753,7 @@ export class CodexAppServerAdapter
   private turnLifecycleContext(): CodexTurnLifecycleContext {
     return {
       subscribeEvents: Boolean(this.options.subscribeEvents),
-      shouldDrainNotifications: Boolean(this.options.drainNotifications),
+      shouldTakeBufferedEvents: true,
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
@@ -767,10 +766,8 @@ export class CodexAppServerAdapter
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
-      handlePendingServerRequests: (session, handledRequestKeys) =>
-        this.runtimeEvents.handlePendingServerRequests(session, handledRequestKeys),
-      handleRetainedServerRequests: (session, handledRequestKeys) =>
-        this.runtimeEvents.handleRetainedServerRequests(session, handledRequestKeys),
+      handleBufferedRuntimeEvents: (session, handledRequestKeys) =>
+        this.runtimeEvents.handleBufferedRuntimeEvents(session, handledRequestKeys),
       emitUserMessage: (event, sourceParts) =>
         this.runtimeEvents.emitUserMessage(event, sourceParts),
       emitSessionEvent: (externalSessionId, event) =>

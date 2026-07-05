@@ -59,6 +59,11 @@ export type CodexAppServerLoadedThreadListResponse = {
   nextCursor: string | null;
 };
 export type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError";
+export type CodexAppServerStreamEvent = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: CodexAppServerProtocolMessage;
+};
 export type CodexAppServerThreadEntry = {
   id: string;
   cwd: string;
@@ -84,12 +89,9 @@ export type CodexAppServerPort = {
   listThreads(
     input: CodexAppServerThreadListInput,
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerError>;
-  drainNotifications(
+  takeBufferedEvents(
     runtimeId: string,
-  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerError>;
-  drainServerRequests(
-    runtimeId: string,
-  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerError>;
+  ): Effect.Effect<CodexAppServerStreamEvent[], CodexAppServerError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
 

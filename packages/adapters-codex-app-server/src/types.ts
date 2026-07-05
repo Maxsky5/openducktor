@@ -305,8 +305,7 @@ export type CodexAppServerClient = {
 export type CodexAppServerAdapterOptions = {
   repoRuntimeResolver: CodexRepoRuntimeResolverPort;
   transportFactory: CodexJsonRpcTransportFactory;
-  drainServerRequests: (runtimeId: string) => Promise<unknown[]>;
-  drainNotifications?: (runtimeId: string) => Promise<unknown[]>;
+  takeBufferedEvents: (runtimeId: string) => Promise<CodexAppServerStreamEvent[]>;
   subscribeEvents?: (
     runtimeId: string,
     listener: (event: CodexAppServerStreamEvent) => void,

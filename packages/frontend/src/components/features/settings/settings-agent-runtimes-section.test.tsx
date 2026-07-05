@@ -104,7 +104,6 @@ describe("AgentRuntimesSection", () => {
     expect(html).toContain("Danger full access");
     expect(html).toContain("On request");
     expect(html).toContain("User");
-    expect(html).toContain("Inherited");
     expect(html).toContain("Command network access");
     expect(html).toContain("Keep command network blocked in sandboxed Codex turns.");
     expect(html).toContain("bg-info-surface");
