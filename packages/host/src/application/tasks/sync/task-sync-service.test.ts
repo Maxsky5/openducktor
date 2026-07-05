@@ -247,7 +247,7 @@ describe("createTaskSyncService", () => {
       expect(events).toEqual([]);
       releaseSync();
       await syncFinished;
-      await sleep(10);
+      await Effect.runPromise(Effect.yieldNow());
       expect(events).toEqual([]);
     } finally {
       releaseSync();

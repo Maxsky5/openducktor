@@ -1,5 +1,5 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Effect, Fiber, Ref, Schedule } from "effect";
+import { Effect, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type {
@@ -14,6 +14,7 @@ export type TaskSyncLifecycleLogger = {
   error(message: string): void;
 };
 export type TaskSyncLoopHandle = {
+  /** Request loop shutdown without waiting for an active sync iteration to finish. */
   stop(): Effect.Effect<void, never>;
 };
 export type TaskSyncService = {
@@ -131,9 +132,10 @@ export const createTaskSyncService = ({
       ),
     );
   const runPullRequestSyncLoop = (stopped: Ref.Ref<boolean>) =>
-    Effect.sleep(`${intervalMs} millis`).pipe(
-      Effect.zipRight(runPullRequestSyncLoopIteration(stopped)),
-      Effect.repeat({ schedule: Schedule.forever }),
+    Effect.forever(
+      Effect.sleep(`${intervalMs} millis`).pipe(
+        Effect.zipRight(runPullRequestSyncLoopIteration(stopped)),
+      ),
     );
   return {
     publishExternalTaskCreated(repoPath, taskId) {
