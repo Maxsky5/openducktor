@@ -12,7 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -641,21 +641,10 @@ export function AgentRuntimesSection({
   onUpdateAgentRuntimes,
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
-  const defaultTab = sortedRuntimeDefinitions[0]?.kind;
-  const [selectedTab, setSelectedTab] = useState(defaultTab ?? "");
+  const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
   const selectedDefinition =
-    sortedRuntimeDefinitions.find((definition) => definition.kind === selectedTab) ??
+    sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
     sortedRuntimeDefinitions[0];
-
-  useEffect(() => {
-    if (!defaultTab) {
-      setSelectedTab("");
-      return;
-    }
-    if (!sortedRuntimeDefinitions.some((definition) => definition.kind === selectedTab)) {
-      setSelectedTab(defaultTab);
-    }
-  }, [defaultTab, selectedTab, sortedRuntimeDefinitions]);
 
   return (
     <div className="grid gap-4 p-4">
@@ -692,7 +681,7 @@ export function AgentRuntimesSection({
                         : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground",
                     )}
                     disabled={disabled}
-                    onClick={() => setSelectedTab(definition.kind)}
+                    onClick={() => setSelectedRuntimeKind(definition.kind)}
                   >
                     <span className="truncate">{definition.label}</span>
                     <Badge

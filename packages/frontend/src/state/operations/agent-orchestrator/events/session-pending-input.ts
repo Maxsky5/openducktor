@@ -144,7 +144,7 @@ const formatAutoRejectedApprovalNotice = (
   if (event.details) {
     lines.push("", "Details:", event.details);
   }
-  return lines.filter((line) => line.length > 0).join("\n");
+  return lines.join("\n");
 };
 
 const readLoadedPendingInputTarget = (

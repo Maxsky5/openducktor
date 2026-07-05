@@ -33,6 +33,7 @@ describe("agent-orchestrator permission auto-rejection", () => {
         requestId: "perm-1",
         affectedPaths: ["edit file"],
         action: { name: "write" },
+        details: "Write access is not allowed for this role.",
         mutation: "mutating" as const,
         metadata: { tool: "edit" },
       }),
@@ -46,8 +47,12 @@ describe("agent-orchestrator permission auto-rejection", () => {
     const notice = getSessionMessages(sessionsRef).find((message) =>
       message.content.includes("Auto-rejected mutating approval"),
     );
+    expect(notice?.content).toContain("Auto-rejected mutating approval for spec session.\n\n");
     expect(notice?.content).toContain("Action: write");
     expect(notice?.content).toContain("Affected paths: edit file");
+    expect(notice?.content).toContain(
+      "Affected paths: edit file\n\nDetails:\nWrite access is not allowed for this role.",
+    );
   });
 
   test("keeps unknown command approvals pending for read-only roles", async () => {

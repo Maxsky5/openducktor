@@ -753,7 +753,6 @@ export class CodexAppServerAdapter
   private turnLifecycleContext(): CodexTurnLifecycleContext {
     return {
       subscribeEvents: Boolean(this.options.subscribeEvents),
-      shouldTakeBufferedEvents: true,
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),

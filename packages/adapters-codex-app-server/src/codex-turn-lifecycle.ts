@@ -24,7 +24,6 @@ import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
-  shouldTakeBufferedEvents: boolean;
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -75,7 +74,7 @@ const emitAcceptedUserMessage = (
   acceptedUserMessage: AcceptedAgentUserMessage,
   parts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  if (!context.subscribeEvents && context.shouldTakeBufferedEvents) {
+  if (!context.subscribeEvents) {
     return acceptedUserMessage;
   }
   return context.emitUserMessage(acceptedUserMessage, parts);
@@ -233,10 +232,7 @@ export const startCodexTurnForSession = async (
         context.bindActiveTurnId(activeTurnState, turnId);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (!context.subscribeEvents && !context.shouldTakeBufferedEvents) {
-        context.emitUserMessage(acceptedUserMessage, parts);
-        activeTurnState.markTurnSettled();
-      } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
+      if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
         context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
         activeTurnState.markTurnSettled();
       }

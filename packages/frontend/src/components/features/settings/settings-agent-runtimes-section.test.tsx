@@ -379,4 +379,36 @@ describe("AgentRuntimesSection", () => {
       renderer.unmount();
     }
   });
+
+  test("falls back to an available runtime when the selected runtime disappears", () => {
+    const renderer = render(createSection());
+
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+
+      renderer.rerender(
+        createElement(AgentRuntimesSection, {
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          disabled: false,
+          requiresCodexDangerAcknowledgement: false,
+          isCodexDangerAcknowledged: false,
+          onCodexDangerAcknowledgedChange: () => {},
+          onUpdateAgentRuntimes: () => {},
+        }),
+      );
+
+      expect(screen.getByRole("tab", { name: /OpenCode/i }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      expect(renderer.container.innerHTML).toContain(
+        "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+      );
+    } finally {
+      renderer.unmount();
+    }
+  });
 });
