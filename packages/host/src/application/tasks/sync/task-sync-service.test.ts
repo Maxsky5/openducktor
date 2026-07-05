@@ -186,7 +186,7 @@ describe("createTaskSyncService", () => {
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });
-  test("waits for an in-flight pull request sync iteration during stop", async () => {
+  test("stops without waiting for an in-flight pull request sync iteration", async () => {
     const { eventBus, events } = createEventBus();
     let resolveSyncStarted: () => void = () => {};
     const syncStarted = new Promise<void>((resolve) => {
@@ -195,6 +195,10 @@ describe("createTaskSyncService", () => {
     let releaseSync: () => void = () => {};
     const syncReleased = new Promise<void>((resolve) => {
       releaseSync = resolve;
+    });
+    let resolveSyncFinished: () => void = () => {};
+    const syncFinished = new Promise<void>((resolve) => {
+      resolveSyncFinished = resolve;
     });
     const service = createTaskSyncServiceForTest({
       eventBus,
@@ -205,6 +209,7 @@ describe("createTaskSyncService", () => {
             Effect.gen(function* () {
               resolveSyncStarted();
               yield* Effect.promise(() => syncReleased);
+              resolveSyncFinished();
               return { ran: true, changedTaskIds: ["task-1"] };
             }),
           );
@@ -238,10 +243,11 @@ describe("createTaskSyncService", () => {
         sleep(50).then(() => "waiting" as const),
       ]);
 
-      expect(stopBeforeRelease).toBe("waiting");
+      expect(stopBeforeRelease).toBe("stopped");
       expect(events).toEqual([]);
       releaseSync();
-      await expect(stopPromise).resolves.toBe("stopped");
+      await syncFinished;
+      await Effect.runPromise(Effect.yieldNow());
       expect(events).toEqual([]);
     } finally {
       releaseSync();

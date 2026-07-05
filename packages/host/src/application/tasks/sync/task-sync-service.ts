@@ -1,5 +1,5 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type {
@@ -14,6 +14,7 @@ export type TaskSyncLifecycleLogger = {
   error(message: string): void;
 };
 export type TaskSyncLoopHandle = {
+  /** Request loop shutdown without waiting for an active sync iteration to finish. */
   stop(): Effect.Effect<void, never>;
 };
 export type TaskSyncService = {
@@ -34,6 +35,10 @@ export type CreateTaskSyncServiceInput = {
   taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
 };
+type PullRequestSyncResult = {
+  changedTaskIds: string[];
+  repoPath: string;
+} | null;
 const nowIso = (): string => new Date().toISOString();
 const buildExternalTaskCreatedEvent = (
   eventIdFactory: () => string,
@@ -76,23 +81,62 @@ export const createTaskSyncService = ({
           details: { channel: TASK_EVENT_CHANNEL, eventKind: event.kind },
         }),
     });
-  const syncActiveWorkspacePullRequests = () =>
+  const readActiveWorkspacePullRequestSync = (): Effect.Effect<
+    PullRequestSyncResult,
+    TaskSyncError
+  > =>
     Effect.gen(function* () {
       const activeWorkspace = (yield* workspaceSettingsService.listWorkspaces()).find(
         (workspace) => workspace.isActive,
       );
       if (!activeWorkspace) {
-        return;
+        return null;
       }
       const result = yield* taskService.repoPullRequestSyncDetailed({
         repoPath: activeWorkspace.repoPath,
       });
-      if (result.changedTaskIds.length > 0) {
-        yield* publish(
-          buildTasksUpdatedEvent(eventIdFactory, activeWorkspace.repoPath, result.changedTaskIds),
-        );
-      }
+      return {
+        changedTaskIds: result.changedTaskIds,
+        repoPath: activeWorkspace.repoPath,
+      };
     });
+  const publishPullRequestSyncResult = (
+    result: PullRequestSyncResult,
+  ): Effect.Effect<void, HostOperationError> => {
+    if (!result || result.changedTaskIds.length === 0) {
+      return Effect.void;
+    }
+    return publish(buildTasksUpdatedEvent(eventIdFactory, result.repoPath, result.changedTaskIds));
+  };
+  const publishPullRequestSyncResultIfRunning = (
+    stopped: Ref.Ref<boolean>,
+    result: PullRequestSyncResult,
+  ): Effect.Effect<void, HostOperationError> => {
+    return Ref.get(stopped).pipe(
+      Effect.flatMap((isStopped) =>
+        isStopped ? Effect.void : publishPullRequestSyncResult(result),
+      ),
+    );
+  };
+  const syncActiveWorkspacePullRequests = () =>
+    readActiveWorkspacePullRequestSync().pipe(Effect.flatMap(publishPullRequestSyncResult));
+  const runPullRequestSyncLoopIteration = (stopped: Ref.Ref<boolean>) =>
+    readActiveWorkspacePullRequestSync().pipe(
+      Effect.flatMap((result) => publishPullRequestSyncResultIfRunning(stopped, result)),
+      Effect.catchAll((error) =>
+        Effect.sync(() => {
+          logger.error(
+            `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }),
+      ),
+    );
+  const runPullRequestSyncLoop = (stopped: Ref.Ref<boolean>) =>
+    Effect.forever(
+      Effect.sleep(`${intervalMs} millis`).pipe(
+        Effect.zipRight(runPullRequestSyncLoopIteration(stopped)),
+      ),
+    );
   return {
     publishExternalTaskCreated(repoPath, taskId) {
       return publish(buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskId));
@@ -105,29 +149,18 @@ export const createTaskSyncService = ({
     },
     syncActiveWorkspacePullRequests,
     startPullRequestSyncLoop() {
-      return Effect.forkDaemon(
-        Effect.forever(
-          Effect.sleep(`${intervalMs} millis`).pipe(
-            Effect.zipRight(
-              syncActiveWorkspacePullRequests().pipe(
-                Effect.catchAll((error) =>
-                  Effect.sync(() => {
-                    logger.error(
-                      `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
-                    );
-                  }),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ).pipe(
-        Effect.map((fiber) => ({
+      return Effect.gen(function* () {
+        const stopped = yield* Ref.make(false);
+        const fiber = yield* Effect.forkDaemon(runPullRequestSyncLoop(stopped));
+        return {
           stop() {
-            return Fiber.interrupt(fiber).pipe(Effect.asVoid);
+            return Ref.set(stopped, true).pipe(
+              Effect.zipRight(Fiber.interruptFork(fiber)),
+              Effect.asVoid,
+            );
           },
-        })),
-      );
+        };
+      });
     },
   };
 };
