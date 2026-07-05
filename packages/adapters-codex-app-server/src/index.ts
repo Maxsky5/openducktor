@@ -11,6 +11,7 @@ export type {
   CodexModelCatalogRecord,
   CodexModelListResponse,
   CodexModelSelectionPayload,
+  CodexPolicyLogEntry,
   CodexRepoRuntimeResolverPort,
   CodexServerRequestRecord,
   CodexServerRequestResponder,

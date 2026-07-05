@@ -27,15 +27,18 @@ const isReadOnlyCommandActionType = (value: string): value is ReadOnlyCommandAct
 const hasEntries = <T>(value: readonly T[] | null | undefined): boolean =>
   Array.isArray(value) && value.length > 0;
 
+const hasNetworkApprovalContext = (value: Record<string, unknown>): boolean =>
+  value.networkApprovalContext !== undefined && value.networkApprovalContext !== null;
+
+const hasAdditionalNetworkPermissions = (value: unknown): boolean =>
+  isCodexAppServerRequestPermissionProfile(value) && value.network !== null;
+
 const classifyAdditionalPermissions = (value: unknown): AgentApprovalMutation => {
   if (value === undefined || value === null) {
     return "unknown";
   }
   if (!isCodexAppServerRequestPermissionProfile(value)) {
     return "unknown";
-  }
-  if (value.network?.enabled === true) {
-    return "mutating";
   }
   if (hasEntries(value.fileSystem?.write)) {
     return "mutating";
@@ -46,6 +49,18 @@ const classifyAdditionalPermissions = (value: unknown): AgentApprovalMutation =>
   return "unknown";
 };
 
+const classifyCommandAction = (
+  action: unknown,
+  isAction: (
+    action: unknown,
+  ) => action is CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
+): AgentApprovalMutation => {
+  if (!isAction(action)) {
+    return "unknown";
+  }
+  return isReadOnlyCommandActionType(action.type) ? "read_only" : "unknown";
+};
+
 const classifyCommandActions = (
   value: unknown,
   isAction: (
@@ -53,12 +68,14 @@ const classifyCommandActions = (
   ) => action is CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
 ): AgentApprovalMutation => {
   if (!Array.isArray(value) || value.length === 0) {
-    return "mutating";
+    return "unknown";
   }
 
-  return value.every((action) => isAction(action) && isReadOnlyCommandActionType(action.type))
-    ? "read_only"
-    : "mutating";
+  const actionMutations = value.map((action) => classifyCommandAction(action, isAction));
+  if (actionMutations.some((mutation) => mutation === "mutating")) {
+    return "mutating";
+  }
+  return actionMutations.every((mutation) => mutation === "read_only") ? "read_only" : "unknown";
 };
 
 export const classifyCodexCommandRequestMutation = (
@@ -67,16 +84,27 @@ export const classifyCodexCommandRequestMutation = (
   if (!isPlainObject(request.params)) {
     return "unknown";
   }
-  if (request.params.networkApprovalContext != null) {
-    return "mutating";
-  }
   const additionalPermissions = classifyAdditionalPermissions(request.params.additionalPermissions);
   if (additionalPermissions === "mutating") {
     return additionalPermissions;
   }
+  if (
+    hasNetworkApprovalContext(request.params) ||
+    hasAdditionalNetworkPermissions(request.params.additionalPermissions)
+  ) {
+    return "unknown";
+  }
 
   if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {
     return classifyCommandActions(request.params.parsedCmd, isCodexAppServerLegacyParsedCommand);
+  }
+
+  if (
+    Array.isArray(request.params.commandActions) &&
+    request.params.commandActions.length === 0 &&
+    !hasNetworkApprovalContext(request.params)
+  ) {
+    return "mutating";
   }
 
   return classifyCommandActions(request.params.commandActions, isCodexAppServerCommandAction);

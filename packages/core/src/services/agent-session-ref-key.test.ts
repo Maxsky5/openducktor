@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, AgentSessionRef } from "../types/agent-orchestrator";
+import type { AgentEvent, SessionRef } from "../types/agent-orchestrator";
 import {
   agentSessionRefKey,
   agentSessionRefsEqual,
@@ -7,7 +7,7 @@ import {
   withAgentSessionRef,
 } from "./agent-session-ref-key";
 
-const sessionRef = (overrides: Partial<AgentSessionRef> = {}): AgentSessionRef => ({
+const sessionRef = (overrides: Partial<SessionRef> = {}): SessionRef => ({
   externalSessionId: "session-1",
   repoPath: "/repo",
   runtimeKind: "opencode",

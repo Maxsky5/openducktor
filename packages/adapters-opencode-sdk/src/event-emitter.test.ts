@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, AgentSessionRef } from "@openducktor/core";
+import type { AgentEvent, SessionRef } from "@openducktor/core";
 import {
   clearSessionListeners,
   emitSessionEvent,
@@ -7,7 +7,7 @@ import {
   subscribeSessionEvents,
 } from "./event-emitter";
 
-const sessionRef: AgentSessionRef = {
+const sessionRef: SessionRef = {
   externalSessionId: "session-1",
   repoPath: "/repo",
   runtimeKind: "opencode",
@@ -25,7 +25,7 @@ describe("OpenCode session event emitter", () => {
   test("does not deliver events to a listener for the same external id in another repo", () => {
     const listeners: SessionEventListeners = new Map();
     const received: AgentEvent[] = [];
-    const otherRepoSessionRef: AgentSessionRef = {
+    const otherRepoSessionRef: SessionRef = {
       ...sessionRef,
       repoPath: "/other-repo",
       workingDirectory: "/other-repo",
@@ -40,7 +40,7 @@ describe("OpenCode session event emitter", () => {
   test("clears listeners by full session ref", () => {
     const listeners: SessionEventListeners = new Map();
     const received: AgentEvent[] = [];
-    const otherWorkingDirectorySessionRef: AgentSessionRef = {
+    const otherWorkingDirectorySessionRef: SessionRef = {
       ...sessionRef,
       workingDirectory: "/repo/worktrees/session-1",
     };

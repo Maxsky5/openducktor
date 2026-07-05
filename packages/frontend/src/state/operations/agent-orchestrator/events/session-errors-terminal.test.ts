@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildSession,
   createRecordingSessionTodosUpdater,
@@ -70,6 +71,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
     });
 
     const handleEvent = handlers[0];

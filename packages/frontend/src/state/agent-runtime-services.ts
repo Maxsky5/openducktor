@@ -1,5 +1,6 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimePolicyBinding } from "@openducktor/core";
+import { assertAgentRuntimePolicyBinding } from "@openducktor/core";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "./operations/shared/host";
 import {
@@ -54,17 +55,21 @@ const createAgentEngine = (
   getAdapter: (runtimeKind: RuntimeKind) => AgentRuntimeAdapter,
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
+  const validatePolicy = <Input extends AgentRuntimePolicyBinding>(
+    input: Input,
+    action: string,
+  ): Input => {
+    assertAgentRuntimePolicyBinding(input, action);
+    return input;
+  };
   return {
-    async startSession(input) {
-      return getAdapter(input.runtimeKind).startSession(input);
-    },
-    async resumeSession(input) {
-      return getAdapter(input.runtimeKind).resumeSession(input);
-    },
+    startSession: (input) =>
+      getAdapter(input.runtimeKind).startSession(validatePolicy(input, "start session")),
+    resumeSession: (input) =>
+      getAdapter(input.runtimeKind).resumeSession(validatePolicy(input, "resume session")),
     releaseSession: (input) => getAdapter(input.runtimeKind).releaseSession(input),
-    async forkSession(input) {
-      return getAdapter(input.runtimeKind).forkSession(input);
-    },
+    forkSession: (input) =>
+      getAdapter(input.runtimeKind).forkSession(validatePolicy(input, "fork session")),
     listRuntimeDefinitions: () =>
       runtimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),
     listAvailableModels: (input) => getAdapter(input.runtimeKind).listAvailableModels(input),
@@ -76,14 +81,24 @@ const createAgentEngine = (
       getAdapter(input.runtimeKind).listSessionRuntimeSnapshots(input),
     readSessionRuntimeSnapshot: (input) =>
       getAdapter(input.runtimeKind).readSessionRuntimeSnapshot(input),
-    loadSessionHistory: (input) => getAdapter(input.runtimeKind).loadSessionHistory(input),
-    loadSessionTodos: (input) => getAdapter(input.runtimeKind).loadSessionTodos(input),
+    loadSessionHistory: (input) =>
+      getAdapter(input.runtimeKind).loadSessionHistory(
+        validatePolicy(input, "load session history"),
+      ),
+    loadSessionTodos: (input) =>
+      getAdapter(input.runtimeKind).loadSessionTodos(validatePolicy(input, "load session todos")),
     updateSessionModel: (input) => getAdapter(input.runtimeKind).updateSessionModel(input),
-    sendUserMessage: (input) => getAdapter(input.runtimeKind).sendUserMessage(input),
-    replyApproval: (input) => getAdapter(input.runtimeKind).replyApproval(input),
-    replyQuestion: (input) => getAdapter(input.runtimeKind).replyQuestion(input),
+    sendUserMessage: (input) =>
+      getAdapter(input.runtimeKind).sendUserMessage(validatePolicy(input, "send user message")),
+    replyApproval: (input) =>
+      getAdapter(input.runtimeKind).replyApproval(validatePolicy(input, "reply to approval")),
+    replyQuestion: (input) =>
+      getAdapter(input.runtimeKind).replyQuestion(validatePolicy(input, "reply to question")),
     subscribeEvents: (input, listener) =>
-      getAdapter(input.runtimeKind).subscribeEvents(input, listener),
+      getAdapter(input.runtimeKind).subscribeEvents(
+        validatePolicy(input, "subscribe to session events"),
+        listener,
+      ),
     stopSession: (input) => getAdapter(input.runtimeKind).stopSession(input),
     loadSessionDiff: (input) => getAdapter(input.runtimeKind).loadSessionDiff(input),
     loadFileStatus: (input) => getAdapter(input.runtimeKind).loadFileStatus(input),

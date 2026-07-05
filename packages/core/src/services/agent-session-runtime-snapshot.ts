@@ -2,8 +2,8 @@ import type { AgentSessionActivity, AgentSessionRuntimeSnapshot } from "../ports
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
-  AgentSessionRef,
   ExternalSessionId,
+  SessionRef,
 } from "../types/agent-orchestrator";
 
 export type AgentSessionRuntimeActivity = AgentSessionActivity;
@@ -56,11 +56,11 @@ export type AgentSessionRuntimeSnapshotSource = {
 export const toAgentSessionRuntimeSnapshot = (
   input:
     | {
-        ref: AgentSessionRef;
+        ref: SessionRef;
         snapshot: AgentSessionRuntimeSnapshotSource;
       }
     | {
-        ref: AgentSessionRef;
+        ref: SessionRef;
         snapshot: null;
       },
 ): AgentSessionRuntimeSnapshot => {
@@ -85,7 +85,7 @@ export const toAgentSessionRuntimeSnapshot = (
 };
 
 export const toMissingAgentSessionRuntimeSnapshot = (
-  ref: AgentSessionRef,
+  ref: SessionRef,
 ): AgentSessionRuntimeSnapshot => ({
   availability: "missing",
   classification: "missing",

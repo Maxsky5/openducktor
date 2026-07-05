@@ -1,14 +1,23 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentEvent, AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
+import type {
+  AgentEvent,
+  AgentSessionHistoryMessage,
+  PolicyBoundSessionRef,
+} from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import { host } from "@/state/operations/host";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
+import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 (
@@ -27,6 +36,7 @@ const subscribeSessionEventsRef: {
 } = {
   current: async () => () => undefined,
 };
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
@@ -56,7 +66,9 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useRuntimeTranscriptSessionHistory, initialProps, { wrapper });
 
-const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
+const createTarget = (
+  overrides: Partial<AgentSessionTranscriptTarget> = {},
+): AgentSessionTranscriptTarget => ({
   externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a/worktree",
@@ -99,19 +111,24 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 describe("useRuntimeTranscriptSessionHistory", () => {
   beforeEach(() => {
     subscribeSessionEventsRef.current = async () => () => undefined;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
+  afterEach(() => {
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("streams runtime events for an unmaterialized read-only transcript session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     const subscribed: {
-      sessionRef: AgentSessionRef | null;
+      sessionRef: PolicyBoundSessionRef | null;
       listener: ((event: AgentEvent) => void) | null;
     } = {
       sessionRef: null,
       listener: null,
     };
     const unsubscribe = mock(() => undefined);
-    const subscribeSessionEvents = mock(async (sessionRef: AgentSessionRef, listener) => {
+    const subscribeSessionEvents = mock(async (sessionRef: PolicyBoundSessionRef, listener) => {
       subscribed.sessionRef = sessionRef;
       subscribed.listener = listener;
       return unsubscribe;
@@ -130,6 +147,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo-a/worktree",
           externalSessionId: "session-1",
+          runtimePolicy: { kind: "opencode" },
         },
         expect.any(Function),
       );
@@ -138,6 +156,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
+        runtimePolicy: { kind: "opencode" },
       });
 
       await harness.run(async () => {
@@ -149,6 +168,73 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest().interactionSession?.externalSessionId).toBe("session-1");
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves transcript target workflow scope for Codex runtime policy", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    const subscribeSessionEvents = mock(async () => () => undefined);
+    host.workspaceGetSettingsSnapshot = mock(async () =>
+      createSettingsSnapshotFixture({
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: {
+            enabled: true,
+            defaults: {
+              sandboxMode: "read-only",
+              approvalPolicy: "untrusted",
+              approvalsReviewer: "user",
+              commandNetworkAccess: false,
+            },
+            roleOverrides: {
+              spec: {
+                sandboxMode: "workspace-write",
+                approvalPolicy: "on-request",
+                approvalsReviewer: "auto_review",
+                commandNetworkAccess: true,
+              },
+            },
+          },
+        },
+      }),
+    );
+    readSessionHistoryRef.current = readSessionHistory;
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
+    const expectedSessionRef: PolicyBoundSessionRef = {
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      sessionScope,
+      runtimePolicy: {
+        kind: "codex",
+        policy: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          approvalsReviewerApplies: true,
+          commandNetworkAccess: true,
+        },
+      },
+    };
+    const harness = createHookHarness(
+      createBaseArgs({
+        target: createTarget({
+          runtimeKind: "codex",
+          sessionScope,
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(expectedSessionRef);
+      expect(subscribeSessionEvents).toHaveBeenCalledWith(expectedSessionRef, expect.any(Function));
     } finally {
       await harness.unmount();
     }
@@ -183,6 +269,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
+        runtimePolicy: { kind: "opencode" },
       });
       const session = harness.getLatest().session;
       expect(session?.externalSessionId).toBe("session-1");
@@ -265,6 +352,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
+        runtimePolicy: { kind: "opencode" },
       });
       expect(harness.getLatest().session?.activityState).toBeNull();
       expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");

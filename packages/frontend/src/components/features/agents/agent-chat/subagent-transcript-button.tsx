@@ -2,26 +2,26 @@ import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import {
-  type ParentSessionRuntimeIdentity,
-  toSubagentSessionIdentity,
+  type ParentSessionRuntimeContext,
+  toSubagentTranscriptTarget,
 } from "./subagent-session-key";
 
 type SubagentTranscriptButtonProps = {
-  parentSession: ParentSessionRuntimeIdentity | null;
+  parentSession: ParentSessionRuntimeContext | null;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
 };
 
 const buildTranscriptRequest = (
-  target: AgentSessionIdentity,
+  target: AgentSessionTranscriptTarget,
 ): OpenAgentSessionTranscriptRequest => {
   return {
     target,
@@ -38,7 +38,7 @@ export function SubagentTranscriptButton({
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
-  const transcriptTarget = toSubagentSessionIdentity({
+  const transcriptTarget = toSubagentTranscriptTarget({
     externalSessionId: meta.externalSessionId,
     parentSession,
   });

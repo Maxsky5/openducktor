@@ -3,11 +3,13 @@ import type {
   AgentEnginePort,
   AgentEvent,
   AgentRole,
-  AgentSessionRef,
   AgentSessionTodoItem,
+  PolicyBoundSessionRef,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
 export type PersistSessionUpdateOptions = { persist: true };
@@ -37,7 +39,7 @@ export type WorkflowToolAliasesByCanonical = {
   [ToolName in AgentToolName]?: string[] | undefined;
 };
 export type UpdateSessionTodos = (
-  session: AgentSessionRef,
+  session: SessionRef,
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
 ) => void;
 
@@ -49,7 +51,7 @@ export type SessionPart = SessionPartEvent["part"];
 
 export type ObserveAgentSessionParams = {
   adapter: SessionEventAdapter;
-  sessionRef: AgentSessionRef;
+  sessionRef: PolicyBoundSessionRef;
   eventBatchWindowMs?: number;
   turnMetadata: SessionTurnMetadata;
   readSession: ReadSession;
@@ -62,6 +64,7 @@ export type ObserveAgentSessionParams = {
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
+  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   readOnlyApprovalAutoRejectSafe: boolean;
   refreshTaskData: (
     repoPath: string,
@@ -69,6 +72,10 @@ export type ObserveAgentSessionParams = {
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
   workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
+};
+
+type SessionEventContextParams = Omit<ObserveAgentSessionParams, "sessionRef"> & {
+  sessionRef: SessionRef;
 };
 
 export type SessionEventSessionContext = {
@@ -98,7 +105,10 @@ export type SessionTurnContext = Pick<
 
 export type SessionApprovalContext = Pick<
   ObserveAgentSessionParams,
-  "adapter" | "readOnlyApprovalAutoRejectSafe" | "buildReadOnlyApprovalRejectionMessage"
+  | "adapter"
+  | "readOnlyApprovalAutoRejectSafe"
+  | "buildReadOnlyApprovalRejectionMessage"
+  | "loadSettingsSnapshot"
 >;
 
 export type SessionRefreshContext = Pick<
@@ -130,20 +140,20 @@ export type SessionToolPartEventContext = Pick<
   "session" | "store" | "refresh" | "todos"
 >;
 
-const createSessionContext = (context: ObserveAgentSessionParams): SessionEventSessionContext => ({
+const createSessionContext = (context: SessionEventContextParams): SessionEventSessionContext => ({
   identity: toAgentSessionIdentity(context.sessionRef),
   key: agentSessionIdentityKey(context.sessionRef),
   repoPath: context.sessionRef.repoPath,
 });
 
-const createStoreContext = (context: ObserveAgentSessionParams): SessionStoreContext => ({
+const createStoreContext = (context: SessionEventContextParams): SessionStoreContext => ({
   ensureSession: context.ensureSession,
   updateSession: context.updateSession,
   readSession: context.readSession,
   isSessionObserved: context.isSessionObserved,
 });
 
-const createTurnContext = (context: ObserveAgentSessionParams): SessionTurnContext => ({
+const createTurnContext = (context: SessionEventContextParams): SessionTurnContext => ({
   turnMetadata: context.turnMetadata,
   recordTurnActivityTimestamp: context.recordTurnActivityTimestamp,
   recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp,
@@ -152,7 +162,7 @@ const createTurnContext = (context: ObserveAgentSessionParams): SessionTurnConte
 });
 
 export const createSessionEventContext = (
-  context: ObserveAgentSessionParams,
+  context: SessionEventContextParams,
 ): SessionEventContext => {
   const session = createSessionContext(context);
   const store = createStoreContext(context);
@@ -166,6 +176,9 @@ export const createSessionEventContext = (
       adapter: context.adapter,
       buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
       readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
+      ...(context.loadSettingsSnapshot
+        ? { loadSettingsSnapshot: context.loadSettingsSnapshot }
+        : {}),
     },
     refresh: {
       refreshTaskData: context.refreshTaskData,

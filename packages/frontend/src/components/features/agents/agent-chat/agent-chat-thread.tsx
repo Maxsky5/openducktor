@@ -1,16 +1,24 @@
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import { type AgentSessionTodoItem, workflowAgentSessionScope } from "@openducktor/core";
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
+import {
+  memo,
+  type ReactElement,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { cn } from "@/lib/utils";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
 import {
@@ -25,7 +33,7 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
@@ -306,7 +314,22 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const sessionIdentity = useStableAgentSessionIdentity(session);
+  const stableSessionIdentity = useStableAgentSessionIdentity(session);
+  const sessionScopeTaskId = session?.sessionScope?.taskId ?? null;
+  const sessionScopeRole = session?.sessionScope?.role ?? null;
+  const sessionIdentity = useMemo<AgentSessionTranscriptTarget | null>(() => {
+    if (stableSessionIdentity === null) {
+      return null;
+    }
+    const sessionScope =
+      sessionScopeTaskId !== null && sessionScopeRole !== null
+        ? workflowAgentSessionScope(sessionScopeTaskId, sessionScopeRole)
+        : null;
+    return {
+      ...stableSessionIdentity,
+      ...(sessionScope ? { sessionScope } : {}),
+    };
+  }, [sessionScopeRole, sessionScopeTaskId, stableSessionIdentity]);
   const {
     messagesContentRef,
     renderedTurns,

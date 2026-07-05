@@ -9,9 +9,10 @@ const baseProps = {
   isStreamingAssistantMessage: false,
   sessionAgentColors: {},
   sessionIdentity: {
-    externalSessionId: "session-parent",
     runtimeKind: "opencode" as const,
     workingDirectory: "/repo",
+    taskId: "task-1",
+    role: "spec" as const,
   },
 };
 

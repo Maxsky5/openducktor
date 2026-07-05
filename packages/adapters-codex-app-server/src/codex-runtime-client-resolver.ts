@@ -1,11 +1,11 @@
 import {
-  type AgentSessionRuntimeRef,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
   type ListSessionRuntimeSnapshotsInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
   type LoadAgentSessionTodosInput,
+  type PolicyBoundSessionRef,
   type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
   requireRepoRuntimeRef,
@@ -20,7 +20,7 @@ type RuntimeClientInput =
   | ListAgentModelsInput
   | StartAgentSessionInput
   | ResumeAgentSessionInput
-  | AgentSessionRuntimeRef
+  | PolicyBoundSessionRef
   | ForkAgentSessionInput
   | ListSessionRuntimeSnapshotsInput
   | ReadSessionRuntimeSnapshotInput
@@ -29,7 +29,7 @@ type RuntimeClientInput =
   | LoadAgentSessionTodosInput
   | SearchAgentFilesInput;
 
-type RuntimeRef = { repoPath: string; runtimeKind: "codex" };
+type CodexRepoRuntimeRef = { repoPath: string; runtimeKind: "codex" };
 
 export class CodexRuntimeClientResolver {
   private readonly clientsByRuntimeId = new Map<string, CodexAppServerClient>();
@@ -65,7 +65,7 @@ export class CodexRuntimeClientResolver {
     if (requestedRuntimeRef.runtimeKind !== "codex") {
       throw new Error(`Codex App Server can only ${action} for runtime 'codex'.`);
     }
-    const runtimeRef: RuntimeRef = {
+    const runtimeRef: CodexRepoRuntimeRef = {
       repoPath: requestedRuntimeRef.repoPath,
       runtimeKind: requestedRuntimeRef.runtimeKind,
     };

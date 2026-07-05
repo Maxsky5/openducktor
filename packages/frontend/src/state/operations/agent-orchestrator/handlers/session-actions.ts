@@ -6,6 +6,7 @@ import type { UpdateSession } from "../events/session-event-types";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { SessionObservers } from "../support/session-observers";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { SessionTurnState } from "../support/session-turn-state";
 import { createPendingInputActions } from "./pending-input-actions";
@@ -34,6 +35,7 @@ type SessionActionsDependencies = {
   ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   refreshTaskData: (
@@ -65,6 +67,7 @@ export const createAgentSessionActions = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
+  loadSettingsSnapshot,
   loadSourceSession,
   loadAgentSessionHistory,
   refreshTaskData,
@@ -82,6 +85,7 @@ export const createAgentSessionActions = ({
     observeAgentSession,
     ensureRuntime,
     loadRepoPromptOverrides,
+    loadSettingsSnapshot,
   });
 
   const sendAgentMessage = createSendAgentMessage({
@@ -94,6 +98,7 @@ export const createAgentSessionActions = ({
     turnMetadata: sessionTurnState.metadata,
     clearSessionTurnState: sessionTurnState.clearSession,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
+    loadSettingsSnapshot,
   });
 
   const startAgentSession = createStartAgentSession({
@@ -126,6 +131,7 @@ export const createAgentSessionActions = ({
     },
     model: {
       loadRepoPromptOverrides,
+      loadSettingsSnapshot,
     },
   });
 
@@ -150,6 +156,7 @@ export const createAgentSessionActions = ({
     turnMetadata: sessionTurnState.metadata,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
     readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,
+    loadSettingsSnapshot,
   });
 
   const modelActions = createSessionModelActions({

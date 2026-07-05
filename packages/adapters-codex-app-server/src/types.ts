@@ -1,7 +1,9 @@
 import type {
+  CodexAppServerApprovalsReviewer,
   CodexAppServerAskForApproval,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
+  CodexAppServerRequestId,
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
   RuntimeDescriptor,
@@ -15,6 +17,7 @@ import type {
   AgentRole,
   AgentSessionActivity,
   AgentSessionHistoryMessage,
+  AgentSessionRuntimePolicy,
   AgentSessionSummary,
   AgentSkillCatalog,
   ForkAgentSessionInput,
@@ -24,6 +27,7 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import type { CodexPolicyLogEntry } from "./codex-session-policy";
 
 export type CodexJsonRpcRequest = {
   method: string;
@@ -37,7 +41,7 @@ export type CodexJsonRpcTransport = {
 export type CodexJsonRpcTransportFactory = (runtimeId: string) => CodexJsonRpcTransport;
 
 export type CodexServerRequestRecord = {
-  id?: number;
+  id?: CodexAppServerRequestId;
   method: string;
   params?: unknown;
 };
@@ -50,7 +54,7 @@ export type CodexNotificationRecord = {
 
 export type CodexServerRequestResponder = (
   runtimeId: string,
-  requestId: number,
+  requestId: CodexAppServerRequestId,
   result?: unknown,
   error?: unknown,
 ) => Promise<void>;
@@ -159,6 +163,7 @@ export type CodexInitializeParams = {
 
 export type CodexThreadStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   cwd: string;
   developerInstructions: string;
   sandbox: CodexAppServerSandboxMode;
@@ -168,6 +173,7 @@ export type CodexThreadStartParams = {
 
 export type CodexThreadResumeParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions?: string;
@@ -179,6 +185,7 @@ export type CodexThreadResumeParams = {
 
 export type CodexThreadForkParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   cwd: string;
   developerInstructions: string;
@@ -194,6 +201,7 @@ export type CodexThreadSetNameParams = {
 
 export type CodexTurnStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
+  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   threadId: string;
   input: CodexUserInput[];
   sandboxPolicy: CodexAppServerSandboxPolicy;
@@ -260,7 +268,8 @@ export type CodexSessionState = {
   repoPath: string;
   threadId: string;
   workingDirectory: string;
-  taskId: string;
+  taskId: string | null;
+  runtimePolicy: AgentSessionRuntimePolicy;
   liveStatus?: {
     classification: AgentSessionActivity;
   };
@@ -296,13 +305,13 @@ export type CodexAppServerClient = {
 export type CodexAppServerAdapterOptions = {
   repoRuntimeResolver: CodexRepoRuntimeResolverPort;
   transportFactory: CodexJsonRpcTransportFactory;
-  drainServerRequests: (runtimeId: string) => Promise<unknown[]>;
-  drainNotifications?: (runtimeId: string) => Promise<unknown[]>;
+  takeBufferedEvents: (runtimeId: string) => Promise<CodexAppServerStreamEvent[]>;
   subscribeEvents?: (
     runtimeId: string,
     listener: (event: CodexAppServerStreamEvent) => void,
   ) => Promise<() => void> | (() => void);
   respondServerRequest: CodexServerRequestResponder;
+  logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
 export type {
@@ -317,6 +326,7 @@ export type {
   AgentSkillCatalog,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
+  CodexPolicyLogEntry,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   RuntimeDescriptor,

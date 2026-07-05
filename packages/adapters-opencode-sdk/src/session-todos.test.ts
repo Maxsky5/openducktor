@@ -144,8 +144,7 @@ describe("OpencodeSdkAdapter session todos", () => {
 
     await expect(
       adapter.loadSessionTodos({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
+        ...defaultRepoRuntimeInput,
         workingDirectory: "   ",
         externalSessionId: "session-opencode-1",
       }),

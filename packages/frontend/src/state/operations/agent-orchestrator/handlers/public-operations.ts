@@ -3,10 +3,10 @@ import type {
   AgentEnginePort,
   AgentModelSelection,
   AgentSessionHistoryMessage,
-  AgentSessionRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -62,7 +62,7 @@ export const createOrchestratorPublicOperations = ({
   sessionActions,
   loadAgentSessionHistory,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  readSessionTodos: (session: AgentSessionRef): Promise<AgentSessionTodoItem[]> =>
+  readSessionTodos: (session: PolicyBoundSessionRef): Promise<AgentSessionTodoItem[]> =>
     agentEngine.loadSessionTodos(session),
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,

@@ -12,6 +12,7 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - Fix root causes at the source layer where the failure originates.
 - If a call fails, return/propagate an actionable error instead of silent defaults.
 - Do not add secondary probes or alternate paths to hide broken primary behavior.
+- Do not add polling/retry loops for data that should arrive through an existing live event stream or subscription; fix the event/stream contract instead.
 
 ## Critical Notice — Keep it simple
 

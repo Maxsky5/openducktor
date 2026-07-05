@@ -1,9 +1,12 @@
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core";
+import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
+
+type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
 
 export const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 export const buildQueuedSignature = (text: string): string =>
@@ -18,9 +21,11 @@ export const defaultRepoRuntimeInput = {
   repoPath: "/repo",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo",
+  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
+  runtimePolicy: { kind: "opencode" as const },
 };
 
-export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessionRef => ({
+export const sessionRef = (externalSessionId = "session-opencode-1"): SessionRef => ({
   repoPath: "/repo",
   externalSessionId,
   runtimeKind: "opencode",
@@ -29,14 +34,14 @@ export const sessionRef = (externalSessionId = "session-opencode-1"): AgentSessi
 
 export const sessionRuntimeRef = (
   externalSessionId = "session-opencode-1",
-  overrides: Partial<AgentSessionRuntimeRef> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<OpencodePolicyBoundSessionRef> = {},
+): OpencodePolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec" satisfies AgentRole,
+  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
+  runtimePolicy: { kind: "opencode" },
   systemPrompt: "system prompt",
   ...overrides,
 });
@@ -479,18 +484,16 @@ export const startDefaultSession = async (
   await adapter.startSession({
     repoPath: "/repo",
     workingDirectory: "/repo",
-    taskId: "task-1",
     runtimeKind: "opencode",
-    role,
+    sessionScope: workflowAgentSessionScope("task-1", role),
+    runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
     ...(model ? { model } : {}),
   });
 };
 
 export const defaultLoadSessionTodosInput = {
-  repoPath: "/repo",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/repo",
+  ...defaultRepoRuntimeInput,
   externalSessionId: "session-opencode-1",
 };
 

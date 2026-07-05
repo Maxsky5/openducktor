@@ -1,16 +1,16 @@
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
+import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 type AgentChatTranscriptRowProps = {
   row: AgentChatTranscriptRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: ParentSessionRuntimeContext | null;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };

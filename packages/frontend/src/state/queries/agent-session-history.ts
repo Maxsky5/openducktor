@@ -1,8 +1,4 @@
-import type {
-  AgentSessionHistoryMessage,
-  AgentSessionRef,
-  LoadAgentSessionHistoryInput,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { type QueryKey, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
@@ -10,7 +6,12 @@ export const SESSION_HISTORY_STALE_TIME_MS = 0;
 
 export const agentSessionHistoryQueryKeys = {
   all: ["agent-session-history"] as const,
-  history: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: AgentSessionRef) =>
+  history: ({
+    repoPath,
+    runtimeKind,
+    workingDirectory,
+    externalSessionId,
+  }: LoadAgentSessionHistoryInput) =>
     [
       ...agentSessionHistoryQueryKeys.all,
       normalizeWorkingDirectory(repoPath),
@@ -21,7 +22,7 @@ export const agentSessionHistoryQueryKeys = {
 };
 
 export const sessionHistoryQueryOptions = (
-  session: AgentSessionRef,
+  session: LoadAgentSessionHistoryInput,
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>,

@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
-  type AgentSessionRef,
+  type PolicyBoundSessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -47,12 +47,12 @@ const createHarnessState = () => {
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-2"), []);
 
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
-  const observedSessions: AgentSessionRef[] = [];
-  const loadedSessionHistories: AgentSessionRef[] = [];
-  let observeAgentSessionImpl = async (session: AgentSessionRef): Promise<void> => {
+  const observedSessions: PolicyBoundSessionRef[] = [];
+  const loadedSessionHistories: PolicyBoundSessionRef[] = [];
+  let observeAgentSessionImpl = async (session: PolicyBoundSessionRef): Promise<void> => {
     observedSessions.push(session);
   };
-  let loadLiveSessionHistoryImpl = async (session: AgentSessionRef): Promise<void> => {
+  let loadLiveSessionHistoryImpl = async (session: PolicyBoundSessionRef): Promise<void> => {
     loadedSessionHistories.push(session);
   };
   const listSessionRuntimeSnapshots = mock(
@@ -68,8 +68,9 @@ const createHarnessState = () => {
     sessionCollection = collection;
     return result;
   };
-  const observeAgentSession = (session: AgentSessionRef) => observeAgentSessionImpl(session);
-  const loadLiveSessionHistory = (session: AgentSessionRef) => loadLiveSessionHistoryImpl(session);
+  const observeAgentSession = (session: PolicyBoundSessionRef) => observeAgentSessionImpl(session);
+  const loadLiveSessionHistory = (session: PolicyBoundSessionRef) =>
+    loadLiveSessionHistoryImpl(session);
   const clearSessionObservationState = mock(() => undefined);
   const readyRuntimeHealthByRuntime: RepoRuntimeHealthMap = {
     opencode: createRepoRuntimeHealthFixture(),
@@ -440,6 +441,8 @@ describe("useRepoSessionReadModel", () => {
           repoPath: "/repo",
           externalSessionId: record.externalSessionId,
           runtimeKind: "opencode",
+          runtimePolicy: { kind: "opencode" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
           workingDirectory: record.workingDirectory,
         },
       ]);
@@ -610,6 +613,8 @@ describe("useRepoSessionReadModel", () => {
           repoPath: "/repo",
           externalSessionId: record.externalSessionId,
           runtimeKind: "opencode",
+          runtimePolicy: { kind: "opencode" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
           workingDirectory: record.workingDirectory,
         },
       ]);

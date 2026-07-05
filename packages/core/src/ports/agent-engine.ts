@@ -1,4 +1,5 @@
 import type {
+  CodexEffectivePolicy,
   FileDiff,
   FileStatus,
   RuntimeApprovalReplyOutcome,
@@ -12,8 +13,6 @@ import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentRole,
-  AgentSessionContext,
-  AgentSessionRef,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -27,32 +26,90 @@ import type {
   RuntimeKind,
   RuntimePendingInputRequestId,
   RuntimeWorkingDirectoryRef,
+  SessionRef,
 } from "../types/agent-orchestrator";
 
-export type AgentSessionRuntimeRef = AgentSessionRef & {
-  taskId: string;
-  role: AgentRole | null;
-  model?: AgentModelSelection;
-  systemPrompt?: string;
+export type AgentSessionWorkflowScope = { kind: "workflow"; taskId: string; role: AgentRole };
+export type AgentSessionScope = AgentSessionWorkflowScope;
+export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
+export type AgentSessionRuntimePolicy =
+  | { kind: "opencode" }
+  | { kind: "codex"; policy: CodexEffectivePolicy };
+export type AgentRuntimePolicyBinding =
+  | {
+      runtimeKind: "opencode";
+      runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "opencode" }>;
+    }
+  | { runtimeKind: "codex"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "codex" }> };
+
+export const workflowAgentSessionScope = (
+  taskId: string,
+  role: AgentRole,
+): AgentSessionWorkflowScope => ({ kind: "workflow", taskId, role });
+
+export const sessionScopeRole = (scope: AgentSessionScope): AgentRole => scope.role;
+export const requireWorkflowAgentSessionScope = (
+  scope: AgentSessionScope | null | undefined,
+  action: string,
+): AgentSessionWorkflowScope => {
+  if (!scope) {
+    throw new Error(`Cannot ${action} without workflow session context.`);
+  }
+  return scope;
 };
 
-export type StartAgentSessionInput = AgentSessionContext;
+export const assertAgentRuntimePolicyBinding = (
+  input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
+  action: string,
+): void => {
+  if (!input.runtimePolicy) {
+    throw new Error(`Cannot ${action} without resolved runtime policy.`);
+  }
+  if (input.runtimeKind !== input.runtimePolicy.kind) {
+    throw new Error(
+      `Cannot ${action} with runtime '${input.runtimeKind}' and '${input.runtimePolicy.kind}' runtime policy.`,
+    );
+  }
+};
 
-export type ResumeAgentSessionInput = AgentSessionRuntimeRef;
+export const toAgentRuntimePolicyBinding = (input: {
+  runtimeKind: RuntimeKind;
+  runtimePolicy: AgentSessionRuntimePolicy;
+}): AgentRuntimePolicyBinding => {
+  assertAgentRuntimePolicyBinding(input, "bind runtime policy");
+  return input as AgentRuntimePolicyBinding;
+};
 
-export type ForkAgentSessionInput = AgentSessionContext & {
+export type PolicyBoundSessionRef = (SessionRef | WorkflowSessionRef) &
+  AgentRuntimePolicyBinding & {
+    model?: AgentModelSelection;
+    systemPrompt?: string;
+  };
+
+export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
+  AgentRuntimePolicyBinding & {
+    sessionScope: AgentSessionScope;
+    systemPrompt: string;
+    model?: AgentModelSelection;
+  };
+
+export type ResumeAgentSessionInput = PolicyBoundSessionRef & {
+  sessionScope?: AgentSessionScope;
+};
+
+export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type SendAgentUserMessageInput = AgentSessionRuntimeRef & {
+export type SendAgentUserMessageInput = PolicyBoundSessionRef & {
   parts: AgentUserMessagePart[];
   model?: AgentModelSelection;
 };
 
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
 
-export type UpdateAgentSessionModelInput = AgentSessionRef & {
+export type UpdateAgentSessionModelInput = SessionRef & {
   model: AgentModelSelection | null;
 };
 
@@ -61,15 +118,12 @@ export type AgentSessionHistorySystemPromptContext = {
   startedAt: string;
 };
 
-export type LoadAgentSessionHistoryInput = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
+export type LoadAgentSessionHistoryInput = PolicyBoundSessionRef & {
   systemPromptContext?: AgentSessionHistorySystemPromptContext;
   limit?: number;
 };
 
-export type LoadAgentSessionTodosInput = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
-};
+export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
 export type ListAgentModelsInput = RepoRuntimeRef;
 
@@ -85,7 +139,7 @@ export type ListSessionRuntimeSnapshotsInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ReadSessionRuntimeSnapshotInput = AgentSessionRef;
+export type ReadSessionRuntimeSnapshotInput = SessionRef;
 
 export type LoadAgentSessionDiffInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
@@ -150,7 +204,7 @@ export type AgentSessionRuntimeSnapshot =
   | {
       availability: "runtime";
       classification: AgentSessionActivity;
-      ref: AgentSessionRef;
+      ref: SessionRef;
       parentExternalSessionId?: ExternalSessionId;
       title: string;
       startedAt: string;
@@ -160,18 +214,18 @@ export type AgentSessionRuntimeSnapshot =
   | {
       availability: "missing";
       classification: "missing";
-      ref: AgentSessionRef;
+      ref: SessionRef;
       pendingApprovals: [];
       pendingQuestions: [];
     };
 
-export type ReplyApprovalInput = AgentSessionRuntimeRef & {
+export type ReplyApprovalInput = PolicyBoundSessionRef & {
   requestId: RuntimePendingInputRequestId;
   outcome: RuntimeApprovalReplyOutcome;
   message?: string;
 };
 
-export type ReplyQuestionInput = AgentSessionRuntimeRef & {
+export type ReplyQuestionInput = PolicyBoundSessionRef & {
   requestId: RuntimePendingInputRequestId;
   answers: string[][];
 };
@@ -202,7 +256,7 @@ export interface AgentCatalogPort {
 export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
-  releaseSession(input: AgentSessionRef): Promise<void>;
+  releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listSessionRuntimeSnapshots(
     input: ListSessionRuntimeSnapshotsInput,
@@ -217,10 +271,10 @@ export interface AgentSessionPort {
   replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(
-    input: AgentSessionRef,
+    input: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe>;
-  stopSession(input: AgentSessionRef): Promise<void>;
+  stopSession(input: SessionRef): Promise<void>;
 }
 
 export interface AgentWorkspaceInspectionPort {

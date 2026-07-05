@@ -6,6 +6,9 @@ import type { WorkspaceSettingsService } from "../../workspaces/workspace-settin
 import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
+const sleep = (durationMs: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, durationMs));
+
 const createTaskSyncServiceForTest = (input: Parameters<typeof createTaskSyncService>[0]) =>
   createTaskSyncService(input);
 const createEventBus = () => {
@@ -182,5 +185,66 @@ describe("createTaskSyncService", () => {
     const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
+  });
+  test("waits for an in-flight pull request sync iteration during stop", async () => {
+    const { eventBus, events } = createEventBus();
+    let resolveSyncStarted: () => void = () => {};
+    const syncStarted = new Promise<void>((resolve) => {
+      resolveSyncStarted = resolve;
+    });
+    let releaseSync: () => void = () => {};
+    const syncReleased = new Promise<void>((resolve) => {
+      releaseSync = resolve;
+    });
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      intervalMs: 1,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.uninterruptible(
+            Effect.gen(function* () {
+              resolveSyncStarted();
+              yield* Effect.promise(() => syncReleased);
+              return { ran: true, changedTaskIds: ["task-1"] };
+            }),
+          );
+        },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.succeed([
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ]);
+        },
+      }),
+    });
+
+    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
+    await syncStarted;
+
+    try {
+      const stopPromise = Effect.runPromise(loop.stop()).then(() => "stopped" as const);
+      const stopBeforeRelease = await Promise.race([
+        stopPromise,
+        sleep(50).then(() => "waiting" as const),
+      ]);
+
+      expect(stopBeforeRelease).toBe("waiting");
+      expect(events).toEqual([]);
+      releaseSync();
+      await expect(stopPromise).resolves.toBe("stopped");
+      expect(events).toEqual([]);
+    } finally {
+      releaseSync();
+    }
   });
 });

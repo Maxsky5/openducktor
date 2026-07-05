@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 
 describe("session-runtime-utils", () => {
@@ -16,9 +17,9 @@ describe("session-runtime-utils", () => {
     const withModel = toSessionInput({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
       workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
+      sessionScope: workflowAgentSessionScope("task-1", "spec"),
       systemPrompt: "prompt",
       model: {
         providerId: "openai",
@@ -30,9 +31,9 @@ describe("session-runtime-utils", () => {
     const withoutModel = toSessionInput({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
       workingDirectory: "/repo",
-      taskId: "task-2",
-      role: "build",
+      sessionScope: workflowAgentSessionScope("task-2", "build"),
       systemPrompt: "prompt",
     });
 

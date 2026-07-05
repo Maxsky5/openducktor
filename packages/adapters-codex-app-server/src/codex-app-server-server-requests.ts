@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   normalizeOdtWorkflowToolName,
 } from "@openducktor/core";
+import { codexServerRequestIdMetadata, codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -143,7 +144,7 @@ export const handleCodexServerRequest = async (
   handledRequestKeys: Set<string>,
 ): Promise<boolean> => {
   const requestId = rawRequest.id;
-  const requestKey = requestId !== undefined ? `request:${requestId}` : undefined;
+  const requestKey = requestId !== undefined ? codexServerRequestKey(requestId) : undefined;
   if (requestKey && handledRequestKeys.has(requestKey)) {
     return false;
   }
@@ -231,6 +232,7 @@ export const handleCodexServerRequest = async (
     const questionInput = {
       requestId: parsed.request.requestId,
       questions: parsed.request.questions,
+      ...codexServerRequestIdMetadata(parsed.serverRequestId),
     };
     context.pendingInput.addQuestion({
       runtimeId: routeContext.runtimeId,
@@ -289,38 +291,7 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
-    const isMutatingRequest = requestMutation === "mutating";
-    const shouldRejectForRole =
-      !routeContext.policySession.role ||
-      (isMutatingRequest && READ_ONLY_ROLES.has(routeContext.policySession.role));
-    if (shouldRejectForRole) {
-      const roleReason = routeContext.policySession.role
-        ? `role '${routeContext.policySession.role}' is read-only`
-        : "the session role is unknown";
-      await context.respondServerRequest(
-        routeContext.runtimeId,
-        requestId,
-        codexApprovalResponseForRequest({
-          outcome: "reject",
-          request: rawRequest,
-          message: `Codex request '${rawRequest.method}' was rejected because ${roleReason}.`,
-        }),
-        undefined,
-      );
-      context.emitSessionEvent(routeContext.policySession.threadId, {
-        type: "session_error",
-        externalSessionId: routeContext.policySession.threadId,
-        timestamp: new Date().toISOString(),
-        message: `Rejected ${isMutatingRequest ? "mutating " : ""}Codex request '${rawRequest.method}' because ${roleReason}.`,
-      });
-      return false;
-    }
-
-    const role = routeContext.policySession.role;
-    if (!role) {
-      throw new Error("Codex approval request cannot be created without a session role.");
-    }
-    const approval = toApprovalRequest(rawRequest, role);
+    const approval = toApprovalRequest(rawRequest);
     context.pendingInput.addApproval({
       runtimeId: routeContext.runtimeId,
       threadId: routeContext.ownerThreadId,
@@ -337,7 +308,7 @@ export const handleCodexServerRequest = async (
   }
 
   if (requestId === undefined) {
-    throw new Error("Codex app-server tool request is missing a numeric id.");
+    throw new Error("Codex app-server tool request is missing an id.");
   }
 
   // Dynamic Codex tool calls are never approved here; OpenDucktor workflow tools are exposed

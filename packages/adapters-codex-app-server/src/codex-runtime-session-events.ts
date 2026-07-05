@@ -2,11 +2,12 @@ import type {
   AcceptedAgentUserMessage,
   AgentEvent,
   AgentModelSelection,
-  AgentSessionRef,
   AgentSessionTodoItem,
   AgentUserMessagePart,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
@@ -56,8 +57,7 @@ import type {
 
 type CodexRuntimeSessionEventsDeps = {
   subscribeEvents: CodexAppServerAdapterOptions["subscribeEvents"];
-  drainServerRequests: CodexAppServerAdapterOptions["drainServerRequests"];
-  drainNotifications: CodexAppServerAdapterOptions["drainNotifications"];
+  takeBufferedEvents: CodexAppServerAdapterOptions["takeBufferedEvents"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
@@ -72,18 +72,18 @@ type CodexRuntimeSessionHistoryContext = {
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
   tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
-  drainThreadReadTokenUsage: (
+  collectThreadReadTokenUsage: (
     runtimeId: string,
     threadId: string,
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
 };
 
 type RestoredContextCapture = {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
   tokenUsageByTurnId: Map<string, CodexTokenUsageTotals>;
 };
 
-const RESTORED_USAGE_DRAIN_ATTEMPTS = 3;
+const RESTORED_USAGE_REPLAY_ATTEMPTS = 3;
 
 const waitForRestoredUsageReplayTick = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 0));
@@ -114,7 +114,7 @@ export class CodexRuntimeSessionEvents {
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
     deps.subagents.onRouteLearned((route) => {
-      this.scheduleBufferedSubagentServerRequestDrain(route);
+      this.scheduleBufferedSubagentServerRequestProcessing(route);
     });
   }
 
@@ -139,13 +139,13 @@ export class CodexRuntimeSessionEvents {
       eventMapperPipeline: createCodexEventMapperPipeline(),
       modelByTurnKey: this.modelByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
-      drainThreadReadTokenUsage: (runtimeId: string, threadId: string) =>
-        this.drainThreadReadTokenUsage(runtimeId, threadId),
+      collectThreadReadTokenUsage: (runtimeId: string, threadId: string) =>
+        this.collectThreadReadTokenUsage(runtimeId, threadId),
     };
   }
 
   async captureRestoredContextUsage(
-    sessionRef: AgentSessionRef,
+    sessionRef: SessionRef,
     runtimeId: string,
     restore: () => Promise<void>,
   ): Promise<void> {
@@ -158,7 +158,7 @@ export class CodexRuntimeSessionEvents {
     this.restoredContextCapturesByKey.set(captureKey, capture);
     try {
       await restore();
-      const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(runtimeId, threadId, {
+      const tokenUsageByTurnId = await this.collectThreadReadTokenUsage(runtimeId, threadId, {
         suppressTargetStatusEvents: true,
         waitForTokenUsage: true,
       });
@@ -215,7 +215,7 @@ export class CodexRuntimeSessionEvents {
     try {
       const hasPendingInput = this.deps.subscribeEvents
         ? false
-        : await this.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
+        : await this.handleBufferedRuntimeEvents(activeTurn.session, activeTurn.handledRequestKeys);
       if (hasPendingInput && !activeTurn.isTurnSettled()) {
         this.bindPendingInputToActiveTurn(activeTurn.session.threadId, activeTurn);
         return;
@@ -226,14 +226,15 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  async handlePendingServerRequests(
+  async handleBufferedRuntimeEvents(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
   ): Promise<boolean> {
-    await this.handlePendingNotifications(session);
-    const requests = await this.deps.drainServerRequests(session.runtimeId);
-    const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
-    return hasPendingInput || requests.length > 0;
+    const events = await this.deps.takeBufferedEvents(session.runtimeId);
+    for (const event of events) {
+      await this.processBufferedRuntimeEvent(session, handledRequestKeys, event);
+    }
+    return this.hasPendingInputForSession(session.threadId);
   }
 
   emitUserMessage(
@@ -243,7 +244,7 @@ export class CodexRuntimeSessionEvents {
     return emitCodexUserMessage(this.streamingContext(), event, sourceParts);
   }
 
-  async drainBufferedStreamEvents(externalSessionId: string): Promise<void> {
+  async replayBufferedStreamEvents(externalSessionId: string): Promise<void> {
     const session = this.deps.sessions.get(externalSessionId);
     if (!session) {
       return;
@@ -254,13 +255,13 @@ export class CodexRuntimeSessionEvents {
       session.runtimeId,
     );
     await this.processServerRequestsForSession(session, bufferedRequests);
-    await this.drainBufferedSubagentServerRequestsForParent(session);
+    await this.processBufferedSubagentServerRequestsForParent(session);
   }
 
-  private scheduleBufferedSubagentServerRequestDrain(route: CodexSubagentRoute): void {
+  private scheduleBufferedSubagentServerRequestProcessing(route: CodexSubagentRoute): void {
     void Promise.resolve()
       .then(() => this.applyRouteToPendingInput(route))
-      .then(() => this.drainBufferedSubagentServerRequests(route))
+      .then(() => this.processBufferedSubagentServerRequests(route))
       .catch((error) => this.emitBufferedSubagentServerRequestError(route, error));
   }
 
@@ -306,18 +307,18 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private async drainBufferedSubagentServerRequestsForParent(
+  private async processBufferedSubagentServerRequestsForParent(
     parentSession: CodexSessionState,
   ): Promise<void> {
     for (const route of this.deps.subagents.routesForParent(
       parentSession.threadId,
       parentSession.runtimeId,
     )) {
-      await this.drainBufferedSubagentServerRequests(route);
+      await this.processBufferedSubagentServerRequests(route);
     }
   }
 
-  private async drainBufferedSubagentServerRequests(route: CodexSubagentRoute): Promise<void> {
+  private async processBufferedSubagentServerRequests(route: CodexSubagentRoute): Promise<void> {
     const parentSession = this.deps.sessions.get(route.parentExternalSessionId);
     const childSession = this.deps.sessions.get(route.childExternalSessionId);
     const session = parentSession ?? childSession;
@@ -559,7 +560,7 @@ export class CodexRuntimeSessionEvents {
     const params = notification.params;
     const requestId = params.requestId ?? params.request_id;
     if (typeof requestId === "number" || typeof requestId === "string") {
-      return String(requestId);
+      return codexServerRequestKey(requestId);
     }
     return null;
   }
@@ -609,7 +610,7 @@ export class CodexRuntimeSessionEvents {
 
   private emitUnroutableRuntimeServerRequest(
     runtimeId: string,
-    message = "Cannot route Codex app-server request because it is missing params.threadId.",
+    message = "Cannot route Codex app-server request because it is missing a thread identifier.",
   ): void {
     for (const session of this.deps.sessions.values()) {
       if (session.runtimeId !== runtimeId) {
@@ -638,13 +639,17 @@ export class CodexRuntimeSessionEvents {
   private async processServerRequestsForSession(
     session: CodexSessionState,
     requests: CodexServerRequestRecord[],
-  ): Promise<void> {
+    handledRequestKeysOverride?: Set<string>,
+  ): Promise<boolean> {
     const ownerThreadIds = new Set(
       requests.map((request) => extractThreadIdFromParams(request.params) ?? session.threadId),
     );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
     const handledRequestKeys =
-      this.handledStreamRequestKeysByThreadId.get(session.threadId) ?? new Set();
+      handledRequestKeysOverride ??
+      activeTurn?.handledRequestKeys ??
+      this.handledStreamRequestKeysByThreadId.get(session.threadId) ??
+      new Set();
     this.handledStreamRequestKeysByThreadId.set(session.threadId, handledRequestKeys);
     const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
     for (const ownerThreadId of ownerThreadIds) {
@@ -653,6 +658,107 @@ export class CodexRuntimeSessionEvents {
     if (hasPendingInput && activeTurn && !activeTurn.isTurnSettled()) {
       this.bindPendingInputToActiveTurn(session.threadId, activeTurn);
     }
+    return hasPendingInput;
+  }
+
+  private async processBufferedRuntimeEvent(
+    preferredSession: CodexSessionState,
+    preferredHandledRequestKeys: Set<string>,
+    event: CodexRuntimeStreamEvent,
+  ): Promise<void> {
+    const threadId = threadIdFromRuntimeStreamEvent(event);
+    if (event.kind === "notification") {
+      await this.processBufferedNotification(preferredSession, threadId, event);
+      return;
+    }
+    if (!threadId) {
+      this.emitUnroutableRuntimeServerRequest(event.runtimeId);
+      return;
+    }
+    const targetSession = this.sessionForBufferedRequest(
+      event.runtimeId,
+      threadId,
+      preferredSession,
+    );
+    if (!targetSession) {
+      this.bufferRuntimeStreamEvent(threadId, event);
+      return;
+    }
+    const handledRequestKeys =
+      targetSession.threadId === preferredSession.threadId
+        ? preferredHandledRequestKeys
+        : undefined;
+    await this.processServerRequestsForSession(
+      targetSession,
+      [parseServerRequestRecord(event.message)],
+      handledRequestKeys,
+    );
+  }
+
+  private async processBufferedNotification(
+    preferredSession: CodexSessionState,
+    threadId: string | null,
+    event: CodexRuntimeStreamEvent,
+  ): Promise<void> {
+    const notification = parseNotificationRecord(event.message);
+    if (notification.method === "serverRequest/resolved") {
+      this.handleServerRequestResolvedNotification(event.runtimeId, notification);
+      return;
+    }
+    if (!threadId) {
+      await this.handlePendingNotifications(preferredSession, [notification]);
+      return;
+    }
+    const targetSession =
+      threadId === preferredSession.threadId ? preferredSession : this.deps.sessions.get(threadId);
+    if (!targetSession) {
+      this.bufferRuntimeStreamEvent(threadId, event);
+      return;
+    }
+    if (targetSession.runtimeId !== event.runtimeId) {
+      return;
+    }
+    await this.handlePendingNotifications(targetSession, [notification]);
+  }
+
+  private sessionForBufferedRequest(
+    runtimeId: string,
+    threadId: string,
+    preferredSession: CodexSessionState,
+  ): CodexSessionState | null {
+    if (threadId === preferredSession.threadId && preferredSession.runtimeId === runtimeId) {
+      return preferredSession;
+    }
+
+    const ownerSession = this.deps.sessions.get(threadId);
+    if (ownerSession) {
+      if (ownerSession.runtimeId === runtimeId) {
+        return ownerSession;
+      }
+      this.emitCrossRuntimeRouteError(
+        runtimeId,
+        threadId,
+        ownerSession.runtimeId,
+        ownerSession.threadId,
+      );
+      return null;
+    }
+
+    const route = this.deps.subagents.routeForChild(threadId, runtimeId);
+    const parentSession = route ? this.deps.sessions.get(route.parentExternalSessionId) : undefined;
+    if (!parentSession) {
+      return null;
+    }
+    if (parentSession.runtimeId !== runtimeId) {
+      this.emitCrossRuntimeRouteError(
+        runtimeId,
+        threadId,
+        parentSession.runtimeId,
+        parentSession.threadId,
+      );
+      return null;
+    }
+    return parentSession;
   }
 
   private async handleServerRequests(
@@ -672,6 +778,13 @@ export class CodexRuntimeSessionEvents {
     return hasPendingInput;
   }
 
+  private hasPendingInputForSession(threadId: string): boolean {
+    return (
+      this.deps.pendingInput.pendingApprovalEventsForSession(threadId).length > 0 ||
+      this.deps.pendingInput.pendingQuestionEventsForSession(threadId).length > 0
+    );
+  }
+
   private async handlePendingNotifications(
     session: CodexSessionState,
     notificationsFromBatch?: CodexNotificationRecord[],
@@ -680,6 +793,56 @@ export class CodexRuntimeSessionEvents {
       ? this.captureRestoredContextNotifications(session, notificationsFromBatch)
       : notificationsFromBatch;
     await handleCodexPendingNotifications(this.streamingContext(), session, notifications);
+  }
+
+  private serverRequestBatchKey(
+    runtimeId: string,
+    request: CodexServerRequestRecord,
+  ): string | null {
+    const threadId = extractThreadIdFromParams(request.params);
+    return threadId && request.id !== undefined
+      ? `${runtimeId}\u0000${threadId}\u0000${codexServerRequestKey(request.id)}`
+      : null;
+  }
+
+  private resolvedServerRequestBatchKey(event: CodexRuntimeStreamEvent): string | null {
+    if (event.kind !== "notification") {
+      return null;
+    }
+    const notification = parseNotificationRecord(event.message);
+    if (notification.method !== "serverRequest/resolved") {
+      return null;
+    }
+    const threadId = extractThreadIdFromParams(notification.params);
+    const requestId = this.resolvedServerRequestId(notification);
+    return threadId && requestId ? `${event.runtimeId}\u0000${threadId}\u0000${requestId}` : null;
+  }
+
+  private resolvedServerRequestBatchKeys(events: CodexRuntimeStreamEvent[]): Set<string> {
+    const keys = new Set<string>();
+    for (const event of events) {
+      const key = this.resolvedServerRequestBatchKey(event);
+      if (key) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  private bufferUnprocessedServerRequest(
+    runtimeId: string,
+    request: CodexServerRequestRecord,
+  ): void {
+    const threadId = extractThreadIdFromParams(request.params);
+    if (!threadId) {
+      this.emitUnroutableRuntimeServerRequest(runtimeId);
+      return;
+    }
+    this.bufferRuntimeStreamEvent(threadId, {
+      runtimeId,
+      kind: "server_request",
+      message: request,
+    });
   }
 
   private captureRestoredContextNotifications(
@@ -735,7 +898,6 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(): CodexStreamingContext {
     return {
       subscribeEvents: Boolean(this.deps.subscribeEvents),
-      ...(this.deps.drainNotifications ? { drainNotifications: this.deps.drainNotifications } : {}),
       bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       startedItemTimestampsByKey: this.startedItemTimestampsByKey,
@@ -784,21 +946,35 @@ export class CodexRuntimeSessionEvents {
     };
   }
 
-  private async drainThreadReadTokenUsage(
+  private async collectThreadReadTokenUsage(
     runtimeId: string,
     threadId: string,
     options: { suppressTargetStatusEvents?: boolean; waitForTokenUsage?: boolean } = {},
   ): Promise<Map<string, CodexTokenUsageTotals>> {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
 
-    const drainOnce = async (): Promise<void> => {
+    const collectOnce = async (): Promise<void> => {
       const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
-      const drainedNotifications = this.deps.drainNotifications
-        ? (await this.deps.drainNotifications(runtimeId)).map((notification) =>
-            parseNotificationRecord(notification),
-          )
-        : [];
-      const notifications = [...bufferedNotifications, ...drainedNotifications];
+      const takenEvents = await this.deps.takeBufferedEvents(runtimeId);
+      const resolvedRequestKeys = this.resolvedServerRequestBatchKeys(takenEvents);
+      const takenNotifications: CodexNotificationRecord[] = [];
+      for (const event of takenEvents) {
+        if (event.kind === "server_request") {
+          const request = parseServerRequestRecord(event.message);
+          const requestKey = this.serverRequestBatchKey(event.runtimeId, request);
+          if (!requestKey || !resolvedRequestKeys.has(requestKey)) {
+            this.bufferUnprocessedServerRequest(event.runtimeId, request);
+          }
+          continue;
+        }
+        const notification = parseNotificationRecord(event.message);
+        if (notification.method === "serverRequest/resolved") {
+          this.handleServerRequestResolvedNotification(event.runtimeId, notification);
+          continue;
+        }
+        takenNotifications.push(notification);
+      }
+      const notifications = [...bufferedNotifications, ...takenNotifications];
       for (const notification of notifications) {
         const notificationThreadId = extractThreadIdFromParams(notification.params);
         const notificationTurnId = extractTurnId(notification.params);
@@ -827,16 +1003,16 @@ export class CodexRuntimeSessionEvents {
       }
     };
 
-    await drainOnce();
+    await collectOnce();
     for (
       let attempt = 1;
       options.waitForTokenUsage &&
       tokenUsageByTurnId.size === 0 &&
-      attempt < RESTORED_USAGE_DRAIN_ATTEMPTS;
+      attempt < RESTORED_USAGE_REPLAY_ATTEMPTS;
       attempt += 1
     ) {
       await waitForRestoredUsageReplayTick();
-      await drainOnce();
+      await collectOnce();
     }
 
     return tokenUsageByTurnId;
@@ -855,7 +1031,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitLatestContextUsage(
-    sessionRef: AgentSessionRef,
+    sessionRef: SessionRef,
     tokenUsageByTurnId: ReadonlyMap<string, CodexTokenUsageTotals>,
   ): void {
     let latestTokenUsage: CodexTokenUsageTotals | null = null;

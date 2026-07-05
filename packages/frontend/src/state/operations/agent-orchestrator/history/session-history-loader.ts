@@ -2,7 +2,7 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentSessionHistorySystemPromptContext,
-  AgentSessionRef,
+  PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -11,7 +11,9 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
+import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
@@ -39,6 +41,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   updateSession: UpdateSession;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   observeAgentSession?: ObserveAgentSession;
 };
 
@@ -153,6 +156,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   identity: AgentSessionIdentity;
+  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   observeAgentSession?: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
@@ -160,7 +164,7 @@ type LoadSessionHistoryIntoStoreArgs = {
 
 const observeSelectedSessionWithoutBlockingHistory = (
   observeAgentSession: ObserveAgentSession | undefined,
-  sessionRef: AgentSessionRef,
+  sessionRef: PolicyBoundSessionRef,
 ): void => {
   if (!observeAgentSession) {
     return;
@@ -182,6 +186,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   updateSession,
   identity,
   policy,
+  loadSettingsSnapshot,
   loadSystemPromptContext,
   observeAgentSession,
   isStaleRepoOperation,
@@ -224,7 +229,16 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       if (!sessionForHistory) {
         return finishStaleHistoryLoad();
       }
-      const sessionRef = toRuntimeSessionRef(repoPath, sessionForHistory);
+      const sessionRef = await resolveRuntimeSessionContextRef(
+        repoPath,
+        sessionForHistory,
+        loadSettingsSnapshot ??
+          (() => {
+            throw new Error(
+              "Settings snapshot loader is required to resolve session runtime policy.",
+            );
+          }),
+      );
       observeSelectedSessionWithoutBlockingHistory(observeAgentSession, sessionRef);
       if (isStaleRepoOperation()) {
         return finishStaleHistoryLoad();
@@ -277,6 +291,7 @@ const createLoadSessionHistoryWithPolicy = ({
   updateSession,
   taskRef,
   loadRepoPromptOverrides,
+  loadSettingsSnapshot,
   observeAgentSession,
   policy,
 }: CreateLoadAgentSessionHistoryArgs & {
@@ -317,6 +332,7 @@ const createLoadSessionHistoryWithPolicy = ({
           session,
           loadRepoPromptOverrides,
         }),
+      ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : {}),
       ...(observeAgentSession ? { observeAgentSession } : {}),
       isStaleRepoOperation,
     });

@@ -51,13 +51,12 @@ const createPort = (): {
           backwardsCursor: null,
         });
       },
-      drainNotifications(runtimeId) {
-        calls.push({ method: "drainNotifications", runtimeId });
-        return Effect.succeed([codexStatusNotification]);
-      },
-      drainServerRequests(runtimeId) {
-        calls.push({ method: "drainServerRequests", runtimeId });
-        return Effect.succeed([codexApprovalRequest]);
+      takeBufferedEvents(runtimeId) {
+        calls.push({ method: "takeBufferedEvents", runtimeId });
+        return Effect.succeed([
+          { runtimeId, kind: "notification" as const, message: codexStatusNotification },
+          { runtimeId, kind: "server_request" as const, message: codexApprovalRequest },
+        ]);
       },
       respond(input) {
         calls.push({ method: "respond", input });
@@ -80,8 +79,11 @@ describe("createCodexAppServerService", () => {
       ),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
-      Effect.runPromise(service.notifications({ runtimeId: "runtime-1" })),
-    ).resolves.toEqual([codexStatusNotification]);
+      Effect.runPromise(service.takeBufferedEvents({ runtimeId: "runtime-1" })),
+    ).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
+      { runtimeId: "runtime-1", kind: "server_request", message: codexApprovalRequest },
+    ]);
     await expect(
       Effect.runPromise(
         service.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
@@ -94,9 +96,6 @@ describe("createCodexAppServerService", () => {
       nextCursor: null,
       backwardsCursor: null,
     });
-    await expect(Effect.runPromise(service.requests({ runtimeId: "runtime-1" }))).resolves.toEqual([
-      codexApprovalRequest,
-    ]);
     await expect(
       Effect.runPromise(
         service.respond({
@@ -115,7 +114,7 @@ describe("createCodexAppServerService", () => {
           params: {},
         },
       },
-      { method: "drainNotifications", runtimeId: "runtime-1" },
+      { method: "takeBufferedEvents", runtimeId: "runtime-1" },
       {
         method: "listLoadedThreads",
         input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
@@ -124,7 +123,6 @@ describe("createCodexAppServerService", () => {
         method: "listThreads",
         input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
       },
-      { method: "drainServerRequests", runtimeId: "runtime-1" },
       {
         method: "respond",
         input: {

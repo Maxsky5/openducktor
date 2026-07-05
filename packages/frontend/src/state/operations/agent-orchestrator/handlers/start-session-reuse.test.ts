@@ -139,7 +139,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-fresh-build-session",
         startedAt: "2026-02-22T08:20:00.000Z",
-        role: input.role,
+        role: input.sessionScope.role,
         status: "idle",
       };
     };

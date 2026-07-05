@@ -1,8 +1,8 @@
 import {
   type AgentEvent,
-  type AgentSessionRef,
   agentSessionRefKey,
   type EventUnsubscribe,
+  type SessionRef,
 } from "@openducktor/core";
 
 export type SessionEventListener = (event: AgentEvent) => void;
@@ -10,7 +10,7 @@ export type SessionEventListeners = Map<string, Set<SessionEventListener>>;
 
 export const subscribeSessionEvents = (
   listenersBySession: SessionEventListeners,
-  sessionRef: AgentSessionRef,
+  sessionRef: SessionRef,
   listener: SessionEventListener,
 ): EventUnsubscribe => {
   const sessionKey = agentSessionRefKey(sessionRef);
@@ -32,7 +32,7 @@ export const subscribeSessionEvents = (
 
 export const emitSessionEvent = (
   listenersBySession: SessionEventListeners,
-  sessionRef: AgentSessionRef,
+  sessionRef: SessionRef,
   event: AgentEvent,
 ): void => {
   const listeners = listenersBySession.get(agentSessionRefKey(sessionRef));
@@ -47,7 +47,7 @@ export const emitSessionEvent = (
 
 export const clearSessionListeners = (
   listenersBySession: SessionEventListeners,
-  sessionRef: AgentSessionRef,
+  sessionRef: SessionRef,
 ): void => {
   listenersBySession.delete(agentSessionRefKey(sessionRef));
 };

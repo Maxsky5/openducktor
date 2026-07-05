@@ -7,6 +7,7 @@ import type {
 import type {
   CodexAppServerClientRequest,
   CodexAppServerProtocolMessage,
+  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
   CodexAppServerRespondError,
@@ -36,6 +37,7 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
 
 export type {
   CodexAppServerProtocolMessage,
+  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
 };
@@ -43,7 +45,7 @@ export type {
 export type CodexAppServerRequestInput = { runtimeId: string } & CodexAppServerClientRequest;
 export type CodexAppServerRespondInput = {
   runtimeId: string;
-  requestId: number;
+  requestId: CodexAppServerRequestId;
   result?: CodexAppServerRespondResult;
   error?: CodexAppServerRespondError;
 };
@@ -57,6 +59,11 @@ export type CodexAppServerLoadedThreadListResponse = {
   nextCursor: string | null;
 };
 export type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError";
+export type CodexAppServerStreamEvent = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: CodexAppServerProtocolMessage;
+};
 export type CodexAppServerThreadEntry = {
   id: string;
   cwd: string;
@@ -82,12 +89,9 @@ export type CodexAppServerPort = {
   listThreads(
     input: CodexAppServerThreadListInput,
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerError>;
-  drainNotifications(
+  takeBufferedEvents(
     runtimeId: string,
-  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerError>;
-  drainServerRequests(
-    runtimeId: string,
-  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerError>;
+  ): Effect.Effect<CodexAppServerStreamEvent[], CodexAppServerError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
 

@@ -50,6 +50,7 @@ const createArgs = (
   reusablePromptValidationErrorCount: 0,
   hasRuntimeAvailabilityErrors: false,
   runtimeAvailabilityErrorCount: 0,
+  hasUnacknowledgedCodexDangerousSettings: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   invalidRepoPathsWithDevServerErrors: [],
@@ -138,6 +139,66 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe("Fix 2 disabled runtime selections before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("blocks unacknowledged dangerous Codex settings before persistence", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs({
+        hasUnacknowledgedCodexDangerousSettings: true,
+        saveSettingsSnapshot,
+      }),
+    );
+
+    await harness.mount();
+
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Confirm the Codex safety acknowledgement before saving.",
+    );
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("saves dangerous effective Codex read-only role settings after acknowledgement", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes.codex = {
+      ...snapshotDraft.agentRuntimes.codex,
+      defaults: {
+        ...snapshotDraft.agentRuntimes.codex.defaults,
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+      },
+    };
+    const harness = createHookHarness(
+      createArgs(
+        {
+          snapshotDraft,
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, agentRuntimes: true },
+      ),
+    );
+
+    await harness.mount();
+
+    let didSave = false;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(true);
+    expect(harness.getLatest().saveError).toBeNull();
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
   });

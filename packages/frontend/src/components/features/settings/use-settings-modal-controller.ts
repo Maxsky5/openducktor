@@ -13,7 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
@@ -22,6 +22,7 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
@@ -75,6 +76,9 @@ export type SettingsModalController = {
   hasReusablePromptValidationErrors: boolean;
   runtimeAvailabilityValidationState: RuntimeAvailabilityValidationState;
   hasRuntimeAvailabilityErrors: boolean;
+  hasUnacknowledgedCodexDangerousSettings: boolean;
+  requiresCodexDangerAcknowledgement: boolean;
+  isCodexDangerAcknowledged: boolean;
   selectedRepoRuntimeAvailabilityErrors: string[];
   selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
@@ -96,6 +100,7 @@ export type SettingsModalController = {
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
   updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
+  setCodexDangerAcknowledged: (acknowledged: boolean) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -226,6 +231,34 @@ export const useSettingsModalController = ({
     snapshotDraft,
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
+  const codexDangerAcknowledgementKey = useMemo(
+    () =>
+      snapshotDraft
+        ? buildNewCodexDangerousSelectionKey({
+            baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
+            draft: snapshotDraft.agentRuntimes.codex,
+          })
+        : "",
+    [loadedSnapshot?.agentRuntimes.codex, snapshotDraft],
+  );
+  const requiresCodexDangerAcknowledgement = codexDangerAcknowledgementKey !== "";
+  const [acknowledgedCodexDangerKey, setAcknowledgedCodexDangerKey] = useState("");
+  useEffect(() => {
+    if (!open || !requiresCodexDangerAcknowledgement) {
+      setAcknowledgedCodexDangerKey("");
+    }
+  }, [open, requiresCodexDangerAcknowledgement]);
+  const isCodexDangerAcknowledged =
+    requiresCodexDangerAcknowledgement &&
+    acknowledgedCodexDangerKey === codexDangerAcknowledgementKey;
+  const setCodexDangerAcknowledged = useCallback(
+    (acknowledged: boolean) => {
+      setAcknowledgedCodexDangerKey(acknowledged ? codexDangerAcknowledgementKey : "");
+    },
+    [codexDangerAcknowledgementKey],
+  );
+  const hasUnacknowledgedCodexDangerousSettings =
+    requiresCodexDangerAcknowledgement && !isCodexDangerAcknowledged;
   const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
     ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
     : [];
@@ -305,6 +338,7 @@ export const useSettingsModalController = ({
     reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
     hasRuntimeAvailabilityErrors,
     runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
+    hasUnacknowledgedCodexDangerousSettings,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -407,6 +441,9 @@ export const useSettingsModalController = ({
     hasReusablePromptValidationErrors,
     runtimeAvailabilityValidationState,
     hasRuntimeAvailabilityErrors,
+    hasUnacknowledgedCodexDangerousSettings,
+    requiresCodexDangerAcknowledgement,
+    isCodexDangerAcknowledged,
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
@@ -422,6 +459,7 @@ export const useSettingsModalController = ({
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
     updateAgentRuntimes,
+    setCodexDangerAcknowledged,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

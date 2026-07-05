@@ -1,4 +1,8 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -7,8 +11,7 @@ import type {
   AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
+  AgentSessionRuntimePolicy,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
@@ -21,17 +24,21 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
+  SessionRef,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
+  assertAgentRuntimePolicyBinding,
   formatWorkflowAgentSessionTitle,
+  requireWorkflowAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -98,30 +105,26 @@ import {
 } from "./workflow-tool-selection";
 
 const requireWorkflowRole = (session: SessionRecord): AgentRole => {
-  if (session.input.role !== null) {
-    return session.input.role;
-  }
-  throw new Error(
-    `Session ${session.summary.externalSessionId} is a transcript and cannot send messages.`,
-  );
+  return requireWorkflowAgentSessionScope(
+    session.input.sessionScope,
+    `send message for session ${session.summary.externalSessionId}`,
+  ).role;
 };
 
-const toExistingSessionInput = (input: AgentSessionRef | AgentSessionRuntimeRef): SessionInput =>
-  toSessionInput({
-    ...input,
-    taskId: "taskId" in input ? input.taskId : "",
-    role: "role" in input ? input.role : null,
-    ...("model" in input && input.model ? { model: input.model } : {}),
-    ...("systemPrompt" in input && input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
-  });
+const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
+  return toSessionInput(input);
+};
 
 const applyRuntimeContextToSession = (
   session: SessionRecord,
-  input: AgentSessionRuntimeRef,
+  input: PolicyBoundSessionRef,
 ): void => {
   session.input = { ...session.input };
-  session.input.taskId = input.taskId;
-  session.input.role = input.role;
+  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
+  if (sessionScope) {
+    session.input.sessionScope = sessionScope;
+  }
+  session.input.runtimePolicy = input.runtimePolicy;
   if (input.model !== undefined) {
     if (input.model) {
       session.input.model = input.model;
@@ -131,6 +134,16 @@ const applyRuntimeContextToSession = (
   }
   if (input.systemPrompt !== undefined) {
     session.input.systemPrompt = input.systemPrompt;
+  }
+};
+
+const assertOpenCodeRuntimePolicyBinding = (
+  input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
+  action: string,
+): void => {
+  assertAgentRuntimePolicyBinding(input, action);
+  if (input.runtimeKind !== "opencode") {
+    throw new Error(`Cannot ${action} for non-OpenCode runtime '${input.runtimeKind}'.`);
   }
 };
 
@@ -207,14 +220,16 @@ export class OpencodeSdkAdapter
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
+    assertOpenCodeRuntimePolicyBinding(input, "start OpenCode session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start OpenCode session");
     const runtimeDefinition = this.getRuntimeDefinition();
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
-      title: formatWorkflowAgentSessionTitle(input.role, input.taskId),
+      title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
       permission: buildRoleScopedPermissionRules({
-        role: input.role,
+        role: scope.role,
         runtimeDescriptor: runtimeDefinition,
       }),
     });
@@ -232,7 +247,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${input.role} session`,
+      startedMessage: `Started ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -240,6 +255,7 @@ export class OpencodeSdkAdapter
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
@@ -257,6 +273,9 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const sessionInput = toSessionInput(input);
+    const scope = input.sessionScope
+      ? requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session")
+      : null;
 
     return registerSession({
       sessions: this.sessions,
@@ -268,16 +287,15 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${input.role} session`,
+      startedMessage: scope ? `Resumed ${scope.role} session` : "Resumed session",
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
   }
 
-  private async ensureSessionState(
-    input: AgentSessionRef | AgentSessionRuntimeRef,
-  ): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
+    assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
@@ -345,7 +363,7 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
-  async releaseSession(input: AgentSessionRef): Promise<void> {
+  async releaseSession(input: SessionRef): Promise<void> {
     const session = this.sessions.get(input.externalSessionId);
     if (!session) {
       clearSessionListeners(this.listeners, input);
@@ -363,6 +381,7 @@ export class OpencodeSdkAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
+    assertOpenCodeRuntimePolicyBinding(input, "fork OpenCode session");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
     const forked = await client.session.fork({
@@ -373,6 +392,7 @@ export class OpencodeSdkAdapter
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
     const sessionInput = toSessionInput(input);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork OpenCode session");
 
     return registerSession({
       sessions: this.sessions,
@@ -384,7 +404,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${input.role} session`,
+      startedMessage: `Forked ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -498,6 +518,7 @@ export class OpencodeSdkAdapter
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
+    assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
     const matchingSessions = [...this.sessions.values()].filter(
       (session) =>
@@ -543,6 +564,7 @@ export class OpencodeSdkAdapter
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
+    assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
     return loadSessionTodos(this.createClient, {
       ...(await this.resolveRuntimeClientInput(input, "load session todos")),
       externalSessionId: input.externalSessionId,
@@ -591,6 +613,7 @@ export class OpencodeSdkAdapter
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
+    assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -652,6 +675,7 @@ export class OpencodeSdkAdapter
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
+    assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode approval");
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -662,6 +686,7 @@ export class OpencodeSdkAdapter
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
+    assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode question");
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -672,9 +697,10 @@ export class OpencodeSdkAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRef,
+    input: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
+    assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -689,7 +715,7 @@ export class OpencodeSdkAdapter
     return subscribeSessionEvents(this.listeners, registeredSessionRef, listener);
   }
 
-  async stopSession(input: AgentSessionRef): Promise<void> {
+  async stopSession(input: SessionRef): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     const sessionRef = opencodeSessionRef(session);
     if (!agentSessionRefsEqual(sessionRef, input)) {

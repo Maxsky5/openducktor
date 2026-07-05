@@ -1,16 +1,25 @@
 import type {
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
+  AgentSessionRuntimePolicy,
+  PolicyBoundSessionRef,
   RuntimeWorkingDirectoryRef,
+  SessionRef,
+  WorkflowSessionRef,
 } from "@openducktor/core";
-import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import {
+  requireRepoRuntimeRef,
+  requireSessionWorkingDirectory,
+  toAgentRuntimePolicyBinding,
+  workflowAgentSessionScope,
+} from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type ObserveAgentSession = (session: AgentSessionRef) => Promise<void>;
+export type ObserveAgentSession = (session: PolicyBoundSessionRef) => Promise<void>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "selectedModel"
->;
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
+> & {
+  selectedModel?: AgentSessionState["selectedModel"];
+};
 
 export const toRuntimeWorkingDirectoryRef = ({
   repoPath,
@@ -39,7 +48,7 @@ export const toRuntimeWorkingDirectoryRef = ({
 export const toRuntimeSessionRef = (
   repoPath: string,
   session: AgentSessionIdentity,
-): AgentSessionRef => {
+): SessionRef => {
   return {
     ...toRuntimeWorkingDirectoryRef({
       repoPath,
@@ -51,12 +60,29 @@ export const toRuntimeSessionRef = (
   };
 };
 
-export const toRuntimeSessionContextRef = (
+export const toWorkflowSessionRef = (
   repoPath: string,
   session: RuntimeSessionContextSource,
-): AgentSessionRuntimeRef => ({
-  ...toRuntimeSessionRef(repoPath, session),
-  taskId: session.taskId,
-  role: session.role,
-  ...(session.selectedModel ? { model: session.selectedModel } : {}),
-});
+): WorkflowSessionRef => {
+  if (!session.role) {
+    throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
+  }
+  return {
+    ...toRuntimeSessionRef(repoPath, session),
+    sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+  };
+};
+
+export const toRuntimeSessionRefWithPolicy = (
+  repoPath: string,
+  session: AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] },
+  runtimePolicy: AgentSessionRuntimePolicy,
+): PolicyBoundSessionRef => {
+  return {
+    ...toRuntimeSessionRef(repoPath, session),
+    ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
+    ...(session.selectedModel ? { model: session.selectedModel } : {}),
+  };
+};
+
+export const toRuntimeSessionContextRef = toRuntimeSessionRefWithPolicy;

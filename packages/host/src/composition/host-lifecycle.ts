@@ -30,12 +30,15 @@ export const runShutdownSteps = (
   Effect.gen(function* () {
     const errors: string[] = [];
     for (const step of steps) {
+      logger.info(`Stopping ${step.label}...`);
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
         const cause = causeToHostBoundaryError(result.cause);
         const message = cause instanceof Error ? cause.message : String(cause);
         logger.error(`Failed to stop ${step.label}: ${message}`);
         errors.push(`${step.label}: ${message}`);
+      } else {
+        logger.info(`Stopped ${step.label}`);
       }
     }
     if (errors.length > 0) {

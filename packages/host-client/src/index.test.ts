@@ -259,8 +259,7 @@ describe("HostClient", () => {
       "runtimeEnsure",
       "codexAppServerRequest",
       "codexAppServerRespond",
-      "codexAppServerNotifications",
-      "codexAppServerRequests",
+      "takeCodexAppServerBufferedEvents",
       "buildStart",
       "buildBlocked",
       "buildResumed",
@@ -1579,10 +1578,14 @@ describe("HostClient", () => {
           return modelListResponse;
         case "codex_app_server_respond":
           return null;
-        case "codex_app_server_notifications":
-          return [{ method: "codex/app-server/ready" }];
-        case "codex_app_server_requests":
-          return [];
+        case "codex_app_server_take_buffered_events":
+          return [
+            {
+              runtimeId: "runtime-1",
+              kind: "notification",
+              message: { method: "codex/app-server/ready" },
+            },
+          ];
         default:
           throw new Error(`Unexpected command: ${command}`);
       }
@@ -1592,8 +1595,11 @@ describe("HostClient", () => {
       client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
     ).resolves.toEqual(modelListResponse);
     await client.codexAppServerRespond("runtime-1", 7, { ok: true });
-    await client.codexAppServerNotifications("runtime-1");
-    await client.codexAppServerRequests("runtime-1");
+    await client.codexAppServerRespond("runtime-1", "permission-request-1", {
+      permissions: { network: { enabled: true } },
+      scope: "turn",
+    });
+    await client.takeCodexAppServerBufferedEvents("runtime-1");
 
     expect(calls).toEqual([
       {
@@ -1613,14 +1619,31 @@ describe("HostClient", () => {
         },
       },
       {
-        command: "codex_app_server_notifications",
-        args: { runtimeId: "runtime-1" },
+        command: "codex_app_server_respond",
+        args: {
+          runtimeId: "runtime-1",
+          requestId: "permission-request-1",
+          result: { permissions: { network: { enabled: true } }, scope: "turn" },
+        },
       },
       {
-        command: "codex_app_server_requests",
+        command: "codex_app_server_take_buffered_events",
         args: { runtimeId: "runtime-1" },
       },
     ]);
+  });
+
+  test("codex app-server buffered events reject malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "codex_app_server_take_buffered_events") {
+        return [{ runtimeId: "runtime-1", kind: "invalid", message: {} }];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.takeCodexAppServerBufferedEvents("runtime-1")).rejects.toThrow(
+      "Expected Codex app-server buffered event kind",
+    );
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {

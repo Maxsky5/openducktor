@@ -10,7 +10,6 @@ import {
   codexTurnKey,
   extractThreadIdFromParams,
   extractTurnId,
-  parseNotificationRecord,
 } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
@@ -55,7 +54,6 @@ export type CompletedAgentMessage = {
 
 export type CodexStreamingContext = {
   subscribeEvents: boolean;
-  drainNotifications?: (runtimeId: string) => Promise<unknown[]>;
   bufferedNotificationsByThreadId: Map<string, CodexNotificationRecord[]>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   startedItemTimestampsByKey: Map<string, number>;
@@ -454,18 +452,6 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
   return notification.receivedAt;
 };
 
-const drainCodexNotifications = async (
-  context: CodexStreamingContext,
-  runtimeId: string,
-): Promise<CodexNotificationRecord[]> => {
-  if (!context.drainNotifications) {
-    return [];
-  }
-
-  const notifications = await context.drainNotifications(runtimeId);
-  return notifications.map((notification) => parseNotificationRecord(notification));
-};
-
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -473,9 +459,8 @@ export const handleCodexPendingNotifications = async (
 ): Promise<void> => {
   const bufferedNotifications = context.bufferedNotificationsByThreadId.get(session.threadId) ?? [];
   context.bufferedNotificationsByThreadId.delete(session.threadId);
-  const drainedNotifications =
-    notificationsFromBatch ?? (await drainCodexNotifications(context, session.runtimeId));
-  const notifications = [...bufferedNotifications, ...drainedNotifications];
+  const takenNotifications = notificationsFromBatch ?? [];
+  const notifications = [...bufferedNotifications, ...takenNotifications];
   for (const notification of notifications) {
     const notificationThreadId = extractThreadIdFromParams(notification.params);
     if (!notificationThreadId) {

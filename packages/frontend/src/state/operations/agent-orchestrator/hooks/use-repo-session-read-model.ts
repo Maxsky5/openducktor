@@ -1,11 +1,12 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import type { AgentEnginePort, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { useSnapshotReadableRepoRuntimeKinds } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -29,8 +30,8 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
   observeAgentSession: ObserveAgentSession;
-  clearSessionObservationState: (sessions: readonly AgentSessionRef[]) => void;
-  loadLiveSessionHistory: (session: AgentSessionRef) => Promise<unknown>;
+  clearSessionObservationState: (sessions: readonly SessionRef[]) => void;
+  loadLiveSessionHistory: (session: PolicyBoundSessionRef) => Promise<unknown>;
   queryClient: QueryClient;
 };
 
@@ -144,6 +145,7 @@ export const useRepoSessionReadModel = ({
           observeAgentSession,
           clearSessionObservationState,
           loadLiveSessionHistory,
+          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {
@@ -180,6 +182,7 @@ export const useRepoSessionReadModel = ({
     repoEpochRef,
     isLoadingTasks,
     taskSessionRecordsState,
+    queryClient,
     workspaceRepoPath,
   ]);
 

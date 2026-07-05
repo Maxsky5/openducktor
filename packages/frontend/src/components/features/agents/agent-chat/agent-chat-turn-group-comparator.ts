@@ -1,7 +1,7 @@
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { getSubagentMessageSessionKey } from "./subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
 
@@ -9,7 +9,7 @@ export type AgentChatThreadMotionRowProps = {
   row: AgentChatTranscriptRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCount: number;
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -18,7 +18,7 @@ export type AgentChatThreadMotionRowProps = {
 export type AgentChatTurnGroupProps = {
   turn: AgentChatRenderedTurn;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -41,9 +41,9 @@ export const areAgentColorsEqual = (
   return leftKeys.every((key) => left[key] === right[key]);
 };
 
-export const areAgentSessionIdentitiesEqual = (
-  left: AgentSessionIdentity | null,
-  right: AgentSessionIdentity | null,
+export const areAgentSessionTranscriptTargetsEqual = (
+  left: AgentSessionTranscriptTarget | null,
+  right: AgentSessionTranscriptTarget | null,
 ): boolean => {
   if (left === right) {
     return true;
@@ -55,7 +55,9 @@ export const areAgentSessionIdentitiesEqual = (
   return (
     left.externalSessionId === right.externalSessionId &&
     left.runtimeKind === right.runtimeKind &&
-    left.workingDirectory === right.workingDirectory
+    left.workingDirectory === right.workingDirectory &&
+    (left.sessionScope?.taskId ?? null) === (right.sessionScope?.taskId ?? null) &&
+    (left.sessionScope?.role ?? null) === (right.sessionScope?.role ?? null)
   );
 };
 
@@ -86,7 +88,7 @@ export const areChatRowsEquivalent = (
 export const readSubagentPendingApprovalCount = (
   row: AgentChatTranscriptRow,
   countsBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"],
-  sessionIdentity: AgentSessionIdentity | null,
+  sessionIdentity: AgentSessionTranscriptTarget | null,
 ): number => {
   if (row.kind !== "message") {
     return 0;
@@ -102,7 +104,7 @@ export const readSubagentPendingApprovalCount = (
 export const readSubagentPendingQuestionCount = (
   row: AgentChatTranscriptRow,
   countsBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"],
-  sessionIdentity: AgentSessionIdentity | null,
+  sessionIdentity: AgentSessionTranscriptTarget | null,
 ): number => {
   if (row.kind !== "message") {
     return 0;
@@ -147,7 +149,7 @@ const areTurnSubagentPendingCountsEquivalent = ({
   nextApprovalCounts: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   previousQuestionCounts: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   nextQuestionCounts: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
-  sessionIdentity: AgentSessionIdentity | null;
+  sessionIdentity: AgentSessionTranscriptTarget | null;
 }): boolean => {
   if (
     previousApprovalCounts === nextApprovalCounts &&
@@ -177,7 +179,10 @@ export const areAgentChatThreadMotionRowPropsEqual = (
   nextProps: AgentChatThreadMotionRowProps,
 ): boolean => {
   return (
-    areAgentSessionIdentitiesEqual(previousProps.sessionIdentity, nextProps.sessionIdentity) &&
+    areAgentSessionTranscriptTargetsEqual(
+      previousProps.sessionIdentity,
+      nextProps.sessionIdentity,
+    ) &&
     previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
     previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
     previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
@@ -199,7 +204,10 @@ export const areAgentChatTurnGroupPropsEqual = (
     previousProps.turn.activeStreamingAssistantMessageId ===
       nextProps.turn.activeStreamingAssistantMessageId &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
-    areAgentSessionIdentitiesEqual(previousProps.sessionIdentity, nextProps.sessionIdentity) &&
+    areAgentSessionTranscriptTargetsEqual(
+      previousProps.sessionIdentity,
+      nextProps.sessionIdentity,
+    ) &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
     areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
     areTurnSubagentPendingCountsEquivalent({

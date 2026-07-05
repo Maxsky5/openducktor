@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   requiredRuntimeSupportedScopes,
 } from "@openducktor/contracts";
@@ -350,7 +351,7 @@ describe("agent-runtime capability policies", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
           opencode: { enabled: false },
-          codex: { enabled: true },
+          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
@@ -360,11 +361,21 @@ describe("agent-runtime capability policies", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
           opencode: { enabled: true },
-          codex: { enabled: false },
+          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
         },
         startMode: "fresh",
       }).map((definition) => definition.kind),
     ).toEqual(["opencode"]);
+
+    expect(
+      getAvailableRuntimeDefinitions({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        agentRuntimes: {
+          opencode: { enabled: false },
+          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+        },
+      }).map((definition) => definition.kind),
+    ).toEqual([]);
   });
 
   test("reports incompatible runtime definitions with runtime-specific context", () => {

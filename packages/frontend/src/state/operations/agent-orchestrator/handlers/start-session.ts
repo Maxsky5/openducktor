@@ -1,4 +1,5 @@
-import type { AgentSessionRef } from "@openducktor/core";
+import type { PolicyBoundSessionRef } from "@openducktor/core";
+import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
@@ -60,10 +61,13 @@ const observeAgentSessionAndGuard = async ({
   runtime: RuntimeDependencies;
 }): Promise<void> => {
   const { ctx: startedCtx, runtimeInfo } = startResult;
-  const observerTarget: AgentSessionRef = {
+  const observerTarget: PolicyBoundSessionRef = {
     externalSessionId: startedCtx.summary.externalSessionId,
     repoPath: startedCtx.repoPath,
-    runtimeKind: runtimeInfo.runtimeKind,
+    ...toAgentRuntimePolicyBinding({
+      runtimeKind: runtimeInfo.runtimeKind,
+      runtimePolicy: startResult.runtimePolicy,
+    }),
     workingDirectory: runtimeInfo.workingDirectory,
   };
 

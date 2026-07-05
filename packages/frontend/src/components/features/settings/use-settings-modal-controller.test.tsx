@@ -66,7 +66,8 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
     },
   });
 
-const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => createSettingsSnapshot());
+let settingsSnapshotFactory = createSettingsSnapshot;
+const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => settingsSnapshotFactory());
 
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
@@ -211,6 +212,7 @@ describe("useSettingsModalController", () => {
       },
     ];
     runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+    settingsSnapshotFactory = createSettingsSnapshot;
     loadSettingsSnapshot.mockClear();
   });
 
@@ -283,7 +285,7 @@ describe("useSettingsModalController", () => {
     await harness.run((state) => {
       state.updateAgentRuntimes((agentRuntimes) => ({
         ...agentRuntimes,
-        codex: { enabled: true },
+        codex: { ...agentRuntimes.codex, enabled: true },
       }));
     });
 
@@ -292,6 +294,129 @@ describe("useSettingsModalController", () => {
     ).toEqual(["opencode", "codex"]);
 
     await harness.unmount();
+  });
+
+  test("resets Codex danger acknowledgement when dangerous selections are removed", async () => {
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "never",
+            },
+          },
+        }));
+      });
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(true);
+
+      await harness.run((state) => {
+        state.setCodexDangerAcknowledged(true);
+      });
+
+      expect(harness.getLatest().isCodexDangerAcknowledged).toBe(true);
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "on-request",
+            },
+          },
+        }));
+      });
+      await harness.waitFor((state) => !state.isCodexDangerAcknowledged);
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not require Codex danger acknowledgement for already persisted risky settings", async () => {
+    settingsSnapshotFactory = () => ({
+      ...createSettingsSnapshot(),
+      agentRuntimes: {
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          defaults: {
+            ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
+            sandboxMode: "danger-full-access",
+          },
+        },
+      },
+    });
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      expect(harness.getLatest().isCodexDangerAcknowledged).toBe(false);
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("requires Codex danger acknowledgement when a draft adds another risky setting", async () => {
+    settingsSnapshotFactory = () => ({
+      ...createSettingsSnapshot(),
+      agentRuntimes: {
+        ...DEFAULT_AGENT_RUNTIMES,
+        codex: {
+          ...DEFAULT_AGENT_RUNTIMES.codex,
+          defaults: {
+            ...DEFAULT_AGENT_RUNTIMES.codex.defaults,
+            sandboxMode: "danger-full-access",
+          },
+        },
+      },
+    });
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "never",
+            },
+          },
+        }));
+      });
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(true);
+
+      await harness.run((state) => {
+        state.setCodexDangerAcknowledged(true);
+      });
+
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("recalculates catalog runtime kinds when the selected repo changes", async () => {

@@ -1,8 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
-  AgentSessionRef,
   AgentSessionRuntimeSnapshot,
   AgentSessionRuntimeSnapshotSource,
+  SessionRef,
 } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import {
@@ -31,7 +31,7 @@ export const createDeferred = createSharedDeferred;
 type SessionObserversFixture = {
   externalSessionId?: string;
   repoPath?: string;
-  runtimeKind?: AgentSessionRef["runtimeKind"];
+  runtimeKind?: SessionRef["runtimeKind"];
   workingDirectory?: string;
 };
 
@@ -40,7 +40,7 @@ const toSessionObserverFixtureRef = ({
   repoPath = "/tmp/repo",
   runtimeKind = "opencode",
   workingDirectory = "/tmp/repo/worktree",
-}: SessionObserversFixture): AgentSessionRef => ({
+}: SessionObserversFixture): SessionRef => ({
   externalSessionId,
   repoPath,
   runtimeKind,
@@ -134,10 +134,10 @@ export const createAgentSessionRuntimeSnapshotFixture = ({
   ref: refOverrides = {},
   snapshot: snapshotOverrides = {},
 }: {
-  ref?: Partial<AgentSessionRef>;
+  ref?: Partial<SessionRef>;
   snapshot?: Partial<AgentSessionRuntimeSnapshotSource>;
 } = {}): AgentSessionRuntimeSnapshot => {
-  const ref: AgentSessionRef = {
+  const ref: SessionRef = {
     repoPath: "/tmp/repo",
     runtimeKind: "opencode",
     workingDirectory: "/tmp/repo/worktree",

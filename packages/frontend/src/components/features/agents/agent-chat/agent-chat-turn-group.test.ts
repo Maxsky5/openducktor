@@ -111,6 +111,25 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(true);
   });
 
+  test("scope changes invalidate turn groups", () => {
+    const previousProps = baseProps({
+      sessionIdentity: {
+        ...createSessionIdentity(),
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(previousProps, {
+        ...previousProps,
+        sessionIdentity: {
+          ...createSessionIdentity(),
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+        },
+      }),
+    ).toBe(false);
+  });
+
   test("changed message row identity invalidates turn groups", () => {
     const message = createMessage();
     const props = baseProps({

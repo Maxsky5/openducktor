@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { makeMockClient, OpencodeSdkAdapter, sessionRef } from "./test-support";
 
 describe("OpencodeSdkAdapter index", () => {
@@ -41,17 +42,17 @@ describe("OpencodeSdkAdapter index", () => {
     await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo",
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "build",
+      sessionScope: workflowAgentSessionScope("task-1", "build"),
+      runtimePolicy: { kind: "opencode" },
       systemPrompt: "system",
     });
     await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/other",
-      taskId: "task-2",
       runtimeKind: "opencode",
-      role: "qa",
+      sessionScope: workflowAgentSessionScope("task-2", "qa"),
+      runtimePolicy: { kind: "opencode" },
       systemPrompt: "system",
     });
 
@@ -90,9 +91,9 @@ describe("OpencodeSdkAdapter index", () => {
     const summary = await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo",
-      taskId: "task-1",
       runtimeKind: "opencode",
-      role: "planner",
+      sessionScope: workflowAgentSessionScope("task-1", "planner"),
+      runtimePolicy: { kind: "opencode" },
       systemPrompt: "system",
     });
 

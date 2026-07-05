@@ -63,13 +63,20 @@ describe("createCodexAppServerTransportRegistry", () => {
         }
         return Effect.succeed({ data: [], nextCursor: null });
       },
-      drainNotifications() {
-        calls.push({ method: "drainNotifications" });
-        return Effect.succeed([codexStatusNotification]);
-      },
-      drainServerRequests() {
-        calls.push({ method: "drainServerRequests" });
-        return Effect.succeed([codexApprovalRequest]);
+      takeBufferedEvents() {
+        calls.push({ method: "takeBufferedEvents" });
+        return Effect.succeed([
+          {
+            runtimeId: "runtime-1",
+            kind: "notification" as const,
+            message: codexStatusNotification,
+          },
+          {
+            runtimeId: "runtime-1",
+            kind: "server_request" as const,
+            message: codexApprovalRequest,
+          },
+        ]);
       },
       respond(input) {
         calls.push({ method: "respond", input });
@@ -85,8 +92,9 @@ describe("createCodexAppServerTransportRegistry", () => {
         }),
       ),
     ).resolves.toEqual({ data: [], nextCursor: null });
-    await expect(Effect.runPromise(port.drainNotifications("runtime-1"))).resolves.toEqual([
-      codexStatusNotification,
+    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
+      { runtimeId: "runtime-1", kind: "server_request", message: codexApprovalRequest },
     ]);
     await expect(
       Effect.runPromise(
@@ -100,9 +108,6 @@ describe("createCodexAppServerTransportRegistry", () => {
       nextCursor: null,
       backwardsCursor: null,
     });
-    await expect(Effect.runPromise(port.drainServerRequests("runtime-1"))).resolves.toEqual([
-      codexApprovalRequest,
-    ]);
     await expect(
       Effect.runPromise(
         port.respond({
@@ -117,7 +122,7 @@ describe("createCodexAppServerTransportRegistry", () => {
         method: "request",
         input: { method: "model/list", params: {} },
       },
-      { method: "drainNotifications" },
+      { method: "takeBufferedEvents" },
       {
         method: "request",
         input: { method: "thread/loaded/list", params: { cursor: null, limit: 100 } },
@@ -126,7 +131,6 @@ describe("createCodexAppServerTransportRegistry", () => {
         method: "request",
         input: { method: "thread/list", params: { cursor: null, limit: 100 } },
       },
-      { method: "drainServerRequests" },
       { method: "respond", input: { requestId: 7, result: { decision: "approved" } } },
     ]);
   });
@@ -135,7 +139,7 @@ describe("createCodexAppServerTransportRegistry", () => {
     await expect(
       Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
-    await expect(Effect.runPromise(port.drainNotifications("runtime-1"))).rejects.toThrow(
+    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).rejects.toThrow(
       "Codex app-server transport not found for runtime runtime-1",
     );
     await expect(
@@ -146,9 +150,6 @@ describe("createCodexAppServerTransportRegistry", () => {
     await expect(
       Effect.runPromise(port.listThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 })),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
-    await expect(Effect.runPromise(port.drainServerRequests("runtime-1"))).rejects.toThrow(
-      "Codex app-server transport not found for runtime runtime-1",
-    );
     await expect(
       Effect.runPromise(
         port.respond({
@@ -162,10 +163,7 @@ describe("createCodexAppServerTransportRegistry", () => {
       request() {
         return Effect.succeed({ data: [], nextCursor: null });
       },
-      drainNotifications() {
-        return Effect.succeed([]);
-      },
-      drainServerRequests() {
+      takeBufferedEvents() {
         return Effect.succeed([]);
       },
       respond() {
@@ -177,7 +175,7 @@ describe("createCodexAppServerTransportRegistry", () => {
       "Codex app-server transport already registered for runtime runtime-1",
     );
     port.unregisterTransport("runtime-1");
-    await expect(Effect.runPromise(port.drainServerRequests("runtime-1"))).rejects.toThrow(
+    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).rejects.toThrow(
       "Codex app-server transport not found for runtime runtime-1",
     );
   });

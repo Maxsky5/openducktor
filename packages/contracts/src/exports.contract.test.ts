@@ -97,6 +97,7 @@ import type {
   RuntimeHistoryCapabilities,
   RuntimeHistoryFidelity,
   RuntimeHistoryReplay,
+  RuntimeInstanceRef,
   RuntimeInstanceSummary,
   RuntimeInstanceSummaryRole,
   RuntimeKind,
@@ -107,7 +108,6 @@ import type {
   RuntimePromptInputPartType,
   RuntimeProvisioningMode,
   RuntimeQuestionAnswerMode,
-  RuntimeRef,
   RuntimeSessionLifecycleCapabilities,
   RuntimeStructuredInputCapabilities,
   RuntimeSubagentExecutionMode,
@@ -149,6 +149,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRoleValues",
   "agentModelDefaultSchema",
   "agentRuntimeConfigSchema",
+  "agentRuntimeEnabledConfigSchema",
   "agentRuntimesSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
@@ -204,11 +205,21 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
+  "CODEX_APPROVAL_POLICY_VALUES",
+  "CODEX_APPROVALS_REVIEWER_VALUES",
+  "CODEX_SANDBOX_MODE_VALUES",
+  "codexApprovalPolicySchema",
+  "codexApprovalsReviewerSchema",
+  "codexPolicyFieldsSchema",
+  "codexRuntimeConfigSchema",
+  "codexSandboxModeSchema",
+  "DEFAULT_CODEX_RUNTIME_POLICY",
   "DEFAULT_CHAT_SETTINGS",
   "DEFAULT_GENERAL_SETTINGS",
   "DEFAULT_AGENT_RUNTIMES",
   "REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER",
   "REUSABLE_PROMPT_TRIGGER_PATTERN",
+  "resolveCodexEffectivePolicy",
   "reusablePromptSchema",
   "reusablePromptsSchema",
   "buildResumedResultSchema",
@@ -377,7 +388,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeQuestionAnswerModeValues",
   "getMissingRequiredRuntimeSupportedScopes",
   "runtimeRequiredScopesByRole",
-  "runtimeRefSchema",
+  "runtimeInstanceRefSchema",
   "runtimeSessionLifecycleCapabilitiesSchema",
   "runtimeStructuredInputCapabilitiesSchema",
   "runtimeSubagentExecutionModeSchema",
@@ -569,7 +580,7 @@ type ExportedTypeContract = {
   SoftGuardrails: SoftGuardrails;
   RuntimeKind: RuntimeKind;
   RuntimeProvisioningMode: RuntimeProvisioningMode;
-  RuntimeRef: RuntimeRef;
+  RuntimeInstanceRef: RuntimeInstanceRef;
   RuntimeSubagentExecutionMode: RuntimeSubagentExecutionMode;
   RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;

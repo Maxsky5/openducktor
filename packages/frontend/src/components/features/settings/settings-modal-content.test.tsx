@@ -54,6 +54,9 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     totalErrorCount: 0,
   },
   hasRuntimeAvailabilityErrors: false,
+  hasUnacknowledgedCodexDangerousSettings: false,
+  requiresCodexDangerAcknowledgement: false,
+  isCodexDangerAcknowledged: false,
   selectedRepoRuntimeAvailabilityErrors: [],
   selectedRepoRuntimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
@@ -84,6 +87,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
   updateAgentRuntimes: () => {},
+  setCodexDangerAcknowledged: () => {},
   updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},
@@ -204,9 +208,9 @@ describe("settings modal content", () => {
 
     expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
     expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
-    expect(html).toContain(
-      "Local Codex app-server runtime connected through the OpenDucktor MCP bridge.",
-    );
+    expect(html).toContain("Codex");
+    expect(html).toContain("Disabled");
+    expect(html).not.toContain("Codex defaults");
   });
 
   test("renders kanban section when section is kanban", () => {

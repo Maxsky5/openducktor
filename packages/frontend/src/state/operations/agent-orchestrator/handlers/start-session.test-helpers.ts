@@ -14,6 +14,7 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentChatMessage,
   AgentSessionIdentity,
@@ -219,6 +220,7 @@ export const toStartSessionDependencies = (
     },
     model: {
       loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
+      loadSettingsSnapshot: deps.loadSettingsSnapshot,
     },
   };
 };
@@ -256,6 +258,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     refreshTaskData = async () => {},
     sendAgentMessage = async () => {},
     loadRepoPromptOverrides = async () => ({}),
+    loadSettingsSnapshot = async () => createSettingsSnapshotFixture(),
     sessionStartGateRef,
     readSessionSnapshot,
     onSessionCollectionChange,
@@ -294,6 +297,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       refreshTaskData,
       sendAgentMessage,
       loadRepoPromptOverrides,
+      loadSettingsSnapshot,
       ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
       ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
     }),

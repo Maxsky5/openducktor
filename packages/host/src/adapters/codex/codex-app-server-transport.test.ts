@@ -35,7 +35,7 @@ const recordClearTimeouts = () => {
 };
 
 describe("createCodexAppServerTransport", () => {
-  test("keeps emitted notifications drainable after a request response", async () => {
+  test("keeps emitted notifications available as buffered events after a request response", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -81,8 +81,8 @@ describe("createCodexAppServerTransport", () => {
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
-    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
-      notification,
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
 
     await Effect.runPromise(transport.close());
@@ -110,14 +110,14 @@ describe("createCodexAppServerTransport", () => {
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
-    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
-      notification,
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
 
     await Effect.runPromise(transport.close());
   });
 
-  test("does not retain emitted server requests for later drain polling", async () => {
+  test("keeps emitted server requests available as buffered events until OpenDucktor responds", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -135,12 +135,114 @@ describe("createCodexAppServerTransport", () => {
         reason: null,
         parsedCmd: [],
       },
-    };
+    } satisfies CodexAppServerProtocolMessage;
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
     expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
-    await expect(Effect.runPromise(transport.drainServerRequests())).resolves.toEqual([]);
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: request },
+    ]);
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+    await waitForStreamEvents();
+    await Effect.runPromise(transport.respond({ requestId: 1, result: { decision: "denied" } }));
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([]);
+
+    await Effect.runPromise(transport.close());
+  });
+
+  test("drops buffered server requests when Codex reports them resolved before a reply", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const request = {
+      id: "request-1",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        startedAtMs: 1,
+        cwd: "/repo",
+        reason: "Need permission for test",
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const resolved = {
+      method: "serverRequest/resolved",
+      params: {
+        threadId: "thread-1",
+        requestId: "request-1",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+    await waitForStreamEvents();
+    child.stdout.write(`${JSON.stringify(resolved)}\n`);
+    await waitForStreamEvents();
+
+    expect(emitted).toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: request },
+      { runtimeId: "runtime-1", kind: "notification", message: resolved },
+    ]);
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: resolved },
+    ]);
+
+    await Effect.runPromise(transport.close());
+  });
+
+  test("matches buffered server request ids by JSON-RPC id type", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const stringRequest = {
+      id: "53",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-string",
+        startedAtMs: 1,
+        cwd: "/repo",
+        reason: null,
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const numericRequest = {
+      ...stringRequest,
+      id: 53,
+      params: {
+        ...stringRequest.params,
+        itemId: "item-number",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const resolvedNumericRequest = {
+      method: "serverRequest/resolved",
+      params: {
+        threadId: "thread-1",
+        requestId: 53,
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    child.stdout.write(`${JSON.stringify(stringRequest)}\n`);
+    child.stdout.write(`${JSON.stringify(numericRequest)}\n`);
+    await waitForStreamEvents();
+    child.stdout.write(`${JSON.stringify(resolvedNumericRequest)}\n`);
+    await waitForStreamEvents();
+
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: stringRequest },
+      { runtimeId: "runtime-1", kind: "notification", message: resolvedNumericRequest },
+    ]);
 
     await Effect.runPromise(transport.close());
   });

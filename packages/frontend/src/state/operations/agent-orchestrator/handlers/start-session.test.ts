@@ -118,8 +118,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
-      startedRoles.push(input.role);
-      if (input.role === "build") {
+      startedRoles.push(input.sessionScope.role);
+      if (input.sessionScope.role === "build") {
         buildStarted.resolve();
         await startBuildDeferred.promise;
       } else {
@@ -128,9 +128,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return {
         runtimeKind: "opencode",
         workingDirectory: input.workingDirectory,
-        externalSessionId: `${input.role}-external`,
+        externalSessionId: `${input.sessionScope.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: input.role,
+        role: input.sessionScope.role,
         status: "idle",
       };
     };
@@ -701,7 +701,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async (input) => ({
       externalSessionId: "external-qa",
       workingDirectory: input.workingDirectory,
-      role: input.role,
+      role: input.sessionScope.role,
       startedAt: "2026-02-22T08:00:00.000Z",
       status: "idle",
       runtimeKind: input.runtimeKind,

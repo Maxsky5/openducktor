@@ -55,6 +55,7 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
+const INITIAL_REPLAY_STREAM_PATHS = new Set(["codex-app-server-events"]);
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -270,12 +271,13 @@ const createSseResponse = (
   stream: BufferedHostEventStream,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
+  options: { includeRecentWhenNoLastEventId?: boolean } = {},
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const event of stream.replayAfter(lastEventId)) {
+      for (const event of stream.replayAfter(lastEventId, options)) {
         controller.enqueue(encoder.encode(writeSseEvent(event)));
       }
       unsubscribe = stream.subscribe((event) => {
@@ -317,6 +319,23 @@ const webHostRequestErrorResponse = (
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
+const isJsonRpcRequestId = (value: unknown): value is string | number =>
+  typeof value === "string" || typeof value === "number";
+
+const forgetRespondedCodexAppServerRequest = (
+  eventBus: BufferedHostEventBus,
+  command: string,
+  args: Record<string, unknown>,
+): void => {
+  if (command !== "codex_app_server_respond") {
+    return;
+  }
+  const { runtimeId, requestId } = args;
+  if (typeof runtimeId !== "string" || !isJsonRpcRequestId(requestId)) {
+    return;
+  }
+  eventBus.forgetCodexAppServerRequest(runtimeId, requestId);
+};
 
 const parseJsonObjectBody = (
   request: Request,
@@ -477,6 +496,7 @@ const routeCorsRequest = ({
 
     const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
     if (streamChannel && request.method === "GET") {
+      const streamPath = requestUrl.pathname.replace(/^\//, "");
       yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
@@ -489,6 +509,7 @@ const routeCorsRequest = ({
         eventBus.streamFor(streamChannel),
         yield* parseLastEventId(request),
         corsHeaders,
+        { includeRecentWhenNoLastEventId: INITIAL_REPLAY_STREAM_PATHS.has(streamPath) },
       );
     }
 
@@ -523,6 +544,7 @@ const routeCorsRequest = ({
       const result = yield* hostCommandRouter
         .invoke(decodedCommand, args)
         .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
+      forgetRespondedCodexAppServerRequest(eventBus, decodedCommand, args);
       return jsonResponse(result, undefined, corsHeaders);
     }
 

@@ -263,6 +263,7 @@ export const createNodeEffectHostCommandRouter = (
       }
 
       yield* pullRequestSyncLoop.stop();
+      pullRequestSyncLoop = null;
       lifecycleLogger.info("Pull request sync loop stopped");
     });
 
@@ -301,7 +302,9 @@ export const createNodeEffectHostCommandRouter = (
       }),
     handlers: {
       ...createDevServerCommandHandlers(devServerService),
-      ...createCodexAppServerCommandHandlers(codexAppServerService),
+      ...createCodexAppServerCommandHandlers(codexAppServerService, {
+        logger: lifecycleLogger,
+      }),
       ...createFilesystemCommandHandlers(filesystemService),
       ...createGitCommandHandlers(gitService),
       ...createGithubRepositoryDetectionCommandHandlers(githubRepositoryDetectionService),

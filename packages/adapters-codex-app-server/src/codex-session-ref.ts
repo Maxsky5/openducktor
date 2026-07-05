@@ -1,7 +1,7 @@
-import type { AgentSessionRef } from "@openducktor/core";
+import type { SessionRef } from "@openducktor/core";
 import type { CodexSessionState } from "./types";
 
-export const codexSessionRef = (session: CodexSessionState): AgentSessionRef => ({
+export const codexSessionRef = (session: CodexSessionState): SessionRef => ({
   externalSessionId: session.threadId,
   repoPath: session.repoPath,
   runtimeKind: session.summary.runtimeKind,

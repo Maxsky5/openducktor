@@ -110,8 +110,11 @@ const normalizeSessionDirectory = (directory: unknown): string | undefined => {
 
 const toOpencodeLocalRuntimeSnapshot = (session: SessionRecord): OpencodeRuntimeSnapshotSource => ({
   externalSessionId: session.externalSessionId,
-  title: session.input.role
-    ? formatWorkflowAgentSessionTitle(session.input.role, session.input.taskId)
+  title: session.input.sessionScope
+    ? formatWorkflowAgentSessionTitle(
+        session.input.sessionScope.role,
+        session.input.sessionScope.taskId,
+      )
     : "OpenCode",
   workingDirectory: session.input.workingDirectory,
   startedAt: session.summary.startedAt,

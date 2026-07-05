@@ -77,7 +77,7 @@ export type RuntimePendingInputRequestId = string;
 export type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
   workingDirectory: string;
 };
-export type AgentSessionRef = RuntimeWorkingDirectoryRef & {
+export type SessionRef = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
 };
 
@@ -484,5 +484,5 @@ export type AgentEvent = (
       message: string;
     }
 ) & {
-  sessionRef?: AgentSessionRef;
+  sessionRef?: SessionRef;
 };

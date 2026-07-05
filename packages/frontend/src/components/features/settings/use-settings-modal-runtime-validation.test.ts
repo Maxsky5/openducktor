@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
@@ -13,7 +14,7 @@ const createSnapshot = (): SettingsSnapshot =>
     autopilot: createDefaultAutopilotSettings(),
     agentRuntimes: {
       opencode: { enabled: true },
-      codex: { enabled: false },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
     },
     workspaces: {
       repo: {
@@ -67,5 +68,31 @@ describe("settings runtime availability validation", () => {
 
     expect(validation.totalErrorCount).toBe(0);
     expect(validation.errorsByWorkspaceId).toEqual({});
+  });
+
+  test("reports configured disabled runtimes without substituting another runtime", () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes = {
+      opencode: { enabled: false },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+    };
+    const repoConfig = snapshotDraft.workspaces.repo;
+    if (!repoConfig) {
+      throw new Error("Fixture repo workspace is missing.");
+    }
+    snapshotDraft.workspaces = {
+      ...snapshotDraft.workspaces,
+      repo: { ...repoConfig, defaultRuntimeKind: "opencode" },
+    };
+
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft,
+    });
+
+    expect(validation.errorsByWorkspaceId.repo).toEqual([
+      'Default agent runtime "OpenCode" is disabled.',
+      'Builder agent runtime "Codex" is disabled.',
+    ]);
   });
 });

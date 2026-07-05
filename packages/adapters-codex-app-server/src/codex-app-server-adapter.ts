@@ -7,8 +7,6 @@ import type {
   AgentModelCatalog,
   AgentSessionHistoryMessage,
   AgentSessionPort,
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
@@ -24,21 +22,27 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SearchAgentFilesInput,
   SendAgentUserMessageInput,
+  SessionRef,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
   formatWorkflowAgentSessionTitle,
+  requireWorkflowAgentSessionScope,
   withAgentSessionRef,
 } from "@openducktor/core";
-import { requireCodexServerRequestId } from "./codex-app-server-approvals";
+import {
+  requireCodexPendingRequestKey,
+  requireCodexServerResponseRequestId,
+} from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
@@ -66,8 +70,10 @@ import {
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
 import {
-  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
-  OPENDUCKTOR_CODEX_SANDBOX_MODE,
+  assertCodexRuntimePolicyBinding,
+  codexPolicyLogEntry,
+  codexTransportPolicy,
+  requireCodexRuntimePolicy,
 } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
 import {
@@ -111,8 +117,7 @@ export class CodexAppServerAdapter
     this.runtimeClients = new CodexRuntimeClientResolver(options);
     this.runtimeEvents = new CodexRuntimeSessionEvents({
       subscribeEvents: options.subscribeEvents,
-      drainServerRequests: options.drainServerRequests,
-      drainNotifications: options.drainNotifications,
+      takeBufferedEvents: options.takeBufferedEvents,
       respondServerRequest: options.respondServerRequest,
       sessions: {
         get: (externalSessionId) => this.localSessions.get(externalSessionId),
@@ -171,22 +176,32 @@ export class CodexAppServerAdapter
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
+    assertCodexRuntimePolicyBinding(input, "start Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
     const transportModel = toTransportModelSelection(model);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "start Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/start",
+        policy,
+        runtimeId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadStart({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      ...codexTransportPolicy(policy),
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
-      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: transportModel.model,
       effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start Codex session");
+    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -199,17 +214,27 @@ export class CodexAppServerAdapter
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    assertCodexRuntimePolicyBinding(input, "resume Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "resume Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/resume",
+        policy,
+        runtimeId,
+        threadId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadResume({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      ...codexTransportPolicy(policy),
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
-      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -222,22 +247,33 @@ export class CodexAppServerAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
+    assertCodexRuntimePolicyBinding(input, "fork Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "fork Codex session");
 
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/fork",
+        policy,
+        runtimeId,
+        threadId: input.parentExternalSessionId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
     const response = await client.threadFork({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      ...codexTransportPolicy(policy),
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
-      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork Codex session");
+    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -250,6 +286,7 @@ export class CodexAppServerAdapter
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
+    assertCodexRuntimePolicyBinding(input, "send Codex user message");
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -301,6 +338,7 @@ export class CodexAppServerAdapter
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
+    assertCodexRuntimePolicyBinding(input, "load Codex session history");
     const session = this.localSessions.get(input.externalSessionId);
     const runtime = session
       ? {
@@ -313,6 +351,13 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
+      ...(session
+        ? {
+            threadResumePolicy: codexTransportPolicy(
+              requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session history"),
+            ),
+          }
+        : {}),
       rememberTodos: (externalSessionId, todos) =>
         this.runtimeEvents.rememberTodos(externalSessionId, todos),
       ...this.runtimeEvents.historyLoadContext(),
@@ -368,12 +413,12 @@ export class CodexAppServerAdapter
     }
 
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtime.runtimeId);
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "restore Codex context usage");
     await this.runtimeEvents.captureRestoredContextUsage(input, runtime.runtimeId, async () => {
       await runtime.client.threadResume({
-        approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+        ...codexTransportPolicy(policy),
         threadId: input.externalSessionId,
         cwd: input.workingDirectory,
-        sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
         excludeTurns: false,
       });
     });
@@ -381,6 +426,7 @@ export class CodexAppServerAdapter
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
+    assertCodexRuntimePolicyBinding(input, "load Codex session todos");
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
     if (liveTodos) {
       return liveTodos;
@@ -396,6 +442,9 @@ export class CodexAppServerAdapter
       client,
       runtimeId,
       input,
+      codexTransportPolicy(
+        requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session todos"),
+      ),
     );
     if (!isThreadReadable) {
       return [];
@@ -421,9 +470,8 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
-  private async ensureSessionState(
-    input: AgentSessionRef | AgentSessionRuntimeRef,
-  ): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
+    assertCodexRuntimePolicyBinding(input, "ensure Codex session state");
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? (input.model ?? undefined) : undefined;
@@ -431,14 +479,14 @@ export class CodexAppServerAdapter
       await this.models.validate(client, runtimeId, model);
     }
 
+    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "ensure Codex session state");
     const response = await client.threadResume({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      ...codexTransportPolicy(policy),
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...("systemPrompt" in input && input.systemPrompt
         ? { developerInstructions: input.systemPrompt }
         : {}),
-      sandbox: OPENDUCKTOR_CODEX_SANDBOX_MODE,
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
@@ -452,7 +500,7 @@ export class CodexAppServerAdapter
     return summary;
   }
 
-  async releaseSession(input: AgentSessionRef): Promise<void> {
+  async releaseSession(input: SessionRef): Promise<void> {
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) {
       return;
@@ -480,7 +528,8 @@ export class CodexAppServerAdapter
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
-    const requestId = requireCodexServerRequestId(input.requestId, "approval");
+    assertCodexRuntimePolicyBinding(input, "reply to Codex approval");
+    requireCodexPendingRequestKey(input.requestId, "approval");
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -499,6 +548,7 @@ export class CodexAppServerAdapter
       );
     }
     const metadata = isPlainObject(pending.request.metadata) ? pending.request.metadata : {};
+    const requestId = requireCodexServerResponseRequestId(input.requestId, metadata, "approval");
     const requestMethod =
       typeof metadata.codexMethod === "string" ? metadata.codexMethod : "approval/request";
     const requestParams = metadata.params;
@@ -523,7 +573,8 @@ export class CodexAppServerAdapter
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
-    const requestId = requireCodexServerRequestId(input.requestId, "question");
+    assertCodexRuntimePolicyBinding(input, "reply to Codex question");
+    requireCodexPendingRequestKey(input.requestId, "question");
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -545,6 +596,11 @@ export class CodexAppServerAdapter
         questionId,
         { answers: input.answers[index] },
       ]),
+    );
+    const requestId = requireCodexServerResponseRequestId(
+      input.requestId,
+      pending.input,
+      "question",
     );
     const output = JSON.stringify({ answers });
     await this.options.respondServerRequest(pending.runtimeId, requestId, { answers }, undefined);
@@ -577,9 +633,10 @@ export class CodexAppServerAdapter
   }
 
   async subscribeEvents(
-    input: AgentSessionRef,
+    input: PolicyBoundSessionRef,
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
+    assertCodexRuntimePolicyBinding(input, "subscribe Codex session events");
     const externalSessionId = input.externalSessionId;
     if (!this.localSessions.has(externalSessionId)) {
       await this.prepareLiveSessionSubscription(input);
@@ -620,11 +677,11 @@ export class CodexAppServerAdapter
         }),
       );
     }
-    void this.runtimeEvents.drainBufferedStreamEvents(externalSessionId);
+    void this.runtimeEvents.replayBufferedStreamEvents(externalSessionId);
     return unsubscribe;
   }
 
-  private async prepareLiveSessionSubscription(input: AgentSessionRef): Promise<void> {
+  private async prepareLiveSessionSubscription(input: PolicyBoundSessionRef): Promise<void> {
     const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
       "subscribe session events",
@@ -662,7 +719,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
   }
 
-  async stopSession(input: AgentSessionRef): Promise<void> {
+  async stopSession(input: SessionRef): Promise<void> {
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
@@ -705,7 +762,6 @@ export class CodexAppServerAdapter
   private turnLifecycleContext(): CodexTurnLifecycleContext {
     return {
       subscribeEvents: Boolean(this.options.subscribeEvents),
-      shouldDrainNotifications: Boolean(this.options.drainNotifications),
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
@@ -718,12 +774,15 @@ export class CodexAppServerAdapter
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
-      handlePendingServerRequests: (session, handledRequestKeys) =>
-        this.runtimeEvents.handlePendingServerRequests(session, handledRequestKeys),
+      handleBufferedRuntimeEvents: (session, handledRequestKeys) =>
+        this.runtimeEvents.handleBufferedRuntimeEvents(session, handledRequestKeys),
       emitUserMessage: (event, sourceParts) =>
         this.runtimeEvents.emitUserMessage(event, sourceParts),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
+      codexPolicyForSession: (session) =>
+        requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
+      ...(this.options.logSessionPolicy ? { logSessionPolicy: this.options.logSessionPolicy } : {}),
     };
   }
 

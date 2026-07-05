@@ -330,15 +330,15 @@ export const registerSession = (
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(input.sessionInput.role
+    ...(input.sessionInput.sessionScope
       ? {
           title: formatWorkflowAgentSessionTitle(
-            input.sessionInput.role,
-            input.sessionInput.taskId,
+            input.sessionInput.sessionScope.role,
+            input.sessionInput.sessionScope.taskId,
           ),
         }
       : {}),
-    role: input.sessionInput.role,
+    role: input.sessionInput.sessionScope?.role ?? null,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
   };

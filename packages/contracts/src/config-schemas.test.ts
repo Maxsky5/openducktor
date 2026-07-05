@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
   AUTOPILOT_EVENT_IDS,
   chatSettingsSchema,
+  codexRuntimeConfigSchema,
   DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_CODEX_RUNTIME_POLICY,
   globalConfigSchema,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   repoConfigSchema,
+  resolveCodexEffectivePolicy,
   reusablePromptSchema,
   reusablePromptsSchema,
   settingsSnapshotSchema,
@@ -135,6 +138,232 @@ describe("config-schemas", () => {
 
     expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
     expect(globalConfig.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
+  });
+
+  test("defaults missing and enabled-only codex runtime config", () => {
+    const missing = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const enabledOnly = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      agentRuntimes: { codex: { enabled: true } },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(missing.agentRuntimes.codex).toEqual({
+      enabled: false,
+      defaults: DEFAULT_CODEX_RUNTIME_POLICY,
+      roleOverrides: {},
+    });
+    expect(enabledOnly.agentRuntimes.codex).toEqual({
+      enabled: true,
+      defaults: DEFAULT_CODEX_RUNTIME_POLICY,
+      roleOverrides: {},
+    });
+  });
+
+  test("preserves enabled-only opencode and unknown runtime config", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      agentRuntimes: { opencode: { enabled: false }, custom: { enabled: true } },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsed.agentRuntimes.opencode).toEqual({ enabled: false });
+    expect((parsed.agentRuntimes as Record<string, unknown>).custom).toEqual({ enabled: true });
+  });
+
+  test("accepts narrow codex policy values and role overrides", () => {
+    const parsed = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        commandNetworkAccess: true,
+      },
+      roleOverrides: {
+        spec: { sandboxMode: "read-only", approvalPolicy: "untrusted" },
+        planner: { approvalsReviewer: "user" },
+        build: { sandboxMode: "workspace-write" },
+        qa: { commandNetworkAccess: false },
+      },
+    });
+
+    expect(parsed.roleOverrides.build?.sandboxMode).toBe("workspace-write");
+  });
+
+  test("resolves codex policy with override precedence and builder inheritance adjustment", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "read-only",
+        approvalPolicy: "untrusted",
+        approvalsReviewer: "auto_review",
+        commandNetworkAccess: true,
+      },
+      roleOverrides: {
+        qa: { sandboxMode: "workspace-write", commandNetworkAccess: true },
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, "qa")).toEqual({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      approvalsReviewerApplies: true,
+      commandNetworkAccess: true,
+    });
+    expect(resolveCodexEffectivePolicy(config, "spec")).toEqual({
+      sandboxMode: "read-only",
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      approvalsReviewerApplies: true,
+      commandNetworkAccess: true,
+    });
+    expect(resolveCodexEffectivePolicy(config, "build")).toEqual({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "untrusted",
+      approvalsReviewer: "auto_review",
+      approvalsReviewerApplies: true,
+      commandNetworkAccess: true,
+      adjustmentReason:
+        "Build role requires workspace-write when sandboxMode is inherited from read-only.",
+    });
+  });
+
+  test("resolves codex policy from defaults when no workflow role is supplied", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        commandNetworkAccess: true,
+      },
+      roleOverrides: {
+        qa: { sandboxMode: "read-only", approvalsReviewer: "user" },
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, null)).toEqual({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      approvalsReviewerApplies: true,
+      commandNetworkAccess: true,
+    });
+  });
+
+  test("allows dangerous explicit codex read-only role overrides", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      roleOverrides: {
+        spec: { approvalPolicy: "never" },
+        qa: { sandboxMode: "danger-full-access" },
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewerApplies: false,
+    });
+    expect(resolveCodexEffectivePolicy(config, "qa")).toMatchObject({
+      sandboxMode: "danger-full-access",
+      commandNetworkAccess: false,
+    });
+  });
+
+  test("allows dangerous inherited codex policy for read-only roles", () => {
+    const config = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      defaults: {
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        commandNetworkAccess: false,
+      },
+    });
+
+    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
+    });
+    expect(resolveCodexEffectivePolicy(config, "planner")).toMatchObject({
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
+    });
+  });
+
+  test("creates fresh codex default policy objects for each parse", () => {
+    const first = codexRuntimeConfigSchema.parse({ enabled: true });
+    const second = codexRuntimeConfigSchema.parse({ enabled: true });
+    const firstSnapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const secondSnapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(first.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
+    expect(first.defaults).not.toBe(DEFAULT_CODEX_RUNTIME_POLICY);
+    expect(first.defaults).not.toBe(second.defaults);
+    expect(firstSnapshot.agentRuntimes.codex.defaults).not.toBe(
+      secondSnapshot.agentRuntimes.codex.defaults,
+    );
+  });
+
+  test("rejects explicit builder read-only sandbox with field path", () => {
+    const result = codexRuntimeConfigSchema.safeParse({
+      enabled: true,
+      roleOverrides: { build: { sandboxMode: "read-only" } },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("explicit builder read-only must fail");
+    expect(result.error.issues[0]?.path.join(".")).toBe("roleOverrides.build.sandboxMode");
+    expect(result.error.issues[0]?.message).toContain("build role sandboxMode cannot be read-only");
+  });
+
+  test("rejects invalid codex values and out-of-scope keys", () => {
+    for (const value of ["on-failure", "guardian_subagent", { mode: "on-request" }]) {
+      expect(() =>
+        codexRuntimeConfigSchema.parse({ enabled: true, defaults: { approvalPolicy: value } }),
+      ).toThrow();
+    }
+
+    for (const key of [
+      "sandboxMode",
+      "approvalPolicy",
+      "guardian_subagent",
+      "networkProxy",
+      "domainPolicy",
+      "writableRoots",
+      "permissionProfile",
+      "webSearch",
+    ]) {
+      expect(() => codexRuntimeConfigSchema.parse({ enabled: true, [key]: true })).toThrow();
+    }
+
+    expect(() =>
+      codexRuntimeConfigSchema.parse({ enabled: true, roleOverrides: { review: {} } }),
+    ).toThrow("Unsupported Codex role override: review");
+    expect(() =>
+      codexRuntimeConfigSchema.parse({ enabled: true, defaults: { sandboxMode: "workspace" } }),
+    ).toThrow();
   });
 
   test("roundtrips explicit disabled background Agent Studio tab setting", () => {

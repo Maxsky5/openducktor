@@ -1,17 +1,22 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { toRuntimeSessionRef } from "./session-runtime-ref";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
+
+type SessionRuntimeDataSource =
+  | AgentSessionIdentity
+  | (AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] });
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
   | { kind: "unavailable"; error: string }
-  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: AgentSessionRef | null };
+  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: PolicyBoundSessionRef | null };
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
-  selectedSessionIdentity: AgentSessionIdentity | null;
+  selectedSessionIdentity: SessionRuntimeDataSource | null;
+  runtimePolicy: AgentSessionRuntimePolicy | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
 
@@ -35,6 +40,7 @@ const runtimeSupportsTodos = (
 export const resolveSessionRuntimeDataRefs = ({
   repoPath,
   selectedSessionIdentity,
+  runtimePolicy,
   runtimeDefinitions,
 }: ResolveSessionRuntimeDataRefsInput): SessionRuntimeDataRefs => {
   if (!selectedSessionIdentity) {
@@ -61,9 +67,17 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
+  if (!runtimePolicy) {
+    return {
+      kind: "available",
+      catalogRef,
+      todosRef: null,
+    };
+  }
+
   return {
     kind: "available",
     catalogRef,
-    todosRef: toRuntimeSessionRef(repoPath, selectedSessionIdentity),
+    todosRef: toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy),
   };
 };

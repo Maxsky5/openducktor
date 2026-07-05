@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -219,35 +219,26 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("loads history for sessions without workflow prompt context", async () => {
+  test("loads history without workflow role context", async () => {
     const sessionWithoutRole = {
       ...createSession(),
       role: null,
     };
     const harness = createHistoryLoadHarness(sessionWithoutRole);
     const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
-    let receivedSystemPrompt:
-      | Parameters<
-          Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
-        >[0]["systemPromptContext"]
-      | undefined;
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "History can load without workflow role context.",
+        parts: [],
+      },
+    ]);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
       workspaceId: "workspace-1",
-      adapter: {
-        loadSessionHistory: async (input) => {
-          receivedSystemPrompt = input.systemPromptContext;
-          return [
-            {
-              messageId: "history-1",
-              role: "assistant",
-              timestamp: "2026-06-12T08:00:01.000Z",
-              text: "Loaded transcript without workflow prompt",
-              parts: [],
-            },
-          ];
-        },
-      },
+      adapter: { loadSessionHistory },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -259,9 +250,17 @@ describe("session history loader", () => {
     await loadAgentSessionHistory(sessionTarget);
 
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
-    expect(receivedSystemPrompt).toBeUndefined();
+    expect(loadSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "external-1",
+      runtimePolicy: { kind: "opencode" },
+      limit: 600,
+    });
+    expect(harness.session.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
-      "Loaded transcript without workflow prompt",
+      "History can load without workflow role context.",
     ]);
   });
 
@@ -537,7 +536,7 @@ describe("session history loader", () => {
   });
 
   test("does not wait for selected session observation before loading baseline history", async () => {
-    const observedSessions: AgentSessionRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const harness = createHistoryLoadHarness();
     const loadSessionHistory = mock(async () => [
       {
@@ -570,6 +569,8 @@ describe("session history loader", () => {
         repoPath: "/repo",
         runtimeKind: sessionTarget.runtimeKind,
         workingDirectory: sessionTarget.workingDirectory,
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
   }, 500);

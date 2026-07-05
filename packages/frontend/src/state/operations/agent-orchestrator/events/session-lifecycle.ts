@@ -1,7 +1,11 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
-import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
+import {
+  appendSessionMessage,
+  upsertSessionMessage,
+  upsertUserSessionMessage,
+} from "../support/messages";
 import {
   buildSessionCompactedNoticeMessage,
   buildSessionCompactionStartedNoticeMessage,
@@ -160,7 +164,7 @@ export const handleUserMessage = (
   context.store.updateSession(context.session.identity, (current) => {
     return {
       ...current,
-      messages: upsertSessionMessage(current, toUserChatMessage(event)),
+      messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
     };
   });
 };

@@ -15,7 +15,9 @@ const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
   };
 };
 
-export const toUserChatMessage = (event: AcceptedAgentUserMessage): AgentChatMessage => ({
+export const toUserChatMessage = (
+  event: AcceptedAgentUserMessage,
+): AgentChatMessage & { role: "user" } => ({
   id: event.messageId,
   role: "user",
   content: event.message,

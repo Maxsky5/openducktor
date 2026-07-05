@@ -14,8 +14,21 @@ const BUILD_SELECTION = {
 
 const SESSION_IDENTITY = {
   externalSessionId: "session-1",
+  taskId: "task-1",
+  role: "build" as const,
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/worktrees/session-1",
+};
+
+const codexRuntimePolicy = {
+  kind: "codex" as const,
+  policy: {
+    sandboxMode: "workspace-write" as const,
+    approvalPolicy: "on-request" as const,
+    approvalsReviewer: "user" as const,
+    commandNetworkAccess: false,
+    approvalsReviewerApplies: true,
+  },
 };
 
 type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
@@ -25,6 +38,8 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   return {
     startAgentSession: async () => ({
       externalSessionId: "session-started",
+      taskId: "task-1",
+      role: "build" as const,
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/session-started",
     }),
@@ -73,7 +88,7 @@ describe("agent-orchestrator-public-operations", () => {
       await expect(
         operations.startAgentSession({
           taskId: "task-1",
-          role: "build",
+          role: "build" as const,
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
@@ -147,6 +162,7 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
     };
 
     await operations.readSessionTodos(sessionRef);
@@ -168,6 +184,7 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo-a/worktree",
       externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
       systemPromptContext: {
         systemPrompt: "Use the repository rules.",
         startedAt: "2026-06-14T08:00:00.000Z",
@@ -180,6 +197,7 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo-a/worktree",
       externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
       systemPromptContext: {
         systemPrompt: "Use the repository rules.",
         startedAt: "2026-06-14T08:00:00.000Z",
@@ -202,6 +220,7 @@ describe("agent-orchestrator-public-operations", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
     };
     const listener = mock(() => undefined);
 
@@ -215,7 +234,7 @@ describe("agent-orchestrator-public-operations", () => {
     const loadedSession: AgentSessionState = {
       externalSessionId: SESSION_IDENTITY.externalSessionId,
       taskId: "task-1",
-      role: "build",
+      role: "build" as const,
       status: "idle",
       startedAt: "2026-06-12T08:00:00.000Z",
       runtimeKind: SESSION_IDENTITY.runtimeKind,

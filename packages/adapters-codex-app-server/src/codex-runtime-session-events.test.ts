@@ -28,8 +28,7 @@ const createRuntimeEvents = (
 ) =>
   new CodexRuntimeSessionEvents({
     subscribeEvents: undefined,
-    drainServerRequests: async () => [],
-    drainNotifications: undefined,
+    takeBufferedEvents: undefined,
     respondServerRequest: async () => undefined,
     sessions: new Map(),
     activeTurnsBySessionId: new Map(),
@@ -169,6 +168,175 @@ describe("CodexRuntimeSessionEvents", () => {
     });
   });
 
+  test("emits network command approval requests from the live server-request stream", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-network");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = next;
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      pendingInput,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "network-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread-network",
+          turnId: "turn-network",
+          itemId: "call-network-1",
+          startedAtMs: 1_783_109_994_463,
+          environmentId: "local",
+          reason:
+            "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+          networkApprovalContext: {
+            host: "example.com",
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(pendingInput.approval("network-approval-1")).toMatchObject({
+      threadId: "thread-network",
+      request: {
+        requestId: "network-approval-1",
+        requestType: "command_execution",
+        title: "Network access approval requested",
+      },
+    });
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "thread-network",
+        requestId: "network-approval-1",
+        title: "Network access approval requested",
+      }),
+    );
+  });
+
+  test("preserves buffered request resolution ordering", async () => {
+    const session = createSession("thread-buffered-order");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        {
+          runtimeId: "runtime-1",
+          kind: "server_request",
+          message: {
+            id: "buffered-approval-1",
+            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+            params: {
+              threadId: "thread-buffered-order",
+              turnId: "turn-buffered-order",
+              itemId: "call-buffered-order",
+              command: "curl -I https://example.com",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "serverRequest/resolved",
+            params: {
+              threadId: "thread-buffered-order",
+              requestId: "buffered-approval-1",
+            },
+          },
+        },
+      ],
+      sessions,
+      pendingInput,
+    });
+
+    const hasPendingInput = await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(hasPendingInput).toBe(false);
+    expect(pendingInput.approval("buffered-approval-1")).toBeUndefined();
+    expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
+  });
+
+  test("does not replay token-usage drained requests resolved in the same batch", async () => {
+    const session = createSession("thread-drained-resolution");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        {
+          runtimeId: "runtime-1",
+          kind: "server_request",
+          message: {
+            id: "drained-approval-1",
+            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+            params: {
+              threadId: "thread-drained-resolution",
+              turnId: "turn-drained-resolution",
+              itemId: "call-drained-resolution",
+              command: "curl -I https://example.com",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "serverRequest/resolved",
+            params: {
+              threadId: "thread-drained-resolution",
+              requestId: "drained-approval-1",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "thread/tokenUsage/updated",
+            params: {
+              threadId: "thread-drained-resolution",
+              turnId: "turn-drained-resolution",
+              tokenUsage: {
+                total: { totalTokens: 1_000 },
+                last: { totalTokens: 100 },
+                modelContextWindow: 200_000,
+              },
+            },
+          },
+        },
+      ],
+      sessions,
+      pendingInput,
+    });
+
+    const usage = await runtimeEvents
+      .historyLoadContext()
+      .collectThreadReadTokenUsage("runtime-1", "thread-drained-resolution");
+    await runtimeEvents.replayBufferedStreamEvents("thread-drained-resolution");
+
+    expect(usage.get("turn-drained-resolution")).toMatchObject({
+      totalTokens: 100,
+      contextWindow: 200_000,
+    });
+    expect(pendingInput.approval("drained-approval-1")).toBeUndefined();
+    expect(pendingInput.pendingApprovalEventsForSession("thread-drained-resolution")).toHaveLength(
+      0,
+    );
+  });
+
   test("reprocesses child server requests buffered before a parent subagent link is learned", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
@@ -256,7 +424,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toHaveLength(1);
   });
 
-  test("does not let history projection drain live buffered child requests", async () => {
+  test("does not let history projection consume live buffered child requests", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
@@ -430,7 +598,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "parent-thread",
-        message: expect.stringContaining("missing params.threadId"),
+        message: expect.stringContaining("missing a thread identifier"),
       }),
     );
   });
@@ -483,7 +651,7 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
-  test("does not drain buffered child requests across runtimes", async () => {
+  test("does not process buffered child requests across runtimes", async () => {
     const listeners = new Map<string, RuntimeListener>();
     const parentSession = createSessionForRuntime("parent-thread", "runtime-1");
     const runtimeTwoSession = createSessionForRuntime("runtime-two-thread", "runtime-2");
@@ -568,7 +736,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(runtimeTwoEvents).toEqual([]);
   });
 
-  test("drains buffered child approvals when an inventory route is known before parent load", async () => {
+  test("processes buffered child approvals when an inventory route is known before parent load", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map<string, CodexSessionState>();
@@ -614,7 +782,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.approval("52")).toBeUndefined();
 
     sessions.set(parentSession.threadId, parentSession);
-    await runtimeEvents.drainBufferedStreamEvents(parentSession.threadId);
+    await runtimeEvents.replayBufferedStreamEvents(parentSession.threadId);
 
     expect(pendingInput.approval("52")).toMatchObject({
       threadId: "child-thread",

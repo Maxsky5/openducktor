@@ -45,6 +45,7 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
+      runtimePolicy: { kind: "opencode" },
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
@@ -91,6 +92,7 @@ describe("useAgentSessionObservers", () => {
 
     const sessionRef = {
       externalSessionId: "external-1",
+      runtimePolicy: { kind: "opencode" },
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",

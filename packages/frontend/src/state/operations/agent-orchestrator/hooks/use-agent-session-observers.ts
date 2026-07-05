@@ -9,6 +9,7 @@ import { useCallback } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { EnsureSession, UpdateSession } from "../events/session-event-types";
 import { listenToAgentSessionEvents } from "../events/session-events";
@@ -93,6 +94,7 @@ export const useAgentSessionObservers = ({
           resolveTurnDurationMs: sessionTurnState.timing.resolveTurnDurationMs,
           clearTurnDuration: sessionTurnState.timing.clearTurnDuration,
           buildReadOnlyApprovalRejectionMessage,
+          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
           refreshTaskData,
           readOnlyApprovalAutoRejectSafe: runtimeDefinition
             ? runtimeSupportsCapability(runtimeDefinition, "approvals.readOnlyAutoRejectSafe")

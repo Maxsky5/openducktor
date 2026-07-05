@@ -1,12 +1,17 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import { type SessionRef, workflowAgentSessionScope } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionObservers } from "../support/session-observers";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
+import { resolveAgentSessionRuntimePolicy } from "../support/session-runtime-policy";
+import {
+  type ObserveAgentSession,
+  toRuntimeSessionRefWithPolicy,
+} from "../support/session-runtime-ref";
 
 type PrepareSessionSendDependencies = {
   workspaceRepoPath: string | null;
@@ -18,6 +23,7 @@ type PrepareSessionSendDependencies = {
   observeAgentSession: ObserveAgentSession;
   ensureRuntime: EnsureRuntime;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
 };
 
 export type PreparedSessionSend = {
@@ -40,7 +46,7 @@ const removeObserverIfStale = ({
   sessionObservers,
   isStale,
 }: {
-  sessionRef: AgentSessionRef;
+  sessionRef: SessionRef;
   sessionObservers: SessionObservers;
   isStale: () => boolean;
 }): void => {
@@ -62,6 +68,7 @@ export const createPrepareSessionSend = ({
   observeAgentSession,
   ensureRuntime,
   loadRepoPromptOverrides,
+  loadSettingsSnapshot,
 }: PrepareSessionSendDependencies) => {
   return async (session: WorkflowAgentSessionState): Promise<PreparedSessionSend> => {
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
@@ -78,7 +85,16 @@ export const createPrepareSessionSend = ({
 
     assertNotStale();
     const task = findSessionTask(taskRef.current, session);
-    const sessionRef = toRuntimeSessionRef(repoPath, session);
+    const sessionScope = workflowAgentSessionScope(session.taskId, session.role);
+    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
+      runtimeKind: session.runtimeKind,
+      sessionScope,
+      loadSettingsSnapshot,
+    });
+    const sessionRef = {
+      ...toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy),
+      sessionScope,
+    };
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,

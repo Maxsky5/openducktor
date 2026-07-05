@@ -1,17 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const tempDirectories = new Set<string>();
 const sqliteInfrastructureDirectory = path.dirname(fileURLToPath(import.meta.url));
 const hostPackageRoot = path.resolve(sqliteInfrastructureDirectory, "../../..");
-const repositoryRoot = path.resolve(hostPackageRoot, "../..");
-const electronPackageRequire = createRequire(
-  path.join(repositoryRoot, "apps", "electron", "package.json"),
-);
-const resolveElectronExecutablePath = (): string => String(electronPackageRequire("electron"));
 
 const makeTempDirectory = async (): Promise<string> => {
   const directory = await mkdtemp(path.join(hostPackageRoot, ".tmp-sqlite-driver-"));
@@ -26,7 +20,7 @@ afterEach(async () => {
 
 const decode = (value: Uint8Array): string => new TextDecoder().decode(value);
 
-test("openSqliteDatabase supports the Node runtime used by Electron", async () => {
+test("openSqliteDatabase supports the Node runtime adapter", async () => {
   const tempDirectory = await makeTempDirectory();
   const entryPath = path.join(tempDirectory, "node-sqlite-driver-check.ts");
   const buildDirectory = path.join(tempDirectory, "build");
@@ -78,9 +72,7 @@ test("openSqliteDatabase supports the Node runtime used by Electron", async () =
   expect(build.success, build.logs.map((log) => String(log)).join("\n")).toBe(true);
 
   const outputPath = path.join(buildDirectory, "node-sqlite-driver-check.js");
-  const electronExecutablePath = resolveElectronExecutablePath();
-  const result = Bun.spawnSync([electronExecutablePath, outputPath, databasePath], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+  const result = Bun.spawnSync(["node", outputPath, databasePath], {
     stderr: "pipe",
     stdout: "pipe",
   });

@@ -1,11 +1,11 @@
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
 import { useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
-import { toRuntimeSessionRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
+import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import {
   createEmptyReadonlyRuntimeSessionState,
   mergeReadonlyRuntimeHistory,
@@ -29,7 +29,8 @@ type RuntimeTranscriptLiveOverlay = {
 type UseRuntimeTranscriptLiveOverlayArgs = {
   shouldObserve: boolean;
   repoPath: string | null;
-  target: AgentSessionIdentity | null;
+  target: AgentSessionTranscriptTarget | null;
+  sessionRef: PolicyBoundSessionRef | null;
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -53,6 +54,7 @@ export function useRuntimeTranscriptLiveOverlay({
   shouldObserve,
   repoPath,
   target,
+  sessionRef,
   history,
   shouldMergeHistory,
   replyAgentApproval,
@@ -66,13 +68,12 @@ export function useRuntimeTranscriptLiveOverlay({
   }, [liveState]);
 
   useEffect(() => {
-    if (!shouldObserve || repoPath === null || target === null) {
+    if (!shouldObserve || repoPath === null || target === null || sessionRef === null) {
       liveStateRef.current = null;
       setLiveState(null);
       return;
     }
 
-    const sessionRef = toRuntimeSessionRef(repoPath, target);
     let isCancelled = false;
     let unsubscribe: (() => void) | null = null;
 
@@ -132,7 +133,7 @@ export function useRuntimeTranscriptLiveOverlay({
       isCancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, replyAgentApproval, shouldObserve, subscribeSessionEvents, target]);
+  }, [repoPath, replyAgentApproval, sessionRef, shouldObserve, subscribeSessionEvents, target]);
 
   useEffect(() => {
     if (!shouldMergeHistory || target === null || !history) {

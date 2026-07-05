@@ -3,14 +3,26 @@ import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexUserMessageInput,
   createDeferred,
   createHarness,
+  flushCodexAdapterWork,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
+
+const CURL_NETWORK_COMMAND =
+  "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
+
+const bufferedServerRequest = (message: unknown) => ({
+  runtimeId: "runtime-live",
+  kind: "server_request" as const,
+  message,
+});
 
 describe("CodexAppServerAdapter approvals", () => {
-  test("emits a session error for streamed server requests missing threadId", async () => {
+  test("emits a session error for streamed server requests missing a thread identifier", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
     > = [];
@@ -20,15 +32,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -49,8 +53,277 @@ describe("CodexAppServerAdapter approvals", () => {
         event !== null &&
         (event as { type?: unknown; message?: unknown }).type === "session_error" &&
         typeof (event as { message?: unknown }).message === "string" &&
-        (event as { message: string }).message.includes("missing params.threadId"),
+        (event as { message: string }).message.includes("missing a thread identifier"),
     );
+    unsubscribe();
+  });
+
+  test("surfaces legacy exec command approvals routed by conversationId", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter, respondServerRequest } = createHarness({ subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "legacy-exec-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
+        params: {
+          conversationId: "thread/start-runtime-live",
+          callId: "call-1",
+          approvalId: null,
+          command: ["curl", "-I", "https://example.com"],
+          cwd: "/repo",
+          reason: "Need network access.",
+          parsedCmd: [],
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "legacy-exec-approval-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "legacy-exec-approval-1",
+      requestType: "command_execution",
+      title: "Bash approval requested",
+      summary: "Need network access.",
+      mutation: "unknown",
+      action: { name: "Bash" },
+      command: { command: "curl -I https://example.com", workingDirectory: "/repo" },
+    });
+    expect(approval).not.toHaveProperty("details");
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("surfaces streamed network command approvals from structured command actions", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
+    const { adapter, respondServerRequest } = createHarness({
+      takeBufferedEvents,
+      subscribeEvents,
+    });
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "network-approval-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-1",
+          itemId: "call-1",
+          startedAtMs: 1,
+          reason:
+            "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+          command: `/bin/zsh -lc '${CURL_NETWORK_COMMAND}'`,
+          cwd: "/repo",
+          commandActions: [
+            {
+              type: "unknown",
+              command: CURL_NETWORK_COMMAND,
+            },
+          ],
+          networkApprovalContext: {
+            host: "example.com",
+            protocol: "https",
+          },
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "network-approval-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "network-approval-1",
+      requestType: "command_execution",
+      title: "Network access approval requested",
+      summary:
+        "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
+      mutation: "unknown",
+      action: { name: "Network access" },
+      command: {
+        command: CURL_NETWORK_COMMAND,
+        workingDirectory: "/repo",
+      },
+    });
+    expect(approval).not.toHaveProperty("details");
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("requires a server request to create command approvals", async () => {
+    const streamListeners: Array<
+      (event: {
+        runtimeId: string;
+        kind: "notification" | "server_request";
+        message: unknown;
+      }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
+    const { adapter } = createHarness(
+      {
+        takeBufferedEvents,
+        subscribeEvents,
+      },
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Check network with curl" }],
+      }),
+    );
+    await flushCodexAdapterWork();
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "thread/status/changed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          status: {
+            type: "active",
+            activeFlags: ["waitingOnApproval"],
+          },
+        },
+      },
+    });
+
+    await flushCodexAdapterWork();
+
+    expect(events.some((event) => (event as { type?: unknown }).type === "approval_required")).toBe(
+      false,
+    );
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test("surfaces live command approvals before turn start settles", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
+    const { adapter, transports, respondServerRequest } = createHarness(
+      {
+        takeBufferedEvents,
+        subscribeEvents,
+      },
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession(codexStartSessionInput());
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Check network with curl" }],
+      }),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "network-approval-live",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-1",
+          itemId: "call-1",
+          startedAtMs: 1,
+          reason: "Allow terminal network access?",
+          networkApprovalContext: {
+            host: "example.com",
+            protocol: "https",
+          },
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "network-approval-live",
+    );
+
+    expect(approval).toMatchObject({
+      requestId: "network-approval-live",
+      requestType: "command_execution",
+      title: "Network access approval requested",
+    });
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    transports.get("runtime-live")?.turnStartDeferred.resolve({});
     unsubscribe();
   });
 
@@ -62,21 +335,17 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter, respondServerRequest } = createHarness({
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(
+      codexStartSessionInput({
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      }),
+    );
 
     const request = {
       id: 17,
@@ -119,7 +388,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
       undefined,
     );
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "session_error",
@@ -130,24 +399,16 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces unknown Codex server methods as approval requests", async () => {
-    const { adapter, transports, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, transports, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
     const transport = transports.get("runtime-live");
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 19,
         method: "item/unknown",
         params: {
@@ -157,7 +418,7 @@ describe("CodexAppServerAdapter approvals", () => {
           tool: "odt_read_task",
           arguments: { taskId: "task-1" },
         },
-      },
+      }),
     ]);
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
@@ -188,6 +449,7 @@ describe("CodexAppServerAdapter approvals", () => {
       }),
     );
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "19",
       outcome: "reject",
@@ -201,24 +463,94 @@ describe("CodexAppServerAdapter approvals", () => {
     transport?.turnStartDeferred.resolve({});
   });
 
+  test("surfaces and resolves Codex permission approvals with string request ids", async () => {
+    const requestResolved = createDeferred<void>();
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
+      if (requestId === "permission-request-1") {
+        requestResolved.resolve();
+      }
+    });
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: "permission-request-1",
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-permission",
+          itemId: "permission-item-1",
+          startedAtMs: 1,
+          cwd: "/repo",
+          reason: "Need one-time network access.",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      },
+    });
+
+    const approval = await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+        (event as { requestId?: unknown }).requestId === "permission-request-1",
+    );
+    expect(approval).toMatchObject({
+      requestId: "permission-request-1",
+      requestType: "permission_grant",
+      title: "Permission approval requested",
+      summary: "Need one-time network access.",
+      mutation: "unknown",
+    });
+    expect(approval).not.toHaveProperty("details");
+
+    await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: "permission-request-1",
+      outcome: "approve_once",
+    });
+
+    await requestResolved.promise;
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      "permission-request-1",
+      { permissions: { network: { enabled: true } }, scope: "turn" },
+      undefined,
+    );
+    unsubscribe();
+  });
+
   test("rejects approval replies routed through another session", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
 
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 33,
         method: "approval/request",
         params: {
@@ -227,7 +559,7 @@ describe("CodexAppServerAdapter approvals", () => {
           tool: "network",
           url: "https://example.com",
         },
-      },
+      }),
     ]);
 
     await adapter.sendUserMessage(
@@ -254,25 +586,58 @@ describe("CodexAppServerAdapter approvals", () => {
     unsubscribe();
   });
 
-  test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
-    const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
-        id: 31,
+  test("preserves numeric string server request ids when replying to approvals", async () => {
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
+        id: "53",
         method: "approval/request",
-        params: { tool: "network", url: "https://example.com" },
-      },
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-approval-string-id",
+          tool: "network",
+          url: "https://example.com",
+        },
+      }),
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Need approval" }],
+      }),
+    );
+
+    await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: codexServerRequestKey("53"),
+      outcome: "reject",
     });
+
+    expect(respondServerRequest.mock.calls[0]?.[1]).toBe("53");
+  });
+
+  test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
+    const { adapter, takeBufferedEvents } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
+        id: 31,
+        method: "approval/request",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-approval-initial",
+          tool: "network",
+          url: "https://example.com",
+        },
+      }),
+    ]);
+
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -303,13 +668,13 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces and resolves Codex user-input question requests", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
     const events: unknown[] = [];
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 32,
         method: "item/tool/requestUserInput",
         params: {
@@ -326,18 +691,10 @@ describe("CodexAppServerAdapter approvals", () => {
             },
           ],
         },
-      },
+      }),
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -365,12 +722,12 @@ describe("CodexAppServerAdapter approvals", () => {
         tool: "request_user_input",
         title: "Question",
         preview: "Pick a mode",
-        input: {
+        input: expect.objectContaining({
           requestId: "32",
           questions: [
             expect.objectContaining({ header: "Mode", question: "Pick a mode", custom: true }),
           ],
-        },
+        }),
       }),
     });
 
@@ -400,6 +757,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await adapter.replyQuestion({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "32",
       answers: [["Safe"]],
@@ -436,13 +794,56 @@ describe("CodexAppServerAdapter approvals", () => {
     });
   });
 
-  test("resolves Codex MCP tool approvals with session persistence metadata", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+  test("preserves numeric string server request ids when replying to questions", async () => {
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
       {},
       { deferTurnStart: true },
     );
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
+        id: "54",
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-question-string-id",
+          itemId: "item-1",
+          questions: [
+            {
+              id: "question-1",
+              header: "Mode",
+              question: "Pick a mode",
+              options: ["Safe"],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+      }),
+    );
+
+    await adapter.replyQuestion({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
+      externalSessionId: "thread/start-runtime-live",
+      requestId: codexServerRequestKey("54"),
+      answers: [["Safe"]],
+    });
+
+    expect(respondServerRequest.mock.calls[0]?.[1]).toBe("54");
+  });
+
+  test("resolves Codex MCP tool approvals with session persistence metadata", async () => {
+    const { adapter, takeBufferedEvents, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 37,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
         params: {
@@ -458,18 +859,10 @@ describe("CodexAppServerAdapter approvals", () => {
             persist: ["session", "always"],
           },
         },
-      },
+      }),
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     const events: unknown[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
@@ -496,6 +889,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "37",
       outcome: "approve_session",
@@ -510,9 +904,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("clears pending Codex input state when local stop cleanup runs", async () => {
-    const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    const { adapter, takeBufferedEvents } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 36,
         method: "item/tool/requestUserInput",
         params: {
@@ -521,18 +915,10 @@ describe("CodexAppServerAdapter approvals", () => {
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
         },
-      },
+      }),
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -565,12 +951,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("steers active Codex turns for queued user messages", async () => {
-    const { adapter, drainServerRequests, transports } = createHarness(
-      {},
-      { deferTurnStart: true },
-    );
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
+    const { adapter, takeBufferedEvents, transports } = createHarness({}, { deferTurnStart: true });
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedServerRequest({
         id: 33,
         method: "item/tool/requestUserInput",
         params: {
@@ -579,18 +962,10 @@ describe("CodexAppServerAdapter approvals", () => {
           itemId: "item-1",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
         },
-      },
+      }),
     ]);
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -620,11 +995,12 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyApproval({
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
-        requestId: "not-a-number",
+        requestId: " ",
         outcome: "approve_once",
       }),
-    ).rejects.toThrow("Codex approval request id 'not-a-number' must be numeric.");
+    ).rejects.toThrow("Codex approval request id must not be empty.");
 
     expect(respondServerRequest).toHaveBeenCalledTimes(0);
   });
@@ -634,18 +1010,19 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await expect(
       adapter.replyQuestion({
+        ...codexSessionRuntimeRef("thread/start-runtime-live"),
         externalSessionId: "thread/start-runtime-live",
-        requestId: "32.5",
+        requestId: " ",
         answers: [["yes"]],
       }),
-    ).rejects.toThrow("Codex question request id '32.5' must be numeric.");
+    ).rejects.toThrow("Codex question request id must not be empty.");
 
     expect(respondServerRequest).toHaveBeenCalledTimes(0);
   });
 
   test("continues a paused turn from streamed requests after approval replies", async () => {
     const dynamicToolRejected = createDeferred<void>();
-    const respondServerRequest = mock(async (_runtimeId: string, requestId: number) => {
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
       if (requestId === 42) {
         dynamicToolRejected.resolve();
       }
@@ -657,10 +1034,10 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter } = createHarness({
       respondServerRequest,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
     const approvalRequest = {
@@ -684,15 +1061,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     };
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(codexStartSessionInput());
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -719,6 +1088,7 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     await adapter.replyApproval({
+      ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
       requestId: "41",
       outcome: "approve_once",
@@ -754,9 +1124,9 @@ describe("CodexAppServerAdapter approvals", () => {
     unsubscribe();
   });
 
-  test("auto-rejects mutating Codex requests for read-only roles", async () => {
+  test("surfaces mutating Codex approvals for read-only roles while rejecting dynamic tools", async () => {
     const dynamicToolRejected = createDeferred<void>();
-    const respondServerRequest = mock(async (_runtimeId: string, requestId: number) => {
+    const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
       if (requestId === 24) {
         dynamicToolRejected.resolve();
       }
@@ -768,22 +1138,19 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push(listener);
       return () => {};
     });
-    const drainServerRequests = mock(async () => [] as unknown[]);
+    const takeBufferedEvents = mock(async () => [] as unknown[]);
     const { adapter } = createHarness({
       respondServerRequest,
-      drainServerRequests,
+      takeBufferedEvents,
       subscribeEvents,
     });
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "qa",
-      systemPrompt: "Review only.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.startSession(
+      codexStartSessionInput({
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+        systemPrompt: "Review only.",
+      }),
+    );
     const events: unknown[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
@@ -819,12 +1186,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await dynamicToolRejected.promise;
 
-    expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-live",
-      23,
-      { decision: "decline" },
-      undefined,
-    );
+    expect(respondServerRequest.mock.calls.some(([, requestId]) => requestId === 23)).toBe(false);
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
       24,
@@ -841,11 +1203,19 @@ describe("CodexAppServerAdapter approvals", () => {
     );
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("Rejected mutating Codex request"),
+        type: "approval_required",
+        requestId: "23",
+        requestType: "file_change",
+        mutation: "mutating",
       }),
     );
-    expect(drainServerRequests).not.toHaveBeenCalled();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("must use MCP"),
+      }),
+    );
+    expect(takeBufferedEvents).not.toHaveBeenCalled();
     unsubscribe();
   });
 });

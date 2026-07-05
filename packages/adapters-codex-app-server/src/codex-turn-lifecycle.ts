@@ -1,3 +1,4 @@
+import type { CodexEffectivePolicy } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -12,8 +13,10 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import {
-  codexWorkspaceWriteSandboxPolicy,
-  OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+  type CodexPolicyLogEntry,
+  codexApprovalsReviewer,
+  codexPolicyLogEntry,
+  codexSandboxPolicy,
 } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
@@ -21,7 +24,6 @@ import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
-  shouldDrainNotifications: boolean;
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -34,7 +36,7 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  handlePendingServerRequests(
+  handleBufferedRuntimeEvents(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
   ): Promise<boolean>;
@@ -43,6 +45,8 @@ export type CodexTurnLifecycleContext = {
     sourceParts: AgentUserMessagePart[],
   ): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
+  codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
+  logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
 const flushQueuedUserMessages = async (
@@ -70,7 +74,7 @@ const emitAcceptedUserMessage = (
   acceptedUserMessage: AcceptedAgentUserMessage,
   parts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  if (!context.subscribeEvents && context.shouldDrainNotifications) {
+  if (!context.subscribeEvents) {
     return acceptedUserMessage;
   }
   return context.emitUserMessage(acceptedUserMessage, parts);
@@ -98,7 +102,7 @@ const steerActiveTurn = async (
 ): Promise<AcceptedAgentUserMessage | null> => {
   const input = toCodexTurnInputList(parts);
   if (!activeTurn.turnId && !context.subscribeEvents) {
-    await context.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
+    await context.handleBufferedRuntimeEvents(activeTurn.session, activeTurn.handledRequestKeys);
   }
   if (activeTurn.isTurnSettled()) {
     return null;
@@ -185,6 +189,14 @@ export const startCodexTurnForSession = async (
   });
 
   const client = context.clientForRuntime(session.runtimeId);
+  let policy: CodexEffectivePolicy;
+  try {
+    policy = context.codexPolicyForSession(session);
+  } catch (error) {
+    turnSettled = true;
+    context.activeTurnsBySessionId.delete(session.threadId);
+    throw error;
+  }
   try {
     await context.validateModel(client, session.runtimeId, model);
   } catch (error) {
@@ -193,12 +205,24 @@ export const startCodexTurnForSession = async (
     throw error;
   }
 
+  const sandboxPolicy = codexSandboxPolicy(policy, session.workingDirectory);
+  context.logSessionPolicy?.(
+    codexPolicyLogEntry({
+      operation: "turn/start",
+      policy,
+      runtimeId: session.runtimeId,
+      threadId: session.threadId,
+      workingDirectory: session.workingDirectory,
+    }),
+  );
+
   const turnStartPromise = client
     .turnStart({
-      approvalPolicy: OPENDUCKTOR_CODEX_APPROVAL_POLICY,
+      approvalPolicy: policy.approvalPolicy,
+      approvalsReviewer: codexApprovalsReviewer(policy),
       threadId: session.threadId,
       input,
-      sandboxPolicy: codexWorkspaceWriteSandboxPolicy(session.workingDirectory),
+      sandboxPolicy,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     })
@@ -208,10 +232,7 @@ export const startCodexTurnForSession = async (
         context.bindActiveTurnId(activeTurnState, turnId);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (!context.subscribeEvents && !context.shouldDrainNotifications) {
-        context.emitUserMessage(acceptedUserMessage, parts);
-        activeTurnState.markTurnSettled();
-      } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
+      if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
         context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
         activeTurnState.markTurnSettled();
       }
@@ -229,7 +250,7 @@ export const startCodexTurnForSession = async (
     return acceptedUserMessage;
   }
 
-  const hasPendingInput = await context.handlePendingServerRequests(session, handledRequestKeys);
+  const hasPendingInput = await context.handleBufferedRuntimeEvents(session, handledRequestKeys);
   if (hasPendingInput && !turnSettled) {
     context.bindPendingInputToActiveTurn(session.threadId, activeTurnState);
     emitTurnStartErrorLater(context, session, turnStartPromise);

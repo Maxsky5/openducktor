@@ -9,6 +9,7 @@ import {
 import type {
   CodexAppServerProtocolMessage,
   CodexAppServerRespondInput,
+  CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
 import {
   type CodexAppServerClientRequest,
@@ -26,14 +27,12 @@ import {
 import type {
   CodexAppServerChildTransport,
   CodexAppServerEventEmitter,
-  CodexAppServerStreamEvent,
   CodexChildProcess,
   PendingCodexAppServerRequest,
 } from "./codex-app-server-transport-types";
 import { writeJsonLine } from "./codex-json-line-writer";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
-
 export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
@@ -45,8 +44,7 @@ export const createCodexAppServerTransport = (
   let fatalError: Error | null = null;
   const pending = new Map<number, PendingCodexAppServerRequest>();
   const cancelledSentRequests = new Map<number, NodeJS.Timeout>();
-  const notifications: CodexAppServerProtocolMessage[] = [];
-  const serverRequests: CodexAppServerProtocolMessage[] = [];
+  const bufferedEvents: CodexAppServerStreamEvent[] = [];
   let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
@@ -197,14 +195,8 @@ export const createCodexAppServerTransport = (
     }
     request.resolve(parsedResult.right);
   };
-  const emitEvent = (
-    event: CodexAppServerStreamEvent,
-    pendingEvents: CodexAppServerProtocolMessage[],
-    options: { bufferWhenEmitting: boolean },
-  ): void => {
-    if (!eventEmitter || options.bufferWhenEmitting) {
-      pushBoundedMessage(pendingEvents, event.message);
-    }
+  const emitBufferedEvent = (event: CodexAppServerStreamEvent) => {
+    pushBoundedMessage(bufferedEvents, event);
     if (!eventEmitter) {
       return;
     }
@@ -220,6 +212,42 @@ export const createCodexAppServerTransport = (
         }),
       );
     }
+  };
+
+  const forgetServerRequest = (requestId: string | number): void => {
+    const index = bufferedEvents.findIndex(
+      (event) =>
+        event.kind === "server_request" &&
+        isJsonRecord(event.message) &&
+        "id" in event.message &&
+        event.message.id === requestId,
+    );
+    if (index >= 0) {
+      bufferedEvents.splice(index, 1);
+    }
+  };
+
+  const forgetResolvedServerRequest = ({ method, params }: CodexAppServerProtocolMessage): void => {
+    if (method === "serverRequest/resolved" && isJsonRecord(params)) {
+      const requestId = params.requestId ?? params.request_id;
+      if (typeof requestId === "number" || typeof requestId === "string") {
+        forgetServerRequest(requestId);
+      }
+    }
+  };
+  const rejectPendingRequests = (operation: string, message: string): void => {
+    clearCancelledSentRequests();
+    for (const [id, request] of pending) {
+      request.reject(
+        new HostResourceError({
+          resource: "codexAppServerTransport",
+          operation,
+          message,
+          details: { runtimeId, requestId: id },
+        }),
+      );
+    }
+    pending.clear();
   };
 
   const handleMessage = (message: unknown): void => {
@@ -256,17 +284,13 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId === null) {
       try {
-        emitEvent(
-          {
-            runtimeId,
-            kind: "notification",
-            message: parseStreamMessage(runtimeId, message, "notification"),
-          },
-          notifications,
-          {
-            bufferWhenEmitting: true,
-          },
-        );
+        const notification = parseStreamMessage(runtimeId, message, "notification");
+        forgetResolvedServerRequest(notification);
+        emitBufferedEvent({
+          runtimeId,
+          kind: "notification",
+          message: notification,
+        });
       } catch (error) {
         failFast(
           toHostOperationError(error, "codexAppServerTransport.parseNotification", {
@@ -279,17 +303,11 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId !== null) {
       try {
-        emitEvent(
-          {
-            runtimeId,
-            kind: "server_request",
-            message: parseStreamMessage(runtimeId, message, "server_request"),
-          },
-          serverRequests,
-          {
-            bufferWhenEmitting: false,
-          },
-        );
+        emitBufferedEvent({
+          runtimeId,
+          kind: "server_request",
+          message: parseStreamMessage(runtimeId, message, "server_request"),
+        });
       } catch (error) {
         failFast(
           toHostOperationError(error, "codexAppServerTransport.parseServerRequest", {
@@ -409,11 +427,8 @@ export const createCodexAppServerTransport = (
         ...notification,
       });
     },
-    drainNotifications() {
-      return Effect.sync(() => notifications.splice(0));
-    },
-    drainServerRequests() {
-      return Effect.sync(() => serverRequests.splice(0));
+    takeBufferedEvents() {
+      return Effect.sync(() => bufferedEvents.splice(0));
     },
     respond({ requestId, result, error }: Omit<CodexAppServerRespondInput, "runtimeId">) {
       return Effect.gen(function* () {
@@ -433,6 +448,7 @@ export const createCodexAppServerTransport = (
             }),
           );
         }
+        forgetServerRequest(requestId);
         yield* sendMessage({
           jsonrpc: "2.0",
           id: requestId,
@@ -440,6 +456,14 @@ export const createCodexAppServerTransport = (
           ...(error !== undefined ? { error } : {}),
         });
       });
+    },
+    rejectPendingRequestsForShutdown() {
+      return Effect.sync(() =>
+        rejectPendingRequests(
+          "codexAppServerTransport.rejectPendingRequestsForShutdown",
+          `Codex app-server transport for runtime ${runtimeId} is shutting down`,
+        ),
+      );
     },
     close() {
       return Effect.sync(() => {
@@ -454,18 +478,10 @@ export const createCodexAppServerTransport = (
         child.stdin.destroy();
         child.stdout.destroy();
         child.stderr.destroy();
-        clearCancelledSentRequests();
-        for (const [id, request] of pending) {
-          request.reject(
-            new HostResourceError({
-              resource: "codexAppServerTransport",
-              operation: "codexAppServerTransport.close",
-              message: `Codex app-server transport for runtime ${runtimeId} is closed`,
-              details: { runtimeId, requestId: id },
-            }),
-          );
-        }
-        pending.clear();
+        rejectPendingRequests(
+          "codexAppServerTransport.close",
+          `Codex app-server transport for runtime ${runtimeId} is closed`,
+        );
       });
     },
   };

@@ -1,10 +1,8 @@
-import type { AgentRole, StartAgentSessionInput } from "@openducktor/core";
+import type { PolicyBoundSessionRef, StartAgentSessionInput } from "@openducktor/core";
+import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
-type SessionInputSource = Omit<StartAgentSessionInput, "role" | "systemPrompt"> & {
-  role: AgentRole | null;
-  systemPrompt?: string;
-};
+type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -15,13 +13,13 @@ export const toIsoFromEpoch = (value: unknown, fallback: () => string): string =
 };
 
 export const toSessionInput = (input: SessionInputSource): SessionInput => {
+  const sessionScope = "sessionScope" in input ? input.sessionScope : undefined;
   return {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
-    taskId: input.taskId,
-    role: input.role,
     systemPrompt: input.systemPrompt ?? "",
-    runtimeKind: input.runtimeKind,
+    ...toAgentRuntimePolicyBinding(input),
+    ...(sessionScope ? { sessionScope } : {}),
     ...(input.model ? { model: input.model } : {}),
   };
 };

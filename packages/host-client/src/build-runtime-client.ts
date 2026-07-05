@@ -3,6 +3,7 @@ import {
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
+  type CodexAppServerRequestId,
   type DevServerGroupState,
   devServerGroupStateSchema,
   type FailureKind,
@@ -39,6 +40,12 @@ import { parseArray, parseOkResult } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
 type RuntimeEnsureFailureKind = FailureKind;
+
+export type CodexAppServerBufferedEvent = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: unknown;
+};
 
 type RuntimeEnsureErrorInit = {
   failureKind: RuntimeEnsureFailureKind;
@@ -263,7 +270,7 @@ const codexAppServerRequest = async (
 const codexAppServerRespond = async (
   invokeFn: InvokeFn,
   runtimeId: string,
-  requestId: number,
+  requestId: CodexAppServerRequestId,
   result?: unknown,
   error?: unknown,
 ): Promise<void> => {
@@ -275,26 +282,39 @@ const codexAppServerRespond = async (
   });
 };
 
-const codexAppServerNotifications = async (
-  invokeFn: InvokeFn,
-  runtimeId: string,
-): Promise<unknown[]> => {
-  const payload = await invokeFn("codex_app_server_notifications", { runtimeId });
-  if (!Array.isArray(payload)) {
-    throw new Error("Expected array payload from host command codex_app_server_notifications");
+const parseCodexAppServerBufferedEvent = (value: unknown): CodexAppServerBufferedEvent => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Expected Codex app-server buffered event payload");
   }
-  return payload;
+
+  const event = value as { runtimeId?: unknown; kind?: unknown; message?: unknown };
+  if (typeof event.runtimeId !== "string" || event.runtimeId.trim().length === 0) {
+    throw new Error("Expected Codex app-server buffered event runtimeId");
+  }
+  if (event.kind !== "notification" && event.kind !== "server_request") {
+    throw new Error("Expected Codex app-server buffered event kind");
+  }
+  if (!("message" in value)) {
+    throw new Error("Expected Codex app-server buffered event message");
+  }
+
+  return {
+    runtimeId: event.runtimeId,
+    kind: event.kind,
+    message: event.message,
+  };
 };
 
-const codexAppServerRequests = async (
+const takeCodexAppServerBufferedEvents = async (
   invokeFn: InvokeFn,
   runtimeId: string,
-): Promise<unknown[]> => {
-  const payload = await invokeFn("codex_app_server_requests", { runtimeId });
-  if (!Array.isArray(payload)) {
-    throw new Error("Expected array payload from host command codex_app_server_requests");
-  }
-  return payload;
+): Promise<CodexAppServerBufferedEvent[]> => {
+  const payload = await invokeFn("codex_app_server_take_buffered_events", { runtimeId });
+  return parseArray(
+    { parse: parseCodexAppServerBufferedEvent },
+    payload,
+    "codex_app_server_take_buffered_events",
+  );
 };
 
 const buildStart = async (
@@ -581,19 +601,17 @@ export class HostAgentClient {
 
   async codexAppServerRespond(
     runtimeId: string,
-    requestId: number,
+    requestId: CodexAppServerRequestId,
     result?: unknown,
     error?: unknown,
   ): Promise<void> {
     return codexAppServerRespond(this.invokeFn, runtimeId, requestId, result, error);
   }
 
-  async codexAppServerNotifications(runtimeId: string): Promise<unknown[]> {
-    return codexAppServerNotifications(this.invokeFn, runtimeId);
-  }
-
-  async codexAppServerRequests(runtimeId: string): Promise<unknown[]> {
-    return codexAppServerRequests(this.invokeFn, runtimeId);
+  async takeCodexAppServerBufferedEvents(
+    runtimeId: string,
+  ): Promise<CodexAppServerBufferedEvent[]> {
+    return takeCodexAppServerBufferedEvents(this.invokeFn, runtimeId);
   }
 
   async buildStart(

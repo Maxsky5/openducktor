@@ -168,6 +168,7 @@ describe("agent-orchestrator session transcript events", () => {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
+        runtimePolicy: { kind: "opencode" },
       },
       sessionsRef,
       updateSession,

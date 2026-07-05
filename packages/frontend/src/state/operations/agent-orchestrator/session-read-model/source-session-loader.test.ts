@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentSessionRef, AgentSessionRuntimeSnapshot } from "@openducktor/core";
+import type {
+  AgentSessionRuntimeSnapshot,
+  PolicyBoundSessionRef,
+  SessionRef,
+} from "@openducktor/core";
 import {
   toAgentSessionRuntimeSnapshot,
   toMissingAgentSessionRuntimeSnapshot,
@@ -34,7 +38,7 @@ const sourceSession = {
 };
 
 const runtimeSnapshot = (
-  ref: AgentSessionRef,
+  ref: SessionRef,
   runtimeActivity: "running" | "idle" = "running",
 ): AgentSessionRuntimeSnapshot =>
   toAgentSessionRuntimeSnapshot({
@@ -70,16 +74,16 @@ const createCommitSessionCollection = (
 const createLoaderHarness = ({
   initialSessionCollection,
   records = [record],
-  readSessionRuntimeSnapshot = async (ref: AgentSessionRef) => runtimeSnapshot(ref),
+  readSessionRuntimeSnapshot = async (ref: SessionRef) => runtimeSnapshot(ref),
 }: {
   initialSessionCollection?: AgentSessionCollection;
   records?: AgentSessionRecord[];
-  readSessionRuntimeSnapshot?: (ref: AgentSessionRef) => Promise<AgentSessionRuntimeSnapshot>;
+  readSessionRuntimeSnapshot?: (ref: SessionRef) => Promise<AgentSessionRuntimeSnapshot>;
 } = {}) => {
   const queryClient = new QueryClient();
   const collection = createCommitSessionCollection(initialSessionCollection);
-  const observedSessions: AgentSessionRef[] = [];
-  const runtimeSnapshotReads: AgentSessionRef[] = [];
+  const observedSessions: PolicyBoundSessionRef[] = [];
+  const runtimeSnapshotReads: SessionRef[] = [];
   const persistedSessionReads: string[] = [];
 
   host.agentSessionsList = async (_repoPath, taskId) => {
@@ -152,12 +156,21 @@ describe("source session loader", () => {
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
+        runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
       },
     ]);
     expect(harness.getSession(record.externalSessionId)).toBe(session);
-    expect(harness.observedSessions).toEqual(harness.runtimeSnapshotReads);
+    expect(harness.observedSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: record.workingDirectory,
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      },
+    ]);
   });
 
   test("returns null when the persisted record does not match the source identity and role", async () => {

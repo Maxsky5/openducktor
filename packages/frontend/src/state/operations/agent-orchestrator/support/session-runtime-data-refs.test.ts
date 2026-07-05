@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "./messages";
 import { resolveSessionRuntimeDataRefs } from "./session-runtime-data-refs";
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor =>
@@ -18,6 +19,20 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
   workingDirectory: "/repo",
   ...overrides,
 });
+const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  ...sessionIdentity(),
+  taskId: "task-1",
+  role: "build",
+  title: "BUILD task-1",
+  status: "idle",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  historyLoadState: "not_requested",
+  messages: createSessionMessagesState("external-1"),
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
+  ...overrides,
+});
 
 describe("resolveSessionRuntimeDataRefs", () => {
   test("returns no refs without a selected session", () => {
@@ -25,6 +40,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: null,
+        runtimePolicy: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -36,7 +52,8 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: null,
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSessionIdentity: sessionState(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -49,7 +66,8 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSessionIdentity: sessionState(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toEqual({
@@ -63,6 +81,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
       },
     });
   });
@@ -72,6 +91,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSessionIdentity: sessionIdentity(),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
       }),
     ).toEqual({
@@ -84,11 +104,60 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
+  test("returns todo refs for a plain selected-session identity", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionIdentity(),
+        runtimePolicy: { kind: "opencode" },
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "available",
+      catalogRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      },
+      todosRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
+      },
+    });
+  });
+
+  test("returns todo refs when selected workflow session has no known role", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState({ role: null }),
+        runtimePolicy: { kind: "opencode" },
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "available",
+      catalogRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      },
+      todosRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
+      },
+    });
+  });
+
   test("fails fast on invalid selected-session runtime context", () => {
     expect(() =>
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity({ workingDirectory: "" }),
+        selectedSessionIdentity: sessionState({ workingDirectory: "" }),
+        runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
     ).toThrow("Session workingDirectory is required to reach session 'external-1'.");

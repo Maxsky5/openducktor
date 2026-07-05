@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentSessionRef } from "@openducktor/core";
+import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import {
   type AgentSessionCollection,
@@ -68,9 +68,9 @@ const loadReadModel = async ({
   listSessionRuntimeSnapshots: () => Promise<
     Awaited<ReturnType<typeof toAgentSessionRuntimeSnapshot>>[]
   >;
-  observeAgentSession?: (session: AgentSessionRef) => Promise<void>;
-  clearSessionObservationState?: (sessions: readonly AgentSessionRef[]) => void;
-  loadLiveSessionHistory?: (session: AgentSessionRef) => Promise<unknown>;
+  observeAgentSession?: (session: PolicyBoundSessionRef) => Promise<void>;
+  clearSessionObservationState?: (sessions: readonly SessionRef[]) => void;
+  loadLiveSessionHistory?: (session: PolicyBoundSessionRef) => Promise<unknown>;
   records?: TaskSessionRecords;
 }) => {
   const collection = createCommitSessionCollection(initialSessionCollection);
@@ -84,6 +84,9 @@ const loadReadModel = async ({
     observeAgentSession,
     clearSessionObservationState,
     loadLiveSessionHistory,
+    loadSettingsSnapshot: async () => {
+      throw new Error("Unexpected settings snapshot load in repo session read model loader test.");
+    },
     isStaleRepoOperation: () => false,
   });
 
@@ -93,7 +96,7 @@ const loadReadModel = async ({
 describe("repo session read model loader", () => {
   test("commits persisted sessions with one runtime snapshot scan", async () => {
     let runtimeSnapshotReads = 0;
-    const observedSessions: AgentSessionRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => {
         runtimeSnapshotReads += 1;
@@ -136,13 +139,15 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
   });
 
   test("preloads detected live session histories after observation", async () => {
     const events: string[] = [];
-    const loadedSessionHistories: AgentSessionRef[] = [];
+    const loadedSessionHistories: PolicyBoundSessionRef[] = [];
     const harness = await loadReadModel({
       listSessionRuntimeSnapshots: async () => [
         toAgentSessionRuntimeSnapshot({
@@ -178,12 +183,14 @@ describe("repo session read model loader", () => {
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
   });
 
   test("clears observations for mounted sessions no longer listed by persistence", async () => {
-    const cleanedSessions: AgentSessionRef[] = [];
+    const cleanedSessions: SessionRef[] = [];
     const removedSession = createAgentSessionFixture({
       externalSessionId: "removed-session",
       taskId: "task-1",
@@ -211,8 +218,37 @@ describe("repo session read model loader", () => {
     ]);
   });
 
+  test("clears stale Codex observations without loading settings", async () => {
+    const cleanedSessions: SessionRef[] = [];
+    const removedSession = createAgentSessionFixture({
+      externalSessionId: "removed-codex-session",
+      taskId: "task-1",
+      runtimeKind: "codex",
+      role: "build",
+      status: "running",
+      workingDirectory: "/repo/old-codex-worktree",
+    });
+
+    await loadReadModel({
+      initialSessionCollection: createAgentSessionCollection([removedSession]),
+      listSessionRuntimeSnapshots: async () => [],
+      clearSessionObservationState: (sessions) => {
+        cleanedSessions.push(...sessions);
+      },
+    });
+
+    expect(cleanedSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: "removed-codex-session",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/old-codex-worktree",
+      },
+    ]);
+  });
+
   test("commits the read model when one live session observer fails", async () => {
-    const observedSessions: AgentSessionRef[] = [];
+    const observedSessions: PolicyBoundSessionRef[] = [];
     const records: TaskSessionRecords = {
       taskIds: ["task-1", "task-2"],
       records: [

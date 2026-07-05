@@ -1,10 +1,17 @@
 import { mock } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  type CodexEffectivePolicy,
+  type CodexRuntimeConfig,
+  DEFAULT_CODEX_RUNTIME_POLICY,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import type {
-  AgentSessionRef,
-  AgentSessionRuntimeRef,
+  PolicyBoundSessionRef,
   SendAgentUserMessageInput,
+  StartAgentSessionInput,
 } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -24,25 +31,52 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
 
+export const bufferedNotificationEvent = (message: unknown, runtimeId = "runtime-live") => ({
+  runtimeId,
+  kind: "notification" as const,
+  message,
+});
+
+export const bufferedServerRequestEvent = (message: unknown, runtimeId = "runtime-live") => ({
+  runtimeId,
+  kind: "server_request" as const,
+  message,
+});
+
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
-): AgentSessionRef => ({
+): PolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
 });
 
 export const codexSessionRuntimeRef = (
   externalSessionId = "thread/start-runtime-live",
-  overrides: Partial<AgentSessionRuntimeRef> = {},
-): AgentSessionRuntimeRef => ({
+  overrides: Partial<PolicyBoundSessionRef> = {},
+): PolicyBoundSessionRef => ({
   externalSessionId,
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "build",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+  systemPrompt: "Use the repo rules.",
+  model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+  ...overrides,
+});
+
+export const codexStartSessionInput = (
+  overrides: Partial<StartAgentSessionInput> = {},
+): StartAgentSessionInput => ({
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
   systemPrompt: "Use the repo rules.",
   model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
   ...overrides,
@@ -384,6 +418,17 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   }
 }
 
+export const defaultCodexRuntimeConfig = (): CodexRuntimeConfig => ({
+  enabled: true,
+  defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+  roleOverrides: {},
+});
+
+export const defaultCodexEffectivePolicy = (): CodexEffectivePolicy => ({
+  ...DEFAULT_CODEX_RUNTIME_POLICY,
+  approvalsReviewerApplies: true,
+});
+
 const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
   const threadId = (request.params as { threadId: string }).threadId;
   return {
@@ -423,8 +468,7 @@ export const createAdapterWithTransport = (
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
-    drainServerRequests: async () => [],
-    drainNotifications: async () => [],
+    takeBufferedEvents: async () => [],
     respondServerRequest: async () => {},
     ...overrides,
   });
@@ -449,8 +493,7 @@ export const createHarness = (
     kind: runtimeKind,
     runtimeId: "runtime-live",
   }));
-  const drainServerRequests = mock(async (_runtimeId: string) => [] as unknown[]);
-  const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
+  const takeBufferedEvents = mock(async (_runtimeId: string) => []);
   const respondServerRequest = mock(async () => {});
 
   const adapter = new CodexAppServerAdapter({
@@ -458,8 +501,7 @@ export const createHarness = (
       requireRepoRuntime,
     },
     transportFactory,
-    drainServerRequests,
-    drainNotifications,
+    takeBufferedEvents,
     respondServerRequest,
     ...overrides,
   });
@@ -469,8 +511,7 @@ export const createHarness = (
     transports,
     transportFactory,
     requireRepoRuntime,
-    drainServerRequests,
-    drainNotifications,
+    takeBufferedEvents,
     respondServerRequest,
   };
 };

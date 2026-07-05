@@ -968,6 +968,47 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     );
   });
 
+  test("reconciles a local accepted user send when history confirms it after an approval delay", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "runtime-user-confirmed",
+          role: "user",
+          content: "Check network with curl",
+          timestamp: "2026-03-01T09:00:06.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Check network with curl" }],
+          },
+        },
+      ],
+      [
+        {
+          id: "codex-user-1772355601123-1",
+          role: "user",
+          content: "Check network with curl",
+          timestamp: "2026-03-01T09:00:01.123Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Check network with curl" }],
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(
+      expect.objectContaining({
+        id: "codex-user-1772355601123-1",
+        role: "user",
+        content: "Check network with curl",
+        timestamp: "2026-03-01T09:00:01.123Z",
+      }),
+    );
+  });
+
   test("matches the nearest local accepted user send when repeated text exists", () => {
     const merged = mergedMessages(
       [

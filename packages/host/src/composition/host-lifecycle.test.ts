@@ -64,6 +64,12 @@ describe("host lifecycle shutdown", () => {
     ).rejects.toThrow("first: first failed\nthird: third failed");
 
     expect(calls).toEqual(["first", "second", "third"]);
+    expect(logger.infos).toEqual([
+      "Stopping first...",
+      "Stopping second...",
+      "Stopped second",
+      "Stopping third...",
+    ]);
     expect(logger.errors).toEqual([
       "Failed to stop first: first failed",
       "Failed to stop third: third failed",

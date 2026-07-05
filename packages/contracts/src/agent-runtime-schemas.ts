@@ -701,13 +701,13 @@ export const formatRuntimeDescriptorSchemaIssue = (
   return `[${issueClass}] runtime descriptor schema violation at ${issuePath}: ${issue.message}`;
 };
 
-export const runtimeRefSchema = z
+export const runtimeInstanceRefSchema = z
   .object({
     kind: runtimeKindSchema,
     runtimeId: z.string().trim().min(1),
   })
   .strict();
-export type RuntimeRef = z.infer<typeof runtimeRefSchema>;
+export type RuntimeInstanceRef = z.infer<typeof runtimeInstanceRefSchema>;
 
 export const repoRuntimeRefSchema = z
   .object({

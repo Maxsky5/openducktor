@@ -33,6 +33,7 @@ describe("agent-orchestrator permission auto-rejection", () => {
         requestId: "perm-1",
         affectedPaths: ["edit file"],
         action: { name: "write" },
+        details: "Write access is not allowed for this role.",
         mutation: "mutating" as const,
         metadata: { tool: "edit" },
       }),
@@ -43,11 +44,59 @@ describe("agent-orchestrator permission auto-rejection", () => {
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(0);
+    const notice = getSessionMessages(sessionsRef).find((message) =>
+      message.content.includes("Auto-rejected mutating approval"),
+    );
+    expect(notice?.content).toContain("Auto-rejected mutating approval for spec session.\n\n");
+    expect(notice?.content).toContain("Action: write");
+    expect(notice?.content).toContain("Affected paths: edit file");
+    expect(notice?.content).toContain(
+      "Affected paths: edit file\n\nDetails:\nWrite access is not allowed for this role.",
+    );
+  });
+
+  test("keeps unknown command approvals pending for read-only roles", async () => {
+    const curlCommand =
+      "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
+    const replyApproval = mock(async () => {});
+    const sessionsRef = createSessionsRef([buildSession({ role: "spec" })]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "session-1",
+      sessionsRef,
+      replyApproval,
+    });
+
+    handleEvent(
+      approvalRequiredEvent({
+        externalSessionId: "session-1",
+        requestId: "network-curl-approval",
+        requestType: "command_execution",
+        title: "Codex item/commandExecution/requestApproval",
+        summary: "Codex requested item/commandExecution/requestApproval.",
+        action: { name: "Bash" },
+        command: {
+          command: curlCommand,
+        },
+        mutation: "unknown" as const,
+      }),
+    );
+    await flushAutoReject();
+
+    expect(replyApproval).not.toHaveBeenCalled();
+    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toMatchObject([
+      {
+        requestId: "network-curl-approval",
+        mutation: "unknown",
+        command: {
+          command: curlCommand,
+        },
+      },
+    ]);
     expect(
       getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Auto-rejected mutating approval"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("auto-rejects mutating child permissions mirrored on a read-only parent", async () => {
@@ -214,7 +263,13 @@ describe("agent-orchestrator permission auto-rejection", () => {
   });
 
   test("lets active child sessions own linked auto-reject replies", async () => {
-    const replyApproval = mock(async () => {});
+    let completeReply!: () => void;
+    const replyCompleted = new Promise<void>((resolve) => {
+      completeReply = resolve;
+    });
+    const replyApproval = mock(async () => {
+      await replyCompleted;
+    });
     const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
     const sessionsRef = createSessionsRef([
       buildParentSessionWithSubagent({
@@ -254,7 +309,7 @@ describe("agent-orchestrator permission auto-rejection", () => {
     });
 
     handleParentEvent(event);
-    await Promise.resolve();
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(replyApproval).toHaveBeenCalledWith(
@@ -270,6 +325,8 @@ describe("agent-orchestrator permission auto-rejection", () => {
     await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
+    completeReply();
+    await flushAutoReject();
     expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(0);
   });
 });

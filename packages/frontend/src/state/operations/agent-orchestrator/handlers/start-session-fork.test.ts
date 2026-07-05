@@ -34,8 +34,8 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     ]);
 
     adapter.forkSession = async (input) => {
-      expect(input.taskId).toBe("task-1");
-      expect(input.role).toBe("build");
+      expect(input.sessionScope.taskId).toBe("task-1");
+      expect(input.sessionScope.role).toBe("build");
       expect(input.parentExternalSessionId).toBe("external-source-build");
       expect(input.repoPath).toBe("/tmp/repo");
       expect(input.runtimeKind).toBe("opencode");

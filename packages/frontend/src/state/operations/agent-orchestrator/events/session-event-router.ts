@@ -1,3 +1,4 @@
+import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { QueuedSessionEvent, SessionEventBatcher } from "./session-event-batching";
@@ -14,14 +15,14 @@ type RoutedSessionEventHandler = (context: SessionEventContext, event: SessionEv
 type RoutedSessionEvent<Event extends SessionEvent = SessionEvent> = {
   event: Event;
   routeKey: string;
-  sessionRef: ObserveAgentSessionParams["sessionRef"];
+  sessionRef: SessionRef;
   storeKey: string;
 };
 
 type RoutedQueuedSessionEvent = RoutedSessionEvent<QueuedSessionEvent>;
 
 type QueuedSessionCommit = {
-  sessionRef: ObserveAgentSessionParams["sessionRef"];
+  sessionRef: SessionRef;
   nextSession: AgentSessionState;
   changed: boolean;
 };

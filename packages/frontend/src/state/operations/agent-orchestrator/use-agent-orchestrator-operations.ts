@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -179,6 +180,7 @@ export function useAgentOrchestratorOperations({
       updateSession,
       taskRef,
       loadRepoPromptOverrides: queryBackedPromptOverrides,
+      loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
       observeAgentSession,
     };
 
@@ -191,6 +193,7 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef,
     observeAgentSession,
     queryBackedPromptOverrides,
+    queryClient,
     repoEpochRef,
     sessionStore,
     taskRef,
@@ -243,6 +246,7 @@ export function useAgentOrchestratorOperations({
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
+        loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
         loadSourceSession,
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         refreshTaskData,
@@ -260,6 +264,7 @@ export function useAgentOrchestratorOperations({
       observeAgentSession,
       persistSessionRecord,
       queryBackedPromptOverrides,
+      queryClient,
       repoEpochRef,
       refreshTaskData,
       sessionObserversRef,
