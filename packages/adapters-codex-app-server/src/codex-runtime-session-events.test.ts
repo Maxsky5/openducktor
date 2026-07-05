@@ -270,6 +270,73 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
   });
 
+  test("does not replay token-usage drained requests resolved in the same batch", async () => {
+    const session = createSession("thread-drained-resolution");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        {
+          runtimeId: "runtime-1",
+          kind: "server_request",
+          message: {
+            id: "drained-approval-1",
+            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+            params: {
+              threadId: "thread-drained-resolution",
+              turnId: "turn-drained-resolution",
+              itemId: "call-drained-resolution",
+              command: "curl -I https://example.com",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "serverRequest/resolved",
+            params: {
+              threadId: "thread-drained-resolution",
+              requestId: "drained-approval-1",
+            },
+          },
+        },
+        {
+          runtimeId: "runtime-1",
+          kind: "notification",
+          message: {
+            method: "thread/tokenUsage/updated",
+            params: {
+              threadId: "thread-drained-resolution",
+              turnId: "turn-drained-resolution",
+              tokenUsage: {
+                total: { totalTokens: 1_000 },
+                last: { totalTokens: 100 },
+                modelContextWindow: 200_000,
+              },
+            },
+          },
+        },
+      ],
+      sessions,
+      pendingInput,
+    });
+
+    const usage = await runtimeEvents
+      .historyLoadContext()
+      .collectThreadReadTokenUsage("runtime-1", "thread-drained-resolution");
+    await runtimeEvents.replayBufferedStreamEvents("thread-drained-resolution");
+
+    expect(usage.get("turn-drained-resolution")).toMatchObject({
+      totalTokens: 100,
+      contextWindow: 200_000,
+    });
+    expect(pendingInput.approval("drained-approval-1")).toBeUndefined();
+    expect(pendingInput.pendingApprovalEventsForSession("thread-drained-resolution")).toHaveLength(
+      0,
+    );
+  });
+
   test("reprocesses child server requests buffered before a parent subagent link is learned", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");

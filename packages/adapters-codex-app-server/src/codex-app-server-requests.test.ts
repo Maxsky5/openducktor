@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
   extractThreadIdFromParams,
   parseNotificationRecord,
+  parseQuestionRequest,
   parseServerRequestRecord,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
@@ -41,6 +43,40 @@ describe("Codex App Server request parsing", () => {
       method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
       params: { threadId: "thread-1" },
     });
+  });
+
+  test("keeps numeric string request ids distinct from numeric request ids", () => {
+    const numericApproval = toApprovalRequest({
+      id: 53,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: { threadId: "thread-1", turnId: "turn-1" },
+    });
+    const stringApproval = toApprovalRequest({
+      id: "53",
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: { threadId: "thread-1", turnId: "turn-1" },
+    });
+    const stringQuestion = parseQuestionRequest({
+      id: "53",
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        questions: [
+          {
+            id: "question-1",
+            header: "Proceed",
+            question: "Continue?",
+            options: ["Yes", "No"],
+          },
+        ],
+      },
+    });
+
+    expect(numericApproval.requestId).toBe(codexServerRequestKey(53));
+    expect(stringApproval.requestId).toBe(codexServerRequestKey("53"));
+    expect(stringQuestion.request.requestId).toBe(codexServerRequestKey("53"));
+    expect(numericApproval.requestId).not.toBe(stringApproval.requestId);
   });
 
   test("extracts legacy conversation ids as thread identifiers", () => {

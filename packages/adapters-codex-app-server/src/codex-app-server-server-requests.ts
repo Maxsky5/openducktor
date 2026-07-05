@@ -3,7 +3,7 @@ import {
   type AgentEvent,
   normalizeOdtWorkflowToolName,
 } from "@openducktor/core";
-import { codexServerRequestIdMetadata } from "./codex-app-server-approvals";
+import { codexServerRequestIdMetadata, codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -144,7 +144,7 @@ export const handleCodexServerRequest = async (
   handledRequestKeys: Set<string>,
 ): Promise<boolean> => {
   const requestId = rawRequest.id;
-  const requestKey = requestId !== undefined ? `request:${requestId}` : undefined;
+  const requestKey = requestId !== undefined ? codexServerRequestKey(requestId) : undefined;
   if (requestKey && handledRequestKeys.has(requestKey)) {
     return false;
   }

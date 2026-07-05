@@ -10,6 +10,7 @@ import {
   flushCodexAdapterWork,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 
 const CURL_NETWORK_COMMAND =
   "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
@@ -614,7 +615,7 @@ describe("CodexAppServerAdapter approvals", () => {
     await adapter.replyApproval({
       ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
-      requestId: "53",
+      requestId: codexServerRequestKey("53"),
       outcome: "reject",
     });
 
@@ -829,7 +830,7 @@ describe("CodexAppServerAdapter approvals", () => {
     await adapter.replyQuestion({
       ...codexSessionRuntimeRef("thread/start-runtime-live"),
       externalSessionId: "thread/start-runtime-live",
-      requestId: "54",
+      requestId: codexServerRequestKey("54"),
       answers: [["Safe"]],
     });
 

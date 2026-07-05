@@ -9,7 +9,7 @@ import {
   type RuntimeApprovalRequestType,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
-import { codexServerRequestIdMetadata } from "./codex-app-server-approvals";
+import { codexServerRequestIdMetadata, codexServerRequestKey } from "./codex-app-server-approvals";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
@@ -282,7 +282,7 @@ export const toApprovalRequest = (
   }
 
   return {
-    requestId: String(request.id),
+    requestId: codexServerRequestKey(request.id),
     requestType: classifyApprovalRequestType(request),
     ...approvalContentFields(request),
     mutation: classifyCodexRequestMutation(request),
@@ -362,7 +362,7 @@ export const toMcpElicitationApprovalRequest = (
   const toolParams = meta[MCP_APPROVAL_TOOL_PARAMS_KEY];
 
   return {
-    requestId: String(request.id),
+    requestId: codexServerRequestKey(request.id),
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
     summary: request.params.message,
@@ -486,7 +486,7 @@ export const parseQuestionRequest = (
 
   return {
     request: {
-      requestId: String(request.id),
+      requestId: codexServerRequestKey(request.id),
       questions,
     },
     threadId,

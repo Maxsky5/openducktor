@@ -7,6 +7,7 @@ import type {
   SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
@@ -559,7 +560,7 @@ export class CodexRuntimeSessionEvents {
     const params = notification.params;
     const requestId = params.requestId ?? params.request_id;
     if (typeof requestId === "number" || typeof requestId === "string") {
-      return String(requestId);
+      return codexServerRequestKey(requestId);
     }
     return null;
   }
@@ -794,40 +795,54 @@ export class CodexRuntimeSessionEvents {
     await handleCodexPendingNotifications(this.streamingContext(), session, notifications);
   }
 
-  private partitionBufferedRuntimeEvents(events: CodexRuntimeStreamEvent[]): {
-    notifications: CodexNotificationRecord[];
-    requests: CodexServerRequestRecord[];
-  } {
-    const notifications: CodexNotificationRecord[] = [];
-    const requests: CodexServerRequestRecord[] = [];
-
-    for (const event of events) {
-      if (event.kind === "notification") {
-        notifications.push(parseNotificationRecord(event.message));
-        continue;
-      }
-      requests.push(parseServerRequestRecord(event.message));
-    }
-
-    return { notifications, requests };
+  private serverRequestBatchKey(
+    runtimeId: string,
+    request: CodexServerRequestRecord,
+  ): string | null {
+    const threadId = extractThreadIdFromParams(request.params);
+    return threadId && request.id !== undefined
+      ? `${runtimeId}\u0000${threadId}\u0000${codexServerRequestKey(request.id)}`
+      : null;
   }
 
-  private bufferUnprocessedServerRequests(
-    runtimeId: string,
-    requests: CodexServerRequestRecord[],
-  ): void {
-    for (const request of requests) {
-      const threadId = extractThreadIdFromParams(request.params);
-      if (!threadId) {
-        this.emitUnroutableRuntimeServerRequest(runtimeId);
-        continue;
-      }
-      this.bufferRuntimeStreamEvent(threadId, {
-        runtimeId,
-        kind: "server_request",
-        message: request,
-      });
+  private resolvedServerRequestBatchKey(event: CodexRuntimeStreamEvent): string | null {
+    if (event.kind !== "notification") {
+      return null;
     }
+    const notification = parseNotificationRecord(event.message);
+    if (notification.method !== "serverRequest/resolved") {
+      return null;
+    }
+    const threadId = extractThreadIdFromParams(notification.params);
+    const requestId = this.resolvedServerRequestId(notification);
+    return threadId && requestId ? `${event.runtimeId}\u0000${threadId}\u0000${requestId}` : null;
+  }
+
+  private resolvedServerRequestBatchKeys(events: CodexRuntimeStreamEvent[]): Set<string> {
+    const keys = new Set<string>();
+    for (const event of events) {
+      const key = this.resolvedServerRequestBatchKey(event);
+      if (key) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  private bufferUnprocessedServerRequest(
+    runtimeId: string,
+    request: CodexServerRequestRecord,
+  ): void {
+    const threadId = extractThreadIdFromParams(request.params);
+    if (!threadId) {
+      this.emitUnroutableRuntimeServerRequest(runtimeId);
+      return;
+    }
+    this.bufferRuntimeStreamEvent(threadId, {
+      runtimeId,
+      kind: "server_request",
+      message: request,
+    });
   }
 
   private captureRestoredContextNotifications(
@@ -940,10 +955,25 @@ export class CodexRuntimeSessionEvents {
 
     const collectOnce = async (): Promise<void> => {
       const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
-      const { notifications: takenNotifications, requests } = this.partitionBufferedRuntimeEvents(
-        await this.deps.takeBufferedEvents(runtimeId),
-      );
-      this.bufferUnprocessedServerRequests(runtimeId, requests);
+      const takenEvents = await this.deps.takeBufferedEvents(runtimeId);
+      const resolvedRequestKeys = this.resolvedServerRequestBatchKeys(takenEvents);
+      const takenNotifications: CodexNotificationRecord[] = [];
+      for (const event of takenEvents) {
+        if (event.kind === "server_request") {
+          const request = parseServerRequestRecord(event.message);
+          const requestKey = this.serverRequestBatchKey(event.runtimeId, request);
+          if (!requestKey || !resolvedRequestKeys.has(requestKey)) {
+            this.bufferUnprocessedServerRequest(event.runtimeId, request);
+          }
+          continue;
+        }
+        const notification = parseNotificationRecord(event.message);
+        if (notification.method === "serverRequest/resolved") {
+          this.handleServerRequestResolvedNotification(event.runtimeId, notification);
+          continue;
+        }
+        takenNotifications.push(notification);
+      }
       const notifications = [...bufferedNotifications, ...takenNotifications];
       for (const notification of notifications) {
         const notificationThreadId = extractThreadIdFromParams(notification.params);
