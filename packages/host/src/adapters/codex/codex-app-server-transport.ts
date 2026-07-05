@@ -220,7 +220,7 @@ export const createCodexAppServerTransport = (
         event.kind === "server_request" &&
         isJsonRecord(event.message) &&
         "id" in event.message &&
-        (event.message.id === requestId || String(event.message.id) === String(requestId)),
+        event.message.id === requestId,
     );
     if (index >= 0) {
       bufferedEvents.splice(index, 1);

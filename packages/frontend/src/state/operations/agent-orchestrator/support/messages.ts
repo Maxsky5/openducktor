@@ -112,7 +112,8 @@ const confirmsCodexSyntheticUserMessage = (
   if (
     existing.role !== "user" ||
     existing.content !== incoming.content ||
-    isCodexSyntheticUserMessageId(existing.id) === isCodexSyntheticUserMessageId(incoming.id)
+    !isCodexSyntheticUserMessageId(existing.id) ||
+    isCodexSyntheticUserMessageId(incoming.id)
   ) {
     return false;
   }

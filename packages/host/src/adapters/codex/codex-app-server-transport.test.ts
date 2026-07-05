@@ -198,6 +198,55 @@ describe("createCodexAppServerTransport", () => {
     await Effect.runPromise(transport.close());
   });
 
+  test("matches buffered server request ids by JSON-RPC id type", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const stringRequest = {
+      id: "53",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-string",
+        startedAtMs: 1,
+        cwd: "/repo",
+        reason: null,
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const numericRequest = {
+      ...stringRequest,
+      id: 53,
+      params: {
+        ...stringRequest.params,
+        itemId: "item-number",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const resolvedNumericRequest = {
+      method: "serverRequest/resolved",
+      params: {
+        threadId: "thread-1",
+        requestId: 53,
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    child.stdout.write(`${JSON.stringify(stringRequest)}\n`);
+    child.stdout.write(`${JSON.stringify(numericRequest)}\n`);
+    await waitForStreamEvents();
+    child.stdout.write(`${JSON.stringify(resolvedNumericRequest)}\n`);
+    await waitForStreamEvents();
+
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: stringRequest },
+      { runtimeId: "runtime-1", kind: "notification", message: resolvedNumericRequest },
+    ]);
+
+    await Effect.runPromise(transport.close());
+  });
+
   test("accepts permissions approval requests without an optional reason", async () => {
     const child = createChild();
     const emitted: unknown[] = [];

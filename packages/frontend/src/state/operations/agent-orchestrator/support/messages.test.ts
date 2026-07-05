@@ -20,6 +20,7 @@ import {
   updateLastSessionMessage,
   updateLastToolSessionMessage,
   upsertSessionMessage,
+  upsertUserSessionMessage,
 } from "./messages";
 
 const createSession = (messages: SessionMessagesFixtureInput) => ({
@@ -54,6 +55,50 @@ describe("agent-orchestrator/support/messages", () => {
     });
     expect(getSessionMessageCount(createSession(replaced))).toBe(2);
     expect(sessionMessageAt(createSession(replaced), 0)?.content).toBe("updated");
+  });
+
+  test("confirms a pending synthetic Codex user message with the matching runtime message", () => {
+    const session = createSession([
+      {
+        id: "codex-user-session-1-1",
+        role: "user",
+        content: "continue",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+    ]);
+
+    const updated = upsertUserSessionMessage(session, {
+      id: "runtime-user-1",
+      role: "user",
+      content: "continue",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+
+    expect(getSessionMessageCount(createSession(updated))).toBe(1);
+    expect(sessionMessageAt(createSession(updated), 0)?.id).toBe("runtime-user-1");
+  });
+
+  test("does not merge a repeated prompt into a previous real Codex user message", () => {
+    const session = createSession([
+      {
+        id: "runtime-user-1",
+        role: "user",
+        content: "continue",
+        timestamp: "2026-02-22T08:00:00.000Z",
+      },
+    ]);
+
+    const updated = upsertUserSessionMessage(session, {
+      id: "codex-user-session-1-2",
+      role: "user",
+      content: "continue",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+
+    expect(sessionMessagesToArray(createSession(updated)).map((message) => message.id)).toEqual([
+      "runtime-user-1",
+      "codex-user-session-1-2",
+    ]);
   });
 
   test("finds the last message by role without scanning callers manually", () => {

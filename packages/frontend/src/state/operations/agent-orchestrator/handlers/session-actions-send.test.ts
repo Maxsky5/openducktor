@@ -227,6 +227,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const originalSendUserMessage = adapter.sendUserMessage;
     const originalSubscribeEvents = adapter.subscribeEvents;
     const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
+    const acceptedCodexEvents: AcceptedAgentUserMessage[] = [];
     adapter.subscribeEvents = async (_sessionRef, handler) => {
       handlers.push(handler);
       return () => {};
@@ -236,12 +237,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         ...acceptedUserMessage(input, "codex-user-1772355601000-1"),
         timestamp: "2026-02-22T08:00:01.000Z",
       };
+      acceptedCodexEvents.push(event);
       for (const handler of handlers) {
-        handler({
-          ...event,
-          messageId: "runtime-user-confirmed",
-          timestamp: "2026-02-22T08:00:06.000Z",
-        });
+        handler(event);
       }
       return event;
     };
@@ -275,6 +273,22 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
     try {
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      const confirmedEvent = acceptedCodexEvents[0];
+      if (!confirmedEvent) {
+        throw new Error("Expected fake adapter to accept the Codex user message.");
+      }
+      for (const handler of handlers) {
+        handler({
+          type: confirmedEvent.type,
+          externalSessionId: confirmedEvent.externalSessionId,
+          messageId: "runtime-user-confirmed",
+          message: confirmedEvent.message,
+          parts: confirmedEvent.parts,
+          state: confirmedEvent.state,
+          timestamp: "2026-02-22T08:00:06.000Z",
+          ...(confirmedEvent.model ? { model: confirmedEvent.model } : {}),
+        });
+      }
 
       const userMessages = sessionMessagesToArray(getSession(sessionsRef)).filter(
         (message) => message.role === "user",
@@ -282,10 +296,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(userMessages).toHaveLength(1);
       expect(userMessages[0]).toEqual(
         expect.objectContaining({
-          id: "codex-user-1772355601000-1",
+          id: "runtime-user-confirmed",
           role: "user",
           content: "hello",
-          timestamp: "2026-02-22T08:00:01.000Z",
+          timestamp: "2026-02-22T08:00:06.000Z",
         }),
       );
     } finally {
