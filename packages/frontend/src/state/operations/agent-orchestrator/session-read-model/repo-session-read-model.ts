@@ -3,6 +3,7 @@ import type {
   AgentSessionScope,
   PolicyBoundSessionRef,
   RuntimeKind,
+  SessionRef,
 } from "@openducktor/core";
 import { toMissingAgentSessionRuntimeSnapshot, workflowAgentSessionScope } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -28,7 +29,7 @@ import type { TaskSessionRecords } from "./task-session-records";
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: PolicyBoundSessionRef[];
-  unlistedSessionRefs: PolicyBoundSessionRef[];
+  unlistedSessionRefs: SessionRef[];
 };
 
 export type ResolveSessionRuntimePolicySync = (input: {
@@ -58,7 +59,7 @@ export const buildRepoSessionReadModel = ({
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   const carriedSessions: AgentSessionState[] = [];
-  const unlistedSessionRefs: PolicyBoundSessionRef[] = [];
+  const unlistedSessionRefs: SessionRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
   const workflowScopeForSession = (session: AgentSessionState): AgentSessionScope | null => {
     return session.role ? workflowAgentSessionScope(session.taskId, session.role) : null;
@@ -95,7 +96,7 @@ export const buildRepoSessionReadModel = ({
     }
 
     if (!persistedSessionKeys.has(agentSessionIdentityKey(session))) {
-      unlistedSessionRefs.push(policyBoundSessionRefForSession(session));
+      unlistedSessionRefs.push(toRuntimeSessionRef(repoPath, session));
     }
   }
 

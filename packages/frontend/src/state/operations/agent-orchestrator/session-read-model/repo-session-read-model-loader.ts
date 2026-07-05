@@ -1,5 +1,5 @@
 import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
-import type { AgentEnginePort, PolicyBoundSessionRef } from "@openducktor/core";
+import type { AgentEnginePort, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
@@ -13,7 +13,7 @@ import type { TaskSessionRecords } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
-type ClearSessionObservationState = (sessions: readonly PolicyBoundSessionRef[]) => void;
+type ClearSessionObservationState = (sessions: readonly SessionRef[]) => void;
 type SessionObserverFailure = {
   session: PolicyBoundSessionRef;
   message: string;

@@ -5,6 +5,7 @@ import {
   type AgentPendingQuestionRequest,
   type AgentRole,
   type PolicyBoundSessionRef,
+  type SessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import {
@@ -67,6 +68,22 @@ const expectedRuntimeRef = ({
     runtimePolicy: { kind: "opencode" },
   };
 };
+const expectedSessionRef = ({
+  repoPath = "/repo",
+  externalSessionId,
+  runtimeKind = "opencode",
+  workingDirectory = "/repo/worktree",
+}: {
+  repoPath?: string;
+  externalSessionId: string;
+  runtimeKind?: RuntimeKind;
+  workingDirectory?: string;
+}): SessionRef => ({
+  repoPath,
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+});
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
   listAgentSessions(readModel.sessionCollection).find(
@@ -372,7 +389,7 @@ describe("repo session read model", () => {
       otherTaskSession,
     );
     expect(readModel.unlistedSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedSessionRef({
         externalSessionId: removedSession.externalSessionId,
         runtimeKind: removedSession.runtimeKind,
         workingDirectory: removedSession.workingDirectory,
@@ -596,7 +613,7 @@ describe("repo session read model", () => {
     expect(sessionMessagesToArray(session)).toEqual([]);
     expect(getAgentSession(readModel.sessionCollection, currentSession)).toBeNull();
     expect(readModel.unlistedSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedSessionRef({
         externalSessionId: currentSession.externalSessionId,
         runtimeKind: currentSession.runtimeKind,
         workingDirectory: currentSession.workingDirectory,
@@ -858,7 +875,7 @@ describe("repo session read model", () => {
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
     expect(readModel.unlistedSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedSessionRef({
         externalSessionId: currentSession.externalSessionId,
         runtimeKind: currentSession.runtimeKind,
         workingDirectory: currentSession.workingDirectory,

@@ -7,6 +7,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
+  CodexAppServerProtocolMessage,
   CodexAppServerRespondInput,
   CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
@@ -194,13 +195,8 @@ export const createCodexAppServerTransport = (
     }
     request.resolve(parsedResult.right);
   };
-  const emitEvent = (
-    event: CodexAppServerStreamEvent,
-    options: { bufferWhenEmitting: boolean },
-  ): void => {
-    if (!eventEmitter || options.bufferWhenEmitting) {
-      pushBoundedMessage(bufferedEvents, event);
-    }
+  const emitBufferedEvent = (event: CodexAppServerStreamEvent) => {
+    pushBoundedMessage(bufferedEvents, event);
     if (!eventEmitter) {
       return;
     }
@@ -231,6 +227,14 @@ export const createCodexAppServerTransport = (
     }
   };
 
+  const forgetResolvedServerRequest = ({ method, params }: CodexAppServerProtocolMessage): void => {
+    if (method === "serverRequest/resolved" && isJsonRecord(params)) {
+      const requestId = params.requestId ?? params.request_id;
+      if (typeof requestId === "number" || typeof requestId === "string") {
+        forgetServerRequest(requestId);
+      }
+    }
+  };
   const rejectPendingRequests = (operation: string, message: string): void => {
     clearCancelledSentRequests();
     for (const [id, request] of pending) {
@@ -280,16 +284,13 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId === null) {
       try {
-        emitEvent(
-          {
-            runtimeId,
-            kind: "notification",
-            message: parseStreamMessage(runtimeId, message, "notification"),
-          },
-          {
-            bufferWhenEmitting: true,
-          },
-        );
+        const notification = parseStreamMessage(runtimeId, message, "notification");
+        forgetResolvedServerRequest(notification);
+        emitBufferedEvent({
+          runtimeId,
+          kind: "notification",
+          message: notification,
+        });
       } catch (error) {
         failFast(
           toHostOperationError(error, "codexAppServerTransport.parseNotification", {
@@ -302,16 +303,11 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId !== null) {
       try {
-        emitEvent(
-          {
-            runtimeId,
-            kind: "server_request",
-            message: parseStreamMessage(runtimeId, message, "server_request"),
-          },
-          {
-            bufferWhenEmitting: true,
-          },
-        );
+        emitBufferedEvent({
+          runtimeId,
+          kind: "server_request",
+          message: parseStreamMessage(runtimeId, message, "server_request"),
+        });
       } catch (error) {
         failFast(
           toHostOperationError(error, "codexAppServerTransport.parseServerRequest", {

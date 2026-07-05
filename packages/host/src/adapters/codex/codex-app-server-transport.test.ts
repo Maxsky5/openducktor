@@ -152,6 +152,52 @@ describe("createCodexAppServerTransport", () => {
     await Effect.runPromise(transport.close());
   });
 
+  test("drops buffered server requests when Codex reports them resolved before a reply", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const request = {
+      id: "request-1",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        startedAtMs: 1,
+        cwd: "/repo",
+        reason: "Need permission for test",
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const resolved = {
+      method: "serverRequest/resolved",
+      params: {
+        threadId: "thread-1",
+        requestId: "request-1",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+    await waitForStreamEvents();
+    child.stdout.write(`${JSON.stringify(resolved)}\n`);
+    await waitForStreamEvents();
+
+    expect(emitted).toEqual([
+      { runtimeId: "runtime-1", kind: "server_request", message: request },
+      { runtimeId: "runtime-1", kind: "notification", message: resolved },
+    ]);
+    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: resolved },
+    ]);
+
+    await Effect.runPromise(transport.close());
+  });
+
   test("accepts permissions approval requests without an optional reason", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
