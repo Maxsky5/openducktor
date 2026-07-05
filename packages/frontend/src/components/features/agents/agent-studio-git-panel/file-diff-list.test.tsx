@@ -18,14 +18,32 @@ const preloaderMock = mock(({ filePath }: { filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>
 ));
 
+const fileViewerMock = mock(
+  ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
+    <div data-testid="pierre-file-viewer" data-content={content} data-file-path={filePath}>
+      {content}
+    </div>
+  ),
+);
+
 const viewerMock = mock(
   ({
+    diffStyle,
     filePath,
+    diffIndicators,
+    heightMode,
+    hunkSeparators,
+    lineOverflow,
     onLineSelectionEnd,
     lineAnnotations,
     renderAnnotation,
   }: {
+    diffStyle?: string;
     filePath: string;
+    diffIndicators?: string;
+    heightMode?: string;
+    lineOverflow?: string;
+    hunkSeparators?: string;
     onLineSelectionEnd?:
       | ((
           selection: {
@@ -52,7 +70,16 @@ const viewerMock = mock(
       | undefined;
   }) => (
     <div>
-      <div data-testid="pierre-diff-viewer">{filePath}</div>
+      <div
+        data-testid="pierre-diff-viewer"
+        data-diff-indicators={diffIndicators ?? ""}
+        data-diff-style={diffStyle ?? ""}
+        data-height-mode={heightMode ?? ""}
+        data-hunk-separators={hunkSeparators ?? ""}
+        data-line-overflow={lineOverflow ?? ""}
+      >
+        {filePath}
+      </div>
       <button
         type="button"
         data-testid="pierre-diff-select-lines"
@@ -97,6 +124,7 @@ beforeEach(async () => {
   mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
     PierreDiffPreloader: preloaderMock,
     PierreDiffViewer: viewerMock,
+    PierreFileViewer: fileViewerMock,
   }));
 
   ({ FileDiffList } = await import("./file-diff-list"));
@@ -106,6 +134,7 @@ afterEach(() => {
   cleanup();
   preloaderMock.mockClear();
   viewerMock.mockClear();
+  fileViewerMock.mockClear();
   resetInlineComments();
 });
 
@@ -221,6 +250,23 @@ describe("FileDiffList", () => {
 
     expect(screen.getByTestId("pierre-diff-viewer").textContent).toBe("src/example.ts");
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
+  });
+
+  test("keeps chat-only diff display props out of git panel rendering", () => {
+    render(<FileDiffListHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
+
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+    expect(viewer.getAttribute("data-diff-style")).toBe("unified");
+    expect(viewer.getAttribute("data-diff-indicators")).toBe("");
+    expect(viewer.getAttribute("data-height-mode")).toBe("");
+    expect(viewer.getAttribute("data-line-overflow")).toBe("");
+    expect(viewer.getAttribute("data-hunk-separators")).toBe("");
+    expect(viewerMock.mock.calls[0]?.[0]).not.toHaveProperty("diffIndicators");
+    expect(viewerMock.mock.calls[0]?.[0]).not.toHaveProperty("heightMode");
+    expect(viewerMock.mock.calls[0]?.[0]).not.toHaveProperty("lineOverflow");
+    expect(viewerMock.mock.calls[0]?.[0]).not.toHaveProperty("hunkSeparators");
   });
 
   test("creates inline comments, updates file counters, and clears them after send success", () => {

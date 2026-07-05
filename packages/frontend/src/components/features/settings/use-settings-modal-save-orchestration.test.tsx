@@ -396,12 +396,13 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(didSave).toBe(true);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+    const expectedChatSettings = {
+      ...createSnapshot().chat,
+      showThinkingMessages: true,
+    };
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        chat: {
-          showThinkingMessages: true,
-          expandFileDiffsByDefault: true,
-        },
+        chat: expectedChatSettings,
         general: {
           openAgentStudioTabOnBackgroundSessionStart: true,
         },

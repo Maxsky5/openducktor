@@ -350,10 +350,20 @@ describe("createWorkspaceSettingsService", () => {
     if (!repoSnapshot) {
       throw new Error("expected repo workspace snapshot");
     }
+    const explicitChatSettings = {
+      showThinkingMessages: true,
+      expandFileDiffsByDefault: false,
+      diffStyle: "unified" as const,
+      diffIndicators: "none" as const,
+      diffHeight: "scroll" as const,
+      lineOverflow: "scroll" as const,
+      hunkSeparators: "simple" as const,
+    };
     const records = await Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
         theme: "dark",
+        chat: explicitChatSettings,
         agentRuntimes: {
           ...snapshot.agentRuntimes,
           codex: {
@@ -424,6 +434,7 @@ describe("createWorkspaceSettingsService", () => {
         },
       },
     });
+    expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
   });
   test("rejects invalid Codex snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({

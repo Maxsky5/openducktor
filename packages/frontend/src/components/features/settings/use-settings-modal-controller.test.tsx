@@ -469,14 +469,15 @@ describe("useSettingsModalController", () => {
       didSave = await state.submit();
     });
 
+    const expectedSnapshot = createSettingsSnapshot();
     expect(didSave).toBe(true);
     expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(saveSettingsSnapshot).toHaveBeenCalledWith({
-      ...createSettingsSnapshot(),
+      ...expectedSnapshot,
       chat: {
+        ...expectedSnapshot.chat,
         showThinkingMessages: true,
-        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       agentRuntimes: DEFAULT_AGENT_RUNTIMES,

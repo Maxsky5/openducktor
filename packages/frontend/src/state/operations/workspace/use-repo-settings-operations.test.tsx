@@ -567,9 +567,21 @@ describe("use-repo-settings-operations", () => {
   test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshot) => [
+      createWorkspaceRecord(),
+    ]);
+    const explicitChatSettings = {
+      showThinkingMessages: true,
+      expandFileDiffsByDefault: false,
+      diffStyle: "unified" as const,
+      diffIndicators: "classic" as const,
+      diffHeight: "scroll" as const,
+      lineOverflow: "scroll" as const,
+      hunkSeparators: "metadata" as const,
+    };
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      chat: explicitChatSettings,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -595,6 +607,7 @@ describe("use-repo-settings-operations", () => {
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      chat: explicitChatSettings,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -607,6 +620,7 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
+      expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);

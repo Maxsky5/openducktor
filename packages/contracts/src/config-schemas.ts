@@ -7,6 +7,17 @@ import { repoPromptOverridesSchema } from "./prompt-schemas";
 export const DEFAULT_BRANCH_PREFIX = "odt";
 export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const CHAT_DIFF_STYLE_VALUES = ["split", "unified"] as const;
+export const CHAT_DIFF_INDICATOR_VALUES = ["bars", "classic", "none"] as const;
+export const CHAT_DIFF_HEIGHT_VALUES = ["full", "scroll"] as const;
+export const CHAT_LINE_OVERFLOW_VALUES = ["wrap", "scroll"] as const;
+export const CHAT_HUNK_SEPARATOR_VALUES = [
+  "line-info",
+  "line-info-basic",
+  "metadata",
+  "simple",
+] as const;
+
 const DEFAULT_SOFT_GUARDRAILS = {
   cpuHighWatermarkPercent: 85,
   minFreeMemoryMb: 2048,
@@ -16,6 +27,11 @@ const DEFAULT_SOFT_GUARDRAILS = {
 export const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
   expandFileDiffsByDefault: true,
+  diffStyle: "split",
+  diffIndicators: "bars",
+  diffHeight: "full",
+  lineOverflow: "wrap",
+  hunkSeparators: "line-info",
 } as const;
 export const DEFAULT_GENERAL_SETTINGS = {
   openAgentStudioTabOnBackgroundSessionStart: true,
@@ -367,8 +383,18 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
   expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),
+  diffStyle: z.enum(CHAT_DIFF_STYLE_VALUES).default(DEFAULT_CHAT_SETTINGS.diffStyle),
+  diffIndicators: z.enum(CHAT_DIFF_INDICATOR_VALUES).default(DEFAULT_CHAT_SETTINGS.diffIndicators),
+  diffHeight: z.enum(CHAT_DIFF_HEIGHT_VALUES).default(DEFAULT_CHAT_SETTINGS.diffHeight),
+  lineOverflow: z.enum(CHAT_LINE_OVERFLOW_VALUES).default(DEFAULT_CHAT_SETTINGS.lineOverflow),
+  hunkSeparators: z.enum(CHAT_HUNK_SEPARATOR_VALUES).default(DEFAULT_CHAT_SETTINGS.hunkSeparators),
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
+export type ChatDiffStyle = z.infer<typeof chatSettingsSchema>["diffStyle"];
+export type ChatDiffIndicators = z.infer<typeof chatSettingsSchema>["diffIndicators"];
+export type ChatDiffHeight = z.infer<typeof chatSettingsSchema>["diffHeight"];
+export type ChatLineOverflow = z.infer<typeof chatSettingsSchema>["lineOverflow"];
+export type ChatHunkSeparators = z.infer<typeof chatSettingsSchema>["hunkSeparators"];
 
 export const generalSettingsSchema = z.object({
   openAgentStudioTabOnBackgroundSessionStart: z

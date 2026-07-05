@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
@@ -12,11 +14,31 @@ const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) =
 ));
 
 const viewerMock = mock(
-  ({ diffStyle, filePath, patch }: { patch: string; filePath: string; diffStyle?: string }) => (
+  ({
+    diffIndicators,
+    diffStyle,
+    filePath,
+    heightMode,
+    hunkSeparators,
+    lineOverflow,
+    patch,
+  }: {
+    patch: string;
+    filePath: string;
+    diffStyle?: string;
+    diffIndicators?: string;
+    heightMode?: string;
+    lineOverflow?: string;
+    hunkSeparators?: string;
+  }) => (
     <div
       data-testid="pierre-diff-viewer"
+      data-diff-indicators={diffIndicators ?? ""}
       data-diff-style={diffStyle ?? ""}
       data-file-path={filePath}
+      data-height-mode={heightMode ?? ""}
+      data-hunk-separators={hunkSeparators ?? ""}
+      data-line-overflow={lineOverflow ?? ""}
       data-patch={patch}
     >
       {filePath}
@@ -70,22 +92,26 @@ const buildPathFileEditData = (overrides: Partial<PathFileEditData> = {}): PathF
   ...overrides,
 });
 
-const buildChatSettings = (expandFileDiffsByDefault: boolean) => ({
-  showThinkingMessages: false,
-  expandFileDiffsByDefault,
-});
+const buildChatSettings = (
+  expandFileDiffsByDefault: boolean,
+  overrides: Partial<ChatSettings> = {},
+): ChatSettings => createChatSettingsFixture({ expandFileDiffsByDefault, ...overrides });
 
 const fileEditCardElement = (
   data: FileEditData,
   expandFileDiffsByDefault: boolean,
+  chatOverrides: Partial<ChatSettings> = {},
 ): ReactElement => (
-  <AgentChatSettingsProvider value={buildChatSettings(expandFileDiffsByDefault)}>
+  <AgentChatSettingsProvider value={buildChatSettings(expandFileDiffsByDefault, chatOverrides)}>
     <AgentChatFileEditCard data={data} />
   </AgentChatSettingsProvider>
 );
 
-const renderFileEditCard = (data: FileEditData, expandFileDiffsByDefault: boolean) =>
-  render(fileEditCardElement(data, expandFileDiffsByDefault));
+const renderFileEditCard = (
+  data: FileEditData,
+  expandFileDiffsByDefault: boolean,
+  chatOverrides: Partial<ChatSettings> = {},
+) => render(fileEditCardElement(data, expandFileDiffsByDefault, chatOverrides));
 
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
@@ -141,12 +167,16 @@ describe("AgentChatFileEditCard", () => {
     expect(viewer.getAttribute("data-file-path")).toBe("src/example.ts");
     expect(viewer.getAttribute("data-patch")).toBe("@@ -1 +1 @@\n-old\n+new\n");
     expect(viewer.getAttribute("data-diff-style")).toBe("split");
+    expect(viewer.getAttribute("data-diff-indicators")).toBe("bars");
+    expect(viewer.getAttribute("data-height-mode")).toBe("full");
+    expect(viewer.getAttribute("data-line-overflow")).toBe("wrap");
+    expect(viewer.getAttribute("data-hunk-separators")).toBe("line-info");
     expect(viewer.parentElement).toBe(screen.getByTestId("agent-chat-file-edit-card"));
     expect(preloaderMock).not.toHaveBeenCalled();
     expect(viewerMock).toHaveBeenCalledTimes(1);
   });
 
-  test("renders the visible diff viewer after expansion with the existing split view props", () => {
+  test("renders the visible diff viewer after expansion with default chat diff settings", () => {
     renderFileEditCard(buildFileEditData(), false);
 
     fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
@@ -155,8 +185,29 @@ describe("AgentChatFileEditCard", () => {
     expect(viewer.getAttribute("data-file-path")).toBe("src/example.ts");
     expect(viewer.getAttribute("data-patch")).toBe("@@ -1 +1 @@\n-old\n+new\n");
     expect(viewer.getAttribute("data-diff-style")).toBe("split");
+    expect(viewer.getAttribute("data-diff-indicators")).toBe("bars");
+    expect(viewer.getAttribute("data-height-mode")).toBe("full");
+    expect(viewer.getAttribute("data-line-overflow")).toBe("wrap");
+    expect(viewer.getAttribute("data-hunk-separators")).toBe("line-info");
     expect(preloaderMock).not.toHaveBeenCalled();
     expect(viewerMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("passes explicit chat diff display settings to expanded transcript diffs", () => {
+    renderFileEditCard(buildFileEditData(), true, {
+      diffStyle: "unified",
+      diffIndicators: "none",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "simple",
+    });
+
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+    expect(viewer.getAttribute("data-diff-style")).toBe("unified");
+    expect(viewer.getAttribute("data-diff-indicators")).toBe("none");
+    expect(viewer.getAttribute("data-height-mode")).toBe("scroll");
+    expect(viewer.getAttribute("data-line-overflow")).toBe("scroll");
+    expect(viewer.getAttribute("data-hunk-separators")).toBe("simple");
   });
 
   test("renders full file content without invoking the diff viewer", () => {
@@ -222,6 +273,30 @@ describe("AgentChatFileEditCard", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
     });
+  });
+
+  test("updates an already expanded diff card when chat diff settings change", () => {
+    const data = buildFileEditData();
+    const { rerender } = renderFileEditCard(data, true);
+
+    expect(screen.getByTestId("pierre-diff-viewer").getAttribute("data-height-mode")).toBe("full");
+
+    rerender(
+      fileEditCardElement(data, true, {
+        diffStyle: "unified",
+        diffIndicators: "classic",
+        diffHeight: "scroll",
+        lineOverflow: "scroll",
+        hunkSeparators: "metadata",
+      }),
+    );
+
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+    expect(viewer.getAttribute("data-diff-style")).toBe("unified");
+    expect(viewer.getAttribute("data-diff-indicators")).toBe("classic");
+    expect(viewer.getAttribute("data-height-mode")).toBe("scroll");
+    expect(viewer.getAttribute("data-line-overflow")).toBe("scroll");
+    expect(viewer.getAttribute("data-hunk-separators")).toBe("metadata");
   });
 
   test("keeps the user's manual collapsed state when defaults change", () => {

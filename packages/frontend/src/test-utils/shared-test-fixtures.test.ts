@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
 import {
   createSessionMessagesState,
   getSessionMessageCount,
@@ -62,7 +63,7 @@ describe("shared test fixtures", () => {
 
   test("createChatSettingsFixture derives from canonical defaults", () => {
     expect(createChatSettingsFixture({ expandFileDiffsByDefault: false })).toEqual({
-      showThinkingMessages: false,
+      ...DEFAULT_CHAT_SETTINGS,
       expandFileDiffsByDefault: false,
     });
   });

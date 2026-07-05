@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUTOPILOT_EVENT_IDS,
+  CHAT_DIFF_HEIGHT_VALUES,
+  CHAT_DIFF_INDICATOR_VALUES,
+  CHAT_DIFF_STYLE_VALUES,
+  CHAT_HUNK_SEPARATOR_VALUES,
+  CHAT_LINE_OVERFLOW_VALUES,
   chatSettingsSchema,
   codexRuntimeConfigSchema,
   DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
   globalConfigSchema,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
@@ -21,6 +27,16 @@ const baseRepoConfigInput = {
   repoPath: "/repo",
   defaultRuntimeKind: "opencode",
 };
+
+const expectedDefaultChatSettings = {
+  showThinkingMessages: false,
+  expandFileDiffsByDefault: true,
+  diffStyle: "split",
+  diffIndicators: "bars",
+  diffHeight: "full",
+  lineOverflow: "wrap",
+  hunkSeparators: "line-info",
+} as const;
 
 describe("config-schemas", () => {
   test("defaults dev servers to an empty array", () => {
@@ -382,25 +398,22 @@ describe("config-schemas", () => {
     const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
 
     expect(parsed).toEqual({
+      ...expectedDefaultChatSettings,
       showThinkingMessages: true,
-      expandFileDiffsByDefault: true,
     });
   });
 
   test("defaults file diff expansion for older chat settings", () => {
     const parsed = chatSettingsSchema.parse({ showThinkingMessages: false });
 
-    expect(parsed).toEqual({
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    });
+    expect(parsed).toEqual(expectedDefaultChatSettings);
   });
 
-  test("roundtrips explicit file diff expansion settings", () => {
+  test("defaults chat diff display settings for older chat settings", () => {
     const parsedSnapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      chat: { showThinkingMessages: true, expandFileDiffsByDefault: false },
+      chat: { showThinkingMessages: true },
       workspaces: {},
       globalPromptOverrides: {},
     });
@@ -408,7 +421,47 @@ describe("config-schemas", () => {
       version: 2,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      chat: { showThinkingMessages: false, expandFileDiffsByDefault: false },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(chatSettingsSchema.parse({})).toEqual(expectedDefaultChatSettings);
+    expect(parsedSnapshot.chat).toEqual({
+      ...expectedDefaultChatSettings,
+      showThinkingMessages: true,
+    });
+    expect(parsedGlobalConfig.chat).toEqual(expectedDefaultChatSettings);
+  });
+
+  test("roundtrips explicit chat display settings", () => {
+    const parsedSnapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      chat: {
+        showThinkingMessages: true,
+        expandFileDiffsByDefault: false,
+        diffStyle: "unified",
+        diffIndicators: "classic",
+        diffHeight: "scroll",
+        lineOverflow: "scroll",
+        hunkSeparators: "metadata",
+      },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const parsedGlobalConfig = globalConfigSchema.parse({
+      version: 2,
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      chat: {
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: false,
+        diffStyle: "unified",
+        diffIndicators: "none",
+        diffHeight: "scroll",
+        lineOverflow: "scroll",
+        hunkSeparators: "simple",
+      },
       workspaces: {},
       globalPromptOverrides: {},
     });
@@ -416,11 +469,61 @@ describe("config-schemas", () => {
     expect(parsedSnapshot.chat).toEqual({
       showThinkingMessages: true,
       expandFileDiffsByDefault: false,
+      diffStyle: "unified",
+      diffIndicators: "classic",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "metadata",
     });
     expect(parsedGlobalConfig.chat).toEqual({
       showThinkingMessages: false,
       expandFileDiffsByDefault: false,
+      diffStyle: "unified",
+      diffIndicators: "none",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "simple",
     });
+  });
+
+  test("accepts every supported chat diff display value", () => {
+    expect(DEFAULT_CHAT_SETTINGS).toEqual(expectedDefaultChatSettings);
+
+    for (const diffStyle of CHAT_DIFF_STYLE_VALUES) {
+      expect(chatSettingsSchema.parse({ diffStyle }).diffStyle).toBe(diffStyle);
+    }
+    for (const diffIndicators of CHAT_DIFF_INDICATOR_VALUES) {
+      expect(chatSettingsSchema.parse({ diffIndicators }).diffIndicators).toBe(diffIndicators);
+    }
+    for (const diffHeight of CHAT_DIFF_HEIGHT_VALUES) {
+      expect(chatSettingsSchema.parse({ diffHeight }).diffHeight).toBe(diffHeight);
+    }
+    for (const lineOverflow of CHAT_LINE_OVERFLOW_VALUES) {
+      expect(chatSettingsSchema.parse({ lineOverflow }).lineOverflow).toBe(lineOverflow);
+    }
+    for (const hunkSeparators of CHAT_HUNK_SEPARATOR_VALUES) {
+      expect(chatSettingsSchema.parse({ hunkSeparators }).hunkSeparators).toBe(hunkSeparators);
+    }
+  });
+
+  test("rejects invalid explicit chat diff display values", () => {
+    const invalidCases: Array<[string, Record<string, unknown>]> = [
+      ["diffStyle", { diffStyle: "side-by-side" }],
+      ["diffIndicators", { diffIndicators: "glyphs" }],
+      ["diffHeight", { diffHeight: "auto" }],
+      ["lineOverflow", { lineOverflow: "clip" }],
+      ["hunkSeparators", { hunkSeparators: "custom" }],
+    ];
+
+    for (const [field, input] of invalidCases) {
+      const result = chatSettingsSchema.safeParse(input);
+
+      expect(result.success).toBe(false);
+      if (result.success) {
+        throw new Error(`Expected ${field} to reject invalid values`);
+      }
+      expect(result.error.issues.some((issue) => issue.path.includes(field))).toBe(true);
+    }
   });
 
   test("defaults reusable prompts to an empty array", () => {

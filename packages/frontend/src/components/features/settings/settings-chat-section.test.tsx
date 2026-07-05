@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsChatSection } from "./settings-chat-section";
 
@@ -11,10 +11,37 @@ const renderSettingsChatSection = (chat: ChatSettings, disabled = false): void =
   render(<SettingsChatSection chat={chat} disabled={disabled} onUpdateChat={() => chat} />);
 };
 
+const renderSettingsChatSectionWithUpdates = (chat: ChatSettings) => {
+  let latestChat = chat;
+  const onUpdateChat = mock((updater: (current: ChatSettings) => ChatSettings): void => {
+    latestChat = updater(latestChat);
+  });
+
+  render(<SettingsChatSection chat={chat} disabled={false} onUpdateChat={onUpdateChat} />);
+
+  return {
+    onUpdateChat,
+    getLatestChat: () => latestChat,
+  };
+};
+
 const expectSwitchChecked = (name: string, checked: boolean): void => {
   expect(screen.getByRole("switch", { name }).getAttribute("aria-checked")).toBe(
     checked ? "true" : "false",
   );
+};
+
+const expectSegmentedOptions = (name: string, labels: string[]): void => {
+  const group = screen.getByRole("group", { name });
+  expect(
+    within(group)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(labels);
+};
+
+const clickSegmentedOption = (name: string, label: string): void => {
+  fireEvent.click(within(screen.getByRole("group", { name })).getByRole("button", { name: label }));
 };
 
 afterEach(() => {
@@ -39,6 +66,11 @@ describe("settings chat section", () => {
     expect(
       screen.getByText(/File diffs in Agent Studio transcripts will start expanded/),
     ).toBeDefined();
+    expect(screen.getByText("Diff Style")).toBeDefined();
+    expect(screen.getByText("Diff Indicators")).toBeDefined();
+    expect(screen.getByText("Diff Height")).toBeDefined();
+    expect(screen.getByText("Line Overflow")).toBeDefined();
+    expect(screen.getByText("Hunk Separators")).toBeDefined();
   });
 
   test("renders switch as unchecked when showThinkingMessages is false", () => {
@@ -81,6 +113,114 @@ describe("settings chat section", () => {
     const switches = screen.getAllByRole("switch");
     expect(switches).toHaveLength(2);
     expect(switches.every((control) => control.hasAttribute("disabled"))).toBe(true);
+  });
+
+  test("renders every transcript diff setting option", () => {
+    const chatSettings = createChatSettings();
+
+    renderSettingsChatSection(chatSettings);
+
+    expectSegmentedOptions("Diff Style", ["Split", "Unified"]);
+    expectSegmentedOptions("Diff Indicators", ["Bars", "Classic", "None"]);
+    expectSegmentedOptions("Diff Height", ["Full", "Scroll"]);
+    expectSegmentedOptions("Line Overflow", ["Wrap", "Scroll"]);
+    expectSegmentedOptions("Hunk Separators", [
+      "Line info",
+      "Line info basic",
+      "Metadata",
+      "Simple",
+    ]);
+  });
+
+  test("uses wrapping segmented controls for variable option counts", () => {
+    const chatSettings = createChatSettings();
+
+    renderSettingsChatSection(chatSettings);
+
+    expect(screen.getByRole("group", { name: "Diff Indicators" }).className).toContain("flex-wrap");
+    expect(screen.getByRole("group", { name: "Hunk Separators" }).className).toContain("flex-wrap");
+  });
+
+  test("marks saved transcript diff setting values as active", () => {
+    const chatSettings = createChatSettings({
+      diffStyle: "unified",
+      diffIndicators: "none",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "simple",
+    });
+
+    renderSettingsChatSection(chatSettings);
+
+    expect(
+      within(screen.getByRole("group", { name: "Diff Style" }))
+        .getByRole("button", { name: "Unified" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("group", { name: "Diff Indicators" }))
+        .getByRole("button", { name: "None" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("group", { name: "Diff Height" }))
+        .getByRole("button", { name: "Scroll" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("group", { name: "Line Overflow" }))
+        .getByRole("button", { name: "Scroll" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("group", { name: "Hunk Separators" }))
+        .getByRole("button", { name: "Simple" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  test("segmented diff setting controls are disabled when disabled prop is true", () => {
+    const chatSettings = createChatSettings();
+
+    renderSettingsChatSection(chatSettings, true);
+
+    const optionButtons = screen.getAllByRole("button");
+    expect(optionButtons).toHaveLength(13);
+    expect(optionButtons.every((control) => control.hasAttribute("disabled"))).toBe(true);
+  });
+
+  test("does not update chat settings when clicking the active segmented option", () => {
+    const chatSettings = createChatSettings();
+    const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
+
+    clickSegmentedOption("Diff Style", "Split");
+
+    expect(onUpdateChat).not.toHaveBeenCalled();
+    expect(getLatestChat()).toEqual(chatSettings);
+  });
+
+  test("updates transcript diff settings without dropping unrelated chat settings", () => {
+    const chatSettings = createChatSettings({
+      showThinkingMessages: true,
+      expandFileDiffsByDefault: false,
+    });
+    const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
+
+    clickSegmentedOption("Diff Style", "Unified");
+    clickSegmentedOption("Diff Indicators", "Classic");
+    clickSegmentedOption("Diff Height", "Scroll");
+    clickSegmentedOption("Line Overflow", "Scroll");
+    clickSegmentedOption("Hunk Separators", "Metadata");
+
+    expect(onUpdateChat).toHaveBeenCalledTimes(5);
+    expect(getLatestChat()).toEqual({
+      ...chatSettings,
+      diffStyle: "unified",
+      diffIndicators: "classic",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "metadata",
+    });
   });
 
   test("displays save notice about changes taking effect after save", () => {

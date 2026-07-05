@@ -77,11 +77,13 @@ describe("useSettingsModalDirtyState", () => {
 
     expect(harness.getLatest().dirtySections.globalGit).toBe(true);
 
+    const defaultSnapshot = createSnapshot();
     await harness.update({
       open: true,
       loadedSnapshot: {
-        ...createSnapshot(),
+        ...defaultSnapshot,
         chat: {
+          ...defaultSnapshot.chat,
           showThinkingMessages: true,
           expandFileDiffsByDefault: true,
         },

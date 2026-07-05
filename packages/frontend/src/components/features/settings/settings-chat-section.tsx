@@ -1,6 +1,22 @@
-import type { ChatSettings } from "@openducktor/contracts";
+import {
+  CHAT_DIFF_HEIGHT_VALUES,
+  CHAT_DIFF_INDICATOR_VALUES,
+  CHAT_DIFF_STYLE_VALUES,
+  CHAT_HUNK_SEPARATOR_VALUES,
+  CHAT_LINE_OVERFLOW_VALUES,
+  type ChatDiffHeight,
+  type ChatDiffIndicators,
+  type ChatDiffStyle,
+  type ChatHunkSeparators,
+  type ChatLineOverflow,
+  type ChatSettings,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Switch } from "@/components/ui/switch";
+import {
+  type SettingsSegmentedOption,
+  SettingsSegmentedOptionRow,
+} from "./settings-segmented-option-row";
 
 type SettingsChatSectionProps = {
   chat: ChatSettings;
@@ -16,6 +32,40 @@ type ChatSettingSwitchRowProps = {
   ariaLabel: string;
   onCheckedChange: (checked: boolean) => void;
 };
+
+const toSegmentedOptions = <Value extends string>(
+  values: readonly Value[],
+  labelsByValue: Record<Value, string>,
+): SettingsSegmentedOption<Value>[] =>
+  values.map((value) => ({ value, label: labelsByValue[value] }));
+
+const diffStyleOptions = toSegmentedOptions(CHAT_DIFF_STYLE_VALUES, {
+  split: "Split",
+  unified: "Unified",
+} satisfies Record<ChatDiffStyle, string>);
+
+const diffIndicatorOptions = toSegmentedOptions(CHAT_DIFF_INDICATOR_VALUES, {
+  bars: "Bars",
+  classic: "Classic",
+  none: "None",
+} satisfies Record<ChatDiffIndicators, string>);
+
+const diffHeightOptions = toSegmentedOptions(CHAT_DIFF_HEIGHT_VALUES, {
+  full: "Full",
+  scroll: "Scroll",
+} satisfies Record<ChatDiffHeight, string>);
+
+const lineOverflowOptions = toSegmentedOptions(CHAT_LINE_OVERFLOW_VALUES, {
+  wrap: "Wrap",
+  scroll: "Scroll",
+} satisfies Record<ChatLineOverflow, string>);
+
+const hunkSeparatorOptions = toSegmentedOptions(CHAT_HUNK_SEPARATOR_VALUES, {
+  "line-info": "Line info",
+  "line-info-basic": "Line info basic",
+  metadata: "Metadata",
+  simple: "Simple",
+} satisfies Record<ChatHunkSeparators, string>);
 
 function ChatSettingSwitchRow({
   title,
@@ -76,6 +126,55 @@ export function SettingsChatSection({
         ariaLabel="Expand file diffs by default in Agent Studio transcripts"
         onCheckedChange={(checked) =>
           onUpdateChat((current) => ({ ...current, expandFileDiffsByDefault: checked }))
+        }
+      />
+
+      <SettingsSegmentedOptionRow<ChatDiffStyle>
+        title="Diff Style"
+        description="Choose how file diffs are displayed in Agent Studio transcripts."
+        value={chat.diffStyle}
+        options={diffStyleOptions}
+        disabled={disabled}
+        onValueChange={(diffStyle) => onUpdateChat((current) => ({ ...current, diffStyle }))}
+      />
+
+      <SettingsSegmentedOptionRow<ChatDiffIndicators>
+        title="Diff Indicators"
+        description="Choose the visual markers shown next to added and removed lines."
+        value={chat.diffIndicators}
+        options={diffIndicatorOptions}
+        disabled={disabled}
+        onValueChange={(diffIndicators) =>
+          onUpdateChat((current) => ({ ...current, diffIndicators }))
+        }
+      />
+
+      <SettingsSegmentedOptionRow<ChatDiffHeight>
+        title="Diff Height"
+        description="Choose whether transcript diffs expand fully or use the compact scroll area."
+        value={chat.diffHeight}
+        options={diffHeightOptions}
+        disabled={disabled}
+        onValueChange={(diffHeight) => onUpdateChat((current) => ({ ...current, diffHeight }))}
+      />
+
+      <SettingsSegmentedOptionRow<ChatLineOverflow>
+        title="Line Overflow"
+        description="Choose whether long diff lines wrap or require horizontal scrolling."
+        value={chat.lineOverflow}
+        options={lineOverflowOptions}
+        disabled={disabled}
+        onValueChange={(lineOverflow) => onUpdateChat((current) => ({ ...current, lineOverflow }))}
+      />
+
+      <SettingsSegmentedOptionRow<ChatHunkSeparators>
+        title="Hunk Separators"
+        description="Choose the separator style for collapsed unchanged regions in transcript diffs."
+        value={chat.hunkSeparators}
+        options={hunkSeparatorOptions}
+        disabled={disabled}
+        onValueChange={(hunkSeparators) =>
+          onUpdateChat((current) => ({ ...current, hunkSeparators }))
         }
       />
 
