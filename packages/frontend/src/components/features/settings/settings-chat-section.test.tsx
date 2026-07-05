@@ -31,17 +31,17 @@ const expectSwitchChecked = (name: string, checked: boolean): void => {
   );
 };
 
-const expectSegmentedOptions = (name: string, values: string[]): void => {
+const expectSegmentedOptions = (name: string, labels: string[]): void => {
   const group = screen.getByRole("group", { name });
   expect(
     within(group)
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(values);
+  ).toEqual(labels);
 };
 
-const clickSegmentedOption = (name: string, value: string): void => {
-  fireEvent.click(within(screen.getByRole("group", { name })).getByRole("button", { name: value }));
+const clickSegmentedOption = (name: string, label: string): void => {
+  fireEvent.click(within(screen.getByRole("group", { name })).getByRole("button", { name: label }));
 };
 
 afterEach(() => {
@@ -120,15 +120,15 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSegmentedOptions("Diff Style", ["split", "unified"]);
-    expectSegmentedOptions("Diff Indicators", ["bars", "classic", "none"]);
-    expectSegmentedOptions("Diff Height", ["full", "scroll"]);
-    expectSegmentedOptions("Line Overflow", ["wrap", "scroll"]);
+    expectSegmentedOptions("Diff Style", ["Split", "Unified"]);
+    expectSegmentedOptions("Diff Indicators", ["Bars", "Classic", "None"]);
+    expectSegmentedOptions("Diff Height", ["Full", "Scroll"]);
+    expectSegmentedOptions("Line Overflow", ["Wrap", "Scroll"]);
     expectSegmentedOptions("Hunk Separators", [
-      "line-info",
-      "line-info-basic",
-      "metadata",
-      "simple",
+      "Line info",
+      "Line info basic",
+      "Metadata",
+      "Simple",
     ]);
   });
 
@@ -145,27 +145,27 @@ describe("settings chat section", () => {
 
     expect(
       within(screen.getByRole("group", { name: "Diff Style" }))
-        .getByRole("button", { name: "unified" })
+        .getByRole("button", { name: "Unified" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       within(screen.getByRole("group", { name: "Diff Indicators" }))
-        .getByRole("button", { name: "none" })
+        .getByRole("button", { name: "None" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       within(screen.getByRole("group", { name: "Diff Height" }))
-        .getByRole("button", { name: "scroll" })
+        .getByRole("button", { name: "Scroll" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       within(screen.getByRole("group", { name: "Line Overflow" }))
-        .getByRole("button", { name: "scroll" })
+        .getByRole("button", { name: "Scroll" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       within(screen.getByRole("group", { name: "Hunk Separators" }))
-        .getByRole("button", { name: "simple" })
+        .getByRole("button", { name: "Simple" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
@@ -187,11 +187,11 @@ describe("settings chat section", () => {
     });
     const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
 
-    clickSegmentedOption("Diff Style", "unified");
-    clickSegmentedOption("Diff Indicators", "classic");
-    clickSegmentedOption("Diff Height", "scroll");
-    clickSegmentedOption("Line Overflow", "scroll");
-    clickSegmentedOption("Hunk Separators", "metadata");
+    clickSegmentedOption("Diff Style", "Unified");
+    clickSegmentedOption("Diff Indicators", "Classic");
+    clickSegmentedOption("Diff Height", "Scroll");
+    clickSegmentedOption("Line Overflow", "Scroll");
+    clickSegmentedOption("Hunk Separators", "Metadata");
 
     expect(onUpdateChat).toHaveBeenCalledTimes(5);
     expect(getLatestChat()).toEqual({
