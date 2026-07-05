@@ -12,7 +12,7 @@ import {
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
-import { codexWorkspaceWriteSandboxPolicy } from "./codex-session-policy";
+import { codexSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
 
 class NameFailingTransport extends RecordingTransport {
@@ -40,7 +40,7 @@ const expectedThreadPolicy = {
 const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
-  sandboxPolicy: codexWorkspaceWriteSandboxPolicy(workingDirectory, false),
+  sandboxPolicy: codexSandboxPolicy(defaultCodexEffectivePolicy(), workingDirectory),
 });
 const codexPolicy = (
   config: ReturnType<typeof defaultCodexRuntimeConfig>,
@@ -324,7 +324,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
-      sandboxPolicy: codexWorkspaceWriteSandboxPolicy("/repo", true),
+      sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
       threadId: "thread/start-runtime-live",
       input: [{ type: "text", text: "Build it" }],
       model: "gpt-5",
@@ -438,7 +438,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       sandbox: "workspace-write",
     });
     expect(transports.get("runtime-live")?.calls[2]?.params).toMatchObject({
-      sandboxPolicy: codexWorkspaceWriteSandboxPolicy("/repo", false),
+      sandboxPolicy: codexSandboxPolicy(defaultCodexEffectivePolicy(), "/repo"),
     });
   });
 

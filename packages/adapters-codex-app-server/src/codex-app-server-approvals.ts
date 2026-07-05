@@ -8,7 +8,7 @@ export const codexServerRequestIdMetadata = (
   [CODEX_SERVER_REQUEST_ID_METADATA_KEY]: requestId,
 });
 
-export const requireCodexServerRequestId = (
+const requireCodexServerRequestId = (
   requestId: string,
   requestType: string,
 ): CodexAppServerRequestId => {

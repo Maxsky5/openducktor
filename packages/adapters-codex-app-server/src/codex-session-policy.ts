@@ -10,7 +10,7 @@ import { assertAgentRuntimePolicyBinding } from "@openducktor/core";
 
 export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
-export const codexWorkspaceWriteSandboxPolicy = (
+const codexWorkspaceWriteSandboxPolicy = (
   workingDirectory: string,
   networkAccess: boolean,
 ): CodexAppServerSandboxPolicy => ({
@@ -58,9 +58,7 @@ export type CodexPolicyLogEntry = {
   networkAccess: CodexNetworkAccessLogValue;
 };
 
-export const codexNetworkAccessLogValue = (
-  policy: CodexEffectivePolicy,
-): CodexNetworkAccessLogValue =>
+const codexNetworkAccessLogValue = (policy: CodexEffectivePolicy): CodexNetworkAccessLogValue =>
   policy.sandboxMode === "danger-full-access" ? "unrestricted" : policy.commandNetworkAccess;
 
 export const codexPolicyLogEntry = ({
