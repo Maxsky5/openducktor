@@ -2,9 +2,9 @@ import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-ses
 import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
-export type ParentSessionRuntimeIdentity = Pick<
+export type ParentSessionRuntimeContext = Pick<
   AgentSessionTranscriptTarget,
-  "runtimeKind" | "workingDirectory"
+  "runtimeKind" | "workingDirectory" | "sessionScope"
 >;
 
 export const toSubagentSessionIdentity = ({
@@ -12,7 +12,7 @@ export const toSubagentSessionIdentity = ({
   parentSession,
 }: {
   externalSessionId: string | null | undefined;
-  parentSession: ParentSessionRuntimeIdentity | null | undefined;
+  parentSession: ParentSessionRuntimeContext | null | undefined;
 }): AgentSessionIdentity | null => {
   const resolvedExternalSessionId = externalSessionId?.trim();
   const workingDirectory = parentSession?.workingDirectory.trim();
@@ -32,7 +32,7 @@ export const toSubagentTranscriptTarget = ({
   parentSession,
 }: {
   externalSessionId: string | null | undefined;
-  parentSession: ParentSessionRuntimeIdentity | null | undefined;
+  parentSession: ParentSessionRuntimeContext | null | undefined;
 }): AgentSessionTranscriptTarget | null => {
   const identity = toSubagentSessionIdentity({ externalSessionId, parentSession });
   if (!identity || !parentSession) {
@@ -41,6 +41,7 @@ export const toSubagentTranscriptTarget = ({
 
   return {
     ...identity,
+    ...(parentSession.sessionScope ? { sessionScope: parentSession.sessionScope } : {}),
   };
 };
 
@@ -49,7 +50,7 @@ export const getSubagentMessageSessionIdentity = ({
   parentSession,
 }: {
   message: AgentChatMessage;
-  parentSession: ParentSessionRuntimeIdentity | null | undefined;
+  parentSession: ParentSessionRuntimeContext | null | undefined;
 }): AgentSessionIdentity | null => {
   if (message.meta?.kind !== "subagent") {
     return null;
@@ -66,7 +67,7 @@ export const getSubagentMessageSessionKey = ({
   parentSession,
 }: {
   message: AgentChatMessage;
-  parentSession: ParentSessionRuntimeIdentity | null | undefined;
+  parentSession: ParentSessionRuntimeContext | null | undefined;
 }): string | null => {
   const subagentIdentity = getSubagentMessageSessionIdentity({ message, parentSession });
   return subagentIdentity ? agentSessionIdentityKey(subagentIdentity) : null;

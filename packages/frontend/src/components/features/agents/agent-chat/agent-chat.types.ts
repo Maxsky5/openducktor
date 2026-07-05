@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSessionScope,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSkillReference,
@@ -40,6 +41,7 @@ export type AgentChatEmptyStateModel = {
 
 export type AgentChatThreadSession = AgentSessionIdentity & {
   title?: string;
+  sessionScope?: AgentSessionScope | null;
   activityState: AgentSessionActivityState | null;
   messages: SessionMessagesState;
 };

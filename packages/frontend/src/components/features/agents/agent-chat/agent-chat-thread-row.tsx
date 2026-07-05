@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
-import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 type AgentChatTranscriptRowProps = {
   row: AgentChatTranscriptRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: ParentSessionRuntimeIdentity | null;
+  sessionIdentity: ParentSessionRuntimeContext | null;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };

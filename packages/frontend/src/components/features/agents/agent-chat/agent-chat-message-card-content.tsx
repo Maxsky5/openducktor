@@ -34,7 +34,7 @@ import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-ca
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
-import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
@@ -543,7 +543,7 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  parentSession: ParentSessionRuntimeIdentity | null;
+  parentSession: ParentSessionRuntimeContext | null;
   timeLabel: string;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
@@ -645,7 +645,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  parentSession: ParentSessionRuntimeIdentity | null;
+  parentSession: ParentSessionRuntimeContext | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;

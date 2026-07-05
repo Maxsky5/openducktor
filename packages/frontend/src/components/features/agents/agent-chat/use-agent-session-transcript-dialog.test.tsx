@@ -314,6 +314,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           externalSessionId: "session-child-planner-1",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

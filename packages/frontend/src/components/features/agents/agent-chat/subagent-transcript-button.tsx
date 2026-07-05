@@ -9,12 +9,12 @@ import {
 } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import {
-  type ParentSessionRuntimeIdentity,
+  type ParentSessionRuntimeContext,
   toSubagentTranscriptTarget,
 } from "./subagent-session-key";
 
 type SubagentTranscriptButtonProps = {
-  parentSession: ParentSessionRuntimeIdentity | null;
+  parentSession: ParentSessionRuntimeContext | null;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;

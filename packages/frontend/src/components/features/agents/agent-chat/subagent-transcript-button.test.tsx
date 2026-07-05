@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const runtimeKind = "opencode" as const;
-const parentSession: ParentSessionRuntimeIdentity = {
+const parentSession: ParentSessionRuntimeContext = {
   runtimeKind,
   workingDirectory: "/repo-a",
 };

@@ -2,8 +2,10 @@ import { agentRoleValues } from "@openducktor/contracts";
 import type {
   AgentRole,
   AgentSessionHistoryMessage,
+  AgentSessionScope,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -55,6 +57,20 @@ const agentRoleSet = new Set<string>(agentRoleValues);
 const isAgentRole = (value: unknown): value is AgentRole =>
   typeof value === "string" && agentRoleSet.has(value);
 
+const sessionScopeForPolicySession = (
+  policySession: AgentSessionState | AgentSessionTranscriptTarget,
+): AgentSessionScope | null => {
+  if (
+    "taskId" in policySession &&
+    typeof policySession.taskId === "string" &&
+    "role" in policySession &&
+    isAgentRole(policySession.role)
+  ) {
+    return workflowAgentSessionScope(policySession.taskId, policySession.role);
+  }
+  return "sessionScope" in policySession ? (policySession.sessionScope ?? null) : null;
+};
+
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
   repoPath,
@@ -66,6 +82,8 @@ export function useRuntimeTranscriptSessionHistory({
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
   const targetWorkingDirectory = target?.workingDirectory ?? null;
+  const targetSessionScopeTaskId = target?.sessionScope?.taskId ?? null;
+  const targetSessionScopeRole = target?.sessionScope?.role ?? null;
   const stableTarget = useMemo<AgentSessionTranscriptTarget | null>(() => {
     if (
       targetExternalSessionId === null ||
@@ -79,8 +97,22 @@ export function useRuntimeTranscriptSessionHistory({
       externalSessionId: targetExternalSessionId,
       runtimeKind: targetRuntimeKind,
       workingDirectory: targetWorkingDirectory,
+      ...(targetSessionScopeTaskId !== null && targetSessionScopeRole !== null
+        ? {
+            sessionScope: workflowAgentSessionScope(
+              targetSessionScopeTaskId,
+              targetSessionScopeRole,
+            ),
+          }
+        : {}),
     };
-  }, [targetExternalSessionId, targetRuntimeKind, targetWorkingDirectory]);
+  }, [
+    targetExternalSessionId,
+    targetRuntimeKind,
+    targetSessionScopeRole,
+    targetSessionScopeTaskId,
+    targetWorkingDirectory,
+  ]);
 
   const emptyReason: AgentSessionTranscriptEmptyReason | null =
     !isOpen || stableTarget === null ? "inactive" : repoPath ? null : "unavailable";
@@ -97,16 +129,9 @@ export function useRuntimeTranscriptSessionHistory({
     if (policySession === null) {
       return null;
     }
-    const sessionScope =
-      "taskId" in policySession &&
-      typeof policySession.taskId === "string" &&
-      "role" in policySession &&
-      isAgentRole(policySession.role)
-        ? { kind: "workflow" as const, taskId: policySession.taskId, role: policySession.role }
-        : null;
     return {
       runtimeKind: policySession.runtimeKind,
-      sessionScope,
+      sessionScope: sessionScopeForPolicySession(policySession),
     };
   }, [matchingLiveSession, stableTarget]);
   const settingsSnapshotQuery = useQuery({
@@ -144,13 +169,17 @@ export function useRuntimeTranscriptSessionHistory({
     runtimePolicyResult.error ??
     (settingsSnapshotQuery.error instanceof Error ? settingsSnapshotQuery.error.message : null);
   const runtimePolicy = runtimePolicyResult.runtimePolicy;
+  const runtimeSessionScope = runtimePolicyTarget?.sessionScope ?? null;
   const runtimeSessionRef = useMemo<PolicyBoundSessionRef | null>(() => {
     const policySession = matchingLiveSession ?? stableTarget;
     if (repoPath === null || policySession === null || runtimePolicy === null) {
       return null;
     }
-    return toRuntimeSessionRefWithPolicy(repoPath, policySession, runtimePolicy);
-  }, [matchingLiveSession, repoPath, runtimePolicy, stableTarget]);
+    return {
+      ...toRuntimeSessionRefWithPolicy(repoPath, policySession, runtimePolicy),
+      ...(runtimeSessionScope ? { sessionScope: runtimeSessionScope } : {}),
+    };
+  }, [matchingLiveSession, repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
   const shouldLoadHistory =
     emptyReason === null && matchingLiveSession === null && runtimeSessionRef !== null;
   const shouldObserveRuntimeSession =

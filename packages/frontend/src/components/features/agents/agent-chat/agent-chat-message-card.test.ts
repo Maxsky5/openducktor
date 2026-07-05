@@ -7,7 +7,7 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
-import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
   runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -25,7 +25,7 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
-const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeIdentity = {
+const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeContext = {
   runtimeKind: "opencode",
   workingDirectory: "/repo",
 };
@@ -35,7 +35,7 @@ type AgentChatMessageCardTestProps = Omit<
   "sessionIdentity"
 > & {
   chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
-  sessionIdentity?: ParentSessionRuntimeIdentity | null;
+  sessionIdentity?: ParentSessionRuntimeContext | null;
 };
 
 const createElement = (
