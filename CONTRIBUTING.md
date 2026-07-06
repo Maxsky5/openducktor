@@ -80,11 +80,17 @@ The browser command starts the TypeScript host on `127.0.0.1`, serves the shared
 Run the main workspace checks from the repository root:
 
 ```sh
+bun run format:check
 bun run lint
 bun run typecheck
 bun run test
 bun run build
 ```
+
+Use `bun run format` to apply Biome formatting across the repository. The `format:check`
+command is intentionally repo-wide and runs before linting in both CI and the local pre-commit
+hook. Biome is configured to honor Git ignore files, so generated outputs such as `dist`, `build`,
+`coverage`, and `.vite` are excluded from this gate.
 
 Useful focused commands:
 
@@ -101,7 +107,7 @@ bun run --filter @openducktor/host test
 
 Shared local Git hooks run on every commit once you have run `bun install`.
 
-- `pre-commit` runs `bun run lint` and `bun run typecheck` in that order.
+- `pre-commit` runs `bun run format:check`, `bun run lint`, and `bun run typecheck` in that order.
 - `commit-msg` enforces Conventional Commits.
 - `bun run test` does not run during `pre-commit`.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.
