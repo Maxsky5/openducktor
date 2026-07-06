@@ -1304,6 +1304,29 @@ describe("event-stream", () => {
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
+  test("emits session_idle for error-finished assistant turns with visible provider errors", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-provider-error",
+        finish: "error",
+        completedAt: 1,
+        text: "Error from provider (Console Go): Upstream request failed",
+        partId: "text-provider-error-1",
+      }),
+    ]);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0].message).toBe(
+      "Error from provider (Console Go): Upstream request failed",
+    );
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
   test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {
     const emitted = await runEventStream([
       {
