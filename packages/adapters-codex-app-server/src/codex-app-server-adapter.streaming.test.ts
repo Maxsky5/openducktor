@@ -4,10 +4,11 @@ import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexUserMessageInput,
+  createDeferred,
   createHarness,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
-import type { CodexAppServerAdapter } from "./index";
+import type { CodexAppServerAdapter, CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
 const bufferedNotifications = (messages: unknown[]) =>
   messages.map((message) => bufferedNotificationEvent(message));
@@ -949,6 +950,249 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
+  test("flushes the buffered final assistant message before settling from idle status", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    const events: Array<{ type?: string; message?: string; totalTokens?: number }> = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    await flushCodexAdapterWork();
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-live", status: "running" },
+    });
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "item/completed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-live",
+        completedAtMs: 1_777_766_420_000,
+        item: {
+          type: "agentMessage",
+          id: "agent-idle-final",
+          phase: "final_answer",
+          text: "Done before idle.",
+        },
+      },
+    });
+    emitNotification({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-live",
+        tokenUsage: {
+          total: { totalTokens: 12_345 },
+          last: { totalTokens: 321 },
+          modelContextWindow: 200_000,
+        },
+      },
+    });
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "Done before idle.",
+        totalTokens: 321,
+      }),
+    );
+    const assistantMessageIndex = events.findIndex((event) => event.type === "assistant_message");
+    const sessionIdleIndex = events.findIndex((event) => event.type === "session_idle");
+    expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
+    expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
+    unsubscribe();
+  });
+
+  test("late old turn completion does not clear a newer active turn", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const firstTurnStart = createDeferred<unknown>();
+    const secondTurnStart = createDeferred<unknown>();
+    const pendingTurnStarts = [firstTurnStart, secondTurnStart];
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      request: mock(async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+        calls.push(request);
+        if (request.method === "initialize") {
+          return {} as Response;
+        }
+        if (request.method === "model/list") {
+          return {
+            data: [
+              {
+                id: "gpt-5",
+                model: "gpt-5",
+                displayName: "GPT-5",
+                hidden: false,
+                supportedReasoningEfforts: [
+                  { reasoningEffort: "medium", description: "Balanced reasoning" },
+                ],
+                defaultReasoningEffort: {
+                  reasoningEffort: "medium",
+                  description: "Balanced reasoning",
+                },
+                inputModalities: ["text"],
+                supportsPersonality: true,
+                isDefault: true,
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/start") {
+          return {
+            thread: {
+              id: "thread/start-runtime-live",
+              cwd: "/repo",
+              createdAt: 1_778_112_000,
+              status: { type: "active", activeFlags: [] },
+              turns: [],
+            },
+            startedAt: "2026-05-07T00:00:00.000Z",
+          } as Response;
+        }
+        if (request.method === "thread/name/set") {
+          return {} as Response;
+        }
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread/start-runtime-live"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread/start-runtime-live",
+                cwd: "/repo",
+                createdAt: 1_778_112_000,
+                status: { type: "active", activeFlags: [] },
+              },
+            ],
+            nextCursor: null,
+            backwardsCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "thread/start-runtime-live",
+              cwd: "/repo",
+              createdAt: 1_778_112_000,
+              status: { type: "active", activeFlags: [] },
+              turns: [],
+            },
+          } as Response;
+        }
+        if (request.method === "turn/start") {
+          const deferred = pendingTurnStarts.shift();
+          if (!deferred) {
+            throw new Error("Unexpected extra turn/start request.");
+          }
+          return (await deferred.promise) as Response;
+        }
+        if (request.method === "turn/steer") {
+          return { turnId: "turn-steered" } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      }),
+    };
+    const { adapter } = createHarness({
+      subscribeEvents,
+      transportFactory: () => transport,
+    });
+
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start first turn" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turn: { id: "turn-old" },
+      },
+    });
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start replacement turn" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turn: { id: "turn-new" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    firstTurnStart.resolve({ turn: { id: "turn-old", status: "completed" } });
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+      }),
+    ).resolves.toMatchObject({ classification: "running" });
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Steer replacement turn" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    expect(calls.filter((call) => call.method === "turn/start")).toHaveLength(2);
+    expect(calls).toContainEqual({
+      method: "turn/steer",
+      params: {
+        threadId: "thread/start-runtime-live",
+        input: [{ type: "text", text: "Steer replacement turn" }],
+        expectedTurnId: "turn-new",
+      },
+    });
+    unsubscribe();
+  });
+
   test("does not settle the active turn from a stale buffered idle status", async () => {
     const staleReceivedAt = new Date(Date.now() - 60_000).toISOString();
     const takeBufferedEvents = mock(async (_runtimeId: string) => []);
@@ -1165,6 +1409,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1219,6 +1464,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1280,6 +1526,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1357,6 +1604,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1467,6 +1715,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/agentMessage/delta",
         params: {
@@ -1480,6 +1729,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/started",
         params: {
@@ -1496,6 +1746,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1565,6 +1816,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/started",
         params: {
@@ -1581,6 +1833,7 @@ describe("CodexAppServerAdapter streaming", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
+      receivedAt: new Date().toISOString(),
       message: {
         method: "item/completed",
         params: {
@@ -1638,6 +1891,7 @@ describe("CodexAppServerAdapter streaming", () => {
       streamListeners[0]?.({
         runtimeId: "runtime-live",
         kind: "notification",
+        receivedAt: new Date().toISOString(),
         message: {
           method: "item/started",
           params: {

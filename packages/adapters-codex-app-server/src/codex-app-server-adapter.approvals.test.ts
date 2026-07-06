@@ -15,19 +15,33 @@ import { codexServerRequestKey } from "./codex-app-server-approvals";
 const CURL_NETWORK_COMMAND =
   "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
 
+const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
+
+type RuntimeEventInput = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: unknown;
+};
+
+type RuntimeListener = (event: RuntimeEventInput) => void;
+
+const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
+  ...event,
+  receivedAt: runtimeEventReceivedAt,
+});
+
 const bufferedServerRequest = (message: unknown) => ({
   runtimeId: "runtime-live",
   kind: "server_request" as const,
+  receivedAt: runtimeEventReceivedAt,
   message,
 });
 
 describe("CodexAppServerAdapter approvals", () => {
   test("emits a session error for streamed server requests missing a thread identifier", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const { adapter } = createHarness({ subscribeEvents });
@@ -59,11 +73,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces legacy exec command approvals routed by conversationId", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const { adapter, respondServerRequest } = createHarness({ subscribeEvents });
@@ -117,11 +129,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces streamed network command approvals from structured command actions", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -195,15 +205,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("requires a server request to create command approvals", async () => {
-    const streamListeners: Array<
-      (event: {
-        runtimeId: string;
-        kind: "notification" | "server_request";
-        message: unknown;
-      }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -256,11 +260,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces live command approvals before turn start settles", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -328,11 +330,9 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("rejects Codex dynamic tool calls because workflow tools use MCP", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -470,11 +470,9 @@ describe("CodexAppServerAdapter approvals", () => {
         requestResolved.resolve();
       }
     });
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
@@ -1027,11 +1025,9 @@ describe("CodexAppServerAdapter approvals", () => {
         dynamicToolRejected.resolve();
       }
     });
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -1131,11 +1127,9 @@ describe("CodexAppServerAdapter approvals", () => {
         dynamicToolRejected.resolve();
       }
     });
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "server_request"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);

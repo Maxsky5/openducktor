@@ -178,7 +178,9 @@ export const startCodexTurnForSession = async (
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {
       turnSettled = true;
-      context.activeTurnsBySessionId.delete(session.threadId);
+      if (context.activeTurnsBySessionId.get(session.threadId) === activeTurnState) {
+        context.activeTurnsBySessionId.delete(session.threadId);
+      }
     },
     handledRequestKeys,
     queuedUserMessages: [],
@@ -235,7 +237,10 @@ export const startCodexTurnForSession = async (
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
       if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
-        context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+        const currentActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
+        if (!currentActiveTurn || currentActiveTurn === activeTurnState) {
+          context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+        }
         activeTurnState.markTurnSettled();
       }
       return result;

@@ -507,9 +507,10 @@ export const parseNotificationRecord = (
   if (typeof method !== "string" || method.trim().length === 0) {
     throw new Error("Codex app-server notification is missing method.");
   }
-  const parsedReceivedAt =
-    receivedAt ??
-    (typeof value.receivedAt === "string" ? value.receivedAt : new Date().toISOString());
+  const parsedReceivedAt = receivedAt ?? value.receivedAt;
+  if (typeof parsedReceivedAt !== "string" || parsedReceivedAt.trim().length === 0) {
+    throw new Error("Codex app-server notification is missing receivedAt.");
+  }
   return {
     method: method.trim(),
     ...(params !== undefined ? { params } : {}),

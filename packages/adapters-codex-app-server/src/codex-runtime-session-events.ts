@@ -365,6 +365,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {
+    this.assertRuntimeStreamEventReceivedAt(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
       if (event.kind === "server_request") {
@@ -674,6 +675,7 @@ export class CodexRuntimeSessionEvents {
     preferredHandledRequestKeys: Set<string>,
     event: CodexRuntimeStreamEvent,
   ): Promise<void> {
+    this.assertRuntimeStreamEventReceivedAt(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (event.kind === "notification") {
       await this.processBufferedNotification(preferredSession, threadId, event);
@@ -1081,6 +1083,15 @@ export class CodexRuntimeSessionEvents {
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private assertRuntimeStreamEventReceivedAt(
+    event: Pick<CodexRuntimeStreamEvent, "receivedAt">,
+  ): void {
+    const receivedAt = (event as { receivedAt?: unknown }).receivedAt;
+    if (typeof receivedAt !== "string" || receivedAt.trim().length === 0) {
+      throw new Error("Codex app-server stream event is missing receivedAt.");
+    }
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {

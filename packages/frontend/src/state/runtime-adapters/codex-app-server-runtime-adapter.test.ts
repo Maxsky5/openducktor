@@ -83,6 +83,19 @@ const waitForSessionIdleEvent = async (
   await waitForSessionIdleEvent(events, deadline);
 };
 
+const waitForSessionEvent = async (
+  events: Array<{ type?: string }>,
+  type: string,
+  deadline = Date.now() + 1_000,
+): Promise<void> => {
+  if (events.some((event) => event.type === type) || Date.now() >= deadline) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForSessionEvent(events, type, deadline);
+};
+
 const waitForCodexEventListener = async (
   bridge: { listener?: (payload: unknown) => void },
   deadline = Date.now() + 1_000,
@@ -276,14 +289,9 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       },
     });
 
-    const originalConsoleError = console.error;
     try {
       const adapter = createCodexAppServerRuntimeAdapter();
       const events: Array<{ type?: string }> = [];
-      const consoleErrors: unknown[][] = [];
-      console.error = mock((...args: unknown[]) => {
-        consoleErrors.push(args);
-      }) as typeof console.error;
       const unsubscribe = await adapter.subscribeEvents(
         {
           repoPath: "/repo",
@@ -318,11 +326,13 @@ describe("createCodexAppServerRuntimeAdapter", () => {
         kind: "server_request",
         message: { method: "item/tool/requestUserInput" },
       });
-      expect(events).toEqual([]);
-      expect(consoleErrors).toContainEqual([
-        "Dropping Codex app-server event with invalid receivedAt",
-        "server_request",
-      ]);
+      await waitForSessionEvent(events, "session_error");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_error",
+          message: "Codex app-server stream event is missing receivedAt.",
+        }),
+      );
 
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
@@ -353,7 +363,6 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       expect(appQueryClient.getQueryState(runtimeSkillKey)?.isInvalidated).toBe(true);
       unsubscribe();
     } finally {
-      console.error = originalConsoleError;
       host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
       host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;

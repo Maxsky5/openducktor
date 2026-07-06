@@ -69,10 +69,6 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
         if (event.kind !== "notification" && event.kind !== "server_request") {
           return;
         }
-        if (typeof event.receivedAt !== "string" || event.receivedAt.trim().length === 0) {
-          console.error("Dropping Codex app-server event with invalid receivedAt", event.kind);
-          return;
-        }
         if (event.kind === "notification" && isSkillsChangedNotification(event.message)) {
           invalidateSkillCatalogQueries();
         }
@@ -80,7 +76,7 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
           runtimeId,
           kind: event.kind,
           message: event.message,
-          receivedAt: event.receivedAt,
+          receivedAt: event.receivedAt as string,
         });
       });
     },

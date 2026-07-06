@@ -17,11 +17,34 @@ const flushRuntimeEvents = async (): Promise<void> => {
   await waitForRuntimeEvent();
 };
 
-type RuntimeListener = (event: {
+const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
+
+type RuntimeEventInput = {
   runtimeId: string;
   kind: "notification" | "server_request";
   message: unknown;
-}) => void;
+};
+
+type RuntimeListener = (event: RuntimeEventInput) => void;
+
+const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
+  ...event,
+  receivedAt: runtimeEventReceivedAt,
+});
+
+const bufferedServerRequestEvent = (message: unknown, runtimeId = "runtime-1") => ({
+  runtimeId,
+  kind: "server_request" as const,
+  receivedAt: runtimeEventReceivedAt,
+  message,
+});
+
+const bufferedNotificationEvent = (message: unknown, runtimeId = "runtime-1") => ({
+  runtimeId,
+  kind: "notification" as const,
+  receivedAt: runtimeEventReceivedAt,
+  message,
+});
 
 const createRuntimeEvents = (
   overrides: Partial<ConstructorParameters<typeof CodexRuntimeSessionEvents>[0]> = {},
@@ -129,7 +152,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -179,7 +202,7 @@ describe("CodexRuntimeSessionEvents", () => {
     sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -234,31 +257,23 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       takeBufferedEvents: async () => [
-        {
-          runtimeId: "runtime-1",
-          kind: "server_request",
-          message: {
-            id: "buffered-approval-1",
-            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-            params: {
-              threadId: "thread-buffered-order",
-              turnId: "turn-buffered-order",
-              itemId: "call-buffered-order",
-              command: "curl -I https://example.com",
-            },
+        bufferedServerRequestEvent({
+          id: "buffered-approval-1",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {
+            threadId: "thread-buffered-order",
+            turnId: "turn-buffered-order",
+            itemId: "call-buffered-order",
+            command: "curl -I https://example.com",
           },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "serverRequest/resolved",
-            params: {
-              threadId: "thread-buffered-order",
-              requestId: "buffered-approval-1",
-            },
+        }),
+        bufferedNotificationEvent({
+          method: "serverRequest/resolved",
+          params: {
+            threadId: "thread-buffered-order",
+            requestId: "buffered-approval-1",
           },
-        },
+        }),
       ],
       sessions,
       pendingInput,
@@ -277,47 +292,35 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       takeBufferedEvents: async () => [
-        {
-          runtimeId: "runtime-1",
-          kind: "server_request",
-          message: {
-            id: "drained-approval-1",
-            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-            params: {
-              threadId: "thread-drained-resolution",
-              turnId: "turn-drained-resolution",
-              itemId: "call-drained-resolution",
-              command: "curl -I https://example.com",
+        bufferedServerRequestEvent({
+          id: "drained-approval-1",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {
+            threadId: "thread-drained-resolution",
+            turnId: "turn-drained-resolution",
+            itemId: "call-drained-resolution",
+            command: "curl -I https://example.com",
+          },
+        }),
+        bufferedNotificationEvent({
+          method: "serverRequest/resolved",
+          params: {
+            threadId: "thread-drained-resolution",
+            requestId: "drained-approval-1",
+          },
+        }),
+        bufferedNotificationEvent({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "thread-drained-resolution",
+            turnId: "turn-drained-resolution",
+            tokenUsage: {
+              total: { totalTokens: 1_000 },
+              last: { totalTokens: 100 },
+              modelContextWindow: 200_000,
             },
           },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "serverRequest/resolved",
-            params: {
-              threadId: "thread-drained-resolution",
-              requestId: "drained-approval-1",
-            },
-          },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "thread/tokenUsage/updated",
-            params: {
-              threadId: "thread-drained-resolution",
-              turnId: "turn-drained-resolution",
-              tokenUsage: {
-                total: { totalTokens: 1_000 },
-                last: { totalTokens: 100 },
-                modelContextWindow: 200_000,
-              },
-            },
-          },
-        },
+        }),
       ],
       sessions,
       pendingInput,
@@ -349,7 +352,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -432,7 +435,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -498,7 +501,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -564,7 +567,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -620,7 +623,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -669,7 +672,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (runtimeId, next) => {
-        listeners.set(runtimeId, next);
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
         return () => undefined;
       },
       sessions,
@@ -745,7 +748,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,

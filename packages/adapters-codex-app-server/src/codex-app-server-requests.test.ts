@@ -346,4 +346,25 @@ describe("Codex App Server notification parsing", () => {
       ).receivedAt,
     ).toBe("2026-06-23T10:00:01.000Z");
   });
+
+  test("rejects notifications without a receivedAt timestamp", () => {
+    expect(() =>
+      parseNotificationRecord({
+        method: "thread/tokenUsage/updated",
+        params: { threadId: "thread-1" },
+      }),
+    ).toThrow("Codex app-server notification is missing receivedAt.");
+  });
+
+  test("rejects empty explicit receivedAt arguments", () => {
+    expect(() =>
+      parseNotificationRecord(
+        {
+          method: "thread/tokenUsage/updated",
+          receivedAt: "2026-06-23T10:00:00.000Z",
+        },
+        "",
+      ),
+    ).toThrow("Codex app-server notification is missing receivedAt.");
+  });
 });
