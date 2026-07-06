@@ -80,6 +80,26 @@ describe("AgentChatComposerReferenceMenu", () => {
     expect(screen.getByText("Searching files")).toBeDefined();
   });
 
+  test("does not render delayed file search loading when results are already visible", () => {
+    render(
+      <AgentChatComposerReferenceMenu
+        items={fileItems(RESULTS)}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={true}
+        isFileSearchLoading={true}
+        supportsSubagentReferences={false}
+        subagentsError={null}
+        isSubagentsLoading={false}
+        onSelectFile={() => {}}
+        onSelectSubagent={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("Searching files")).toBeNull();
+    expect(screen.getByRole("button", { name: /agent-chat-composer\.tsx/i })).toBeDefined();
+  });
+
   test("uses the selected surface token for the active file row", () => {
     render(
       <AgentChatComposerReferenceMenu

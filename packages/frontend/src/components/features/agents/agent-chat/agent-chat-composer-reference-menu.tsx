@@ -31,6 +31,7 @@ export function AgentChatComposerReferenceMenu({
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
   const hasResults = items.length > 0;
+  const showFileSearchLoading = isFileSearchLoading && !hasResults;
   const showEmptyState =
     !hasResults &&
     !isFileSearchPending &&
@@ -39,7 +40,7 @@ export function AgentChatComposerReferenceMenu({
     !subagentsError;
   const shouldRenderMenu =
     hasResults ||
-    isFileSearchLoading ||
+    showFileSearchLoading ||
     isSubagentsLoading ||
     Boolean(fileSearchError) ||
     Boolean(subagentsError) ||
@@ -62,7 +63,7 @@ export function AgentChatComposerReferenceMenu({
           {subagentsError}
         </div>
       ) : null}
-      {isFileSearchLoading ? (
+      {showFileSearchLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           <span>Searching files</span>
