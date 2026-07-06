@@ -10,7 +10,10 @@ type FakeFile = {
   bytes: Uint8Array;
   modifiedTimeMs: number;
 };
-const createFakeLocalAttachmentPort = () => {
+type FakeLocalAttachmentPortOptions = {
+  readDirectoryDelay?: () => Promise<void>;
+};
+const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions = {}) => {
   const files = new Map<string, FakeFile>();
   const directories = new Set<string>(["/tmp/openducktor-local-attachments"]);
   const calls = {
@@ -92,7 +95,7 @@ const createFakeLocalAttachmentPort = () => {
             error.code = "ENOENT";
             throw error;
           }
-          return [...files.keys()]
+          const entries = [...files.keys()]
             .filter((filePath) => filePath.startsWith(`${path}/`))
             .map(
               (filePath): LocalAttachmentEntry => ({
@@ -100,6 +103,8 @@ const createFakeLocalAttachmentPort = () => {
                 fileName: filePath.slice(path.length + 1),
               }),
             );
+          await options.readDirectoryDelay?.();
+          return entries;
         },
         catch: (cause) =>
           new HostOperationError({
@@ -167,6 +172,63 @@ describe("createLocalAttachmentService", () => {
     expect(older.path).not.toBe(newer.path);
     expect(calls.readDirectory).toBe(1);
     expect(calls.modifiedTimeMs).toBe(2);
+  });
+  test("shares one cold index load across concurrent relative resolves", async () => {
+    let markReadDirectoryStarted: () => void = () => {};
+    let releaseReadDirectory: () => void = () => {};
+    const readDirectoryStarted = new Promise<void>((resolve) => {
+      markReadDirectoryStarted = resolve;
+    });
+    const readDirectoryReleased = new Promise<void>((resolve) => {
+      releaseReadDirectory = resolve;
+    });
+    const { calls, port } = createFakeLocalAttachmentPort({
+      readDirectoryDelay: async () => {
+        markReadDirectoryStarted();
+        await readDirectoryReleased;
+      },
+    });
+    const service = createLocalAttachmentService(port);
+    const staged = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
+    );
+    const resolving = Effect.runPromise(
+      Effect.all([service.resolve({ path: "brief.pdf" }), service.resolve({ path: "brief.pdf" })], {
+        concurrency: "unbounded",
+      }),
+    );
+    await readDirectoryStarted;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls.readDirectory).toBe(1);
+    releaseReadDirectory();
+    await expect(resolving).resolves.toEqual([{ path: staged.path }, { path: staged.path }]);
+    expect(calls.readDirectory).toBe(1);
+  });
+  test("merges attachments staged while a cold index load is in flight", async () => {
+    let markReadDirectoryStarted: () => void = () => {};
+    let releaseReadDirectory: () => void = () => {};
+    const readDirectoryStarted = new Promise<void>((resolve) => {
+      markReadDirectoryStarted = resolve;
+    });
+    const readDirectoryReleased = new Promise<void>((resolve) => {
+      releaseReadDirectory = resolve;
+    });
+    const { calls, port } = createFakeLocalAttachmentPort({
+      readDirectoryDelay: async () => {
+        markReadDirectoryStarted();
+        await readDirectoryReleased;
+      },
+    });
+    const service = createLocalAttachmentService(port);
+    const resolving = Effect.runPromise(service.resolve({ path: "brief.pdf" }));
+    await readDirectoryStarted;
+    const staged = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
+    );
+    releaseReadDirectory();
+    await expect(resolving).resolves.toEqual({ path: staged.path });
+    expect(calls.readDirectory).toBe(1);
   });
   test("updates the loaded attachment index after staging a newer duplicate", async () => {
     const { calls, port } = createFakeLocalAttachmentPort();
