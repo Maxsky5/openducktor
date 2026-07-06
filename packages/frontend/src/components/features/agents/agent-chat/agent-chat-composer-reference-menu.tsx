@@ -9,6 +9,7 @@ type AgentChatComposerReferenceMenuProps = {
   items: ReferenceMenuItem[];
   activeIndex: number;
   fileSearchError: string | null;
+  isFileSearchPending: boolean;
   isFileSearchLoading: boolean;
   supportsSubagentReferences: boolean;
   subagentsError: string | null;
@@ -21,20 +22,32 @@ export function AgentChatComposerReferenceMenu({
   items,
   activeIndex,
   fileSearchError,
+  isFileSearchPending,
   isFileSearchLoading,
   supportsSubagentReferences,
   subagentsError,
   isSubagentsLoading,
   onSelectFile,
   onSelectSubagent,
-}: AgentChatComposerReferenceMenuProps): ReactElement {
+}: AgentChatComposerReferenceMenuProps): ReactElement | null {
   const hasResults = items.length > 0;
   const showEmptyState =
     !hasResults &&
-    !isFileSearchLoading &&
+    !isFileSearchPending &&
     !isSubagentsLoading &&
     !fileSearchError &&
     !subagentsError;
+  const shouldRenderMenu =
+    hasResults ||
+    isFileSearchLoading ||
+    isSubagentsLoading ||
+    Boolean(fileSearchError) ||
+    Boolean(subagentsError) ||
+    showEmptyState;
+
+  if (!shouldRenderMenu) {
+    return null;
+  }
 
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">

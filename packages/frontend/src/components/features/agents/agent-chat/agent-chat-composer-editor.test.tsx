@@ -8,6 +8,8 @@ import {
   createComposerAttachment,
   createFileReferenceSegment,
   createSkillReferenceSegment,
+  createSlashCommandSegment,
+  createSubagentReferenceSegment,
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
@@ -1200,6 +1202,103 @@ describe("AgentChatComposerEditor", () => {
     expect(searchFiles).not.toHaveBeenCalled();
   });
 
+  test("keeps leading text editable before reference chips", async () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const scenarios = [
+      {
+        name: "file",
+        segment: createFileReferenceSegment(file, "file-chip"),
+        visibleText: "main.ts",
+      },
+      {
+        name: "skill",
+        segment: createSkillReferenceSegment(SKILL_REVIEW, "skill-chip"),
+        visibleText: "review",
+      },
+      {
+        name: "subagent",
+        segment: createSubagentReferenceSegment(SUBAGENT_REVIEWER, "subagent-chip"),
+        visibleText: "reviewer",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const leadingSegmentId = `${scenario.name}-leading-text`;
+      const rendered = render(
+        <EditorHarness
+          slashCommands={COMMANDS}
+          slashCommandsError={null}
+          initialDraft={{
+            segments: [
+              createTextSegment("", leadingSegmentId),
+              scenario.segment,
+              createTextSegment("", `${scenario.name}-trailing-text`),
+            ],
+            attachments: [],
+          }}
+        />,
+      );
+
+      const leadingEditable = rendered.container.querySelector(
+        `[data-text-segment-id="${leadingSegmentId}"]`,
+      );
+      if (!(leadingEditable instanceof HTMLElement)) {
+        throw new Error("Expected leading editable text segment before chip");
+      }
+      expect(leadingEditable.textContent).toBe("\u200B");
+
+      leadingEditable.textContent = `before ${scenario.name} `;
+      const textNode = leadingEditable.firstChild;
+      if (textNode) {
+        const range = document.createRange();
+        range.setStart(textNode, leadingEditable.textContent.length);
+        range.collapse(true);
+        const selection = globalThis.getSelection?.();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      fireEvent.input(leadingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+      await waitFor(
+        () => {
+          const composerRoot = rendered.container.querySelector("[data-composer-content-root]");
+          expect(composerRoot?.textContent).toContain(`before ${scenario.name} `);
+          expect(composerRoot?.textContent).toContain(scenario.visibleText);
+        },
+        { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+      );
+
+      rendered.unmount();
+    }
+  });
+
+  test("keeps text before a leading slash command blocked", () => {
+    const compactCommand = COMMANDS[0];
+    if (!compactCommand) {
+      throw new Error("Expected compact slash command fixture");
+    }
+
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("", "leading-text"),
+            createSlashCommandSegment(compactCommand, "slash-chip"),
+            createTextSegment("", "trailing-text"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const leadingEditable = rendered.container.querySelector(
+      '[data-text-segment-id="leading-text"]',
+    );
+    expect(leadingEditable?.textContent).toBe("");
+  });
+
   test("shows the full file path in a hover tooltip for composer file chips", async () => {
     const rendered = render(
       <EditorHarness
@@ -1736,7 +1835,7 @@ describe("AgentChatComposerEditor", () => {
       throw new Error("Expected leading text segment");
     }
 
-    expect(firstTextSegment.textContent).toBe("");
+    expect(firstTextSegment.textContent).toBe("\u200B");
 
     firstTextSegment.textContent = "before ";
     fireEvent.input(firstTextSegment);

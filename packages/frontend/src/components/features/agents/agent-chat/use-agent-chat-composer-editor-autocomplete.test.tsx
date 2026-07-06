@@ -115,6 +115,12 @@ const createDeferred = <Value,>() => {
   };
 };
 
+const wait = (ms: number): Promise<void> => {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+};
+
 describe("useAgentChatComposerEditorAutocomplete", () => {
   test("filters slash commands from the current selection target", async () => {
     const searchFiles = mock(async () => []);
@@ -215,7 +221,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     await harness.unmount();
   });
 
-  test("keeps previous file results while a newer search is loading", async () => {
+  test("keeps previous file results while a newer search is pending", async () => {
     const firstSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
     const secondSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
     const searchFiles = mock((query: string) => {
@@ -246,7 +252,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     const loadingState = harness.getLatest();
     expect(loadingState.showReferenceMenu).toBe(true);
-    expect(loadingState.isFileSearchLoading).toBe(true);
+    expect(loadingState.isFileSearchLoading).toBe(false);
     expect(loadingState.fileSearchResults.map((result) => result.path)).toEqual(["src/alpha.ts"]);
 
     secondSearch.resolve([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
@@ -256,6 +262,38 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     expect(harness.getLatest().fileSearchResults.map((result) => result.path)).toEqual([
       "src/ab.ts",
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("shows file search loading only after the pending search exceeds the delay", async () => {
+    const slowSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
+    const searchFiles = mock(() => slowSearch.promise);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@slow"), {
+        segmentId: "segment-1",
+        offset: 5,
+      });
+    });
+
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
+
+    await harness.run(async () => {
+      await wait(550);
+    });
+
+    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+
+    slowSearch.resolve([buildFileSearchResult({ path: "src/slow.ts", name: "slow.ts" })]);
+    await harness.waitFor((state) => state.isFileSearchLoading === false);
+
+    expect(harness.getLatest().fileSearchResults.map((result) => result.path)).toEqual([
+      "src/slow.ts",
     ]);
 
     await harness.unmount();
@@ -370,7 +408,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     });
 
     expect(harness.getLatest().showReferenceMenu).toBe(true);
-    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.update(
       createAutocompleteProps(searchFiles, {
@@ -410,7 +448,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     });
 
     expect(searchFiles).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run((state) => {
       state.syncMenusForSelectionTarget(buildDraft("@ab"), {

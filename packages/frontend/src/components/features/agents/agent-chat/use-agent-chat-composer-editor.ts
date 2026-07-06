@@ -61,6 +61,7 @@ type UseAgentChatComposerEditorResult = {
   activeReferenceIndex: number;
   showReferenceMenu: boolean;
   fileSearchError: string | null;
+  isFileSearchPending: boolean;
   isFileSearchLoading: boolean;
   focusLastTextSegment: () => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
@@ -131,6 +132,7 @@ export const useAgentChatComposerEditor = ({
     showSkillMenu,
     showReferenceMenu,
     fileSearchError,
+    isFileSearchPending,
     isFileSearchLoading,
     closeSlashMenu,
     closeReferenceMenu,
@@ -386,6 +388,7 @@ export const useAgentChatComposerEditor = ({
     activeReferenceIndex,
     showReferenceMenu,
     fileSearchError,
+    isFileSearchPending,
     isFileSearchLoading,
     focusLastTextSegment,
     selectSlashCommand,

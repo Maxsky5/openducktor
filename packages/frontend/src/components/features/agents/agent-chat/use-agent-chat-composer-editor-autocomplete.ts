@@ -5,7 +5,7 @@ import type {
   AgentSubagentReference,
 } from "@openducktor/core";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentChatComposerDraft,
   AgentChatFileTriggerMatch,
@@ -73,6 +73,7 @@ type InternalSlashMenuState = SlashMenuState & {
 type InternalReferenceMenuState = ReferenceMenuState & {
   availabilityContext: AutocompleteAvailabilityContext;
   requestId: number;
+  showLoadingIndicator: boolean;
 };
 
 type InternalSkillMenuState = SkillMenuState & {
@@ -88,6 +89,7 @@ export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
 ]);
 
 const FILE_SEARCH_FAILED_MESSAGE = "Failed to search files.";
+const FILE_SEARCH_LOADING_INDICATOR_DELAY_MS = 500;
 
 const isSameTextMenuRequest = (
   menuState: { textSegmentId: string; query: string; rangeStart: number; rangeEnd: number } | null,
@@ -219,6 +221,7 @@ export type UseAgentChatComposerEditorAutocompleteResult = {
   activeReferenceIndex: number;
   showReferenceMenu: boolean;
   fileSearchError: string | null;
+  isFileSearchPending: boolean;
   isFileSearchLoading: boolean;
   closeSlashMenu: () => void;
   closeReferenceMenu: () => void;
@@ -252,6 +255,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
   );
   const [activeReferenceIndex, setActiveReferenceIndex] = useState(0);
   const fileSearchRequestIdRef = useRef(0);
+  const fileSearchLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const availabilityContext = useMemo<AutocompleteAvailabilityContext>(
     () => ({
       disabled,
@@ -318,11 +322,28 @@ export const useAgentChatComposerEditorAutocomplete = ({
     setSlashMenuState(null);
   }, []);
 
+  const clearFileSearchLoadingTimer = useCallback(() => {
+    const timer = fileSearchLoadingTimerRef.current;
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    fileSearchLoadingTimerRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearFileSearchLoadingTimer();
+    };
+  }, [clearFileSearchLoadingTimer]);
+
   const closeReferenceMenu = useCallback(() => {
+    clearFileSearchLoadingTimer();
     fileSearchRequestIdRef.current += 1;
     setActiveReferenceIndex(0);
     setReferenceMenuState(null);
-  }, []);
+  }, [clearFileSearchLoadingTimer]);
 
   const closeSkillMenu = useCallback(() => {
     setActiveSkillIndex(0);
@@ -389,6 +410,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
 
       const requestId = fileSearchRequestIdRef.current + 1;
       const requestAvailabilityContext = availabilityContext;
+      clearFileSearchLoadingTimer();
       fileSearchRequestIdRef.current = requestId;
       setActiveReferenceIndex(0);
       setReferenceMenuState((previousState) => ({
@@ -399,6 +421,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         results:
           previousState && previousState.textSegmentId === segmentId ? previousState.results : [],
         isLoading: true,
+        showLoadingIndicator: false,
         error: null,
         availabilityContext: requestAvailabilityContext,
         requestId,
@@ -412,6 +435,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
           rangeEnd: match.rangeEnd,
           results: [],
           isLoading: false,
+          showLoadingIndicator: false,
           error: null,
           availabilityContext: requestAvailabilityContext,
           requestId,
@@ -419,11 +443,29 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
+      fileSearchLoadingTimerRef.current = setTimeout(() => {
+        if (fileSearchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setReferenceMenuState((previousState) => {
+          if (!previousState || previousState.requestId !== requestId || !previousState.isLoading) {
+            return previousState;
+          }
+
+          return {
+            ...previousState,
+            showLoadingIndicator: true,
+          };
+        });
+      }, FILE_SEARCH_LOADING_INDICATOR_DELAY_MS);
+
       void searchFiles(match.query)
         .then((results) => {
           if (fileSearchRequestIdRef.current !== requestId) {
             return;
           }
+          clearFileSearchLoadingTimer();
           setReferenceMenuState({
             textSegmentId: segmentId,
             query: match.query,
@@ -431,6 +473,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
             rangeEnd: match.rangeEnd,
             results,
             isLoading: false,
+            showLoadingIndicator: false,
             error: null,
             availabilityContext: requestAvailabilityContext,
             requestId,
@@ -440,6 +483,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
           if (fileSearchRequestIdRef.current !== requestId) {
             return;
           }
+          clearFileSearchLoadingTimer();
           setReferenceMenuState((previousState) => ({
             textSegmentId: segmentId,
             query: match.query,
@@ -447,6 +491,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
             rangeEnd: match.rangeEnd,
             results: previousState?.results ?? [],
             isLoading: false,
+            showLoadingIndicator: false,
             error: error instanceof Error ? error.message : FILE_SEARCH_FAILED_MESSAGE,
             availabilityContext: requestAvailabilityContext,
             requestId,
@@ -455,6 +500,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
     },
     [
       availabilityContext,
+      clearFileSearchLoadingTimer,
       closeReferenceMenu,
       disabled,
       effectiveReferenceMenuState,
@@ -578,7 +624,8 @@ export const useAgentChatComposerEditorAutocomplete = ({
     activeReferenceIndex: effectiveReferenceMenuState ? activeReferenceIndex : 0,
     showReferenceMenu: effectiveReferenceMenuState !== null,
     fileSearchError: effectiveReferenceMenuState?.error ?? null,
-    isFileSearchLoading: effectiveReferenceMenuState?.isLoading ?? false,
+    isFileSearchPending: effectiveReferenceMenuState?.isLoading ?? false,
+    isFileSearchLoading: effectiveReferenceMenuState?.showLoadingIndicator ?? false,
     closeSlashMenu,
     closeReferenceMenu,
     closeSkillMenu,

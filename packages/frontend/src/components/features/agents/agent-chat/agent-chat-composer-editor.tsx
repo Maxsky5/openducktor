@@ -120,12 +120,31 @@ const isEmptyTextSegmentAdjacentToChip = (
   );
 };
 
+const isReferenceChipSegment = (segment: AgentChatComposerSegment | undefined): boolean => {
+  return (
+    segment?.kind === "file_reference" ||
+    segment?.kind === "skill_mention" ||
+    segment?.kind === "subagent_reference"
+  );
+};
+
+const shouldSuppressEmptyTextSegmentContent = (
+  segment: AgentChatComposerTextSegment,
+  segments: AgentChatComposerSegments,
+  index: number,
+): boolean => {
+  return (
+    isEmptyTextSegmentAdjacentToChip(segment, segments, index) &&
+    !isReferenceChipSegment(segments[index + 1])
+  );
+};
+
 const renderTextSegmentContent = (
   segment: AgentChatComposerTextSegment,
   segments: AgentChatComposerSegments,
   index: number,
 ): string => {
-  return isEmptyTextSegmentAdjacentToChip(segment, segments, index)
+  return shouldSuppressEmptyTextSegmentContent(segment, segments, index)
     ? ""
     : renderEditableTextContent(segment.text);
 };
@@ -234,7 +253,7 @@ const syncComposerDomInPlace = (
         }
 
         if (
-          isEmptyTextSegmentAdjacentToChip(segment, segments, draftIndex) &&
+          shouldSuppressEmptyTextSegmentContent(segment, segments, draftIndex) &&
           ((node.textContent ?? "").length > 0 || node.childNodes.length > 0)
         ) {
           return false;
@@ -364,6 +383,7 @@ export function AgentChatComposerEditor({
     activeReferenceIndex,
     showReferenceMenu,
     fileSearchError,
+    isFileSearchPending,
     isFileSearchLoading,
     focusLastTextSegment,
     selectSlashCommand,
@@ -455,6 +475,7 @@ export function AgentChatComposerEditor({
           items={referenceMenuItems}
           activeIndex={activeReferenceIndex}
           fileSearchError={fileSearchError}
+          isFileSearchPending={isFileSearchPending}
           isFileSearchLoading={isFileSearchLoading}
           supportsSubagentReferences={supportsSubagentReferences}
           subagentsError={subagentsError}

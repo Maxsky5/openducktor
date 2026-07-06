@@ -42,12 +42,51 @@ const subagentItems = (subagents: AgentSubagentReference[]): ReferenceMenuItem[]
   }));
 
 describe("AgentChatComposerReferenceMenu", () => {
+  test("does not render an empty shell while file search is pending but hidden", () => {
+    const rendered = render(
+      <AgentChatComposerReferenceMenu
+        items={[]}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={true}
+        isFileSearchLoading={false}
+        supportsSubagentReferences={false}
+        subagentsError={null}
+        isSubagentsLoading={false}
+        onSelectFile={() => {}}
+        onSelectSubagent={() => {}}
+      />,
+    );
+
+    expect(rendered.container.firstChild).toBeNull();
+  });
+
+  test("renders delayed file search loading inside the reference menu", () => {
+    render(
+      <AgentChatComposerReferenceMenu
+        items={[]}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={true}
+        isFileSearchLoading={true}
+        supportsSubagentReferences={false}
+        subagentsError={null}
+        isSubagentsLoading={false}
+        onSelectFile={() => {}}
+        onSelectSubagent={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Searching files")).toBeDefined();
+  });
+
   test("uses the selected surface token for the active file row", () => {
     render(
       <AgentChatComposerReferenceMenu
         items={fileItems(RESULTS)}
         activeIndex={1}
         fileSearchError={null}
+        isFileSearchPending={false}
         isFileSearchLoading={false}
         supportsSubagentReferences={false}
         subagentsError={null}
@@ -69,6 +108,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         items={[...subagentItems(SUBAGENTS), ...fileItems(RESULTS)]}
         activeIndex={0}
         fileSearchError={null}
+        isFileSearchPending={false}
         isFileSearchLoading={false}
         supportsSubagentReferences={true}
         subagentsError={null}
