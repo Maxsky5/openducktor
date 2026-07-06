@@ -94,17 +94,17 @@ const writeTerminalOutput = (
     return Promise.resolve();
   }
 
-  if (!waitForAcknowledgement) {
-    const pendingWrite = Symbol();
-    pendingTerminalWritesRef.current.add(pendingWrite);
-    const finish = (): void => {
-      pendingTerminalWritesRef.current.delete(pendingWrite);
-    };
+  const pendingWrite = Symbol();
+  pendingTerminalWritesRef.current.add(pendingWrite);
+  const finishPendingWrite = (): void => {
+    pendingTerminalWritesRef.current.delete(pendingWrite);
+  };
 
+  if (!waitForAcknowledgement) {
     try {
-      terminal.write(data, finish);
+      terminal.write(data, finishPendingWrite);
     } catch (error) {
-      finish();
+      finishPendingWrite();
       throw error;
     }
     return Promise.resolve();
@@ -112,21 +112,26 @@ const writeTerminalOutput = (
 
   return new Promise((resolve) => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const finish = (): void => {
+    const resolveWrite = (): void => {
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
         timeoutId = null;
       }
       resolve();
     };
+    const finishAcknowledgedWrite = (): void => {
+      finishPendingWrite();
+      resolveWrite();
+    };
 
-    timeoutId = setTimeout(finish, TERMINAL_WRITE_ACK_TIMEOUT_MS);
+    timeoutId = setTimeout(resolveWrite, TERMINAL_WRITE_ACK_TIMEOUT_MS);
     try {
-      terminal.write(data, finish);
+      terminal.write(data, finishAcknowledgedWrite);
     } catch (error) {
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
       }
+      finishPendingWrite();
       throw error;
     }
   });

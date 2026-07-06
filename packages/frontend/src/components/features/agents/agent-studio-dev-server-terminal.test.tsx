@@ -708,6 +708,105 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(screen).toBe("backend ready\r\n");
   });
 
+  test("drops timed-out replay writes when switching scripts", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    const onRendererError = () => {};
+    let screen = "";
+    const queuedReplayWrites: Array<() => void> = [];
+    const createTerminalBinding = (container: HTMLElement) => {
+      let active = true;
+      const reset = mock(() => {
+        if (active) {
+          screen = "";
+        }
+      });
+      const clear = mock(() => {
+        if (active) {
+          screen = "";
+        }
+      });
+      const dispose = mock(() => {
+        active = false;
+      });
+      const write = mock((data: string, callback?: () => void) => {
+        if (data === "stale replay\r\n") {
+          queuedReplayWrites.push(() => {
+            if (active) {
+              screen += data;
+            }
+            callback?.();
+          });
+          return;
+        }
+
+        if (active) {
+          screen += data;
+        }
+        callback?.();
+      });
+      open(container);
+      loadAddon({});
+      return {
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+        fitAddon: { dispose: mock(() => {}), fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "stale replay\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(queuedReplayWrites).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="backend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "backend",
+              sequence: 0,
+              data: "backend ready\r\n",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("backend ready\r\n");
+    });
+
+    queuedReplayWrites[0]?.();
+    expect(screen).toBe("backend ready\r\n");
+  });
+
   test("surfaces renderer initialization failures", async () => {
     const onRendererError = mock(() => {});
 
