@@ -11,6 +11,58 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+const createQueuedWriteTerminalHarness = (queuedData: string) => {
+  const open = mock((_container: HTMLElement) => {});
+  const loadAddon = mock((_addon: unknown) => {});
+  const fit = mock(() => {});
+  let screen = "";
+  const queuedWrites: Array<() => void> = [];
+  const createTerminalBinding = (container: HTMLElement) => {
+    let active = true;
+    const reset = mock(() => {
+      if (active) {
+        screen = "";
+      }
+    });
+    const clear = mock(() => {
+      if (active) {
+        screen = "";
+      }
+    });
+    const dispose = mock(() => {
+      active = false;
+    });
+    const write = mock((data: string, callback?: () => void) => {
+      if (data === queuedData) {
+        queuedWrites.push(() => {
+          if (active) {
+            screen += data;
+          }
+          callback?.();
+        });
+        return;
+      }
+
+      if (active) {
+        screen += data;
+      }
+      callback?.();
+    });
+    open(container);
+    loadAddon({});
+    return {
+      terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+      fitAddon: { dispose: mock(() => {}), fit },
+    };
+  };
+
+  return {
+    createTerminalBinding,
+    queuedWrites,
+    readScreen: () => screen,
+  };
+};
+
 describe("AgentStudioDevServerTerminal", () => {
   test("creates a read-only terminal and replays buffered chunks", async () => {
     const open = mock((_container: HTMLElement) => {});
@@ -581,50 +633,8 @@ describe("AgentStudioDevServerTerminal", () => {
   });
 
   test("drops queued incremental writes when switching scripts", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
-    const fit = mock(() => {});
     const onRendererError = () => {};
-    let screen = "";
-    const queuedWrites: Array<() => void> = [];
-    const createTerminalBinding = (container: HTMLElement) => {
-      let active = true;
-      const reset = mock(() => {
-        if (active) {
-          screen = "";
-        }
-      });
-      const clear = mock(() => {
-        if (active) {
-          screen = "";
-        }
-      });
-      const dispose = mock(() => {
-        active = false;
-      });
-      const write = mock((data: string, callback?: () => void) => {
-        if (data === "stale frontend\r\n") {
-          queuedWrites.push(() => {
-            if (active) {
-              screen += data;
-            }
-            callback?.();
-          });
-          return;
-        }
-
-        if (active) {
-          screen += data;
-        }
-        callback?.();
-      });
-      open(container);
-      loadAddon({});
-      return {
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose: mock(() => {}), fit },
-      };
-    };
+    const terminalHarness = createQueuedWriteTerminalHarness("stale frontend\r\n");
 
     const view = render(
       <AgentStudioDevServerTerminal
@@ -642,12 +652,12 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(screen).toBe("frontend ready\r\n");
+      expect(terminalHarness.readScreen()).toBe("frontend ready\r\n");
     });
 
     view.rerender(
@@ -672,12 +682,12 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(queuedWrites).toHaveLength(1);
+      expect(terminalHarness.queuedWrites).toHaveLength(1);
     });
 
     view.rerender(
@@ -696,63 +706,21 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(screen).toBe("backend ready\r\n");
+      expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
     });
 
-    queuedWrites[0]?.();
-    expect(screen).toBe("backend ready\r\n");
+    terminalHarness.queuedWrites[0]?.();
+    expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
   });
 
   test("drops timed-out replay writes when switching scripts", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
-    const fit = mock(() => {});
     const onRendererError = () => {};
-    let screen = "";
-    const queuedReplayWrites: Array<() => void> = [];
-    const createTerminalBinding = (container: HTMLElement) => {
-      let active = true;
-      const reset = mock(() => {
-        if (active) {
-          screen = "";
-        }
-      });
-      const clear = mock(() => {
-        if (active) {
-          screen = "";
-        }
-      });
-      const dispose = mock(() => {
-        active = false;
-      });
-      const write = mock((data: string, callback?: () => void) => {
-        if (data === "stale replay\r\n") {
-          queuedReplayWrites.push(() => {
-            if (active) {
-              screen += data;
-            }
-            callback?.();
-          });
-          return;
-        }
-
-        if (active) {
-          screen += data;
-        }
-        callback?.();
-      });
-      open(container);
-      loadAddon({});
-      return {
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose: mock(() => {}), fit },
-      };
-    };
+    const terminalHarness = createQueuedWriteTerminalHarness("stale replay\r\n");
 
     const view = render(
       <AgentStudioDevServerTerminal
@@ -770,12 +738,12 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(queuedReplayWrites).toHaveLength(1);
+      expect(terminalHarness.queuedWrites).toHaveLength(1);
     });
     await new Promise((resolve) => setTimeout(resolve, 70));
 
@@ -795,16 +763,16 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(screen).toBe("backend ready\r\n");
+      expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
     });
 
-    queuedReplayWrites[0]?.();
-    expect(screen).toBe("backend ready\r\n");
+    terminalHarness.queuedWrites[0]?.();
+    expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
   });
 
   test("surfaces renderer initialization failures", async () => {

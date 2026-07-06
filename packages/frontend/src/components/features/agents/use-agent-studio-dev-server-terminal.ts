@@ -29,7 +29,7 @@ type TerminalRenderController = {
   renderedStateRef: { current: RenderedTerminalState };
   renderQueueRef: { current: Promise<void> | null };
   renderGenerationRef: { current: number };
-  pendingTerminalWritesRef: { current: Set<symbol> };
+  pendingTerminalWritesRef: PendingTerminalWritesRef;
   recreateTerminalBinding: () => TerminalBinding | null;
 };
 
@@ -44,6 +44,8 @@ type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   onRendererError: (message: string | null) => void;
 };
+
+type PendingTerminalWritesRef = { current: Set<symbol> };
 
 const TERMINAL_WRITE_ACK_TIMEOUT_MS = 50;
 
@@ -84,21 +86,34 @@ const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
   theme: buildTerminalTheme(container),
 });
 
+const trackPendingTerminalWrite = (
+  pendingTerminalWritesRef: PendingTerminalWritesRef,
+): (() => void) => {
+  const pendingWrite = Symbol();
+  pendingTerminalWritesRef.current.add(pendingWrite);
+  let isFinished = false;
+
+  return () => {
+    if (isFinished) {
+      return;
+    }
+
+    isFinished = true;
+    pendingTerminalWritesRef.current.delete(pendingWrite);
+  };
+};
+
 const writeTerminalOutput = (
   terminal: TerminalBinding["terminal"],
   data: string,
   waitForAcknowledgement: boolean,
-  pendingTerminalWritesRef: { current: Set<symbol> },
+  pendingTerminalWritesRef: PendingTerminalWritesRef,
 ): Promise<void> => {
   if (data.length === 0) {
     return Promise.resolve();
   }
 
-  const pendingWrite = Symbol();
-  pendingTerminalWritesRef.current.add(pendingWrite);
-  const finishPendingWrite = (): void => {
-    pendingTerminalWritesRef.current.delete(pendingWrite);
-  };
+  const finishPendingWrite = trackPendingTerminalWrite(pendingTerminalWritesRef);
 
   if (!waitForAcknowledgement) {
     try {
@@ -280,7 +295,7 @@ const renderTerminalBuffer = async ({
   scriptId: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   renderedStateRef: { current: RenderedTerminalState };
-  pendingTerminalWritesRef: { current: Set<symbol> };
+  pendingTerminalWritesRef: PendingTerminalWritesRef;
   recreateTerminalBinding: () => TerminalBinding | null;
 }): Promise<void> => {
   const entries = terminalBuffer?.entries ?? [];
