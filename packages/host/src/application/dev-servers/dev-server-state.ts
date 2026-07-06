@@ -10,6 +10,7 @@ import type { DevServerProcessHandle } from "../../ports/dev-server-process-port
 export type DevServerGroupRuntime = {
   processes: Map<string, DevServerProcessHandle>;
   state: DevServerGroupState;
+  terminalNextSequenceByScriptId: Map<string, number>;
 };
 
 export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
@@ -82,9 +83,20 @@ export const syncGroupState = (
   state.updatedAt = nowIso();
 };
 
-export const nextTerminalSequence = (script: DevServerScriptState): number => {
+const nextTerminalSequenceFromReplay = (script: DevServerScriptState): number => {
   const lastChunk = script.bufferedTerminalChunks.at(-1);
   return lastChunk ? lastChunk.sequence + 1 : 0;
+};
+
+export const nextTerminalSequence = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+): number => {
+  const nextSequence =
+    runtime.terminalNextSequenceByScriptId.get(script.scriptId) ??
+    nextTerminalSequenceFromReplay(script);
+  runtime.terminalNextSequenceByScriptId.set(script.scriptId, nextSequence + 1);
+  return nextSequence;
 };
 
 const readTerminalBufferByteCount = (chunks: DevServerTerminalChunk[]): number => {
@@ -135,9 +147,13 @@ export const appendTerminalChunk = (
   trimTerminalChunksWithByteCount(chunks, totalBytes);
 };
 
-export const resetTerminalChunks = (script: DevServerScriptState): void => {
+export const resetTerminalChunks = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+): void => {
   script.bufferedTerminalChunks = [];
   terminalBufferByteCounts.set(script.bufferedTerminalChunks, 0);
+  runtime.terminalNextSequenceByScriptId.set(script.scriptId, 0);
 };
 
 export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {

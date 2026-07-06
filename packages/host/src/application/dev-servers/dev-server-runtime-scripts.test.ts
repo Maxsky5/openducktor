@@ -26,6 +26,7 @@ const repoConfig: RepoConfig = {
 const createRuntime = (): DevServerGroupRuntime => ({
   processes: new Map(),
   state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
+  terminalNextSequenceByScriptId: new Map(),
 });
 
 const updateScriptState: UpdateScriptState = (runtime, scriptId, update) => {

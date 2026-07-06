@@ -273,6 +273,50 @@ describe("createDevServerService", () => {
     expect(chunks.map((chunk) => chunk.sequence)).toEqual([2, 3]);
     expect(chunks.reduce((total, chunk) => total + chunk.data.length, 0)).toBe(512 * 1024);
   });
+  test("keeps terminal sequences increasing after an oversized chunk empties replay", async () => {
+    const { eventBus, events } = createEventBus();
+    const oversizedChunk = "x".repeat(600 * 1024);
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        input.onOutput({ data: oversizedChunk });
+        input.onOutput({ data: "still live\n" });
+
+        return Effect.succeed({
+          pid: 413,
+          stop: () => Effect.succeed(undefined),
+        });
+      },
+    };
+    const service = createDevServerService({
+      eventBus,
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const terminalChunks = events
+      .map((event) => (event as { payload?: unknown }).payload)
+      .filter(
+        (payload): payload is { terminalChunk: { data: string; sequence: number }; type: string } =>
+          typeof payload === "object" &&
+          payload !== null &&
+          "type" in payload &&
+          payload.type === "terminal_chunk" &&
+          "terminalChunk" in payload,
+      )
+      .map((payload) => payload.terminalChunk);
+
+    expect(terminalChunks.map((chunk) => chunk.sequence)).toEqual([0, 1, 2]);
+    expect(terminalChunks.map((chunk) => chunk.data)).toEqual([
+      "Starting `bun run dev`\r\n",
+      oversizedChunk,
+      "still live\r\n",
+    ]);
+    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toEqual([
+      "still live\r\n",
+    ]);
+  });
   test("rejects duplicate starts while a script is running", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({

@@ -96,6 +96,7 @@ export const createDevServerService = ({
       const runtime = {
         processes: new Map<string, DevServerProcessHandle>(),
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
+        terminalNextSequenceByScriptId: new Map<string, number>(),
       };
       groups.set(key, runtime);
       return runtime;
@@ -144,7 +145,7 @@ export const createDevServerService = ({
     }
     const terminalChunk = {
       scriptId,
-      sequence: nextTerminalSequence(script),
+      sequence: nextTerminalSequence(runtime, script),
       data,
       timestamp: nowIso(),
     };
@@ -232,7 +233,7 @@ export const createDevServerService = ({
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
-        resetTerminalChunks(script);
+        resetTerminalChunks(runtime, script);
       });
       appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
       const handle = yield* processPort

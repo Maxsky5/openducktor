@@ -103,6 +103,27 @@ describe("dev-server-log-buffer", () => {
     expect(buffer?.entries[0]?.data).toBe("latest");
   });
 
+  test("accepts later live chunks after host byte trimming preserves sequence order", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 1,
+      data: "oversized-live",
+      timestamp: "2026-03-25T10:00:00.000Z",
+    });
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 2,
+      data: "later-live",
+      timestamp: "2026-03-25T10:00:01.000Z",
+    });
+
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual(["oversized-live", "later-live"]);
+  });
+
   test("returned buffer snapshots stay stable after later appends", () => {
     const store = createDevServerTerminalBufferStore();
 
