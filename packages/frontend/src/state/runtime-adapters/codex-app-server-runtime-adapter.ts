@@ -70,6 +70,7 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
           return;
         }
         if (typeof event.receivedAt !== "string" || event.receivedAt.trim().length === 0) {
+          console.error("Dropping Codex app-server event with invalid receivedAt", event.kind);
           return;
         }
         if (event.kind === "notification" && isSkillsChangedNotification(event.message)) {

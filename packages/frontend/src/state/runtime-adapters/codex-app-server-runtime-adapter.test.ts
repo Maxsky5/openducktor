@@ -276,9 +276,14 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       },
     });
 
+    const originalConsoleError = console.error;
     try {
       const adapter = createCodexAppServerRuntimeAdapter();
       const events: Array<{ type?: string }> = [];
+      const consoleErrors: unknown[][] = [];
+      console.error = mock((...args: unknown[]) => {
+        consoleErrors.push(args);
+      }) as typeof console.error;
       const unsubscribe = await adapter.subscribeEvents(
         {
           repoPath: "/repo",
@@ -310,6 +315,17 @@ describe("createCodexAppServerRuntimeAdapter", () => {
 
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
+        kind: "server_request",
+        message: { method: "item/tool/requestUserInput" },
+      });
+      expect(events).toEqual([]);
+      expect(consoleErrors).toContainEqual([
+        "Dropping Codex app-server event with invalid receivedAt",
+        "server_request",
+      ]);
+
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
         kind: "notification",
         receivedAt: "2026-02-22T09:00:01.000Z",
         message: {
@@ -337,6 +353,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       expect(appQueryClient.getQueryState(runtimeSkillKey)?.isInvalidated).toBe(true);
       unsubscribe();
     } finally {
+      console.error = originalConsoleError;
       host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
       host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;

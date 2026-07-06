@@ -33,7 +33,7 @@ export type CodexTurnLifecycleContext = {
     model: AgentModelSelection,
   ): Promise<void>;
   ensureRuntimeEventSubscription(runtimeId: string): Promise<void>;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   handleBufferedRuntimeEvents(
@@ -173,7 +173,7 @@ export const startCodexTurnForSession = async (
   const handledRequestKeys = new Set<string>();
   const activeTurnState: ActiveCodexTurn = {
     session,
-    startedAtMs: Date.now(),
+    startedAtMs: Number.POSITIVE_INFINITY,
     turnStartPromise: Promise.resolve({}),
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {
@@ -228,9 +228,10 @@ export const startCodexTurnForSession = async (
       effort: toTransportModelSelection(model).effort,
     })
     .then((result) => {
+      const turnStartedAtMs = Date.now();
       const turnId = extractTurnId(result);
       if (turnId) {
-        context.bindActiveTurnId(activeTurnState, turnId);
+        context.bindActiveTurnId(activeTurnState, turnId, turnStartedAtMs);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
       if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {

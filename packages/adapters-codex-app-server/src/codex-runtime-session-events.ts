@@ -187,13 +187,19 @@ export class CodexRuntimeSessionEvents {
     this.clearBufferedResolvedServerRequests(externalSessionId, runtimeId);
   }
 
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean {
     if (activeTurn.turnId && activeTurn.turnId !== turnId) {
       return false;
     }
 
     const didBind = !activeTurn.turnId;
     activeTurn.turnId = turnId;
+    if (didBind) {
+      if (startedAtMs !== undefined && !Number.isFinite(startedAtMs)) {
+        throw new Error("Codex active turn was bound with an invalid start timestamp.");
+      }
+      activeTurn.startedAtMs = startedAtMs ?? Date.now();
+    }
     this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
     return didBind;
   }
@@ -913,7 +919,8 @@ export class CodexRuntimeSessionEvents {
       eventMapperPipeline: this.eventMapperPipeline,
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
-      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
+        this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       bufferNotification: (notification) =>

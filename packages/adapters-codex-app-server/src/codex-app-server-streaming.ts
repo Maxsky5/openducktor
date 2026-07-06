@@ -64,7 +64,7 @@ export type CodexStreamingContext = {
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   bufferNotification(notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
@@ -461,12 +461,20 @@ const isCodexIdleThreadStatus = (status: unknown): boolean => {
   return type?.toLowerCase() === "idle";
 };
 
+const receivedAtMsFromCodexNotification = (receivedAt: string): number => {
+  const receivedAtMs = Date.parse(receivedAt);
+  if (!Number.isFinite(receivedAtMs)) {
+    throw new Error(`Codex notification has an unparsable receivedAt timestamp '${receivedAt}'.`);
+  }
+  return receivedAtMs;
+};
+
 const isNotificationAtOrAfterActiveTurnStart = (
-  timestamp: string,
+  receivedAt: string,
   activeTurn: ActiveCodexTurn,
 ): boolean => {
-  const receivedAtMs = Date.parse(timestamp);
-  return Number.isFinite(receivedAtMs) && receivedAtMs >= activeTurn.startedAtMs;
+  const receivedAtMs = receivedAtMsFromCodexNotification(receivedAt);
+  return receivedAtMs >= activeTurn.startedAtMs;
 };
 
 export const handleCodexPendingNotifications = async (
@@ -498,7 +506,11 @@ export const handleCodexPendingNotifications = async (
     if (
       notificationTurnId &&
       activeTurn &&
-      context.bindActiveTurnId(activeTurn, notificationTurnId)
+      context.bindActiveTurnId(
+        activeTurn,
+        notificationTurnId,
+        receivedAtMsFromCodexNotification(notification.receivedAt),
+      )
     ) {
       context.flushQueuedUserMessagesLater(activeTurn);
     }
@@ -509,7 +521,15 @@ export const handleCodexPendingNotifications = async (
       });
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-      if (turnId && activeTurn && context.bindActiveTurnId(activeTurn, turnId)) {
+      if (
+        turnId &&
+        activeTurn &&
+        context.bindActiveTurnId(
+          activeTurn,
+          turnId,
+          receivedAtMsFromCodexNotification(notification.receivedAt),
+        )
+      ) {
         context.flushQueuedUserMessagesLater(activeTurn);
       }
       continue;
@@ -521,13 +541,18 @@ export const handleCodexPendingNotifications = async (
         if (
           activeTurn &&
           isIdleStatus &&
-          !isNotificationAtOrAfterActiveTurnStart(timestamp, activeTurn)
+          !isNotificationAtOrAfterActiveTurnStart(notification.receivedAt, activeTurn)
         ) {
           continue;
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
         if (activeTurn && isIdleStatus) {
+          emitCodexSessionEvent(context, session.threadId, {
+            type: "session_idle",
+            externalSessionId: session.threadId,
+            timestamp: notification.receivedAt,
+          });
           activeTurn.markTurnSettled();
         }
       }

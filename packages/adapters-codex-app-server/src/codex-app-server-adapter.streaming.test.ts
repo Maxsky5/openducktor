@@ -897,7 +897,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+    const events: Array<{ type?: string }> = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    await flushCodexAdapterWork();
 
     await adapter.sendUserMessage(
       codexUserMessageInput({
@@ -928,6 +933,7 @@ describe("CodexAppServerAdapter streaming", () => {
         externalSessionId: "thread/start-runtime-live",
       }),
     ).resolves.toMatchObject({ classification: "idle" });
+    expect(events.some((event) => event.type === "session_idle")).toBe(true);
 
     await adapter.sendUserMessage(
       codexUserMessageInput({
@@ -953,6 +959,7 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-live",
             status: { type: "idle" },
+            timestampMs: Date.now() + 60_000,
           },
         },
         "runtime-live",
@@ -1006,6 +1013,98 @@ describe("CodexAppServerAdapter streaming", () => {
       },
     });
     unsubscribe();
+  });
+
+  test("does not settle the active turn from idle status before the turn id is bound", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-live", status: "running" },
+    });
+    await flushCodexAdapterWork();
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Keep steering" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
+    expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(1);
+    expect(runtimeCalls).toContainEqual({
+      method: "turn/steer",
+      params: {
+        threadId: "thread/start-runtime-live",
+        input: [{ type: "text", text: "Keep steering" }],
+        expectedTurnId: "turn-live",
+      },
+    });
+    unsubscribe();
+  });
+
+  test("rejects malformed receivedAt values when checking idle status freshness", async () => {
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedNotificationEvent(
+        {
+          method: "thread/status/changed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            status: { type: "idle" },
+          },
+        },
+        "runtime-live",
+        "not-a-timestamp",
+      ),
+    ]);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    const sendUserMessageError = adapter
+      .sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Start now" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      )
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    await flushCodexAdapterWork();
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-live", status: "running" },
+    });
+
+    expect(await sendUserMessageError).toEqual(
+      expect.objectContaining({
+        message: "Codex notification has an unparsable receivedAt timestamp 'not-a-timestamp'.",
+      }),
+    );
   });
 
   test("emits accepted queued Codex user messages into the runtime transcript stream", async () => {
