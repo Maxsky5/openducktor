@@ -32,7 +32,7 @@
     "@openducktor/frontend": "workspace:*",
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
-    "@tailwindcss/vite": "^4.3.1",
+    "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^25.9.2",
     "@vitejs/plugin-react": "^6.0.3",
     "bun-types": "^1.3.14",
@@ -41,6 +41,6 @@
     "effect": "^3.21.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "vite": "^8.1.0"
+    "vite": "^8.1.3"
   }
 }
