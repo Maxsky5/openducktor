@@ -31,6 +31,7 @@ import type {
   StoppedDevServerScript,
 } from "./dev-server-service-types";
 import {
+  appendTerminalChunk,
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
@@ -41,9 +42,9 @@ import {
   formatTerminalProcessOutput,
   formatTerminalSystemMessage,
   nextTerminalSequence,
+  resetTerminalChunks,
   scriptHasLiveProcess,
   syncGroupState,
-  trimTerminalChunks,
 } from "./dev-server-state";
 
 export type {
@@ -147,8 +148,7 @@ export const createDevServerService = ({
       data,
       timestamp: nowIso(),
     };
-    script.bufferedTerminalChunks.push(terminalChunk);
-    trimTerminalChunks(script.bufferedTerminalChunks);
+    appendTerminalChunk(script.bufferedTerminalChunks, terminalChunk);
     runtime.state.updatedAt = nowIso();
     publish({
       type: "terminal_chunk",
@@ -232,7 +232,7 @@ export const createDevServerService = ({
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
-        script.bufferedTerminalChunks = [];
+        resetTerminalChunks(script);
       });
       appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
       const handle = yield* processPort
@@ -301,7 +301,6 @@ export const createDevServerService = ({
       }> = [];
       const errors: string[] = [];
       for (const script of runtime.state.scripts) {
-        script.bufferedTerminalChunks = [];
         if (script.pid === null) {
           if (
             script.status !== "stopped" ||

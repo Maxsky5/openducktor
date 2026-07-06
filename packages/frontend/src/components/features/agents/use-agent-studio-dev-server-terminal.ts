@@ -43,6 +43,8 @@ type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
   onRendererError: (message: string | null) => void;
 };
 
+const TERMINAL_WRITE_ACK_TIMEOUT_MS = 50;
+
 const readCssVariable = (element: HTMLElement, name: string): string => {
   return getComputedStyle(element).getPropertyValue(name).trim();
 };
@@ -83,13 +85,36 @@ const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
 const writeTerminalOutput = (
   terminal: TerminalBinding["terminal"],
   data: string,
+  waitForAcknowledgement: boolean,
 ): Promise<void> => {
   if (data.length === 0) {
     return Promise.resolve();
   }
 
+  if (!waitForAcknowledgement) {
+    terminal.write(data);
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
-    terminal.write(data, resolve);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const finish = (): void => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      resolve();
+    };
+
+    timeoutId = setTimeout(finish, TERMINAL_WRITE_ACK_TIMEOUT_MS);
+    try {
+      terminal.write(data, finish);
+    } catch (error) {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      throw error;
+    }
   });
 };
 
@@ -244,7 +269,7 @@ const renderTerminalBuffer = async ({
   if (didScriptChange || didResetTokenChange) {
     binding.terminal.reset();
     binding.terminal.clear();
-    await writeTerminalOutput(binding.terminal, readTerminalReplayOutput(entries));
+    await writeTerminalOutput(binding.terminal, readTerminalReplayOutput(entries), true);
     binding.fitAddon.fit();
     renderedStateRef.current = {
       scriptId,
@@ -257,6 +282,7 @@ const renderTerminalBuffer = async ({
   await writeTerminalOutput(
     binding.terminal,
     readAppendedTerminalOutput(entries, renderedStateRef.current.lastSequence),
+    false,
   );
   renderedStateRef.current.lastSequence = nextLastSequence;
 };

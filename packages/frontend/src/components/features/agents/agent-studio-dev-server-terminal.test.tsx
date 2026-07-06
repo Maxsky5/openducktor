@@ -168,6 +168,129 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(reset).toHaveBeenCalledTimes(2);
   });
 
+  test("continues rendering live chunks when an incremental write callback stalls", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    const reset = mock(() => {});
+    const clear = mock(() => {});
+    const writes: string[] = [];
+    let screen = "";
+    const write = mock((data: string, callback?: () => void) => {
+      writes.push(data);
+      screen += data;
+      if (data === "stalled\r\n") {
+        return;
+      }
+
+      callback?.();
+    });
+    const dispose = mock(() => {});
+    const onRendererError = () => {};
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("ready\r\n");
+    });
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: "stalled\r\n",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+          ],
+          lastSequence: 1,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("ready\r\nstalled\r\n");
+    });
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: "stalled\r\n",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 2,
+              data: "still live\r\n",
+              timestamp: "2026-03-19T15:30:02.000Z",
+            },
+          ],
+          lastSequence: 2,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(
+      () => {
+        expect(screen).toBe("ready\r\nstalled\r\nstill live\r\n");
+      },
+      { timeout: 200 },
+    );
+    expect(writes).toEqual(["ready\r\n", "stalled\r\n", "still live\r\n"]);
+  });
+
   test("clears stale terminal rows before replaying a reset window", async () => {
     const open = mock((_container: HTMLElement) => {});
     const loadAddon = mock((_addon: unknown) => {});

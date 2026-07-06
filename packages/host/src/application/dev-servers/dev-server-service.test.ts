@@ -221,6 +221,58 @@ describe("createDevServerService", () => {
       ]),
     );
   });
+  test("trims buffered terminal output to the chunk limit", async () => {
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        for (let index = 0; index < 2_005; index += 1) {
+          input.onOutput({ data: `line-${index}\n` });
+        }
+
+        return Effect.succeed({
+          pid: 410,
+          stop: () => Effect.succeed(undefined),
+        });
+      },
+    };
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
+
+    expect(chunks).toHaveLength(2_000);
+    expect(chunks[0]).toMatchObject({ sequence: 6, data: "line-5\r\n" });
+    expect(chunks.at(-1)).toMatchObject({ sequence: 2005, data: "line-2004\r\n" });
+  });
+  test("trims buffered terminal output to the byte limit", async () => {
+    const halfLimitChunk = "x".repeat(256 * 1024);
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        input.onOutput({ data: halfLimitChunk });
+        input.onOutput({ data: halfLimitChunk });
+        input.onOutput({ data: halfLimitChunk });
+
+        return Effect.succeed({
+          pid: 411,
+          stop: () => Effect.succeed(undefined),
+        });
+      },
+    };
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
+
+    expect(chunks.map((chunk) => chunk.sequence)).toEqual([2, 3]);
+    expect(chunks.reduce((total, chunk) => total + chunk.data.length, 0)).toBe(512 * 1024);
+  });
   test("rejects duplicate starts while a script is running", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
@@ -464,6 +516,40 @@ describe("createDevServerService", () => {
       scripts: [{ scriptId: "web", status: "stopped", pid: null }],
     });
     expect(stoppedPids).toEqual([400]);
+  });
+  test("preserves existing and shutdown terminal output when stopping", async () => {
+    const stoppedPids: number[] = [];
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        input.onOutput({ data: "ready\n" });
+
+        return Effect.succeed({
+          pid: 412,
+          stop: () =>
+            Effect.sync(() => {
+              stoppedPids.push(412);
+              input.onOutput({ data: "closing dev server\n" });
+              input.onExit({ pid: 412, exitCode: 0, signal: null, error: null });
+            }),
+        });
+      },
+    };
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const state = await Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(stoppedPids).toEqual([412]);
+    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toEqual([
+      "Starting `bun run dev`\r\n",
+      "ready\r\n",
+      "closing dev server\r\n",
+    ]);
+    expect(state.scripts[0]).toMatchObject({ status: "stopped", pid: null });
   });
   test("stops all running task dev server groups during host shutdown", async () => {
     const { processPort, stoppedPids } = createProcessPort();

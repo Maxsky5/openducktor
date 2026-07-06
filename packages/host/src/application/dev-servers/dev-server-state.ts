@@ -21,6 +21,8 @@ export const DEV_SERVER_TERM = "xterm-256color";
 const TERMINAL_BUFFER_CHUNK_LIMIT = 2_000;
 const TERMINAL_BUFFER_BYTE_LIMIT = 512 * 1024;
 
+const terminalBufferByteCounts = new WeakMap<DevServerTerminalChunk[], number>();
+
 const nowIso = (): string => new Date().toISOString();
 
 const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevServerScriptState => ({
@@ -85,9 +87,26 @@ export const nextTerminalSequence = (script: DevServerScriptState): number => {
   return lastChunk ? lastChunk.sequence + 1 : 0;
 };
 
-export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
+const readTerminalBufferByteCount = (chunks: DevServerTerminalChunk[]): number => {
+  const cachedByteCount = terminalBufferByteCounts.get(chunks);
+  if (cachedByteCount !== undefined) {
+    return cachedByteCount;
+  }
+
+  let totalBytes = 0;
+  for (const chunk of chunks) {
+    totalBytes += chunk.data.length;
+  }
+  terminalBufferByteCounts.set(chunks, totalBytes);
+  return totalBytes;
+};
+
+const trimTerminalChunksWithByteCount = (
+  chunks: DevServerTerminalChunk[],
+  initialByteCount: number,
+): void => {
   let removeCount = 0;
-  let totalBytes = chunks.reduce((total, chunk) => total + chunk.data.length, 0);
+  let totalBytes = initialByteCount;
 
   while (
     chunks.length - removeCount > TERMINAL_BUFFER_CHUNK_LIMIT ||
@@ -104,6 +123,25 @@ export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
   if (removeCount > 0) {
     chunks.splice(0, removeCount);
   }
+  terminalBufferByteCounts.set(chunks, totalBytes);
+};
+
+export const appendTerminalChunk = (
+  chunks: DevServerTerminalChunk[],
+  chunk: DevServerTerminalChunk,
+): void => {
+  const totalBytes = readTerminalBufferByteCount(chunks) + chunk.data.length;
+  chunks.push(chunk);
+  trimTerminalChunksWithByteCount(chunks, totalBytes);
+};
+
+export const resetTerminalChunks = (script: DevServerScriptState): void => {
+  script.bufferedTerminalChunks = [];
+  terminalBufferByteCounts.set(script.bufferedTerminalChunks, 0);
+};
+
+export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
+  trimTerminalChunksWithByteCount(chunks, readTerminalBufferByteCount(chunks));
 };
 
 export const formatTerminalSystemMessage = (message: string): string => {

@@ -753,6 +753,126 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("preserves live shutdown output when a stop mutation returns an empty replay", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const runningState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const stoppedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "stopped",
+          pid: null,
+          startedAt: null,
+          bufferedTerminalChunks: [],
+        }),
+      ],
+    });
+    const stoppedScript = stoppedState.scripts[0];
+    if (!stoppedScript) {
+      throw new Error("Expected stopped dev server script fixture.");
+    }
+    const stopDeferred = createDeferred<DevServerGroupState>();
+    devServerGetState = async () => runningState;
+    devServerStop = async () => stopDeferred.promise;
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("ready\r\n");
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      await act(async () => {
+        getLatest().onStop();
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 1,
+            data: "closing dev server\r\n",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:30:02.000Z",
+          script: stoppedScript,
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual(["closing dev server\r\n"]);
+      });
+
+      stopDeferred.resolve(stoppedState);
+
+      await waitFor(() => {
+        expect(getLatest().isStopPending).toBe(false);
+      });
+      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
+        "closing dev server\r\n",
+      ]);
+      expect(getLatest().scripts[0]?.status).toBe("stopped");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("replaces mixed old and new replay when mutation state returns the reset window", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
