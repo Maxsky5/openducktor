@@ -13,6 +13,11 @@ type FakeFile = {
 const createFakeLocalAttachmentPort = () => {
   const files = new Map<string, FakeFile>();
   const directories = new Set<string>(["/tmp/openducktor-local-attachments"]);
+  const calls = {
+    exists: 0,
+    modifiedTimeMs: 0,
+    readDirectory: 0,
+  };
   let nextModifiedTimeMs = 1;
   const port: LocalAttachmentPort = {
     stageDirectory() {
@@ -79,6 +84,7 @@ const createFakeLocalAttachmentPort = () => {
     readDirectory(path) {
       return Effect.tryPromise({
         try: async () => {
+          calls.readDirectory += 1;
           if (!directories.has(path)) {
             const error = new Error(`missing directory: ${path}`) as Error & {
               code: string;
@@ -106,6 +112,7 @@ const createFakeLocalAttachmentPort = () => {
     modifiedTimeMs(path) {
       return Effect.tryPromise({
         try: async () => {
+          calls.modifiedTimeMs += 1;
           return files.get(path)?.modifiedTimeMs ?? 0;
         },
         catch: (cause) =>
@@ -117,10 +124,12 @@ const createFakeLocalAttachmentPort = () => {
       });
     },
     exists(path) {
+      calls.exists += 1;
       return Effect.succeed(directories.has(path) || files.has(path));
     },
   };
   return {
+    calls,
     files,
     port: port as LocalAttachmentPort,
   };
@@ -141,7 +150,7 @@ describe("createLocalAttachmentService", () => {
     expect(Buffer.from(files.get(staged.path)?.bytes ?? []).toString("utf8")).toBe("preview-bytes");
   });
   test("resolves relative filename tokens to the newest staged attachment", async () => {
-    const { port } = createFakeLocalAttachmentPort();
+    const { calls, port } = createFakeLocalAttachmentPort();
     const service = createLocalAttachmentService(port);
     const older = await Effect.runPromise(
       service.stage({ name: "brief.pdf", base64Data: "b2xkZXI=" }),
@@ -152,10 +161,33 @@ describe("createLocalAttachmentService", () => {
     await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
       path: newer.path,
     });
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: newer.path,
+    });
     expect(older.path).not.toBe(newer.path);
+    expect(calls.readDirectory).toBe(1);
+    expect(calls.modifiedTimeMs).toBe(2);
+  });
+  test("updates the loaded attachment index after staging a newer duplicate", async () => {
+    const { calls, port } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+    const older = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "b2xkZXI=" }),
+    );
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: older.path,
+    });
+    const newer = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "bmV3ZXI=" }),
+    );
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: newer.path,
+    });
+    expect(calls.readDirectory).toBe(1);
+    expect(calls.modifiedTimeMs).toBe(2);
   });
   test("resolves absolute staged paths and rejects outside absolute paths", async () => {
-    const { port } = createFakeLocalAttachmentPort();
+    const { calls, port } = createFakeLocalAttachmentPort();
     const service = createLocalAttachmentService(port);
     const staged = await Effect.runPromise(
       service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
@@ -166,6 +198,30 @@ describe("createLocalAttachmentService", () => {
     await expect(
       Effect.runPromise(service.resolve({ path: "/tmp/not-staged.pdf" })),
     ).rejects.toThrow("Failed to resolve staged attachment path:");
+    expect(calls.readDirectory).toBe(0);
+    expect(calls.modifiedTimeMs).toBe(0);
+  });
+  test("prunes stale indexed attachment entries before resolving relative tokens", async () => {
+    const { calls, files, port } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+    const older = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "b2xkZXI=" }),
+    );
+    const newer = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "bmV3ZXI=" }),
+    );
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: newer.path,
+    });
+    files.delete(newer.path);
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: older.path,
+    });
+    files.delete(older.path);
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).rejects.toThrow(
+      "No staged local attachment matches 'brief.pdf'.",
+    );
+    expect(calls.readDirectory).toBe(1);
   });
   test("rejects blank names, blank payloads, and unsafe lookup tokens", async () => {
     const { port } = createFakeLocalAttachmentPort();

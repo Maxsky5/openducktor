@@ -27,6 +27,14 @@ export type LocalAttachmentStageInput = {
 export type LocalAttachmentResolveInput = {
   path: string;
 };
+type IndexedStagedAttachment = {
+  entry: LocalAttachmentEntry;
+  modifiedTimeMs: number;
+};
+type StagedAttachmentIndex = {
+  attachmentDirectory: string;
+  byLookupToken: Map<string, IndexedStagedAttachment[]>;
+};
 const sanitizeAttachmentFilename = (name: string): string => {
   const sanitized = [...name]
     .map((character) => {
@@ -69,7 +77,7 @@ const formatAttachmentLookupDisplayName = (token: string): string => {
   }
   return `${sanitized.slice(0, maxAttachmentLookupDisplayLength - 3)}...`;
 };
-const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): string | undefined => {
+const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): string => {
   if (entry.fileName.length <= 37) {
     return entry.fileName;
   }
@@ -135,143 +143,240 @@ const hasNestedNodeErrorCode = (error: unknown, code: string): boolean => {
     )
   );
 };
+const createNoStagedAttachmentMatchError = (displayName: string): HostValidationError =>
+  new HostValidationError({
+    message: `No staged local attachment matches '${displayName}'.`,
+    field: "path",
+  });
+const compareNewestStagedAttachmentFirst = (
+  left: IndexedStagedAttachment,
+  right: IndexedStagedAttachment,
+): number => right.modifiedTimeMs - left.modifiedTimeMs;
+const addIndexedStagedAttachment = (
+  index: StagedAttachmentIndex,
+  lookupToken: string,
+  attachment: IndexedStagedAttachment,
+): void => {
+  const matches = index.byLookupToken.get(lookupToken);
+  if (!matches) {
+    index.byLookupToken.set(lookupToken, [attachment]);
+    return;
+  }
+  const existingIndex = matches.findIndex((match) => match.entry.path === attachment.entry.path);
+  if (existingIndex >= 0) {
+    matches[existingIndex] = attachment;
+  } else {
+    matches.push(attachment);
+  }
+  matches.sort(compareNewestStagedAttachmentFirst);
+};
+const removeIndexedStagedAttachment = (
+  index: StagedAttachmentIndex,
+  lookupToken: string,
+  path: string,
+): void => {
+  const matches = index.byLookupToken.get(lookupToken);
+  if (!matches) {
+    return;
+  }
+  const remainingMatches = matches.filter((match) => match.entry.path !== path);
+  if (remainingMatches.length === 0) {
+    index.byLookupToken.delete(lookupToken);
+    return;
+  }
+  index.byLookupToken.set(lookupToken, remainingMatches);
+};
+const loadStagedAttachmentIndex = (
+  localAttachmentPort: LocalAttachmentPort,
+  attachmentDirectory: string,
+): Effect.Effect<StagedAttachmentIndex, HostOperationError> =>
+  Effect.gen(function* () {
+    const entries = yield* localAttachmentPort.readDirectory(attachmentDirectory).pipe(
+      Effect.catchAll((error) => {
+        if (hasNestedNodeErrorCode(error, "ENOENT")) {
+          return Effect.succeed([]);
+        }
+        return Effect.fail(
+          new HostOperationError({
+            operation: "local_attachment.read_stage_directory",
+            message: `Failed to read attachment staging directory: ${errorMessage(error)}`,
+            cause: error,
+          }),
+        );
+      }),
+    );
+    const index: StagedAttachmentIndex = {
+      attachmentDirectory,
+      byLookupToken: new Map(),
+    };
+    const indexedAttachments = yield* Effect.all(
+      entries.map((entry) =>
+        localAttachmentPort
+          .modifiedTimeMs(entry.path)
+          .pipe(Effect.map((modifiedTimeMs) => ({ entry, modifiedTimeMs }))),
+      ),
+    );
+    for (const attachment of indexedAttachments) {
+      addIndexedStagedAttachment(
+        index,
+        readStagedAttachmentOriginalName(attachment.entry),
+        attachment,
+      );
+    }
+    return index;
+  });
+const resolveIndexedStagedAttachment = (
+  localAttachmentPort: LocalAttachmentPort,
+  index: StagedAttachmentIndex,
+  lookupToken: string,
+  displayName: string,
+): Effect.Effect<IndexedStagedAttachment, LocalAttachmentServiceError> =>
+  Effect.gen(function* () {
+    const matches = index.byLookupToken.get(lookupToken);
+    if (!matches || matches.length === 0) {
+      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+    }
+    for (const match of [...matches]) {
+      const exists = yield* localAttachmentPort.exists(match.entry.path).pipe(
+        Effect.mapError(
+          (error) =>
+            new HostOperationError({
+              operation: "local_attachment.verify_index_entry",
+              message: `Failed to verify staged attachment index entry: ${errorMessage(error)}`,
+              cause: error,
+              details: { path: match.entry.path },
+            }),
+        ),
+      );
+      if (exists) {
+        return match;
+      }
+      removeIndexedStagedAttachment(index, lookupToken, match.entry.path);
+    }
+    return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+  });
 export const createLocalAttachmentService = (
   localAttachmentPort: LocalAttachmentPort,
   attachmentIdFactory: () => string = () => crypto.randomUUID(),
-): LocalAttachmentService => ({
-  stage(input) {
-    return Effect.gen(function* () {
-      const { name, base64Data } = yield* Effect.try({
-        try: () => normalizeStageInput(input),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const bytes = yield* Effect.try({
-        try: () => decodeBase64(base64Data),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const attachmentDirectory = localAttachmentPort.stageDirectory();
-      yield* localAttachmentPort.ensureDirectory(attachmentDirectory);
-      const fileName = `${attachmentIdFactory()}-${sanitizeAttachmentFilename(name)}`;
-      const stagedPath = localAttachmentPort.joinPath(attachmentDirectory, fileName);
-      yield* localAttachmentPort.writeFile(stagedPath, bytes);
-      return { path: stagedPath };
+): LocalAttachmentService => {
+  let stagedAttachmentIndex: StagedAttachmentIndex | undefined;
+  const getStagedAttachmentIndex = (
+    attachmentDirectory: string,
+  ): Effect.Effect<StagedAttachmentIndex, HostOperationError> =>
+    Effect.gen(function* () {
+      if (stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory) {
+        return stagedAttachmentIndex;
+      }
+      const index = yield* loadStagedAttachmentIndex(localAttachmentPort, attachmentDirectory);
+      stagedAttachmentIndex = index;
+      return index;
     });
-  },
-  resolve(input) {
-    return Effect.gen(function* () {
-      const { path } = input;
-      const trimmedPath = path.trim();
-      const attachmentDirectory = localAttachmentPort.stageDirectory();
-      if (localAttachmentPort.isAbsolutePath(trimmedPath)) {
-        const canonicalDirectory = yield* localAttachmentPort
-          .canonicalizePath(attachmentDirectory)
-          .pipe(
+  const addStagedAttachmentToLoadedIndex = (
+    attachmentDirectory: string,
+    fileName: string,
+    stagedPath: string,
+  ): Effect.Effect<void, HostOperationError> =>
+    Effect.gen(function* () {
+      if (stagedAttachmentIndex?.attachmentDirectory !== attachmentDirectory) {
+        return;
+      }
+      const modifiedTimeMs = yield* localAttachmentPort.modifiedTimeMs(stagedPath);
+      addIndexedStagedAttachment(
+        stagedAttachmentIndex,
+        readStagedAttachmentOriginalName({ path: stagedPath, fileName }),
+        {
+          entry: { path: stagedPath, fileName },
+          modifiedTimeMs,
+        },
+      );
+    });
+  return {
+    stage(input) {
+      return Effect.gen(function* () {
+        const { name, base64Data } = yield* Effect.try({
+          try: () => normalizeStageInput(input),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+        const bytes = yield* Effect.try({
+          try: () => decodeBase64(base64Data),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+        const attachmentDirectory = localAttachmentPort.stageDirectory();
+        yield* localAttachmentPort.ensureDirectory(attachmentDirectory);
+        const fileName = `${attachmentIdFactory()}-${sanitizeAttachmentFilename(name)}`;
+        const stagedPath = localAttachmentPort.joinPath(attachmentDirectory, fileName);
+        yield* localAttachmentPort.writeFile(stagedPath, bytes);
+        yield* addStagedAttachmentToLoadedIndex(attachmentDirectory, fileName, stagedPath);
+        return { path: stagedPath };
+      });
+    },
+    resolve(input) {
+      return Effect.gen(function* () {
+        const { path } = input;
+        const trimmedPath = path.trim();
+        const attachmentDirectory = localAttachmentPort.stageDirectory();
+        if (localAttachmentPort.isAbsolutePath(trimmedPath)) {
+          const canonicalDirectory = yield* localAttachmentPort
+            .canonicalizePath(attachmentDirectory)
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new HostOperationError({
+                    operation: "local_attachment.resolve_stage_directory",
+                    message: `Failed to resolve staged attachment directory: ${errorMessage(error)}`,
+                    cause: error,
+                  }),
+              ),
+            );
+          const canonicalPath = yield* localAttachmentPort.canonicalizePath(trimmedPath).pipe(
             Effect.mapError(
               (error) =>
                 new HostOperationError({
-                  operation: "local_attachment.resolve_stage_directory",
-                  message: `Failed to resolve staged attachment directory: ${errorMessage(error)}`,
+                  operation: "local_attachment.resolve_path",
+                  message: `Failed to resolve staged attachment path: ${errorMessage(error)}`,
                   cause: error,
                 }),
             ),
           );
-        const canonicalPath = yield* localAttachmentPort.canonicalizePath(trimmedPath).pipe(
-          Effect.mapError(
-            (error) =>
-              new HostOperationError({
-                operation: "local_attachment.resolve_path",
-                message: `Failed to resolve staged attachment path: ${errorMessage(error)}`,
-                cause: error,
-              }),
-          ),
-        );
-        if (isWithinDirectory(localAttachmentPort, canonicalDirectory, canonicalPath)) {
-          return { path: trimmedPath };
-        }
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: "Attachment path is not a staged local attachment.",
-            field: "path",
-          }),
-        );
-      }
-      const lookupToken = yield* Effect.try({
-        try: () => sanitizeAttachmentLookupToken(trimmedPath),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: {
-              field: "path",
-            },
-          }),
-      });
-      const displayName = formatAttachmentLookupDisplayName(lookupToken);
-      const entries = yield* localAttachmentPort.readDirectory(attachmentDirectory).pipe(
-        Effect.mapError((error) => {
-          if (hasNestedNodeErrorCode(error, "ENOENT")) {
-            return new HostValidationError({
-              message: `No staged local attachment matches '${displayName}'.`,
-              field: "path",
-              cause: error,
-            });
+          if (isWithinDirectory(localAttachmentPort, canonicalDirectory, canonicalPath)) {
+            return { path: trimmedPath };
           }
-          return new HostOperationError({
-            operation: "local_attachment.read_stage_directory",
-            message: `Failed to read attachment staging directory: ${errorMessage(error)}`,
-            cause: error,
-          });
-        }),
-      );
-      const matches = entries.filter(
-        (entry) => readStagedAttachmentOriginalName(entry) === lookupToken,
-      );
-      if (matches.length === 0) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `No staged local attachment matches '${displayName}'.`,
-            field: "path",
-          }),
-        );
-      }
-      if (matches.length === 1) {
-        const [match] = matches;
-        if (!match) {
           return yield* Effect.fail(
             new HostValidationError({
-              message: `No staged local attachment matches '${displayName}'.`,
+              message: "Attachment path is not a staged local attachment.",
               field: "path",
             }),
           );
         }
-        return { path: match.path };
-      }
-      const rankedMatches = yield* Effect.all(
-        matches.map((entry) =>
-          localAttachmentPort
-            .modifiedTimeMs(entry.path)
-            .pipe(Effect.map((modifiedTimeMs) => ({ entry, modifiedTimeMs }))),
-        ),
-      );
-      rankedMatches.sort((left, right) => right.modifiedTimeMs - left.modifiedTimeMs);
-      const [newestMatch] = rankedMatches;
-      if (!newestMatch) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `No staged local attachment matches '${displayName}'.`,
-            field: "path",
-          }),
+        const lookupToken = yield* Effect.try({
+          try: () => sanitizeAttachmentLookupToken(trimmedPath),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+              details: {
+                field: "path",
+              },
+            }),
+        });
+        const displayName = formatAttachmentLookupDisplayName(lookupToken);
+        const index = yield* getStagedAttachmentIndex(attachmentDirectory);
+        const match = yield* resolveIndexedStagedAttachment(
+          localAttachmentPort,
+          index,
+          lookupToken,
+          displayName,
         );
-      }
-      return { path: newestMatch.entry.path };
-    });
-  },
-});
+        return { path: match.entry.path };
+      });
+    },
+  };
+};
