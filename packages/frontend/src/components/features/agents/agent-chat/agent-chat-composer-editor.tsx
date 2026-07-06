@@ -12,7 +12,7 @@ import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
-import { AgentChatComposerFileMenu } from "./agent-chat-composer-file-menu";
+import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 import {
   readEditableTextContent,
   renderEditableTextContent,
@@ -452,7 +452,7 @@ export function AgentChatComposerEditor({
           )
         : null}
       {showFileMenu ? (
-        <AgentChatComposerFileMenu
+        <AgentChatComposerReferenceMenu
           results={fileSearchResults}
           subagents={filteredSubagents}
           activeIndex={activeFileIndex}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { render, screen } from "@testing-library/react";
-import { AgentChatComposerFileMenu } from "./agent-chat-composer-file-menu";
+import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 
 const RESULTS: AgentFileSearchResult[] = [
   {
@@ -26,10 +26,10 @@ const SUBAGENTS: AgentSubagentReference[] = [
   },
 ];
 
-describe("AgentChatComposerFileMenu", () => {
+describe("AgentChatComposerReferenceMenu", () => {
   test("uses the selected surface token for the active file row", () => {
     render(
-      <AgentChatComposerFileMenu
+      <AgentChatComposerReferenceMenu
         results={RESULTS}
         subagents={[]}
         activeIndex={1}
@@ -51,7 +51,7 @@ describe("AgentChatComposerFileMenu", () => {
 
   test("uses the selected surface token for the active subagent row", () => {
     render(
-      <AgentChatComposerFileMenu
+      <AgentChatComposerReferenceMenu
         results={RESULTS}
         subagents={SUBAGENTS}
         activeIndex={0}
