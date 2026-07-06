@@ -549,6 +549,7 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
     supportsSubagentReferences,
@@ -748,15 +749,21 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
-  let referencePlaceholder = "@ for files";
+  let referencePlaceholder: string | null = null;
   if (supportsFileSearch && supportsSubagentReferences) {
     referencePlaceholder = "@ for files and subagents";
   } else if (supportsSubagentReferences) {
     referencePlaceholder = "@ for subagents";
+  } else if (supportsFileSearch) {
+    referencePlaceholder = "@ for files";
   }
-  let composerPlaceholder = supportsSkillReferences
-    ? `${referencePlaceholder}; / for commands; $ for skills`
-    : `${referencePlaceholder}; / for commands`;
+  const composerPlaceholderParts = [
+    referencePlaceholder,
+    supportsSlashCommands ? "/ for commands" : null,
+    supportsSkillReferences ? "$ for skills" : null,
+  ].filter((part): part is string => Boolean(part));
+  let composerPlaceholder =
+    composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }

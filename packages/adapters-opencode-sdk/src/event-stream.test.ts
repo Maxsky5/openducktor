@@ -1763,6 +1763,24 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
+  test("does not settle assistant turns from step-finish error parts", async () => {
+    const emitted = await runEventStream([
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-step-error",
+        partId: "text-step-error-1",
+        text: "Retryable intermediate output",
+      }),
+      makeAssistantStepFinishPartUpdatedEvent({
+        messageId: "assistant-message-step-error",
+        partId: "step-finish-error-part-1",
+        reason: "error",
+      }),
+    ]);
+
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+    expect(emitted.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
   test("keeps assistant completion monotonic when stale non-terminal updates arrive later", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({

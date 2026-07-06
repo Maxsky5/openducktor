@@ -86,6 +86,22 @@ const readAgentList = async (
   return payload;
 };
 
+const readOptionalAgentList = async (
+  client: AgentsClient,
+  workingDirectory: string,
+): Promise<unknown[]> => {
+  const app = client.app;
+  if (!app || typeof app.agents !== "function") {
+    return [];
+  }
+
+  const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
+  if (!Array.isArray(payload)) {
+    throw new Error("Invalid agent payload: expected an array.");
+  }
+  return payload;
+};
+
 const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
   const trimmedPath = rawPath.trim();
   if (trimmedPath.length === 0) {
@@ -137,7 +153,7 @@ export const listAvailableModels = async (
     directory: input.workingDirectory,
   });
   const providerData = unwrapData(response, "list configured providers");
-  const agentsData = await readAgentList(client as AgentsClient, input.workingDirectory);
+  const agentsData = await readOptionalAgentList(client as AgentsClient, input.workingDirectory);
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = agentsData
     .map((rawEntry) => {
@@ -190,22 +206,28 @@ export const listAvailableSubagents = async (
       .map((rawEntry, index) => {
         const entry = asUnknownRecord(rawEntry);
         const name = entry ? readStringProp(entry, ["name"]) : undefined;
-        if (!entry || !name || name.trim().length === 0) {
+        const trimmedName = name?.trim();
+        if (!entry || !trimmedName) {
           throw new Error(`Invalid agent payload: expected agent ${index} to include a name.`);
         }
 
         const mode = readStringProp(entry, ["mode"]);
+        if (!isAgentMode(mode)) {
+          return null;
+        }
+
         const hidden = typeof entry.hidden === "boolean" ? entry.hidden : undefined;
         if (hidden === true || mode === "primary") {
           return null;
         }
 
         const description = readStringProp(entry, ["description"]);
+        const trimmedDescription = description?.trim();
         return {
-          id: name,
-          name,
-          label: name,
-          ...(description ? { description } : {}),
+          id: trimmedName,
+          name: trimmedName,
+          label: trimmedName,
+          ...(trimmedDescription ? { description: trimmedDescription } : {}),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)

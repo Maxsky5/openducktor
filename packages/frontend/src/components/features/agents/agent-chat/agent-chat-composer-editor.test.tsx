@@ -1059,12 +1059,12 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "@a");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     });
 
     typeIntoEditor(rendered.container, "@ab");
 
-    expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+    expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     expect(screen.queryByText("Searching files...")).toBeNull();
 
     if (!resolveSecondSearch) {
@@ -1074,7 +1074,7 @@ describe("AgentChatComposerEditor", () => {
     finishSecondSearch([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /ab.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /ab.ts/i })).toBeDefined();
     });
   });
 
@@ -1092,7 +1092,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1117,7 +1117,7 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "check @");
 
-    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 
     await waitFor(() => {
@@ -1143,11 +1143,11 @@ describe("AgentChatComposerEditor", () => {
     typeIntoEditor(rendered.container, "@rev");
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
     });
-    expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     expect(
-      screen.getByRole("button", { name: /@reviewer/i }).querySelector(".lucide-bot"),
+      screen.getByRole("option", { name: /@reviewer/i }).querySelector(".lucide-bot"),
     ).toBeDefined();
   });
 
@@ -1167,7 +1167,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "ask @rev");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1197,7 +1197,7 @@ describe("AgentChatComposerEditor", () => {
     typeIntoEditor(rendered.container, "@rev");
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /@reviewer/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
     });
     expect(searchFiles).not.toHaveBeenCalled();
   });
@@ -1310,7 +1310,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1753,7 +1753,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1784,7 +1784,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1886,7 +1886,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1936,7 +1936,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1997,7 +1997,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2071,7 +2071,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2140,7 +2140,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -2187,7 +2187,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -2234,7 +2234,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -2340,7 +2340,7 @@ describe("AgentChatComposerEditor", () => {
     );
 
     typeIntoEditor(rendered.container, "check @");
-    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 
     await waitFor(() => {
@@ -2413,7 +2413,7 @@ describe("AgentChatComposerEditor", () => {
     });
 
     await waitFor(() => {
-      expect(within(rendered.container).getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(within(rendered.container).getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
   });
 });

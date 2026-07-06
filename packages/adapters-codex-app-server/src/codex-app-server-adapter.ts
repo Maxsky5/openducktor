@@ -89,6 +89,7 @@ import {
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexTurnForSession,
 } from "./codex-turn-lifecycle";
+import { assertCodexUserMessagePartsSupported } from "./codex-user-inputs";
 import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
@@ -288,6 +289,7 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
+    assertCodexUserMessagePartsSupported(input.parts);
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }

@@ -740,6 +740,31 @@ describe("CodexAppServerAdapter streaming", () => {
     );
   });
 
+  test("rejects subagent reference sends before initializing a missing local session", async () => {
+    const { adapter, transports, requireRepoRuntime } = createHarness();
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [
+            {
+              kind: "subagent_reference",
+              subagent: {
+                id: "reviewer",
+                name: "reviewer",
+                label: "Reviewer",
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("Codex app-server does not support 'subagent_reference' user message parts.");
+
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(transports.size).toBe(0);
+  });
+
   test("ignores threadless global Codex notifications while replaying buffered session events", async () => {
     let resolveTurnStart: (() => void) | null = null;
     const takeBufferedEvents = mock(async (_runtimeId: string) => {

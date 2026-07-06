@@ -97,7 +97,27 @@ describe("AgentChatComposerReferenceMenu", () => {
     );
 
     expect(screen.queryByText("Searching files")).toBeNull();
-    expect(screen.getByRole("button", { name: /agent-chat-composer\.tsx/i })).toBeDefined();
+    expect(screen.getByRole("option", { name: /agent-chat-composer\.tsx/i })).toBeDefined();
+  });
+
+  test("does not render subagent loading when results are already visible", () => {
+    render(
+      <AgentChatComposerReferenceMenu
+        items={fileItems(RESULTS)}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={false}
+        isFileSearchLoading={false}
+        supportsSubagentReferences={true}
+        subagentsError={null}
+        isSubagentsLoading={true}
+        onSelectFile={() => {}}
+        onSelectSubagent={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("Loading subagents")).toBeNull();
+    expect(screen.getByRole("option", { name: /agent-chat-composer\.tsx/i })).toBeDefined();
   });
 
   test("uses the selected surface token for the active file row", () => {
@@ -116,10 +136,13 @@ describe("AgentChatComposerReferenceMenu", () => {
       />,
     );
 
-    const activeFile = screen.getByRole("button", { name: /styles\.css/i });
+    const listbox = screen.getByRole("listbox", { name: "References" });
+    const activeFile = screen.getByRole("option", { name: /styles\.css/i });
 
     expect(activeFile.className).toContain("bg-selected-surface");
     expect(activeFile.className).not.toContain("bg-primary/20");
+    expect(activeFile.getAttribute("aria-selected")).toBe("true");
+    expect(listbox.getAttribute("aria-activedescendant")).toBe(activeFile.id);
   });
 
   test("uses the selected surface token for the active subagent row", () => {
@@ -138,9 +161,12 @@ describe("AgentChatComposerReferenceMenu", () => {
       />,
     );
 
-    const activeSubagent = screen.getByRole("button", { name: /@reviewer/i });
+    const listbox = screen.getByRole("listbox", { name: "References" });
+    const activeSubagent = screen.getByRole("option", { name: /@reviewer/i });
 
     expect(activeSubagent.className).toContain("bg-selected-surface");
     expect(activeSubagent.querySelector(".lucide-bot")).toBeDefined();
+    expect(activeSubagent.getAttribute("aria-selected")).toBe("true");
+    expect(listbox.getAttribute("aria-activedescendant")).toBe(activeSubagent.id);
   });
 });

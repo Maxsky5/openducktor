@@ -112,6 +112,37 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("@ for files and subagents; / for commands");
   });
 
+  test("uses a subagent-only reference placeholder when file search is unsupported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsFileSearch: false,
+          supportsSubagentReferences: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("@ for subagents; / for commands");
+    expect(html).not.toContain("@ for files");
+  });
+
+  test("does not advertise @ references when files and subagents are unsupported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsFileSearch: false,
+          supportsSubagentReferences: false,
+        },
+      }),
+    );
+
+    expect(html).toContain("/ for commands");
+    expect(html).not.toContain("@ for files");
+    expect(html).not.toContain("@ for subagents");
+  });
+
   test("hides stop and context widgets when not available", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

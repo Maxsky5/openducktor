@@ -102,8 +102,12 @@ const handleReferenceMenuKeyDown = ({
   }
 
   if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
-    event.preventDefault();
     const item = referenceMenuItems[activeReferenceIndex] ?? referenceMenuItems[0];
+    if (!item) {
+      return false;
+    }
+
+    event.preventDefault();
     if (item?.kind === "subagent") {
       selectSubagentReference(item.subagent);
       return true;
@@ -111,8 +115,8 @@ const handleReferenceMenuKeyDown = ({
 
     if (item?.kind === "file") {
       selectFileSearchResult(item.result);
+      return true;
     }
-    return true;
   }
 
   return false;
@@ -207,16 +211,16 @@ const removeChipEditType = (
   | "remove_file_reference"
   | "remove_skill_reference"
   | "remove_subagent_reference" => {
-  if (kind === "slash_command") {
-    return "remove_slash_command";
+  switch (kind) {
+    case "slash_command":
+      return "remove_slash_command";
+    case "file_reference":
+      return "remove_file_reference";
+    case "skill_mention":
+      return "remove_skill_reference";
+    case "subagent_reference":
+      return "remove_subagent_reference";
   }
-  if (kind === "file_reference") {
-    return "remove_file_reference";
-  }
-  if (kind === "subagent_reference") {
-    return "remove_subagent_reference";
-  }
-  return "remove_skill_reference";
 };
 
 const removeAdjacentChip = ({

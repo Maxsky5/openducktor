@@ -1,6 +1,6 @@
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useId, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
@@ -31,6 +31,12 @@ export function AgentChatComposerReferenceMenu({
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
   const hasResults = items.length > 0;
+  const listboxId = useId();
+  const activeOptionId =
+    activeIndex >= 0 && activeIndex < items.length
+      ? `${listboxId}-option-${activeIndex}`
+      : undefined;
+  const showSubagentsLoading = isSubagentsLoading && !hasResults;
   const showFileSearchLoading = isFileSearchLoading && !hasResults;
   const showEmptyState =
     !hasResults &&
@@ -41,7 +47,7 @@ export function AgentChatComposerReferenceMenu({
   const shouldRenderMenu =
     hasResults ||
     showFileSearchLoading ||
-    isSubagentsLoading ||
+    showSubagentsLoading ||
     Boolean(fileSearchError) ||
     Boolean(subagentsError) ||
     showEmptyState;
@@ -52,7 +58,7 @@ export function AgentChatComposerReferenceMenu({
 
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
-      {isSubagentsLoading ? (
+      {showSubagentsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading subagents</span>
@@ -80,13 +86,21 @@ export function AgentChatComposerReferenceMenu({
         </div>
       ) : null}
       {hasResults ? (
-        <div className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl">
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label="References"
+          aria-activedescendant={activeOptionId}
+          tabIndex={0}
+          className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
+        >
           {items.map((item, index) => {
             const isActive = index === activeIndex;
             if (item.kind === "subagent") {
               return (
                 <SubagentReferenceMenuRow
                   key={item.id}
+                  optionId={`${listboxId}-option-${index}`}
                   subagent={item.subagent}
                   isActive={isActive}
                   onSelect={onSelectSubagent}
@@ -96,6 +110,7 @@ export function AgentChatComposerReferenceMenu({
             return (
               <FileReferenceMenuRow
                 key={item.id}
+                optionId={`${listboxId}-option-${index}`}
                 result={item.result}
                 isActive={isActive}
                 onSelect={onSelectFile}
@@ -109,21 +124,37 @@ export function AgentChatComposerReferenceMenu({
 }
 
 type SubagentReferenceMenuRowProps = {
+  optionId: string;
   subagent: AgentSubagentReference;
   isActive: boolean;
   onSelect: (subagent: AgentSubagentReference) => void;
 };
 
 function SubagentReferenceMenuRow({
+  optionId,
   subagent,
   isActive,
   onSelect,
 }: SubagentReferenceMenuRowProps): ReactElement {
+  const rowRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    rowRef.current?.scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [isActive]);
+
   return (
     <button
-      ref={(element) => {
-        scrollActiveReferenceRowIntoView(element, isActive);
-      }}
+      ref={rowRef}
+      id={optionId}
+      role="option"
+      aria-selected={isActive}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {
@@ -149,21 +180,37 @@ function SubagentReferenceMenuRow({
 }
 
 type FileReferenceMenuRowProps = {
+  optionId: string;
   result: AgentFileSearchResult;
   isActive: boolean;
   onSelect: (result: AgentFileSearchResult) => void;
 };
 
 function FileReferenceMenuRow({
+  optionId,
   result,
   isActive,
   onSelect,
 }: FileReferenceMenuRowProps): ReactElement {
+  const rowRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    rowRef.current?.scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [isActive]);
+
   return (
     <button
-      ref={(element) => {
-        scrollActiveReferenceRowIntoView(element, isActive);
-      }}
+      ref={rowRef}
+      id={optionId}
+      role="option"
+      aria-selected={isActive}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {
@@ -188,18 +235,4 @@ function referenceMenuRowClassName(isActive: boolean): string {
     "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
     isActive ? "bg-selected-surface" : "hover:bg-muted/80",
   );
-}
-
-function scrollActiveReferenceRowIntoView(
-  element: HTMLButtonElement | null,
-  isActive: boolean,
-): void {
-  if (!isActive) {
-    return;
-  }
-
-  element?.scrollIntoView({
-    block: "nearest",
-    inline: "nearest",
-  });
 }

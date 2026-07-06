@@ -261,6 +261,27 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.onSend).not.toHaveBeenCalled();
   });
 
+  test("falls through to send when the reference menu has no selectable rows", () => {
+    const setup = createKeyDownTestSetup({
+      referenceMenuState: {
+        query: "missing",
+        textSegmentId: "segment-1",
+        rangeStart: 0,
+        rangeEnd: 8,
+        results: [],
+        isLoading: false,
+        error: null,
+      },
+      referenceMenuItems: [],
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.selectSubagentReference).not.toHaveBeenCalled();
+    expect(setup.selectFileSearchResult).not.toHaveBeenCalled();
+    expect(setup.onSend).toHaveBeenCalledTimes(1);
+  });
+
   test("prefers slash-menu selection over send on enter", () => {
     const setup = createKeyDownTestSetup({
       slashMenuState: {
@@ -328,6 +349,7 @@ describe("agent-chat-composer-editor-keydown", () => {
     );
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeSkillMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes a newly inserted trailing line break before browser DOM mutation", () => {

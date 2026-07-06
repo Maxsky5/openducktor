@@ -284,7 +284,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run(async () => {
-      await wait(550);
+      await wait(650);
     });
 
     expect(harness.getLatest().isFileSearchLoading).toBe(true);

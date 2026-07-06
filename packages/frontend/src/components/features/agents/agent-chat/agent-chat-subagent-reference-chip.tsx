@@ -36,12 +36,10 @@ function AgentChatInlineSubagentReferenceChip({
       title={title}
       {...props}
     >
-      <span className={AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_ICON_CLASS_NAME} title={title}>
+      <span className={AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_ICON_CLASS_NAME}>
         <Bot className="size-3.5" />
       </span>
-      <span className={AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_LABEL_CLASS_NAME} title={title}>
-        {subagent.name}
-      </span>
+      <span className={AGENT_CHAT_SUBAGENT_REFERENCE_CHIP_LABEL_CLASS_NAME}>{subagent.name}</span>
     </Badge>
   );
 }

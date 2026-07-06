@@ -51,6 +51,8 @@ export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: str
 const isTerminalAssistantFinish = (value: string | undefined): boolean =>
   value === "stop" || value === "error";
 
+const isTerminalStepFinishReason = (value: string | undefined): boolean => value === "stop";
+
 export const hasTerminalStopSignalInParts = (
   parts: Part[],
   finish: string | undefined,
@@ -63,7 +65,7 @@ export const hasTerminalStopSignalInParts = (
     (part) =>
       part.type === "step-finish" &&
       typeof part.reason === "string" &&
-      isTerminalAssistantFinish(part.reason),
+      isTerminalStepFinishReason(part.reason),
   );
 };
 
@@ -73,7 +75,7 @@ const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
     return (
       record !== undefined &&
       readStringProp(record, ["type"]) === "step-finish" &&
-      isTerminalAssistantFinish(readStringProp(record, ["reason"]))
+      isTerminalStepFinishReason(readStringProp(record, ["reason"]))
     );
   });
 };
