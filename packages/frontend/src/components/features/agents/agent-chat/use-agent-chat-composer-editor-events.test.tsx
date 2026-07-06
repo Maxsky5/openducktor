@@ -163,6 +163,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     onAddFiles,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
     insertNewlineAtSelectionTarget,
   };
 };
@@ -194,6 +195,7 @@ describe("useAgentChatComposerEditorEvents", () => {
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeSkillMenu).toHaveBeenCalledTimes(1);
     expect(setup.selection.resolveSelectionTargetForLineBreak).toHaveBeenCalledWith(
       setup.root,
       setup.sourceDraft,
@@ -222,6 +224,7 @@ describe("useAgentChatComposerEditorEvents", () => {
     expect(setup.selection.clearPendingInputState).toHaveBeenCalledTimes(1);
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeSkillMenu).toHaveBeenCalledTimes(1);
     expect(setup.onAddFiles).toHaveBeenCalledWith([file]);
     expect(setup.onDraftChange).not.toHaveBeenCalled();
     expect(setup.onEditorInput).not.toHaveBeenCalled();

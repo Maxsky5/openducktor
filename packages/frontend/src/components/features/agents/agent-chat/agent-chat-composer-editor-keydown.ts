@@ -10,6 +10,7 @@ import {
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
+import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import type {
   FileMenuState,
   SkillMenuState,
@@ -66,20 +67,6 @@ type HandleComposerEditorKeyDownArgs = {
 
 const isSelectAllShortcut = (event: ReactKeyboardEvent<HTMLDivElement>): boolean => {
   return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
-};
-
-const closeAutocompleteMenus = ({
-  closeSlashMenu,
-  closeFileMenu,
-  closeSkillMenu,
-}: {
-  closeSlashMenu: () => void;
-  closeFileMenu: () => void;
-  closeSkillMenu: () => void;
-}): void => {
-  closeSlashMenu();
-  closeFileMenu();
-  closeSkillMenu();
 };
 
 const handleFileMenuKeyDown = ({
@@ -275,7 +262,7 @@ const removeAdjacentChip = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
+    closeComposerAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -317,7 +304,7 @@ const removeTrailingLineBreak = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
+    closeComposerAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -410,7 +397,7 @@ const removeCurrentLineText = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
+    closeComposerAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -452,7 +439,7 @@ const removeSelectedTextRange = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
+    closeComposerAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };

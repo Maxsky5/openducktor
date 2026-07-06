@@ -521,6 +521,52 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("closes the skill menu when inserting a newline", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "$");
+
+    await screen.findByRole("button", { name: /\$review/i });
+
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
+    });
+  });
+
+  test("closes the skill menu when pasting plain text", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "$");
+
+    await screen.findByRole("button", { name: /\$review/i });
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        plainText: "pasted",
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
+    });
+  });
+
   test("selects a slash command from pointer down without submitting the message", async () => {
     const onSend = mock(() => {});
     const rendered = render(

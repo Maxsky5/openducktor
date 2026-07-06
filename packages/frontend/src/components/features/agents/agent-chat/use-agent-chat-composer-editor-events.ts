@@ -16,6 +16,7 @@ import {
 import { classifyAttachment } from "./agent-chat-attachments";
 import type { AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
+import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import {
   getComposerContentRoot,
   replaceComposerSelectionWithText,
@@ -241,8 +242,11 @@ export const useAgentChatComposerEditorEvents = ({
       if (imageFiles.length > 0) {
         event.preventDefault();
         selection.clearPendingInputState();
-        closeSlashMenu();
-        closeFileMenu();
+        closeComposerAutocompleteMenus({
+          closeSlashMenu,
+          closeFileMenu,
+          closeSkillMenu,
+        });
         onAddFiles(imageFiles);
         return;
       }
@@ -283,12 +287,16 @@ export const useAgentChatComposerEditorEvents = ({
         return;
       }
 
-      closeSlashMenu();
-      closeFileMenu();
+      closeComposerAutocompleteMenus({
+        closeSlashMenu,
+        closeFileMenu,
+        closeSkillMenu,
+      });
       handleEditorInput(event.currentTarget);
     },
     [
       closeFileMenu,
+      closeSkillMenu,
       closeSlashMenu,
       disabled,
       handleEditorInput,
@@ -339,8 +347,11 @@ export const useAgentChatComposerEditorEvents = ({
       }
 
       event.preventDefault();
-      closeSlashMenu();
-      closeFileMenu();
+      closeComposerAutocompleteMenus({
+        closeSlashMenu,
+        closeFileMenu,
+        closeSkillMenu,
+      });
 
       void insertNewlineAtSelectionTarget(
         selection.resolveSelectionTargetForLineBreak(
@@ -353,6 +364,7 @@ export const useAgentChatComposerEditorEvents = ({
     [
       clearComposerContents,
       closeFileMenu,
+      closeSkillMenu,
       closeSlashMenu,
       insertNewlineAtSelectionTarget,
       latestDraftRef,

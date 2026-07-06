@@ -20,6 +20,7 @@ import {
   createTextSegment,
   normalizeComposerDraft,
 } from "./agent-chat-composer-draft";
+import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import { useAgentChatComposerEditorAutocomplete } from "./use-agent-chat-composer-editor-autocomplete";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import {
@@ -191,11 +192,14 @@ export const useAgentChatComposerEditor = ({
         return false;
       }
 
-      closeSlashMenu();
-      closeFileMenu();
+      closeComposerAutocompleteMenus({
+        closeSlashMenu,
+        closeFileMenu,
+        closeSkillMenu,
+      });
       return true;
     },
-    [applyEditResult, closeFileMenu, closeSlashMenu, getRememberedSelectionTarget],
+    [applyEditResult, closeFileMenu, closeSkillMenu, closeSlashMenu, getRememberedSelectionTarget],
   );
 
   const clearComposerContents = useCallback(() => {
@@ -219,10 +223,13 @@ export const useAgentChatComposerEditor = ({
       return false;
     }
 
-    closeSlashMenu();
-    closeFileMenu();
+    closeComposerAutocompleteMenus({
+      closeSlashMenu,
+      closeFileMenu,
+      closeSkillMenu,
+    });
     return true;
-  }, [applyEditResult, closeFileMenu, closeSlashMenu]);
+  }, [applyEditResult, closeFileMenu, closeSkillMenu, closeSlashMenu]);
 
   const selectSlashCommand = useCallback(
     (command: AgentSlashCommand) => {
