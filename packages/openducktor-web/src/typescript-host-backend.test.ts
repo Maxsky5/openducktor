@@ -44,6 +44,23 @@ type TestHostCommandInvoke = (
   args?: Record<string, unknown>,
 ) => Effect.Effect<unknown, unknown>;
 
+const PENDING_STREAM_READ = Symbol("pending-stream-read");
+type StreamReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
+
+const readImmediateStreamChunk = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<StreamReadResult> => {
+  const readPromise = reader.read().then((value): StreamReadResult => value);
+  await Promise.resolve();
+  const result = await Promise.race([readPromise, Promise.resolve(PENDING_STREAM_READ)]);
+  if (result === PENDING_STREAM_READ) {
+    await reader.cancel();
+    throw new Error("Expected the SSE response to flush an initial frame immediately.");
+  }
+
+  return result;
+};
+
 const createTestHostCommandRouter = (
   invoke: TestHostCommandInvoke = () => Effect.succeed(null),
 ): EffectHostCommandRouter => ({
@@ -208,11 +225,38 @@ describe("TypeScript web host backend", () => {
       throw new Error("Expected SSE response body.");
     }
     try {
-      const chunk = await reader.read();
+      const readyChunk = await readImmediateStreamChunk(reader);
+      expect(readyChunk.done).toBe(false);
+      expect(new TextDecoder().decode(readyChunk.value)).toBe(": openducktor-ready\n\n");
+
+      const chunk = await readImmediateStreamChunk(reader);
       expect(chunk.done).toBe(false);
       expect(new TextDecoder().decode(chunk.value)).toContain(
         'data: {"runtimeId":"runtime-live","kind":"server_request"',
       );
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  test("flushes an initial SSE frame for idle dev-server streams", async () => {
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/dev-server-events", {
+        method: "GET",
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      }),
+      { eventBus: new BufferedHostEventBus() },
+    );
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Expected SSE response body.");
+    }
+    try {
+      const chunk = await readImmediateStreamChunk(reader);
+      expect(chunk.done).toBe(false);
+      expect(new TextDecoder().decode(chunk.value)).toBe(": openducktor-ready\n\n");
     } finally {
       await reader.cancel();
     }

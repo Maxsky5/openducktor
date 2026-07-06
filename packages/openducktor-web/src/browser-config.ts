@@ -24,7 +24,8 @@ const readBrowserLocationOrigin = (): string | undefined => {
     return undefined;
   }
 
-  return window.location.origin;
+  const origin = window.location.origin;
+  return origin === "null" ? undefined : origin;
 };
 
 const readBrowserRuntimeConfig = (): BrowserRuntimeConfig | undefined => {
@@ -109,7 +110,7 @@ const alignBackendOriginWithBrowserOriginEffect = (
   browserOrigin?: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    if (!browserOrigin) {
+    if (!browserOrigin || browserOrigin === "null") {
       return backendOrigin.origin;
     }
 
