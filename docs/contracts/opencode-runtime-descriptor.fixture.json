@@ -2,30 +2,15 @@
   "kind": "opencode",
   "label": "OpenCode",
   "description": "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
-  "readOnlyRoleBlockedTools": [
-    "edit",
-    "write",
-    "apply_patch",
-    "ast_grep_replace",
-    "lsp_rename"
-  ],
+  "readOnlyRoleBlockedTools": ["edit", "write", "apply_patch", "ast_grep_replace", "lsp_rename"],
   "workflowToolAliasesByCanonical": {
-    "odt_read_task": [
-      "openducktor_odt_read_task",
-      "functions.openducktor_odt_read_task"
-    ],
+    "odt_read_task": ["openducktor_odt_read_task", "functions.openducktor_odt_read_task"],
     "odt_read_task_documents": [
       "openducktor_odt_read_task_documents",
       "functions.openducktor_odt_read_task_documents"
     ],
-    "odt_set_spec": [
-      "openducktor_odt_set_spec",
-      "functions.openducktor_odt_set_spec"
-    ],
-    "odt_set_plan": [
-      "openducktor_odt_set_plan",
-      "functions.openducktor_odt_set_plan"
-    ],
+    "odt_set_spec": ["openducktor_odt_set_spec", "functions.openducktor_odt_set_spec"],
+    "odt_set_plan": ["openducktor_odt_set_plan", "functions.openducktor_odt_set_plan"],
     "odt_build_blocked": [
       "openducktor_odt_build_blocked",
       "functions.openducktor_odt_build_blocked"
@@ -42,35 +27,19 @@
       "openducktor_odt_set_pull_request",
       "functions.openducktor_odt_set_pull_request"
     ],
-    "odt_qa_approved": [
-      "openducktor_odt_qa_approved",
-      "functions.openducktor_odt_qa_approved"
-    ],
-    "odt_qa_rejected": [
-      "openducktor_odt_qa_rejected",
-      "functions.openducktor_odt_qa_rejected"
-    ]
+    "odt_qa_approved": ["openducktor_odt_qa_approved", "functions.openducktor_odt_qa_approved"],
+    "odt_qa_rejected": ["openducktor_odt_qa_rejected", "functions.openducktor_odt_qa_rejected"]
   },
   "capabilities": {
     "provisioningMode": "host_managed",
     "workflow": {
       "supportsOdtWorkflowTools": true,
-      "supportedScopes": [
-        "workspace",
-        "task",
-        "build"
-      ]
+      "supportedScopes": ["workspace", "task", "build"]
     },
     "sessionLifecycle": {
-      "supportedStartModes": [
-        "fresh",
-        "reuse",
-        "fork"
-      ],
+      "supportedStartModes": ["fresh", "reuse", "fork"],
       "supportsSessionFork": true,
-      "forkTargets": [
-        "session"
-      ],
+      "forkTargets": ["session"],
       "supportsListLiveSessions": true,
       "supportsQueuedUserMessages": true,
       "supportsPendingInputSnapshots": true
@@ -82,51 +51,29 @@
       "stableItemIds": false,
       "stableItemOrder": true,
       "exposesCompletionState": false,
-      "limitations": [
-        "OpenCode session history is loaded at message-level fidelity."
-      ]
+      "limitations": ["OpenCode session history is loaded at message-level fidelity."]
     },
     "approvals": {
-      "supportedRequestTypes": [
-        "permission_grant",
-        "runtime_tool"
-      ],
-      "supportedReplyOutcomes": [
-        "approve_once",
-        "approve_session",
-        "reject"
-      ],
+      "supportedRequestTypes": ["permission_grant", "runtime_tool"],
+      "supportedReplyOutcomes": ["approve_once", "approve_session", "reject"],
       "omittedPermissionBehavior": "deny",
-      "pendingVisibility": [
-        "live_snapshot"
-      ],
+      "pendingVisibility": ["live_snapshot"],
       "canClassifyMutatingRequests": true,
       "readOnlyAutoRejectSafe": true
     },
     "structuredInput": {
       "supportsQuestions": true,
       "supportsMultipleQuestions": true,
-      "supportedAnswerModes": [
-        "free_text",
-        "single_select",
-        "multi_select"
-      ],
+      "supportedAnswerModes": ["free_text", "single_select", "multi_select"],
       "supportsRequiredQuestions": true,
       "supportsDefaultValues": false,
       "supportsSecretInput": false,
       "supportsCustomAnswers": true,
       "supportsQuestionResolution": true,
-      "pendingVisibility": [
-        "live_snapshot"
-      ]
+      "pendingVisibility": ["live_snapshot"]
     },
     "promptInput": {
-      "supportedParts": [
-        "text",
-        "slash_command",
-        "file_reference",
-        "folder_reference"
-      ],
+      "supportedParts": ["text", "slash_command", "file_reference", "folder_reference"],
       "supportsSlashCommands": true,
       "supportsFileSearch": true,
       "supportsSkillReferences": false
@@ -139,10 +86,7 @@
       "supportsFileStatus": true,
       "supportsMcpStatus": true,
       "supportsSubagents": true,
-      "supportedSubagentExecutionModes": [
-        "foreground",
-        "background"
-      ]
+      "supportedSubagentExecutionModes": ["foreground", "background"]
     }
   }
 }

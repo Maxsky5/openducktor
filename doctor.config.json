@@ -40,10 +40,7 @@
       },
       {
         "files": ["src/pages/agents/query-sync/use-navigation-url-sync.ts"],
-        "rules": [
-          "react-doctor/no-derived-state",
-          "react-doctor/no-pass-live-state-to-parent"
-        ]
+        "rules": ["react-doctor/no-derived-state", "react-doctor/no-pass-live-state-to-parent"]
       }
     ]
   }
