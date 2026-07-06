@@ -1,8 +1,9 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
 import {
   addIndexedStagedAttachment,
+  isStagedAttachmentIndexFresh,
   loadStagedAttachmentIndex,
   readStagedAttachmentOriginalName,
   resolveIndexedStagedAttachment,
@@ -33,15 +34,23 @@ export type LocalAttachmentStageInput = {
 export type LocalAttachmentResolveInput = {
   path: string;
 };
-type StagedAttachmentIndexFlight = {
-  attachmentDirectory: string;
-  deferred: Deferred.Deferred<StagedAttachmentIndex, HostOperationError>;
-};
 type PendingStagedAttachment = {
   fileName: string;
   modifiedTimeMs: number;
   path: string;
 };
+type StagedAttachmentIndexFlight = {
+  attachmentDirectory: string;
+  deferred: Deferred.Deferred<StagedAttachmentIndex, HostOperationError>;
+  pendingAttachments: PendingStagedAttachment[];
+};
+const makeStagedAttachmentIndexFlight = (
+  attachmentDirectory: string,
+): StagedAttachmentIndexFlight => ({
+  attachmentDirectory,
+  deferred: Deferred.unsafeMake(FiberId.none),
+  pendingAttachments: [],
+});
 const sanitizeAttachmentFilename = (name: string): string => {
   const sanitized = [...name]
     .map((character) => {
@@ -140,10 +149,17 @@ export const createLocalAttachmentService = (
 ): LocalAttachmentService => {
   let stagedAttachmentIndex: StagedAttachmentIndex | undefined;
   let stagedAttachmentIndexFlight: StagedAttachmentIndexFlight | undefined;
-  const pendingStagedAttachments = new Map<string, PendingStagedAttachment[]>();
-  const addPendingStagedAttachmentsToIndex = (index: StagedAttachmentIndex): void => {
-    const pendingAttachments = pendingStagedAttachments.get(index.attachmentDirectory);
-    if (!pendingAttachments) {
+  let latestLocalModifiedTimeMs = 0;
+  const nextLocalModifiedTimeMs = (): number => {
+    const now = Date.now();
+    latestLocalModifiedTimeMs = Math.max(now, latestLocalModifiedTimeMs + 1);
+    return latestLocalModifiedTimeMs;
+  };
+  const addPendingStagedAttachmentsToIndex = (
+    index: StagedAttachmentIndex,
+    pendingAttachments: PendingStagedAttachment[],
+  ): void => {
+    if (pendingAttachments.length === 0) {
       return;
     }
     for (const attachment of pendingAttachments) {
@@ -162,38 +178,35 @@ export const createLocalAttachmentService = (
         },
       );
     }
-    pendingStagedAttachments.delete(index.attachmentDirectory);
-  };
-  const recordPendingStagedAttachment = (
-    attachmentDirectory: string,
-    attachment: PendingStagedAttachment,
-  ): void => {
-    const pendingAttachments = pendingStagedAttachments.get(attachmentDirectory);
-    if (!pendingAttachments) {
-      pendingStagedAttachments.set(attachmentDirectory, [attachment]);
-      return;
-    }
-    pendingAttachments.push(attachment);
   };
   const getStagedAttachmentIndex = (
     attachmentDirectory: string,
   ): Effect.Effect<StagedAttachmentIndex, HostOperationError> =>
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        if (stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory) {
-          return stagedAttachmentIndex;
+        const loadedIndex =
+          stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory
+            ? stagedAttachmentIndex
+            : undefined;
+        if (loadedIndex) {
+          const fresh = yield* restore(
+            isStagedAttachmentIndexFresh(localAttachmentPort, loadedIndex),
+          );
+          if (fresh && stagedAttachmentIndex === loadedIndex) {
+            return loadedIndex;
+          }
+          if (stagedAttachmentIndex === loadedIndex) {
+            stagedAttachmentIndex = undefined;
+          }
         }
-        const reservation = yield* Effect.gen(function* () {
+        const reservation = yield* Effect.sync(() => {
           if (stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory) {
             return { _tag: "loaded" as const, index: stagedAttachmentIndex };
           }
           if (stagedAttachmentIndexFlight?.attachmentDirectory === attachmentDirectory) {
             return { _tag: "existing" as const, flight: stagedAttachmentIndexFlight };
           }
-          const flight = {
-            attachmentDirectory,
-            deferred: yield* Deferred.make<StagedAttachmentIndex, HostOperationError>(),
-          };
+          const flight = makeStagedAttachmentIndexFlight(attachmentDirectory);
           stagedAttachmentIndexFlight = flight;
           return { _tag: "created" as const, flight };
         });
@@ -206,7 +219,7 @@ export const createLocalAttachmentService = (
               reservation.flight,
               loadStagedAttachmentIndex(localAttachmentPort, attachmentDirectory),
               (index) => {
-                addPendingStagedAttachmentsToIndex(index);
+                addPendingStagedAttachmentsToIndex(index, reservation.flight.pendingAttachments);
                 stagedAttachmentIndex = index;
               },
               (flight) => {
@@ -224,17 +237,17 @@ export const createLocalAttachmentService = (
     attachmentDirectory: string,
     fileName: string,
     stagedPath: string,
-  ): Effect.Effect<void, HostOperationError> =>
-    Effect.gen(function* () {
+  ): Effect.Effect<void> =>
+    Effect.sync(() => {
       if (
         stagedAttachmentIndex?.attachmentDirectory !== attachmentDirectory &&
         stagedAttachmentIndexFlight?.attachmentDirectory !== attachmentDirectory
       ) {
         return;
       }
-      const modifiedTimeMs = yield* localAttachmentPort.modifiedTimeMs(stagedPath);
+      const modifiedTimeMs = nextLocalModifiedTimeMs();
       if (stagedAttachmentIndex?.attachmentDirectory !== attachmentDirectory) {
-        recordPendingStagedAttachment(attachmentDirectory, {
+        stagedAttachmentIndexFlight?.pendingAttachments.push({
           fileName,
           modifiedTimeMs,
           path: stagedPath,

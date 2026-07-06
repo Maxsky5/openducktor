@@ -12,6 +12,7 @@ export type IndexedStagedAttachment = {
 export type StagedAttachmentIndex = {
   attachmentDirectory: string;
   byLookupToken: Map<string, IndexedStagedAttachment[]>;
+  directoryModifiedTimeMs: number | null;
 };
 
 export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): string => {
@@ -62,6 +63,25 @@ const compareNewestStagedAttachmentFirst = (
   right: IndexedStagedAttachment,
 ): number => right.modifiedTimeMs - left.modifiedTimeMs;
 
+export const readStagedAttachmentDirectoryModifiedTimeMs = (
+  localAttachmentPort: LocalAttachmentPort,
+  attachmentDirectory: string,
+): Effect.Effect<number | null, HostOperationError> =>
+  localAttachmentPort.modifiedTimeMs(attachmentDirectory).pipe(
+    Effect.catchAll((error) => {
+      if (hasNestedNodeErrorCode(error, "ENOENT")) {
+        return Effect.succeed(null);
+      }
+      return Effect.fail(
+        new HostOperationError({
+          operation: "local_attachment.stat_stage_directory",
+          message: `Failed to inspect attachment staging directory: ${errorMessage(error)}`,
+          cause: error,
+        }),
+      );
+    }),
+  );
+
 export const addIndexedStagedAttachment = (
   index: StagedAttachmentIndex,
   lookupToken: string,
@@ -103,6 +123,10 @@ export const loadStagedAttachmentIndex = (
   attachmentDirectory: string,
 ): Effect.Effect<StagedAttachmentIndex, HostOperationError> =>
   Effect.gen(function* () {
+    const directoryModifiedTimeMs = yield* readStagedAttachmentDirectoryModifiedTimeMs(
+      localAttachmentPort,
+      attachmentDirectory,
+    );
     const entries = yield* localAttachmentPort.readDirectory(attachmentDirectory).pipe(
       Effect.catchAll((error) => {
         if (hasNestedNodeErrorCode(error, "ENOENT")) {
@@ -120,6 +144,7 @@ export const loadStagedAttachmentIndex = (
     const index: StagedAttachmentIndex = {
       attachmentDirectory,
       byLookupToken: new Map(),
+      directoryModifiedTimeMs,
     };
     const indexedAttachments = yield* Effect.all(
       entries.map((entry) =>
@@ -137,6 +162,16 @@ export const loadStagedAttachmentIndex = (
     }
     return index;
   });
+
+export const isStagedAttachmentIndexFresh = (
+  localAttachmentPort: LocalAttachmentPort,
+  index: StagedAttachmentIndex,
+): Effect.Effect<boolean, HostOperationError> =>
+  readStagedAttachmentDirectoryModifiedTimeMs(localAttachmentPort, index.attachmentDirectory).pipe(
+    Effect.map(
+      (directoryModifiedTimeMs) => directoryModifiedTimeMs === index.directoryModifiedTimeMs,
+    ),
+  );
 
 export const resolveIndexedStagedAttachment = (
   localAttachmentPort: LocalAttachmentPort,
