@@ -13,7 +13,8 @@ const ALLOWED_ELECTRON_RENDERER_FILES = new Set([
 
 const SHARED_FRONTEND_BANNED_PATTERNS = [
   {
-    pattern: /(?:^|\n)\s*(?:import\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?|export\s+(?:type\s+)?[\s\S]*?\s+from\s+|await\s+import\(|import\()\s*["'][^"']*(?:apps\/electron|packages\/openducktor-web)/,
+    pattern:
+      /(?:^|\n)\s*(?:import\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?|export\s+(?:type\s+)?[\s\S]*?\s+from\s+|await\s+import\(|import\()\s*["'][^"']*(?:apps\/electron|packages\/openducktor-web)/,
     message: "Shared frontend code must not import shell internals; use the shell bridge instead.",
   },
 ];
@@ -59,7 +60,8 @@ const walkFiles = (root: string): string[] => {
   return files.sort((left, right) => left.localeCompare(right));
 };
 
-const lineForIndex = (source: string, index: number): number => source.slice(0, index).split("\n").length;
+const lineForIndex = (source: string, index: number): number =>
+  source.slice(0, index).split("\n").length;
 
 const findSharedFrontendViolations = (): Violation[] => {
   const violations: Violation[] = [];
@@ -86,11 +88,15 @@ const findSharedFrontendViolations = (): Violation[] => {
 
 const findElectronRendererShellViolations = (): Violation[] => {
   return walkFiles(ELECTRON_RENDERER_ROOT)
-    .filter((filePath) => !ALLOWED_ELECTRON_RENDERER_FILES.has(relative(ELECTRON_RENDERER_ROOT, filePath)))
+    .filter(
+      (filePath) =>
+        !ALLOWED_ELECTRON_RENDERER_FILES.has(relative(ELECTRON_RENDERER_ROOT, filePath)),
+    )
     .map((filePath) => ({
       filePath,
       line: 1,
-      message: "Electron renderer source must stay a thin shell. Move shared UI/runtime code to packages/frontend/src.",
+      message:
+        "Electron renderer source must stay a thin shell. Move shared UI/runtime code to packages/frontend/src.",
       snippet: "",
     }));
 };
@@ -98,7 +104,9 @@ const findElectronRendererShellViolations = (): Violation[] => {
 const violations = [...findSharedFrontendViolations(), ...findElectronRendererShellViolations()];
 
 if (violations.length > 0) {
-  console.error(`[frontend-boundary-guard] Found ${violations.length} frontend boundary violation(s).`);
+  console.error(
+    `[frontend-boundary-guard] Found ${violations.length} frontend boundary violation(s).`,
+  );
   for (const violation of violations) {
     console.error(
       `[frontend-boundary-guard] ${violation.filePath}:${violation.line} ${violation.message} ${violation.snippet}`,
@@ -107,4 +115,6 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("[frontend-boundary-guard] Shared frontend and Electron renderer shell boundaries are clean.");
+console.log(
+  "[frontend-boundary-guard] Shared frontend and Electron renderer shell boundaries are clean.",
+);

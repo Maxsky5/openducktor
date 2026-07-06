@@ -23,6 +23,8 @@
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test && bun run test:scripts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "lint": "bun run frontend:boundary-guard && bun run host:architecture-guard && bun run --workspaces lint",
     "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
     "host:architecture-guard": "bun run scripts/host-architecture-guard.ts",
