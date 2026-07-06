@@ -3,10 +3,10 @@ import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
+import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
 
 type AgentChatComposerReferenceMenuProps = {
-  results: AgentFileSearchResult[];
-  subagents: AgentSubagentReference[];
+  items: ReferenceMenuItem[];
   activeIndex: number;
   fileSearchError: string | null;
   isFileSearchLoading: boolean;
@@ -18,8 +18,7 @@ type AgentChatComposerReferenceMenuProps = {
 };
 
 export function AgentChatComposerReferenceMenu({
-  results,
-  subagents,
+  items,
   activeIndex,
   fileSearchError,
   isFileSearchLoading,
@@ -29,7 +28,7 @@ export function AgentChatComposerReferenceMenu({
   onSelectFile,
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement {
-  const hasResults = subagents.length > 0 || results.length > 0;
+  const hasResults = items.length > 0;
   const showEmptyState =
     !hasResults &&
     !isFileSearchLoading &&
@@ -68,24 +67,22 @@ export function AgentChatComposerReferenceMenu({
       ) : null}
       {hasResults ? (
         <div className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl">
-          {subagents.map((subagent, index) => {
+          {items.map((item, index) => {
             const isActive = index === activeIndex;
-            return (
-              <SubagentReferenceMenuRow
-                key={subagent.id}
-                subagent={subagent}
-                isActive={isActive}
-                onSelect={onSelectSubagent}
-              />
-            );
-          })}
-          {results.map((result, index) => {
-            const combinedIndex = subagents.length + index;
-            const isActive = combinedIndex === activeIndex;
+            if (item.kind === "subagent") {
+              return (
+                <SubagentReferenceMenuRow
+                  key={item.id}
+                  subagent={item.subagent}
+                  isActive={isActive}
+                  onSelect={onSelectSubagent}
+                />
+              );
+            }
             return (
               <FileReferenceMenuRow
-                key={result.id}
-                result={result}
+                key={item.id}
+                result={item.result}
                 isActive={isActive}
                 onSelect={onSelectFile}
               />

@@ -131,7 +131,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     const latest = harness.getLatest();
     expect(latest.showSlashMenu).toBe(true);
     expect(latest.filteredSlashCommands.map((command) => command.trigger)).toEqual(["compact"]);
-    expect(latest.showFileMenu).toBe(false);
+    expect(latest.showReferenceMenu).toBe(false);
 
     await harness.unmount();
   });
@@ -245,7 +245,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     });
 
     const loadingState = harness.getLatest();
-    expect(loadingState.showFileMenu).toBe(true);
+    expect(loadingState.showReferenceMenu).toBe(true);
     expect(loadingState.isFileSearchLoading).toBe(true);
     expect(loadingState.fileSearchResults.map((result) => result.path)).toEqual(["src/alpha.ts"]);
 
@@ -278,9 +278,13 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     await harness.waitFor((state) => state.isFileSearchLoading === false);
 
-    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
     expect(harness.getLatest().filteredSubagents.map((subagent) => subagent.name)).toEqual([
       "reviewer",
+    ]);
+    expect(harness.getLatest().referenceMenuItems.map((item) => item.kind)).toEqual([
+      "subagent",
+      "file",
     ]);
     expect(searchFiles).toHaveBeenCalledWith("rev");
 
@@ -303,7 +307,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       });
     });
 
-    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
     expect(harness.getLatest().filteredSubagents.map((subagent) => subagent.name)).toEqual([
       "docs",
@@ -365,7 +369,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       });
     });
 
-    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
     expect(harness.getLatest().isFileSearchLoading).toBe(true);
 
     await harness.update(
@@ -374,8 +378,8 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       }),
     );
 
-    expect(harness.getLatest().fileMenuState).toBeNull();
-    expect(harness.getLatest().showFileMenu).toBe(false);
+    expect(harness.getLatest().referenceMenuState).toBeNull();
+    expect(harness.getLatest().showReferenceMenu).toBe(false);
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run(() => {
@@ -384,8 +388,8 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     await harness.update(createAutocompleteProps(searchFiles));
 
-    expect(harness.getLatest().fileMenuState).toBeNull();
-    expect(harness.getLatest().showFileMenu).toBe(false);
+    expect(harness.getLatest().referenceMenuState).toBeNull();
+    expect(harness.getLatest().showReferenceMenu).toBe(false);
     expect(harness.getLatest().fileSearchResults).toEqual([]);
 
     await harness.unmount();

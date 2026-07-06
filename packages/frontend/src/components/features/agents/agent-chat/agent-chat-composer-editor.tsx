@@ -358,12 +358,11 @@ export function AgentChatComposerEditor({
     activeSlashIndex,
     filteredSkills,
     activeSkillIndex,
-    filteredSubagents,
+    referenceMenuItems,
     showSlashMenu,
     showSkillMenu,
-    fileSearchResults,
-    activeFileIndex,
-    showFileMenu,
+    activeReferenceIndex,
+    showReferenceMenu,
     fileSearchError,
     isFileSearchLoading,
     focusLastTextSegment,
@@ -451,11 +450,10 @@ export function AgentChatComposerEditor({
             document.body,
           )
         : null}
-      {showFileMenu ? (
+      {showReferenceMenu ? (
         <AgentChatComposerReferenceMenu
-          results={fileSearchResults}
-          subagents={filteredSubagents}
-          activeIndex={activeFileIndex}
+          items={referenceMenuItems}
+          activeIndex={activeReferenceIndex}
           fileSearchError={fileSearchError}
           isFileSearchLoading={isFileSearchLoading}
           supportsSubagentReferences={supportsSubagentReferences}

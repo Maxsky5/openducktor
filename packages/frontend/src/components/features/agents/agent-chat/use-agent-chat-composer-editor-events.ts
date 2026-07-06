@@ -23,7 +23,8 @@ import {
 } from "./agent-chat-composer-selection";
 import {
   AUTOCOMPLETE_NAVIGATION_KEYS,
-  type FileMenuState,
+  type ReferenceMenuItem,
+  type ReferenceMenuState,
   type SkillMenuState,
   type SlashMenuState,
 } from "./use-agent-chat-composer-editor-autocomplete";
@@ -136,22 +137,22 @@ type UseAgentChatComposerEditorEventsArgs = {
     | "focusTextSegmentWithMemory"
   >;
   slashMenuState: SlashMenuState | null;
-  fileMenuState: FileMenuState | null;
+  referenceMenuState: ReferenceMenuState | null;
   skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
-  filteredSubagents: AgentSubagentReference[];
+  referenceMenuItems: ReferenceMenuItem[];
   activeSlashIndex: number;
   activeSkillIndex: number;
-  activeFileIndex: number;
+  activeReferenceIndex: number;
   closeSlashMenu: () => void;
-  closeFileMenu: () => void;
+  closeReferenceMenu: () => void;
   closeSkillMenu: () => void;
   syncMenusForSelectionTarget: (
     sourceDraft: AgentChatComposerDraft,
     selectionTarget: TextSelectionTarget | null,
   ) => void;
-  moveActiveFileIndex: (direction: 1 | -1) => boolean;
+  moveActiveReferenceIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
   moveActiveSkillIndex: (direction: 1 | -1) => boolean;
   applyEditResult: ApplyEditResult;
@@ -172,19 +173,19 @@ export const useAgentChatComposerEditorEvents = ({
   latestDraftRef,
   selection,
   slashMenuState,
-  fileMenuState,
+  referenceMenuState,
   skillMenuState,
   filteredSlashCommands,
   filteredSkills,
-  filteredSubagents,
+  referenceMenuItems,
   activeSlashIndex,
   activeSkillIndex,
-  activeFileIndex,
+  activeReferenceIndex,
   closeSlashMenu,
-  closeFileMenu,
+  closeReferenceMenu,
   closeSkillMenu,
   syncMenusForSelectionTarget,
-  moveActiveFileIndex,
+  moveActiveReferenceIndex,
   moveActiveSlashIndex,
   moveActiveSkillIndex,
   applyEditResult,
@@ -244,7 +245,7 @@ export const useAgentChatComposerEditorEvents = ({
         selection.clearPendingInputState();
         closeComposerAutocompleteMenus({
           closeSlashMenu,
-          closeFileMenu,
+          closeReferenceMenu,
           closeSkillMenu,
         });
         onAddFiles(imageFiles);
@@ -289,13 +290,13 @@ export const useAgentChatComposerEditorEvents = ({
 
       closeComposerAutocompleteMenus({
         closeSlashMenu,
-        closeFileMenu,
+        closeReferenceMenu,
         closeSkillMenu,
       });
       handleEditorInput(event.currentTarget);
     },
     [
-      closeFileMenu,
+      closeReferenceMenu,
       closeSkillMenu,
       closeSlashMenu,
       disabled,
@@ -349,7 +350,7 @@ export const useAgentChatComposerEditorEvents = ({
       event.preventDefault();
       closeComposerAutocompleteMenus({
         closeSlashMenu,
-        closeFileMenu,
+        closeReferenceMenu,
         closeSkillMenu,
       });
 
@@ -363,7 +364,7 @@ export const useAgentChatComposerEditorEvents = ({
     },
     [
       clearComposerContents,
-      closeFileMenu,
+      closeReferenceMenu,
       closeSkillMenu,
       closeSlashMenu,
       insertNewlineAtSelectionTarget,
@@ -432,20 +433,20 @@ export const useAgentChatComposerEditorEvents = ({
         selection,
         selectComposerContents,
         isComposerContentFullySelected,
-        fileMenuState,
+        referenceMenuState,
         slashMenuState,
         skillMenuState,
         filteredSlashCommands,
         filteredSkills,
-        filteredSubagents,
+        referenceMenuItems,
         activeSlashIndex,
         activeSkillIndex,
-        activeFileIndex,
-        moveActiveFileIndex,
+        activeReferenceIndex,
+        moveActiveReferenceIndex,
         moveActiveSlashIndex,
         moveActiveSkillIndex,
         closeSlashMenu,
-        closeFileMenu,
+        closeReferenceMenu,
         closeSkillMenu,
         onSend,
         clearComposerContents,
@@ -458,22 +459,22 @@ export const useAgentChatComposerEditorEvents = ({
       });
     },
     [
-      activeFileIndex,
+      activeReferenceIndex,
       activeSlashIndex,
       activeSkillIndex,
       applyEditResult,
       clearComposerContents,
-      closeFileMenu,
+      closeReferenceMenu,
       closeSlashMenu,
       closeSkillMenu,
       disabled,
-      fileMenuState,
+      referenceMenuState,
       filteredSlashCommands,
       filteredSkills,
-      filteredSubagents,
+      referenceMenuItems,
       insertNewlineAtSelectionTarget,
       latestDraftRef,
-      moveActiveFileIndex,
+      moveActiveReferenceIndex,
       moveActiveSlashIndex,
       moveActiveSkillIndex,
       onSend,

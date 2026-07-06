@@ -12,7 +12,11 @@ import {
 } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
-import type { FileMenuState, SkillMenuState } from "./use-agent-chat-composer-editor-autocomplete";
+import type {
+  ReferenceMenuItem,
+  ReferenceMenuState,
+  SkillMenuState,
+} from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
   ActiveTextSelectionRange,
@@ -22,7 +26,7 @@ import type {
 type KeyDownTestSetupOverrides = {
   sourceDraft?: AgentChatComposerDraft;
   activeSelection?: ActiveTextSelection | null;
-  fileMenuState?: FileMenuState | null;
+  referenceMenuState?: ReferenceMenuState | null;
   skillMenuState?: SkillMenuState | null;
   slashMenuState?: {
     query: string;
@@ -32,10 +36,10 @@ type KeyDownTestSetupOverrides = {
   } | null;
   filteredSlashCommands?: AgentSlashCommand[];
   filteredSkills?: AgentSkillReference[];
-  filteredSubagents?: AgentSubagentReference[];
+  referenceMenuItems?: ReferenceMenuItem[];
   activeSlashIndex?: number;
   activeSkillIndex?: number;
-  activeFileIndex?: number;
+  activeReferenceIndex?: number;
   disabled?: boolean;
   key?: string;
   shiftKey?: boolean;
@@ -117,11 +121,11 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   const isComposerContentFullySelected = mock(
     () => overrides.isComposerContentFullySelected ?? false,
   );
-  const moveActiveFileIndex = mock(() => false);
+  const moveActiveReferenceIndex = mock(() => false);
   const moveActiveSlashIndex = mock(() => false);
   const moveActiveSkillIndex = mock(() => false);
   const closeSlashMenu = mock(() => {});
-  const closeFileMenu = mock(() => {});
+  const closeReferenceMenu = mock(() => {});
   const closeSkillMenu = mock(() => {});
   const onSend = mock(() => {});
   const clearComposerContents = mock(() => true);
@@ -135,11 +139,11 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   return {
     event,
     selection,
-    moveActiveFileIndex,
+    moveActiveReferenceIndex,
     moveActiveSlashIndex,
     moveActiveSkillIndex,
     closeSlashMenu,
-    closeFileMenu,
+    closeReferenceMenu,
     closeSkillMenu,
     onSend,
     clearComposerContents,
@@ -161,20 +165,20 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         selection,
         selectComposerContents,
         isComposerContentFullySelected,
-        fileMenuState: overrides.fileMenuState ?? null,
+        referenceMenuState: overrides.referenceMenuState ?? null,
         slashMenuState: overrides.slashMenuState ?? null,
         skillMenuState: overrides.skillMenuState ?? null,
         filteredSlashCommands: overrides.filteredSlashCommands ?? [slashCommand],
         filteredSkills: overrides.filteredSkills ?? [],
-        filteredSubagents: overrides.filteredSubagents ?? [],
+        referenceMenuItems: overrides.referenceMenuItems ?? [],
         activeSlashIndex: overrides.activeSlashIndex ?? 0,
         activeSkillIndex: overrides.activeSkillIndex ?? 0,
-        activeFileIndex: overrides.activeFileIndex ?? 0,
-        moveActiveFileIndex,
+        activeReferenceIndex: overrides.activeReferenceIndex ?? 0,
+        moveActiveReferenceIndex,
         moveActiveSlashIndex,
         moveActiveSkillIndex,
         closeSlashMenu,
-        closeFileMenu,
+        closeReferenceMenu,
         closeSkillMenu,
         onSend,
         clearComposerContents,
@@ -189,13 +193,13 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
 };
 
 describe("agent-chat-composer-editor-keydown", () => {
-  test("prefers file-menu selection over send on enter", () => {
+  test("prefers reference-menu file selection over send on enter", () => {
     const results = [
       buildFileSearchResult({ path: "src/a.ts", name: "a.ts" }),
       buildFileSearchResult({ path: "src/b.ts", name: "b.ts" }),
     ];
     const setup = createKeyDownTestSetup({
-      fileMenuState: {
+      referenceMenuState: {
         query: "b",
         textSegmentId: "segment-1",
         rangeStart: 0,
@@ -204,7 +208,12 @@ describe("agent-chat-composer-editor-keydown", () => {
         isLoading: false,
         error: null,
       },
-      activeFileIndex: 1,
+      referenceMenuItems: results.map((result) => ({
+        kind: "file",
+        id: `file:${result.id}`,
+        result,
+      })),
+      activeReferenceIndex: 1,
     });
 
     expect(setup.handled()).toBe(true);
@@ -221,7 +230,7 @@ describe("agent-chat-composer-editor-keydown", () => {
     };
     const result = buildFileSearchResult({ path: "src/a.ts", name: "a.ts" });
     const setup = createKeyDownTestSetup({
-      fileMenuState: {
+      referenceMenuState: {
         query: "rev",
         textSegmentId: "segment-1",
         rangeStart: 0,
@@ -230,8 +239,19 @@ describe("agent-chat-composer-editor-keydown", () => {
         isLoading: false,
         error: null,
       },
-      filteredSubagents: [subagent],
-      activeFileIndex: 0,
+      referenceMenuItems: [
+        {
+          kind: "subagent",
+          id: `subagent:${subagent.id}`,
+          subagent,
+        },
+        {
+          kind: "file",
+          id: `file:${result.id}`,
+          result,
+        },
+      ],
+      activeReferenceIndex: 0,
     });
 
     expect(setup.handled()).toBe(true);
@@ -307,7 +327,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       expect.objectContaining({ focusTarget: expect.any(Object), draft: expect.any(Object) }),
     );
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes a newly inserted trailing line break before browser DOM mutation", () => {
@@ -336,7 +356,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       },
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
   });
 
   test("does not remove a trailing line break on command backspace", () => {
@@ -389,7 +409,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       },
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes selected text with delete before browser DOM mutation", () => {
@@ -463,7 +483,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       },
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes current line text with command backspace before browser DOM mutation", () => {
@@ -493,7 +513,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       },
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes file chips on the current line with command backspace", () => {

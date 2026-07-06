@@ -21,7 +21,10 @@ import {
   normalizeComposerDraft,
 } from "./agent-chat-composer-draft";
 import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
-import { useAgentChatComposerEditorAutocomplete } from "./use-agent-chat-composer-editor-autocomplete";
+import {
+  type ReferenceMenuItem,
+  useAgentChatComposerEditorAutocomplete,
+} from "./use-agent-chat-composer-editor-autocomplete";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import {
   resolveTextSelectionTarget,
@@ -50,14 +53,13 @@ type UseAgentChatComposerEditorArgs = {
 type UseAgentChatComposerEditorResult = {
   filteredSlashCommands: AgentSlashCommand[];
   filteredSkills: AgentSkillReference[];
-  filteredSubagents: AgentSubagentReference[];
+  referenceMenuItems: ReferenceMenuItem[];
   activeSlashIndex: number;
   activeSkillIndex: number;
   showSlashMenu: boolean;
   showSkillMenu: boolean;
-  fileSearchResults: AgentFileSearchResult[];
-  activeFileIndex: number;
-  showFileMenu: boolean;
+  activeReferenceIndex: number;
+  showReferenceMenu: boolean;
   fileSearchError: string | null;
   isFileSearchLoading: boolean;
   focusLastTextSegment: () => void;
@@ -117,25 +119,24 @@ export const useAgentChatComposerEditor = ({
   });
   const {
     slashMenuState,
-    fileMenuState,
+    referenceMenuState,
     skillMenuState,
     filteredSlashCommands,
     filteredSkills,
-    filteredSubagents,
+    referenceMenuItems,
     activeSlashIndex,
     activeSkillIndex,
-    activeFileIndex,
+    activeReferenceIndex,
     showSlashMenu,
     showSkillMenu,
-    fileSearchResults,
-    showFileMenu,
+    showReferenceMenu,
     fileSearchError,
     isFileSearchLoading,
     closeSlashMenu,
-    closeFileMenu,
+    closeReferenceMenu,
     closeSkillMenu,
     syncMenusForSelectionTarget,
-    moveActiveFileIndex,
+    moveActiveReferenceIndex,
     moveActiveSlashIndex,
     moveActiveSkillIndex,
   } = autocomplete;
@@ -194,12 +195,18 @@ export const useAgentChatComposerEditor = ({
 
       closeComposerAutocompleteMenus({
         closeSlashMenu,
-        closeFileMenu,
+        closeReferenceMenu,
         closeSkillMenu,
       });
       return true;
     },
-    [applyEditResult, closeFileMenu, closeSkillMenu, closeSlashMenu, getRememberedSelectionTarget],
+    [
+      applyEditResult,
+      closeReferenceMenu,
+      closeSkillMenu,
+      closeSlashMenu,
+      getRememberedSelectionTarget,
+    ],
   );
 
   const clearComposerContents = useCallback(() => {
@@ -225,11 +232,11 @@ export const useAgentChatComposerEditor = ({
 
     closeComposerAutocompleteMenus({
       closeSlashMenu,
-      closeFileMenu,
+      closeReferenceMenu,
       closeSkillMenu,
     });
     return true;
-  }, [applyEditResult, closeFileMenu, closeSkillMenu, closeSlashMenu]);
+  }, [applyEditResult, closeReferenceMenu, closeSkillMenu, closeSlashMenu]);
 
   const selectSlashCommand = useCallback(
     (command: AgentSlashCommand) => {
@@ -257,7 +264,7 @@ export const useAgentChatComposerEditor = ({
 
   const selectFileSearchResult = useCallback(
     (result: AgentFileSearchResult) => {
-      if (!fileMenuState) {
+      if (!referenceMenuState) {
         return;
       }
 
@@ -266,17 +273,17 @@ export const useAgentChatComposerEditor = ({
       const didApply = applyEditResult(
         applyComposerDraftEdit(sourceDraft, {
           type: "insert_file_reference",
-          textSegmentId: fileMenuState.textSegmentId,
-          rangeStart: fileMenuState.rangeStart,
-          rangeEnd: fileMenuState.rangeEnd,
+          textSegmentId: referenceMenuState.textSegmentId,
+          rangeStart: referenceMenuState.rangeStart,
+          rangeEnd: referenceMenuState.rangeEnd,
           file: result,
         }),
       );
       if (didApply) {
-        closeFileMenu();
+        closeReferenceMenu();
       }
     },
-    [applyEditResult, closeFileMenu, fileMenuState],
+    [applyEditResult, closeReferenceMenu, referenceMenuState],
   );
 
   const selectSkillReference = useCallback(
@@ -303,24 +310,24 @@ export const useAgentChatComposerEditor = ({
 
   const selectSubagentReference = useCallback(
     (subagent: AgentSubagentReference) => {
-      if (!fileMenuState) {
+      if (!referenceMenuState) {
         return;
       }
 
       const didApply = applyEditResult(
         applyComposerDraftEdit(latestDraftRef.current, {
           type: "insert_subagent_reference",
-          textSegmentId: fileMenuState.textSegmentId,
-          rangeStart: fileMenuState.rangeStart,
-          rangeEnd: fileMenuState.rangeEnd,
+          textSegmentId: referenceMenuState.textSegmentId,
+          rangeStart: referenceMenuState.rangeStart,
+          rangeEnd: referenceMenuState.rangeEnd,
           subagent,
         }),
       );
       if (didApply) {
-        closeFileMenu();
+        closeReferenceMenu();
       }
     },
-    [applyEditResult, closeFileMenu, fileMenuState],
+    [applyEditResult, closeReferenceMenu, referenceMenuState],
   );
 
   const {
@@ -340,19 +347,19 @@ export const useAgentChatComposerEditor = ({
     latestDraftRef,
     selection,
     slashMenuState,
-    fileMenuState,
+    referenceMenuState,
     skillMenuState,
     filteredSlashCommands,
     filteredSkills,
-    filteredSubagents,
+    referenceMenuItems,
     activeSlashIndex,
     activeSkillIndex,
-    activeFileIndex,
+    activeReferenceIndex,
     closeSlashMenu,
-    closeFileMenu,
+    closeReferenceMenu,
     closeSkillMenu,
     syncMenusForSelectionTarget,
-    moveActiveFileIndex,
+    moveActiveReferenceIndex,
     moveActiveSlashIndex,
     moveActiveSkillIndex,
     applyEditResult,
@@ -371,14 +378,13 @@ export const useAgentChatComposerEditor = ({
   return {
     filteredSlashCommands,
     filteredSkills,
-    filteredSubagents,
+    referenceMenuItems,
     activeSlashIndex,
     activeSkillIndex,
     showSlashMenu,
     showSkillMenu,
-    fileSearchResults,
-    activeFileIndex,
-    showFileMenu,
+    activeReferenceIndex,
+    showReferenceMenu,
     fileSearchError,
     isFileSearchLoading,
     focusLastTextSegment,

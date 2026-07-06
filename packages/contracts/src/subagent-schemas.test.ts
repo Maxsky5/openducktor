@@ -10,7 +10,6 @@ describe("subagent schemas", () => {
           name: " reviewer ",
           label: " Review Agent ",
           description: " Checks changes ",
-          color: " teal ",
         },
       ],
     });
@@ -21,7 +20,6 @@ describe("subagent schemas", () => {
         name: "reviewer",
         label: "Review Agent",
         description: "Checks changes",
-        color: "teal",
       },
     ]);
   });

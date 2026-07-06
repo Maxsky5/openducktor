@@ -1,5 +1,33 @@
 import { describe, expect, mock, test } from "bun:test";
-import { listAvailableSlashCommands, listAvailableSubagents, searchFiles } from "./catalog-and-mcp";
+import {
+  listAvailableModels,
+  listAvailableSlashCommands,
+  listAvailableSubagents,
+  searchFiles,
+} from "./catalog-and-mcp";
+
+describe("catalog-and-mcp listAvailableModels", () => {
+  test("requires the runtime agent listing API for profile metadata", async () => {
+    await expect(
+      listAvailableModels(
+        (() => ({
+          config: {
+            providers: async () => ({
+              data: {
+                providers: [],
+                default: {},
+              },
+            }),
+          },
+        })) as never,
+        {
+          runtimeEndpoint: "http://127.0.0.1:1234",
+          workingDirectory: "/repo",
+        },
+      ),
+    ).rejects.toThrow("OpenCode runtime does not expose the agent listing API.");
+  });
+});
 
 describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("normalizes command payloads into a slash catalog", async () => {
@@ -128,7 +156,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
     const agents = mock(async () => ({
       data: [
         { name: "reviewer", description: "Review changes", hidden: false, mode: "subagent" },
-        { name: "planner", hidden: false, mode: "all", native: true, color: "teal" },
+        { name: "planner", hidden: false, mode: "all" },
         { name: "build", hidden: false, mode: "primary" },
         { name: "secret", hidden: true, mode: "subagent" },
       ],
@@ -151,7 +179,6 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
         id: "planner",
         name: "planner",
         label: "planner",
-        color: "teal",
       },
       {
         id: "reviewer",

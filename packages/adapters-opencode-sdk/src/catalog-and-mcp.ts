@@ -50,8 +50,6 @@ type AgentsClient = {
   };
 };
 
-type AgentListMode = "optional" | "required";
-
 const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
   value === "subagent" || value === "primary" || value === "all";
 
@@ -75,13 +73,9 @@ const resolveAgentColor = (
 const readAgentList = async (
   client: AgentsClient,
   workingDirectory: string,
-  mode: AgentListMode,
 ): Promise<unknown[]> => {
   const app = client.app;
   if (!app || typeof app.agents !== "function") {
-    if (mode === "optional") {
-      return [];
-    }
     throw new Error("OpenCode runtime does not expose the agent listing API.");
   }
 
@@ -143,11 +137,7 @@ export const listAvailableModels = async (
     directory: input.workingDirectory,
   });
   const providerData = unwrapData(response, "list configured providers");
-  const agentsData = await readAgentList(
-    client as AgentsClient,
-    input.workingDirectory,
-    "optional",
-  );
+  const agentsData = await readAgentList(client as AgentsClient, input.workingDirectory);
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = agentsData
     .map((rawEntry) => {
@@ -195,11 +185,7 @@ export const listAvailableSubagents = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    const agentsData = await readAgentList(
-      client as AgentsClient,
-      input.workingDirectory,
-      "required",
-    );
+    const agentsData = await readAgentList(client as AgentsClient, input.workingDirectory);
     const subagents = agentsData
       .map((rawEntry, index) => {
         const entry = asUnknownRecord(rawEntry);
@@ -215,14 +201,11 @@ export const listAvailableSubagents = async (
         }
 
         const description = readStringProp(entry, ["description"]);
-        const native = typeof entry.native === "boolean" ? entry.native : undefined;
-        const resolvedColor = resolveAgentColor(name, entry.color, native);
         return {
           id: name,
           name,
           label: name,
           ...(description ? { description } : {}),
-          ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)

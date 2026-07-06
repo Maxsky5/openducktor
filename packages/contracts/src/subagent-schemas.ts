@@ -7,7 +7,6 @@ export const subagentDescriptorSchema = z.object({
   name: subagentTextSchema,
   label: subagentTextSchema.optional(),
   description: subagentTextSchema.optional(),
-  color: subagentTextSchema.optional(),
 });
 export type SubagentDescriptor = z.infer<typeof subagentDescriptorSchema>;
 

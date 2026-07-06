@@ -1,15 +1,15 @@
 type ComposerMenuClosers = {
   closeSlashMenu: () => void;
-  closeFileMenu: () => void;
+  closeReferenceMenu: () => void;
   closeSkillMenu: () => void;
 };
 
 export function closeComposerAutocompleteMenus({
   closeSlashMenu,
-  closeFileMenu,
+  closeReferenceMenu,
   closeSkillMenu,
 }: ComposerMenuClosers): void {
   closeSlashMenu();
-  closeFileMenu();
+  closeReferenceMenu();
   closeSkillMenu();
 }
