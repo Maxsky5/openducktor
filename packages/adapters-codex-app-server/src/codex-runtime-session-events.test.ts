@@ -70,6 +70,7 @@ const createActiveTurn = (
   turnModel: AgentModelSelection = model,
 ): ActiveCodexTurn => ({
   session: createSession(threadId),
+  startedAtMs: Date.now(),
   turnStartPromise: Promise.resolve({}),
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,

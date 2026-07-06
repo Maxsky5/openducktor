@@ -734,6 +734,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         {
           runtimeId: "runtime-events",
           kind: "notification",
+          receivedAt: expect.any(String),
           message: {
             method: "thread/status/changed",
             params: { threadId: "thread-1", status: { type: "idle" } },
@@ -742,6 +743,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         {
           runtimeId: "runtime-events",
           kind: "server_request",
+          receivedAt: expect.any(String),
           message: {
             id: 99,
             method: "execCommandApproval",
@@ -763,6 +765,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         {
           runtimeId: "runtime-events",
           kind: "notification",
+          receivedAt: expect.any(String),
           message: {
             method: "thread/status/changed",
             params: { threadId: "thread-1", status: { type: "idle" } },
@@ -771,6 +774,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         {
           runtimeId: "runtime-events",
           kind: "server_request",
+          receivedAt: expect.any(String),
           message: {
             id: 99,
             method: "execCommandApproval",

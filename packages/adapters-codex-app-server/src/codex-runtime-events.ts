@@ -19,6 +19,7 @@ import type {
 export type CodexRuntimeStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
+  receivedAt: string;
   message: unknown;
 };
 
@@ -94,10 +95,10 @@ export class CodexRuntimeEventBuffer {
 
   bufferRuntimeStreamEvent(
     threadId: string,
-    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "message">,
+    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
   ): BufferedCodexRuntimeEvent {
     if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message);
+      const notification = parseNotificationRecord(event.message, event.receivedAt);
       this.bufferNotificationForThread(threadId, notification);
       return { kind: "notification", notification };
     }

@@ -367,7 +367,7 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message);
+      const notification = parseNotificationRecord(event.message, event.receivedAt);
       if (notification.method === "serverRequest/resolved") {
         this.handleServerRequestResolvedNotification(event.runtimeId, notification);
         return;
@@ -567,7 +567,7 @@ export class CodexRuntimeSessionEvents {
 
   private bufferRuntimeStreamEvent(
     threadId: string,
-    event: { runtimeId: string; kind: "notification" | "server_request"; message: unknown },
+    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
   ): void {
     this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
@@ -627,10 +627,12 @@ export class CodexRuntimeSessionEvents {
 
   private async processRuntimeStreamEventForSession(
     session: CodexSessionState,
-    event: { kind: "notification" | "server_request"; message: unknown },
+    event: Pick<CodexRuntimeStreamEvent, "kind" | "receivedAt" | "message">,
   ): Promise<void> {
     if (event.kind === "notification") {
-      await this.handlePendingNotifications(session, [parseNotificationRecord(event.message)]);
+      await this.handlePendingNotifications(session, [
+        parseNotificationRecord(event.message, event.receivedAt),
+      ]);
       return;
     }
     await this.processServerRequestsForSession(session, [parseServerRequestRecord(event.message)]);
@@ -700,7 +702,7 @@ export class CodexRuntimeSessionEvents {
     threadId: string | null,
     event: CodexRuntimeStreamEvent,
   ): Promise<void> {
-    const notification = parseNotificationRecord(event.message);
+    const notification = parseNotificationRecord(event.message, event.receivedAt);
     if (notification.method === "serverRequest/resolved") {
       this.handleServerRequestResolvedNotification(event.runtimeId, notification);
       return;
@@ -809,7 +811,7 @@ export class CodexRuntimeSessionEvents {
     if (event.kind !== "notification") {
       return null;
     }
-    const notification = parseNotificationRecord(event.message);
+    const notification = parseNotificationRecord(event.message, event.receivedAt);
     if (notification.method !== "serverRequest/resolved") {
       return null;
     }
@@ -832,6 +834,7 @@ export class CodexRuntimeSessionEvents {
   private bufferUnprocessedServerRequest(
     runtimeId: string,
     request: CodexServerRequestRecord,
+    receivedAt: string,
   ): void {
     const threadId = extractThreadIdFromParams(request.params);
     if (!threadId) {
@@ -841,6 +844,7 @@ export class CodexRuntimeSessionEvents {
     this.bufferRuntimeStreamEvent(threadId, {
       runtimeId,
       kind: "server_request",
+      receivedAt,
       message: request,
     });
   }
@@ -963,11 +967,11 @@ export class CodexRuntimeSessionEvents {
           const request = parseServerRequestRecord(event.message);
           const requestKey = this.serverRequestBatchKey(event.runtimeId, request);
           if (!requestKey || !resolvedRequestKeys.has(requestKey)) {
-            this.bufferUnprocessedServerRequest(event.runtimeId, request);
+            this.bufferUnprocessedServerRequest(event.runtimeId, request, event.receivedAt);
           }
           continue;
         }
-        const notification = parseNotificationRecord(event.message);
+        const notification = parseNotificationRecord(event.message, event.receivedAt);
         if (notification.method === "serverRequest/resolved") {
           this.handleServerRequestResolvedNotification(event.runtimeId, notification);
           continue;

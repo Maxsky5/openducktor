@@ -57,17 +57,30 @@ export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
         if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
           return;
         }
-        const event = payload as { runtimeId?: unknown; kind?: unknown; message?: unknown };
+        const event = payload as {
+          runtimeId?: unknown;
+          kind?: unknown;
+          message?: unknown;
+          receivedAt?: unknown;
+        };
         if (event.runtimeId !== runtimeId) {
           return;
         }
         if (event.kind !== "notification" && event.kind !== "server_request") {
           return;
         }
+        if (typeof event.receivedAt !== "string" || event.receivedAt.trim().length === 0) {
+          return;
+        }
         if (event.kind === "notification" && isSkillsChangedNotification(event.message)) {
           invalidateSkillCatalogQueries();
         }
-        listener({ runtimeId, kind: event.kind, message: event.message });
+        listener({
+          runtimeId,
+          kind: event.kind,
+          message: event.message,
+          receivedAt: event.receivedAt,
+        });
       });
     },
     respondServerRequest: async (

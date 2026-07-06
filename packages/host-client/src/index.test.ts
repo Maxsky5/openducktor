@@ -1584,6 +1584,7 @@ describe("HostClient", () => {
               runtimeId: "runtime-1",
               kind: "notification",
               message: { method: "codex/app-server/ready" },
+              receivedAt: "2026-02-22T09:00:00.000Z",
             },
           ];
         default:

@@ -452,6 +452,23 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
   return notification.receivedAt;
 };
 
+const isCodexIdleThreadStatus = (status: unknown): boolean => {
+  const type = isPlainObject(status)
+    ? extractStringField(status, ["type"])
+    : typeof status === "string"
+      ? status
+      : null;
+  return type?.toLowerCase() === "idle";
+};
+
+const isNotificationAtOrAfterActiveTurnStart = (
+  timestamp: string,
+  activeTurn: ActiveCodexTurn,
+): boolean => {
+  const receivedAtMs = Date.parse(timestamp);
+  return Number.isFinite(receivedAtMs) && receivedAtMs >= activeTurn.startedAtMs;
+};
+
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -500,10 +517,19 @@ export const handleCodexPendingNotifications = async (
 
     if (notification.method === "thread/status/changed") {
       if (isPlainObject(notification.params)) {
-        context.setSessionLiveStatus(
-          session,
-          codexThreadStatusSnapshot(notification.params.status),
-        );
+        const isIdleStatus = isCodexIdleThreadStatus(notification.params.status);
+        if (
+          activeTurn &&
+          isIdleStatus &&
+          !isNotificationAtOrAfterActiveTurnStart(timestamp, activeTurn)
+        ) {
+          continue;
+        }
+        const liveStatus = codexThreadStatusSnapshot(notification.params.status);
+        context.setSessionLiveStatus(session, liveStatus);
+        if (activeTurn && isIdleStatus) {
+          activeTurn.markTurnSettled();
+        }
       }
       continue;
     }

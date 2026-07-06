@@ -173,6 +173,7 @@ export const startCodexTurnForSession = async (
   const handledRequestKeys = new Set<string>();
   const activeTurnState: ActiveCodexTurn = {
     session,
+    startedAtMs: Date.now(),
     turnStartPromise: Promise.resolve({}),
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {

@@ -24,6 +24,32 @@ const observeSessionState = async (
   return unsubscribe;
 };
 
+type TestRuntimeStreamListener = (event: {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  receivedAt: string;
+  message: unknown;
+}) => void;
+
+const createRuntimeStreamSubscription = () => {
+  const streamListeners: TestRuntimeStreamListener[] = [];
+  const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
+    streamListeners.push(listener);
+    return () => {};
+  });
+  const emitNotification = (message: unknown, receivedAt = new Date().toISOString()) => {
+    const listener = streamListeners[0];
+    expect(listener).toBeDefined();
+    listener?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      receivedAt,
+      message,
+    });
+  };
+  return { subscribeEvents, emitNotification };
+};
+
 describe("CodexAppServerAdapter streaming", () => {
   test("emits transcript events from Codex notifications", async () => {
     const takeBufferedEvents = mock(async (_runtimeId: string) => []);
@@ -864,6 +890,122 @@ describe("CodexAppServerAdapter streaming", () => {
         expectedTurnId: "turn-active",
       },
     });
+  });
+
+  test("settles the active turn when runtime status changes to idle before turn completion", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-live", status: "running" },
+    });
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+      }),
+    ).resolves.toMatchObject({ classification: "idle" });
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Continue after idle" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
+    expect(runtimeCalls.filter((call) => call.method === "turn/steer")).toEqual([]);
+    expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(2);
+    unsubscribe();
+  });
+
+  test("does not settle the active turn from a stale buffered idle status", async () => {
+    const staleReceivedAt = new Date(Date.now() - 60_000).toISOString();
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedNotificationEvent(
+        {
+          method: "thread/status/changed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            status: { type: "idle" },
+          },
+        },
+        "runtime-live",
+        staleReceivedAt,
+      ),
+    ]);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    const firstMessage = adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    await flushCodexAdapterWork();
+    transports.get("runtime-live")?.turnStartDeferred.resolve({
+      turn: { id: "turn-live", status: "running" },
+    });
+    await firstMessage;
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+      }),
+    ).resolves.toMatchObject({ classification: "running" });
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [{ kind: "text", text: "Keep steering" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+
+    const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
+    expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(1);
+    expect(runtimeCalls).toContainEqual({
+      method: "turn/steer",
+      params: {
+        threadId: "thread/start-runtime-live",
+        input: [{ type: "text", text: "Keep steering" }],
+        expectedTurnId: "turn-live",
+      },
+    });
+    unsubscribe();
   });
 
   test("emits accepted queued Codex user messages into the runtime transcript stream", async () => {

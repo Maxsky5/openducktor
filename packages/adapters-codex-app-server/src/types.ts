@@ -62,6 +62,7 @@ export type CodexServerRequestResponder = (
 export type CodexAppServerStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
+  receivedAt: string;
   message: unknown;
 };
 

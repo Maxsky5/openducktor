@@ -6,6 +6,7 @@ const request = (id: number, threadId: string) => ({
   method: "item/tool/requestUserInput",
   params: { threadId, turnId: `turn-${id}` },
 });
+const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("CodexRuntimeEventSubscriptions", () => {
   test("removes a failed synchronous subscription so the runtime can retry", async () => {
@@ -30,11 +31,13 @@ describe("CodexRuntimeEventBuffer", () => {
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-1",
       kind: "server_request",
+      receivedAt,
       message: request(1, "child-thread"),
     });
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-2",
       kind: "server_request",
+      receivedAt,
       message: request(2, "child-thread"),
     });
 
@@ -51,11 +54,13 @@ describe("CodexRuntimeEventBuffer", () => {
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-1",
       kind: "server_request",
+      receivedAt,
       message: request(1, "child-thread"),
     });
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-2",
       kind: "server_request",
+      receivedAt,
       message: request(2, "child-thread"),
     });
 

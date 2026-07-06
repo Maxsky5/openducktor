@@ -195,13 +195,17 @@ export const createCodexAppServerTransport = (
     }
     request.resolve(parsedResult.right);
   };
-  const emitBufferedEvent = (event: CodexAppServerStreamEvent) => {
-    pushBoundedMessage(bufferedEvents, event);
+  const emitBufferedEvent = (event: Omit<CodexAppServerStreamEvent, "receivedAt">) => {
+    const receivedEvent: CodexAppServerStreamEvent = {
+      ...event,
+      receivedAt: new Date().toISOString(),
+    };
+    pushBoundedMessage(bufferedEvents, receivedEvent);
     if (!eventEmitter) {
       return;
     }
     try {
-      eventEmitter(event);
+      eventEmitter(receivedEvent);
     } catch (error) {
       failFast(
         new HostOperationError({

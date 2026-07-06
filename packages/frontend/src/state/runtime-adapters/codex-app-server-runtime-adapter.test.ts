@@ -311,6 +311,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
         kind: "notification",
+        receivedAt: "2026-02-22T09:00:01.000Z",
         message: {
           method: "turn/completed",
           params: {
@@ -326,6 +327,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
         kind: "notification",
+        receivedAt: "2026-02-22T09:00:02.000Z",
         message: {
           method: "skills/changed",
           params: { cwd: "/repo" },
