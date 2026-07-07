@@ -122,6 +122,57 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("Sessions");
   });
 
+  test("hides workflow action footer for closed tasks", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-CLOSED",
+      title: "Archived task",
+      status: "closed",
+      availableActions: ["build_start", "open_builder", "open_qa"],
+    });
+    const historicalSessions = [
+      {
+        externalSessionId: "external-spec",
+        role: "spec" as const,
+        startedAt: "2026-01-10T10:00:00.000Z",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktrees/spec",
+        selectedModel: null,
+      },
+      {
+        externalSessionId: "external-builder",
+        role: "build" as const,
+        startedAt: "2026-01-11T10:00:00.000Z",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktrees/build",
+        selectedModel: null,
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          historicalSessions,
+          taskActivityState: "idle",
+          taskSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("Archived task");
+    expect(html).not.toContain("Start Builder");
+    expect(html).not.toContain("Open Builder");
+    expect(html).not.toContain("Open Spec");
+    expect(html).not.toContain("Open QA");
+    expect(html).not.toContain('data-slot="popover-trigger"');
+  });
+
   test("renders waiting-input active primary style and suppresses the animated ray", () => {
     const task = createTaskCardFixture({ id: "TASK-WAITING", title: "Need approval" });
 

@@ -347,6 +347,10 @@ function TaskActions({
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
 }): ReactElement | null {
+  if (task.status === "closed") {
+    return null;
+  }
+
   const historicalSessionRoles = resolveHistoricalSessionRoles(historicalSessions);
   const workflowActions = resolveTaskCardActions(task, {
     include: TASK_CARD_WORKFLOW_ACTIONS,
