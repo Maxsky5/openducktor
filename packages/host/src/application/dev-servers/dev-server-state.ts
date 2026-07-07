@@ -10,6 +10,8 @@ import type { DevServerProcessHandle } from "../../ports/dev-server-process-port
 export type DevServerGroupRuntime = {
   processes: Map<string, DevServerProcessHandle>;
   state: DevServerGroupState;
+  terminalBufferedBytesByScriptId: Map<string, number>;
+  terminalNextSequenceByScriptId: Map<string, number>;
 };
 
 export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
@@ -80,14 +82,59 @@ export const syncGroupState = (
   state.updatedAt = nowIso();
 };
 
-export const nextTerminalSequence = (script: DevServerScriptState): number => {
+export const syncRuntimeTerminalBufferByteCounts = (runtime: DevServerGroupRuntime): void => {
+  const activeScriptIds = new Set(runtime.state.scripts.map((script) => script.scriptId));
+  for (const scriptId of runtime.terminalBufferedBytesByScriptId.keys()) {
+    if (!activeScriptIds.has(scriptId)) {
+      runtime.terminalBufferedBytesByScriptId.delete(scriptId);
+    }
+  }
+  for (const scriptId of runtime.terminalNextSequenceByScriptId.keys()) {
+    if (!activeScriptIds.has(scriptId)) {
+      runtime.terminalNextSequenceByScriptId.delete(scriptId);
+    }
+  }
+
+  for (const script of runtime.state.scripts) {
+    if (!runtime.terminalBufferedBytesByScriptId.has(script.scriptId)) {
+      runtime.terminalBufferedBytesByScriptId.set(
+        script.scriptId,
+        readTerminalBufferByteCount(script.bufferedTerminalChunks),
+      );
+    }
+  }
+};
+
+const nextTerminalSequenceFromReplay = (script: DevServerScriptState): number => {
   const lastChunk = script.bufferedTerminalChunks.at(-1);
   return lastChunk ? lastChunk.sequence + 1 : 0;
 };
 
-export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
+export const nextTerminalSequence = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+): number => {
+  const nextSequence =
+    runtime.terminalNextSequenceByScriptId.get(script.scriptId) ??
+    nextTerminalSequenceFromReplay(script);
+  runtime.terminalNextSequenceByScriptId.set(script.scriptId, nextSequence + 1);
+  return nextSequence;
+};
+
+const readTerminalBufferByteCount = (chunks: DevServerTerminalChunk[]): number => {
+  let totalBytes = 0;
+  for (const chunk of chunks) {
+    totalBytes += chunk.data.length;
+  }
+  return totalBytes;
+};
+
+const trimTerminalChunksWithByteCount = (
+  chunks: DevServerTerminalChunk[],
+  initialByteCount: number,
+): number => {
   let removeCount = 0;
-  let totalBytes = chunks.reduce((total, chunk) => total + chunk.data.length, 0);
+  let totalBytes = initialByteCount;
 
   while (
     chunks.length - removeCount > TERMINAL_BUFFER_CHUNK_LIMIT ||
@@ -104,6 +151,33 @@ export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
   if (removeCount > 0) {
     chunks.splice(0, removeCount);
   }
+  return totalBytes;
+};
+
+export const appendTerminalChunk = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+  chunk: DevServerTerminalChunk,
+): void => {
+  const chunks = script.bufferedTerminalChunks;
+  const currentBytes =
+    runtime.terminalBufferedBytesByScriptId.get(script.scriptId) ??
+    readTerminalBufferByteCount(chunks);
+  const totalBytes = currentBytes + chunk.data.length;
+  chunks.push(chunk);
+  runtime.terminalBufferedBytesByScriptId.set(
+    script.scriptId,
+    trimTerminalChunksWithByteCount(chunks, totalBytes),
+  );
+};
+
+export const resetTerminalChunks = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+): void => {
+  script.bufferedTerminalChunks = [];
+  runtime.terminalBufferedBytesByScriptId.set(script.scriptId, 0);
+  runtime.terminalNextSequenceByScriptId.set(script.scriptId, 0);
 };
 
 export const formatTerminalSystemMessage = (message: string): string => {

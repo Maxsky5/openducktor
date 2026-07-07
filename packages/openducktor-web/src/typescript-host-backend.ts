@@ -266,6 +266,7 @@ const writeSseEvent = (event: BufferedHostEvent): string =>
   [`id: ${event.id}`, ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join(
     "\n",
   );
+const SSE_READY_COMMENT = ": openducktor-ready\n\n";
 
 const createSseResponse = (
   stream: BufferedHostEventStream,
@@ -277,6 +278,7 @@ const createSseResponse = (
   let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      controller.enqueue(encoder.encode(SSE_READY_COMMENT));
       for (const event of stream.replayAfter(lastEventId, options)) {
         controller.enqueue(encoder.encode(writeSseEvent(event)));
       }

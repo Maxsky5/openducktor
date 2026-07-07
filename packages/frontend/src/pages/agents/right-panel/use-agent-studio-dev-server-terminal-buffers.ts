@@ -185,8 +185,15 @@ export const useAgentStudioDevServerTerminalBuffers =
         }
 
         if (event.type === "script_status_changed") {
+          const replacementContext =
+            event.script.status === "starting"
+              ? null
+              : getDevServerTerminalBufferReplacementContext(
+                  terminalBuffers,
+                  event.script.scriptId,
+                );
           const replacement = getDevServerTerminalBufferReplacement(
-            getDevServerTerminalBufferReplacementContext(terminalBuffers, event.script.scriptId),
+            replacementContext,
             event.script,
           );
           if (replacement === null) {

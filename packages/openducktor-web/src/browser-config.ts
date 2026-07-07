@@ -18,13 +18,18 @@ const readBrowserEnv = (): BrowserEnv =>
   (typeof process !== "undefined" ? process.env : undefined);
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+const OPAQUE_BROWSER_ORIGIN = "null";
+
+const isUsableBrowserOrigin = (origin: string | undefined): origin is string =>
+  typeof origin === "string" && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
 
 const readBrowserLocationOrigin = (): string | undefined => {
   if (typeof window === "undefined") {
     return undefined;
   }
 
-  return window.location.origin;
+  const origin = window.location.origin;
+  return isUsableBrowserOrigin(origin) ? origin : undefined;
 };
 
 const readBrowserRuntimeConfig = (): BrowserRuntimeConfig | undefined => {
@@ -109,7 +114,7 @@ const alignBackendOriginWithBrowserOriginEffect = (
   browserOrigin?: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    if (!browserOrigin) {
+    if (!isUsableBrowserOrigin(browserOrigin)) {
       return backendOrigin.origin;
     }
 

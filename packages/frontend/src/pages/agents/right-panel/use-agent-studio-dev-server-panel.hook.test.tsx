@@ -753,6 +753,108 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("preserves live shutdown output when a stop mutation returns an empty replay", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const runningState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const stoppedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "stopped",
+          pid: null,
+          startedAt: null,
+          bufferedTerminalChunks: [],
+        }),
+      ],
+    });
+    const stoppedScript = stoppedState.scripts[0];
+    if (!stoppedScript) {
+      throw new Error("Expected stopped dev server script fixture.");
+    }
+    const stopDeferred = createDeferred<DevServerGroupState>();
+    devServerGetState = async () => runningState;
+    devServerStop = async () => stopDeferred.promise;
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+    const getLatest = harness.getLatest;
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("ready\r\n");
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      await act(async () => {
+        getLatest().onStop();
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 1,
+            data: "closing dev server\r\n",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:30:02.000Z",
+          script: stoppedScript,
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual(["closing dev server\r\n"]);
+      });
+
+      stopDeferred.resolve(stoppedState);
+
+      await waitFor(() => {
+        expect(getLatest().isStopPending).toBe(false);
+      });
+      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
+        "closing dev server\r\n",
+      ]);
+      expect(getLatest().scripts[0]?.status).toBe("stopped");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("replaces mixed old and new replay when mutation state returns the reset window", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -1454,6 +1556,164 @@ describe("useAgentStudioDevServerPanel", () => {
       expect(getStateCalls).toBe(2);
     } finally {
       view.unmount();
+    }
+  });
+
+  test("clears old live-only output when restart emits a starting status before low-sequence chunks", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "failed",
+          pid: null,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          lastError: "Command failed.",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "Starting `bun run dev`\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const restartDeferred = createDeferred<DevServerGroupState>();
+    devServerGetState = async () => initialState;
+    devServerRestart = async () => restartDeferred.promise;
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+    const getLatest = harness.getLatest;
+
+    try {
+      await waitFor(() => {
+        expect(
+          getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual(["Starting `bun run dev`\r\n"]);
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 1,
+            data: "old failed output\r\n",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 2,
+            data: "ELIFECYCLE Command failed.\r\n",
+            timestamp: "2026-03-19T15:30:02.000Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual([
+          "Starting `bun run dev`\r\n",
+          "old failed output\r\n",
+          "ELIFECYCLE Command failed.\r\n",
+        ]);
+      });
+
+      await act(async () => {
+        getLatest().onRestart();
+      });
+      act(() => {
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:31:00.000Z",
+          script: buildScript({
+            status: "starting",
+            pid: null,
+            startedAt: "2026-03-19T15:31:00.000Z",
+            bufferedTerminalChunks: [],
+          }),
+        });
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 0,
+            data: "Starting `bun run dev`\r\n",
+            timestamp: "2026-03-19T15:31:00.000Z",
+          },
+        });
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 1,
+            data: "new dev server ready\r\n",
+            timestamp: "2026-03-19T15:31:01.000Z",
+          },
+        });
+      });
+
+      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
+        "Starting `bun run dev`\r\n",
+        "new dev server ready\r\n",
+      ]);
+
+      restartDeferred.resolve(
+        buildState({
+          scripts: [
+            buildScript({
+              status: "running",
+              pid: 4343,
+              startedAt: "2026-03-19T15:31:00.000Z",
+              bufferedTerminalChunks: [
+                {
+                  scriptId: "frontend",
+                  sequence: 0,
+                  data: "Starting `bun run dev`\r\n",
+                  timestamp: "2026-03-19T15:31:00.000Z",
+                },
+                {
+                  scriptId: "frontend",
+                  sequence: 1,
+                  data: "new dev server ready\r\n",
+                  timestamp: "2026-03-19T15:31:01.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+      await waitFor(() => {
+        expect(getLatest().isRestartPending).toBe(false);
+      });
+    } finally {
+      harness.unmount();
     }
   });
 

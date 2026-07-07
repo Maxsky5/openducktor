@@ -1,6 +1,6 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, type ITheme, Terminal } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
 export type TerminalBinding = {
@@ -29,6 +29,7 @@ type TerminalRenderController = {
   renderedStateRef: { current: RenderedTerminalState };
   renderQueueRef: { current: Promise<void> | null };
   renderGenerationRef: { current: number };
+  recreateTerminalBinding: () => TerminalBinding | null;
 };
 
 type UseDevServerTerminalBindingArgs = {
@@ -80,17 +81,12 @@ const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
   theme: buildTerminalTheme(container),
 });
 
-const writeTerminalOutput = (
-  terminal: TerminalBinding["terminal"],
-  data: string,
-): Promise<void> => {
+const writeTerminalOutput = (terminal: TerminalBinding["terminal"], data: string): void => {
   if (data.length === 0) {
-    return Promise.resolve();
+    return;
   }
 
-  return new Promise((resolve) => {
-    terminal.write(data, resolve);
-  });
+  terminal.write(data);
 };
 
 const readTerminalErrorMessage = (action: "initialize" | "render", error: unknown): string => {
@@ -224,17 +220,19 @@ const readAppendedTerminalOutput = (
   return output;
 };
 
-const renderTerminalBuffer = async ({
+const renderTerminalBuffer = ({
   binding,
   scriptId,
   terminalBuffer,
   renderedStateRef,
+  recreateTerminalBinding,
 }: {
   binding: TerminalBinding;
   scriptId: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   renderedStateRef: { current: RenderedTerminalState };
-}): Promise<void> => {
+  recreateTerminalBinding: () => TerminalBinding | null;
+}): void => {
   const entries = terminalBuffer?.entries ?? [];
   const nextResetToken = terminalBuffer?.resetToken ?? 0;
   const nextLastSequence = terminalBuffer?.lastSequence ?? null;
@@ -242,10 +240,16 @@ const renderTerminalBuffer = async ({
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
 
   if (didScriptChange || didResetTokenChange) {
-    binding.terminal.reset();
-    binding.terminal.clear();
-    await writeTerminalOutput(binding.terminal, readTerminalReplayOutput(entries));
-    binding.fitAddon.fit();
+    const hasRenderedCurrentBinding = renderedStateRef.current.scriptId !== null;
+    const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
+    if (!activeBinding) {
+      throw new Error("Cannot recreate dev server terminal before replay without a container");
+    }
+
+    activeBinding.terminal.reset();
+    activeBinding.terminal.clear();
+    writeTerminalOutput(activeBinding.terminal, readTerminalReplayOutput(entries));
+    activeBinding.fitAddon.fit();
     renderedStateRef.current = {
       scriptId,
       resetToken: nextResetToken,
@@ -254,7 +258,7 @@ const renderTerminalBuffer = async ({
     return;
   }
 
-  await writeTerminalOutput(
+  writeTerminalOutput(
     binding.terminal,
     readAppendedTerminalOutput(entries, renderedStateRef.current.lastSequence),
   );
@@ -277,6 +281,26 @@ export const useDevServerTerminalBinding = ({
     renderQueueRef.current = Promise.resolve();
   }
   const renderGenerationRef = useRef(0);
+  const terminalObserversCleanupRef = useRef<(() => void) | null>(null);
+
+  const recreateTerminalBinding = useCallback((): TerminalBinding | null => {
+    const container = containerRef.current;
+    if (!container) {
+      return null;
+    }
+
+    terminalObserversCleanupRef.current?.();
+    terminalObserversCleanupRef.current = null;
+    bindingRef.current?.terminal.dispose();
+    bindingRef.current?.fitAddon.dispose();
+    bindingRef.current = null;
+
+    const binding = createTerminalBinding(container, terminalOptions(container));
+    wireTerminalSelectionCopy(binding);
+    bindingRef.current = binding;
+    terminalObserversCleanupRef.current = createTerminalObserversCleanup(container, binding);
+    return binding;
+  }, [containerRef, createTerminalBinding]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -285,26 +309,25 @@ export const useDevServerTerminalBinding = ({
     }
 
     try {
-      const binding = createTerminalBinding(container, terminalOptions(container));
-      wireTerminalSelectionCopy(binding);
-      bindingRef.current = binding;
+      recreateTerminalBinding();
       onRendererError(null);
-      const cleanupObservers = createTerminalObserversCleanup(container, binding);
 
       return () => {
-        cleanupObservers();
+        terminalObserversCleanupRef.current?.();
+        terminalObserversCleanupRef.current = null;
         disposeTerminalBinding(bindingRef, renderedStateRef, renderQueueRef, renderGenerationRef);
       };
     } catch (error) {
       onRendererError(readTerminalErrorMessage("initialize", error));
     }
-  }, [containerRef, createTerminalBinding, onRendererError]);
+  }, [containerRef, onRendererError, recreateTerminalBinding]);
 
   return {
     bindingRef,
     renderedStateRef,
     renderQueueRef,
     renderGenerationRef,
+    recreateTerminalBinding,
   };
 };
 
@@ -313,6 +336,7 @@ export const useDevServerTerminalRendering = ({
   renderedStateRef,
   renderQueueRef,
   renderGenerationRef,
+  recreateTerminalBinding,
   scriptId,
   terminalBuffer,
   onRendererError,
@@ -328,17 +352,18 @@ export const useDevServerTerminalRendering = ({
 
     renderQueueRef.current = (renderQueueRef.current ?? Promise.resolve())
       .catch(() => {})
-      .then(async () => {
+      .then(() => {
         const queuedBinding = bindingRef.current;
         if (!queuedBinding || renderGeneration !== renderGenerationRef.current) {
           return;
         }
 
-        await renderTerminalBuffer({
+        renderTerminalBuffer({
           binding: queuedBinding,
           scriptId,
           terminalBuffer,
           renderedStateRef,
+          recreateTerminalBinding,
         });
         if (bindingRef.current && renderGeneration === renderGenerationRef.current) {
           onRendererError(null);
@@ -355,6 +380,7 @@ export const useDevServerTerminalRendering = ({
     renderGenerationRef,
     renderQueueRef,
     renderedStateRef,
+    recreateTerminalBinding,
     scriptId,
     terminalBuffer,
   ]);

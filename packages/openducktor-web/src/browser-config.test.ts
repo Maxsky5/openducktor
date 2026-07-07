@@ -76,4 +76,10 @@ describe("browser web host config", () => {
       ),
     ).toBe("http://127.0.0.1:14327");
   });
+
+  test("keeps the injected backend hostname for opaque browser origins", () => {
+    expect(
+      getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" }, "null"),
+    ).toBe("http://127.0.0.1:14327");
+  });
 });

@@ -218,6 +218,7 @@ const subscribeSseChannelEffect = (
       const listeners = new Map<number, BrowserSseListener>();
       const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
       let hasOpened = false;
+      let hasReportedPostOpenError = false;
       let resolveReady: () => void = () => {};
       let rejectReady: (error: unknown) => void = () => {};
       const ready = new Promise<void>((resolve, reject) => {
@@ -234,9 +235,11 @@ const subscribeSseChannelEffect = (
       const handleOpen = (): void => {
         if (!hasOpened) {
           hasOpened = true;
+          hasReportedPostOpenError = false;
           resolveReady();
           return;
         }
+        hasReportedPostOpenError = false;
         if (!shouldEmitControlEvents) {
           return;
         }
@@ -246,6 +249,29 @@ const subscribeSseChannelEffect = (
       };
       const handleError = (event: Event): void => {
         if (hasOpened) {
+          if (!shouldEmitControlEvents || hasReportedPostOpenError) {
+            return;
+          }
+          const warningPayload = browserLiveControlEvent(
+            BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+            `EventSource ${path} reported an error after opening.`,
+          );
+          let hasListenerError = false;
+          let listenerError: unknown;
+          for (const currentListener of listeners.values()) {
+            try {
+              currentListener(warningPayload);
+            } catch (error) {
+              if (!hasListenerError) {
+                listenerError = error;
+              }
+              hasListenerError = true;
+            }
+          }
+          hasReportedPostOpenError = true;
+          if (hasListenerError) {
+            throw listenerError;
+          }
           return;
         }
         rejectReady(

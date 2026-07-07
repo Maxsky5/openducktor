@@ -31,6 +31,7 @@ import type {
   StoppedDevServerScript,
 } from "./dev-server-service-types";
 import {
+  appendTerminalChunk,
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
@@ -41,9 +42,10 @@ import {
   formatTerminalProcessOutput,
   formatTerminalSystemMessage,
   nextTerminalSequence,
+  resetTerminalChunks,
   scriptHasLiveProcess,
   syncGroupState,
-  trimTerminalChunks,
+  syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
 
 export type {
@@ -90,11 +92,14 @@ export const createDevServerService = ({
       const existing = groups.get(key);
       if (existing) {
         syncGroupState(existing.state, repoConfig, taskId, worktreePath);
+        syncRuntimeTerminalBufferByteCounts(existing);
         return existing;
       }
       const runtime = {
         processes: new Map<string, DevServerProcessHandle>(),
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
+        terminalBufferedBytesByScriptId: new Map<string, number>(),
+        terminalNextSequenceByScriptId: new Map<string, number>(),
       };
       groups.set(key, runtime);
       return runtime;
@@ -141,15 +146,15 @@ export const createDevServerService = ({
     if (!script) {
       return;
     }
+    const timestamp = nowIso();
     const terminalChunk = {
       scriptId,
-      sequence: nextTerminalSequence(script),
+      sequence: nextTerminalSequence(runtime, script),
       data,
-      timestamp: nowIso(),
+      timestamp,
     };
-    script.bufferedTerminalChunks.push(terminalChunk);
-    trimTerminalChunks(script.bufferedTerminalChunks);
-    runtime.state.updatedAt = nowIso();
+    appendTerminalChunk(runtime, script, terminalChunk);
+    runtime.state.updatedAt = timestamp;
     publish({
       type: "terminal_chunk",
       repoPath: runtime.state.repoPath,
@@ -232,7 +237,7 @@ export const createDevServerService = ({
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
-        script.bufferedTerminalChunks = [];
+        resetTerminalChunks(runtime, script);
       });
       appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
       const handle = yield* processPort
@@ -301,7 +306,6 @@ export const createDevServerService = ({
       }> = [];
       const errors: string[] = [];
       for (const script of runtime.state.scripts) {
-        script.bufferedTerminalChunks = [];
         if (script.pid === null) {
           if (
             script.status !== "stopped" ||
