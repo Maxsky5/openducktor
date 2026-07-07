@@ -20,6 +20,8 @@ export const sessionLaunchActionIds = [
 
 export type SessionLaunchActionId = (typeof sessionLaunchActionIds)[number];
 
+const sessionLaunchActionIdSet: ReadonlySet<string> = new Set(sessionLaunchActionIds);
+
 export type SessionLaunchAction = {
   id: SessionLaunchActionId;
   role: AgentRole;
@@ -118,13 +120,12 @@ export const defaultSessionLaunchActionForRole = (role: AgentRole): SessionLaunc
 };
 
 export const isSessionLaunchActionId = (value: string | null): value is SessionLaunchActionId =>
-  value !== null && sessionLaunchActionIds.includes(value as SessionLaunchActionId);
+  value !== null && sessionLaunchActionIdSet.has(value);
 
 export const isLaunchStartModeAllowed = (
   actionId: SessionLaunchActionId,
   startMode: AgentSessionStartMode,
-): boolean =>
-  (SESSION_LAUNCH_ACTIONS[actionId] as SessionLaunchAction).allowedStartModes.includes(startMode);
+): boolean => getSessionLaunchAction(actionId).allowedStartModes.includes(startMode);
 
 export const resolveBuildContinuationLaunchAction = (
   task: TaskCard | null | undefined,
