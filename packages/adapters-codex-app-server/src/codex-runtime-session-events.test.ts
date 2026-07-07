@@ -102,6 +102,7 @@ const createActiveTurn = (
 ): ActiveCodexTurn => ({
   session: createSession(threadId),
   startedAtMs: Date.now(),
+  turnEvidenceMinReceivedAtMs: 0,
   turnStartPromise: Promise.resolve({}),
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
@@ -372,6 +373,60 @@ describe("CodexRuntimeSessionEvents", () => {
         type: "session_idle",
         externalSessionId: session.threadId,
         timestamp: idleReceivedAt,
+      }),
+    );
+  });
+
+  test("does not first-bind an active turn from old buffered turn evidence", async () => {
+    const staleTurnStartedReceivedAt = "2000-01-01T00:00:00.000Z";
+    const staleIdleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-stale-turn-start");
+    const sessions = new Map([[session.threadId, session]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    activeTurn.startedAtMs = Number.POSITIVE_INFINITY;
+    activeTurn.turnEvidenceMinReceivedAtMs = Date.parse("2000-01-01T00:00:02.000Z");
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedNotificationEvent(
+          {
+            method: "turn/started",
+            params: {
+              threadId: session.threadId,
+              turn: { id: "turn-old" },
+            },
+          },
+          session.runtimeId,
+          staleTurnStartedReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          staleIdleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      activeTurnsBySessionId,
+    });
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBeUndefined();
+    expect(activeTurn.startedAtMs).toBe(Number.POSITIVE_INFINITY);
+    expect(isSettled()).toBe(false);
+    expect(emittedEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
       }),
     );
   });

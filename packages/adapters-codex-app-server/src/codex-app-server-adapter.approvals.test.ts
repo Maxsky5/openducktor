@@ -30,10 +30,10 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
   receivedAt: runtimeEventReceivedAt,
 });
 
-const bufferedServerRequest = (message: unknown) => ({
+const bufferedServerRequest = (message: unknown, receivedAt = runtimeEventReceivedAt) => ({
   runtimeId: "runtime-live",
   kind: "server_request" as const,
-  receivedAt: runtimeEventReceivedAt,
+  receivedAt,
   message,
 });
 
@@ -951,16 +951,19 @@ describe("CodexAppServerAdapter approvals", () => {
   test("steers active Codex turns for queued user messages", async () => {
     const { adapter, takeBufferedEvents, transports } = createHarness({}, { deferTurnStart: true });
     takeBufferedEvents.mockImplementationOnce(async () => [
-      bufferedServerRequest({
-        id: 33,
-        method: "item/tool/requestUserInput",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turnId: "turn-active",
-          itemId: "item-1",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+      bufferedServerRequest(
+        {
+          id: 33,
+          method: "item/tool/requestUserInput",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turnId: "turn-active",
+            itemId: "item-1",
+            questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          },
         },
-      }),
+        new Date().toISOString(),
+      ),
     ]);
 
     await adapter.startSession(codexStartSessionInput());

@@ -174,6 +174,7 @@ export const startCodexTurnForSession = async (
   const activeTurnState: ActiveCodexTurn = {
     session,
     startedAtMs: Number.POSITIVE_INFINITY,
+    turnEvidenceMinReceivedAtMs: Number.POSITIVE_INFINITY,
     turnStartPromise: Promise.resolve({}),
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {
@@ -219,6 +220,7 @@ export const startCodexTurnForSession = async (
     }),
   );
 
+  activeTurnState.turnEvidenceMinReceivedAtMs = Date.now();
   const turnStartPromise = client
     .turnStart({
       approvalPolicy: policy.approvalPolicy,
