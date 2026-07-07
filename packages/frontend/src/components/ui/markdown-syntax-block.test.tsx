@@ -13,6 +13,8 @@ type Theme = "dark" | "light";
 const LIGHT_THEME = { themeName: "light" };
 const DARK_THEME = { themeName: "dark" };
 
+const actualThemeProviderModule = await import("@/components/layout/theme-provider");
+
 let currentTheme: Theme = "light";
 let yamlLanguageShouldFail = false;
 const registerLanguageMock = mock((_language: string, _grammar: unknown) => {});
@@ -85,7 +87,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await restoreMockedModules([
-    ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
+    ["@/components/layout/theme-provider", async () => actualThemeProviderModule],
     ["react-syntax-highlighter", () => import("react-syntax-highlighter")],
     [
       "react-syntax-highlighter/dist/esm/languages/prism/javascript",

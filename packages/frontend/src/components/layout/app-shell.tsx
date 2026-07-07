@@ -147,6 +147,29 @@ export const AppShell = memo(function AppShell(): ReactElement {
                 <div className="w-full border-t border-sidebar-border pt-2">
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
                 </div>
+                <div className="mt-auto flex w-full justify-center border-t border-sidebar-border pt-2">
+                  <Suspense
+                    fallback={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                        disabled
+                        aria-label="Settings"
+                        title="Settings"
+                      >
+                        <Settings2 className="size-4" />
+                      </Button>
+                    }
+                  >
+                    <SettingsModal
+                      triggerClassName="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                      triggerIconOnly
+                      triggerSize="icon"
+                    />
+                  </Suspense>
+                </div>
               </div>
             )}
           </aside>
