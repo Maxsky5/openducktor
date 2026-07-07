@@ -73,7 +73,13 @@
       "pendingVisibility": ["live_snapshot"]
     },
     "promptInput": {
-      "supportedParts": ["text", "slash_command", "file_reference", "folder_reference", "subagent_reference"],
+      "supportedParts": [
+        "text",
+        "slash_command",
+        "file_reference",
+        "folder_reference",
+        "subagent_reference"
+      ],
       "supportsSlashCommands": true,
       "supportsFileSearch": true,
       "supportsSkillReferences": false,

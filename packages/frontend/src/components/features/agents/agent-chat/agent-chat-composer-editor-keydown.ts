@@ -104,7 +104,8 @@ const handleReferenceMenuKeyDown = ({
   if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
     const item = referenceMenuItems[activeReferenceIndex] ?? referenceMenuItems[0];
     if (!item) {
-      return false;
+      event.preventDefault();
+      return true;
     }
 
     event.preventDefault();

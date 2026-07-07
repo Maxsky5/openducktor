@@ -261,7 +261,7 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.onSend).not.toHaveBeenCalled();
   });
 
-  test("falls through to send when the reference menu has no selectable rows", () => {
+  test("captures enter when the reference menu has no selectable rows", () => {
     const setup = createKeyDownTestSetup({
       referenceMenuState: {
         query: "missing",
@@ -279,7 +279,7 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
     expect(setup.selectSubagentReference).not.toHaveBeenCalled();
     expect(setup.selectFileSearchResult).not.toHaveBeenCalled();
-    expect(setup.onSend).toHaveBeenCalledTimes(1);
+    expect(setup.onSend).not.toHaveBeenCalled();
   });
 
   test("prefers slash-menu selection over send on enter", () => {
