@@ -252,14 +252,25 @@ const subscribeSseChannelEffect = (
           if (!shouldEmitControlEvents || hasReportedPostOpenError) {
             return;
           }
-          hasReportedPostOpenError = true;
+          const warningPayload = browserLiveControlEvent(
+            BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+            `EventSource ${path} reported an error after opening.`,
+          );
+          let hasListenerError = false;
+          let listenerError: unknown;
           for (const currentListener of listeners.values()) {
-            currentListener(
-              browserLiveControlEvent(
-                BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-                `EventSource ${path} reported an error after opening.`,
-              ),
-            );
+            try {
+              currentListener(warningPayload);
+            } catch (error) {
+              if (!hasListenerError) {
+                listenerError = error;
+              }
+              hasListenerError = true;
+            }
+          }
+          hasReportedPostOpenError = true;
+          if (hasListenerError) {
+            throw listenerError;
           }
           return;
         }

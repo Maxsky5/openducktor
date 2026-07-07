@@ -385,6 +385,36 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
+  test("isolates post-open dev-server stream-warning listener failures", async () => {
+    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const throwingListener = mock(() => {
+      throw new Error("listener failed");
+    });
+    const listener = mock(() => {});
+
+    const throwingSubscription = subscribeLocalHostDevServerEvents(throwingListener);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const unsubscribeThrowing = await throwingSubscription;
+    const unsubscribe = await subscribeLocalHostDevServerEvents(listener);
+
+    expect(() => eventSource.emit("error", "lost connection")).toThrow("listener failed");
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "EventSource dev-server-events reported an error after opening.",
+    });
+
+    eventSource.emit("error", "still disconnected");
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribeThrowing();
+    unsubscribe();
+  });
+
   test("buildLocalAttachmentPreviewUrl normalizes the backend base URL", async () => {
     const { buildLocalAttachmentPreviewUrl } = await loadLocalHostTransport();
 

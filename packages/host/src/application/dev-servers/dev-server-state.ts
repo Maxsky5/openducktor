@@ -89,6 +89,11 @@ export const syncRuntimeTerminalBufferByteCounts = (runtime: DevServerGroupRunti
       runtime.terminalBufferedBytesByScriptId.delete(scriptId);
     }
   }
+  for (const scriptId of runtime.terminalNextSequenceByScriptId.keys()) {
+    if (!activeScriptIds.has(scriptId)) {
+      runtime.terminalNextSequenceByScriptId.delete(scriptId);
+    }
+  }
 
   for (const script of runtime.state.scripts) {
     if (!runtime.terminalBufferedBytesByScriptId.has(script.scriptId)) {
@@ -173,10 +178,6 @@ export const resetTerminalChunks = (
   script.bufferedTerminalChunks = [];
   runtime.terminalBufferedBytesByScriptId.set(script.scriptId, 0);
   runtime.terminalNextSequenceByScriptId.set(script.scriptId, 0);
-};
-
-export const trimTerminalChunks = (chunks: DevServerTerminalChunk[]): void => {
-  trimTerminalChunksWithByteCount(chunks, readTerminalBufferByteCount(chunks));
 };
 
 export const formatTerminalSystemMessage = (message: string): string => {

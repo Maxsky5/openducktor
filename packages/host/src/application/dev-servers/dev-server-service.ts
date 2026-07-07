@@ -146,14 +146,15 @@ export const createDevServerService = ({
     if (!script) {
       return;
     }
+    const timestamp = nowIso();
     const terminalChunk = {
       scriptId,
       sequence: nextTerminalSequence(runtime, script),
       data,
-      timestamp: nowIso(),
+      timestamp,
     };
     appendTerminalChunk(runtime, script, terminalChunk);
-    runtime.state.updatedAt = nowIso();
+    runtime.state.updatedAt = timestamp;
     publish({
       type: "terminal_chunk",
       repoPath: runtime.state.repoPath,

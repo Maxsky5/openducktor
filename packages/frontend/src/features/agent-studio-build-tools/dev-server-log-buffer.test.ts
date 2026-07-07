@@ -103,7 +103,7 @@ describe("dev-server-log-buffer", () => {
     expect(buffer?.entries[0]?.data).toBe("latest");
   });
 
-  test("accepts later live chunks after host byte trimming preserves sequence order", () => {
+  test("accepts sequential live chunks after replay gaps", () => {
     const store = createDevServerTerminalBufferStore();
 
     appendDevServerTerminalChunk(store, {
