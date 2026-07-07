@@ -367,4 +367,14 @@ describe("Codex App Server notification parsing", () => {
       ),
     ).toThrow("Codex app-server notification is missing receivedAt.");
   });
+
+  test("rejects unparsable receivedAt timestamps", () => {
+    expect(() =>
+      parseNotificationRecord({
+        method: "thread/tokenUsage/updated",
+        params: { threadId: "thread-1" },
+        receivedAt: "not-a-date",
+      }),
+    ).toThrow("Codex app-server notification has an unparsable receivedAt timestamp 'not-a-date'.");
+  });
 });

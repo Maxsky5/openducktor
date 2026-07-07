@@ -1309,7 +1309,7 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
-  test("rejects malformed receivedAt values when checking idle status freshness", async () => {
+  test("rejects malformed receivedAt values before idle status processing", async () => {
     const takeBufferedEvents = mock(async (_runtimeId: string) => []);
     takeBufferedEvents.mockImplementationOnce(async () => [
       bufferedNotificationEvent(
@@ -1346,7 +1346,8 @@ describe("CodexAppServerAdapter streaming", () => {
 
     expect(await sendUserMessageError).toEqual(
       expect.objectContaining({
-        message: "Codex notification has an unparsable receivedAt timestamp 'not-a-timestamp'.",
+        message:
+          "Codex app-server notification has an unparsable receivedAt timestamp 'not-a-timestamp'.",
       }),
     );
   });
