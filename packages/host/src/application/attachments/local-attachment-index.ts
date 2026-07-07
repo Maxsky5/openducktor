@@ -6,7 +6,7 @@ const uuidPrefixPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 
 export type IndexedStagedAttachment = {
   entry: LocalAttachmentEntry;
-  modifiedTimeMs: number;
+  modifiedTimeMs: number | null;
 };
 
 export type StagedAttachmentIndex = {
@@ -14,15 +14,6 @@ export type StagedAttachmentIndex = {
   byLookupToken: Map<string, IndexedStagedAttachment[]>;
   directoryModifiedTimeMs: number | null;
 };
-
-type StagedAttachmentIndexLoadResult =
-  | {
-      _tag: "indexed";
-      attachment: IndexedStagedAttachment;
-    }
-  | {
-      _tag: "skipped";
-    };
 
 export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): string => {
   const uuidPrefixMatch = uuidPrefixPattern.exec(entry.fileName);
@@ -57,7 +48,9 @@ const createNoStagedAttachmentMatchError = (displayName: string): HostValidation
 const compareNewestStagedAttachmentFirst = (
   left: IndexedStagedAttachment,
   right: IndexedStagedAttachment,
-): number => right.modifiedTimeMs - left.modifiedTimeMs;
+): number =>
+  (right.modifiedTimeMs ?? Number.NEGATIVE_INFINITY) -
+  (left.modifiedTimeMs ?? Number.NEGATIVE_INFINITY);
 
 export const readStagedAttachmentDirectoryModifiedTimeMs = (
   localAttachmentPort: LocalAttachmentPort,
@@ -114,32 +107,6 @@ const removeIndexedStagedAttachment = (
   index.byLookupToken.set(lookupToken, remainingMatches);
 };
 
-const readIndexedStagedAttachment = (
-  localAttachmentPort: LocalAttachmentPort,
-  entry: LocalAttachmentEntry,
-): Effect.Effect<StagedAttachmentIndexLoadResult, HostOperationError> =>
-  localAttachmentPort.modifiedTimeMs(entry.path).pipe(
-    Effect.map(
-      (modifiedTimeMs): StagedAttachmentIndexLoadResult => ({
-        _tag: "indexed",
-        attachment: { entry, modifiedTimeMs },
-      }),
-    ),
-    Effect.catchAll((error) => {
-      if (hasNestedNodeErrorCode(error, "ENOENT")) {
-        return Effect.succeed({ _tag: "skipped" as const });
-      }
-      return Effect.fail(
-        new HostOperationError({
-          operation: "local_attachment.stat_staged_attachment",
-          message: `Failed to inspect staged attachment entry: ${errorMessage(error)}`,
-          cause: error,
-          details: { path: entry.path },
-        }),
-      );
-    }),
-  );
-
 export const loadStagedAttachmentIndex = (
   localAttachmentPort: LocalAttachmentPort,
   attachmentDirectory: string,
@@ -168,19 +135,11 @@ export const loadStagedAttachmentIndex = (
       byLookupToken: new Map(),
       directoryModifiedTimeMs,
     };
-    const indexedAttachments = yield* Effect.all(
-      entries.map((entry) => readIndexedStagedAttachment(localAttachmentPort, entry)),
-      { concurrency: "unbounded" },
-    );
-    for (const attachment of indexedAttachments) {
-      if (attachment._tag === "skipped") {
-        continue;
-      }
-      addIndexedStagedAttachment(
-        index,
-        readStagedAttachmentOriginalName(attachment.attachment.entry),
-        attachment.attachment,
-      );
+    for (const entry of entries) {
+      addIndexedStagedAttachment(index, readStagedAttachmentOriginalName(entry), {
+        entry,
+        modifiedTimeMs: null,
+      });
     }
     return index;
   });
@@ -219,10 +178,41 @@ export const resolveIndexedStagedAttachment = (
             }),
         ),
       );
-      if (exists) {
-        return match;
+      if (!exists) {
+        removeIndexedStagedAttachment(index, lookupToken, match.entry.path);
+        continue;
       }
-      removeIndexedStagedAttachment(index, lookupToken, match.entry.path);
+      if (match.modifiedTimeMs !== null) {
+        continue;
+      }
+      const modifiedTimeMs = yield* localAttachmentPort.modifiedTimeMs(match.entry.path).pipe(
+        Effect.catchAll((error) => {
+          if (hasNestedNodeErrorCode(error, "ENOENT")) {
+            removeIndexedStagedAttachment(index, lookupToken, match.entry.path);
+            return Effect.succeed(null);
+          }
+          return Effect.fail(
+            new HostOperationError({
+              operation: "local_attachment.stat_staged_attachment",
+              message: `Failed to inspect staged attachment entry: ${errorMessage(error)}`,
+              cause: error,
+              details: { path: match.entry.path },
+            }),
+          );
+        }),
+      );
+      if (modifiedTimeMs !== null) {
+        match.modifiedTimeMs = modifiedTimeMs;
+      }
     }
-    return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+    const refreshedMatches = index.byLookupToken.get(lookupToken);
+    if (!refreshedMatches || refreshedMatches.length === 0) {
+      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+    }
+    refreshedMatches.sort(compareNewestStagedAttachmentFirst);
+    const newestMatch = refreshedMatches[0];
+    if (!newestMatch) {
+      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+    }
+    return newestMatch;
   });

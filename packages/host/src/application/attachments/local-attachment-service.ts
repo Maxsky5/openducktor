@@ -189,18 +189,19 @@ export const createLocalAttachmentService = (
           stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory
             ? stagedAttachmentIndex
             : undefined;
+        let loadedIndexFresh = false;
         if (loadedIndex) {
-          const fresh = yield* restore(
+          loadedIndexFresh = yield* restore(
             isStagedAttachmentIndexFresh(localAttachmentPort, loadedIndex),
           );
-          if (fresh && stagedAttachmentIndex === loadedIndex) {
-            return loadedIndex;
-          }
-          if (stagedAttachmentIndex === loadedIndex) {
-            stagedAttachmentIndex = undefined;
-          }
         }
         const reservation = yield* Effect.sync(() => {
+          if (loadedIndex && stagedAttachmentIndex === loadedIndex) {
+            if (loadedIndexFresh) {
+              return { _tag: "loaded" as const, index: loadedIndex };
+            }
+            stagedAttachmentIndex = undefined;
+          }
           if (stagedAttachmentIndex?.attachmentDirectory === attachmentDirectory) {
             return { _tag: "loaded" as const, index: stagedAttachmentIndex };
           }

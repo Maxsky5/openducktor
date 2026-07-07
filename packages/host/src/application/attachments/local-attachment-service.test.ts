@@ -302,6 +302,24 @@ describe("createLocalAttachmentService", () => {
     });
     expect(calls.readDirectory).toBe(1);
   });
+  test("does not let an unrelated stat failure block a matching relative token", async () => {
+    const { failModifiedTimePaths, port, writeExternalFile } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+    const staged = await Effect.runPromise(
+      service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
+    );
+    const brokenPath = writeExternalFile(
+      "00000000-0000-0000-0000-000000000111-broken.txt",
+      "broken",
+    );
+    failModifiedTimePaths.add(brokenPath);
+    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).resolves.toEqual({
+      path: staged.path,
+    });
+    await expect(Effect.runPromise(service.resolve({ path: "broken.txt" }))).rejects.toThrow(
+      "Failed to inspect staged attachment entry:",
+    );
+  });
   test("shares one cold index load across concurrent relative resolves", async () => {
     let markReadDirectoryStarted: () => void = () => {};
     let releaseReadDirectory: () => void = () => {};
@@ -447,7 +465,7 @@ describe("createLocalAttachmentService", () => {
       "No staged local attachment matches 'brief.pdf'.",
     );
     expect(calls.readDirectory).toBe(1);
-    expect(calls.existsPaths).toEqual([newer.path, newer.path, older.path, older.path]);
+    expect(calls.existsPaths).toEqual([older.path, newer.path, newer.path, older.path, older.path]);
   });
   test("returns a validation error when resolving a relative token without a staging directory", async () => {
     const { calls, port } = createFakeLocalAttachmentPort({ includeStageDirectory: false });
