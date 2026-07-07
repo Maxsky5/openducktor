@@ -1584,6 +1584,7 @@ describe("HostClient", () => {
               runtimeId: "runtime-1",
               kind: "notification",
               message: { method: "codex/app-server/ready" },
+              receivedAt: "2026-02-22T09:00:00.000Z",
             },
           ];
         default:
@@ -1634,16 +1635,35 @@ describe("HostClient", () => {
   });
 
   test("codex app-server buffered events reject malformed host payloads", async () => {
-    const { client } = createClient((command) => {
-      if (command === "codex_app_server_take_buffered_events") {
-        return [{ runtimeId: "runtime-1", kind: "invalid", message: {} }];
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
+    const cases = [
+      {
+        payload: [{ runtimeId: "runtime-1", kind: "invalid", message: {} }],
+        expected: "Expected Codex app-server buffered event kind",
+      },
+      {
+        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {} }],
+        expected: "Expected Codex app-server buffered event receivedAt",
+      },
+      {
+        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {}, receivedAt: "" }],
+        expected: "Expected Codex app-server buffered event receivedAt",
+      },
+      {
+        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {}, receivedAt: 123 }],
+        expected: "Expected Codex app-server buffered event receivedAt",
+      },
+    ];
 
-    await expect(client.takeCodexAppServerBufferedEvents("runtime-1")).rejects.toThrow(
-      "Expected Codex app-server buffered event kind",
-    );
+    for (const { payload, expected } of cases) {
+      const { client } = createClient((command) => {
+        if (command === "codex_app_server_take_buffered_events") {
+          return payload;
+        }
+        throw new Error(`Unexpected command: ${command}`);
+      });
+
+      await expect(client.takeCodexAppServerBufferedEvents("runtime-1")).rejects.toThrow(expected);
+    }
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {

@@ -64,7 +64,7 @@ export type CodexStreamingContext = {
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   bufferNotification(notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
@@ -452,6 +452,62 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
   return notification.receivedAt;
 };
 
+const isCodexIdleThreadStatus = (status: unknown): boolean => {
+  const type = isPlainObject(status)
+    ? extractStringField(status, ["type"])
+    : typeof status === "string"
+      ? status
+      : null;
+  return type?.toLowerCase() === "idle";
+};
+
+const receivedAtMsFromCodexNotification = (receivedAt: string): number => {
+  const receivedAtMs = Date.parse(receivedAt);
+  if (!Number.isFinite(receivedAtMs)) {
+    throw new Error(`Codex notification has an unparsable receivedAt timestamp '${receivedAt}'.`);
+  }
+  return receivedAtMs;
+};
+
+const isNotificationAtOrAfterActiveTurnStart = (
+  receivedAt: string,
+  activeTurn: ActiveCodexTurn,
+): boolean => {
+  const receivedAtMs = receivedAtMsFromCodexNotification(receivedAt);
+  return receivedAtMs >= activeTurn.startedAtMs;
+};
+
+const clearTurnScopedStreamingState = (
+  context: CodexStreamingContext,
+  threadId: string,
+  turnId: string,
+): void => {
+  const turnKey = codexTurnKey(threadId, turnId);
+  context.completedAgentMessagesByTurnKey.delete(turnKey);
+  context.tokenUsageByTurnKey.delete(turnKey);
+  context.modelByTurnKey.delete(turnKey);
+};
+
+const flushBufferedFinalAgentMessage = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  turnId: string,
+): void => {
+  const turnKey = codexTurnKey(session.threadId, turnId);
+  const bufferedAgentMessage = context.completedAgentMessagesByTurnKey.get(turnKey);
+  if (!bufferedAgentMessage) {
+    return;
+  }
+  emitFinalAgentMessage(
+    context,
+    bufferedAgentMessage.session,
+    bufferedAgentMessage.item,
+    bufferedAgentMessage.timestamp,
+    context.tokenUsageByTurnKey.get(turnKey),
+    bufferedAgentMessage.model ?? modelForTurn(context, session, turnId),
+  );
+};
+
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -481,7 +537,11 @@ export const handleCodexPendingNotifications = async (
     if (
       notificationTurnId &&
       activeTurn &&
-      context.bindActiveTurnId(activeTurn, notificationTurnId)
+      context.bindActiveTurnId(
+        activeTurn,
+        notificationTurnId,
+        receivedAtMsFromCodexNotification(notification.receivedAt),
+      )
     ) {
       context.flushQueuedUserMessagesLater(activeTurn);
     }
@@ -492,7 +552,15 @@ export const handleCodexPendingNotifications = async (
       });
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-      if (turnId && activeTurn && context.bindActiveTurnId(activeTurn, turnId)) {
+      if (
+        turnId &&
+        activeTurn &&
+        context.bindActiveTurnId(
+          activeTurn,
+          turnId,
+          receivedAtMsFromCodexNotification(notification.receivedAt),
+        )
+      ) {
         context.flushQueuedUserMessagesLater(activeTurn);
       }
       continue;
@@ -500,10 +568,28 @@ export const handleCodexPendingNotifications = async (
 
     if (notification.method === "thread/status/changed") {
       if (isPlainObject(notification.params)) {
-        context.setSessionLiveStatus(
-          session,
-          codexThreadStatusSnapshot(notification.params.status),
-        );
+        const isIdleStatus = isCodexIdleThreadStatus(notification.params.status);
+        if (
+          activeTurn &&
+          isIdleStatus &&
+          !isNotificationAtOrAfterActiveTurnStart(notification.receivedAt, activeTurn)
+        ) {
+          continue;
+        }
+        const liveStatus = codexThreadStatusSnapshot(notification.params.status);
+        context.setSessionLiveStatus(session, liveStatus);
+        if (activeTurn && isIdleStatus) {
+          if (activeTurn.turnId) {
+            flushBufferedFinalAgentMessage(context, session, activeTurn.turnId);
+            clearTurnScopedStreamingState(context, session.threadId, activeTurn.turnId);
+          }
+          emitCodexSessionEvent(context, session.threadId, {
+            type: "session_idle",
+            externalSessionId: session.threadId,
+            timestamp: notification.receivedAt,
+          });
+          activeTurn.markTurnSettled();
+        }
       }
       continue;
     }
@@ -574,26 +660,10 @@ export const handleCodexPendingNotifications = async (
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
       if (turnId && isPlainObject(turn) && turn.status === "completed") {
-        const turnKey = codexTurnKey(session.threadId, turnId);
-        const bufferedAgentMessage = context.completedAgentMessagesByTurnKey.get(turnKey);
-        if (bufferedAgentMessage) {
-          emitFinalAgentMessage(
-            context,
-            bufferedAgentMessage.session,
-            bufferedAgentMessage.item,
-            bufferedAgentMessage.timestamp,
-            context.tokenUsageByTurnKey.get(turnKey),
-            bufferedAgentMessage.model ?? modelForTurn(context, session, turnId),
-          );
-          context.completedAgentMessagesByTurnKey.delete(turnKey);
-        }
-        context.tokenUsageByTurnKey.delete(turnKey);
-        context.modelByTurnKey.delete(turnKey);
+        flushBufferedFinalAgentMessage(context, session, turnId);
+        clearTurnScopedStreamingState(context, session.threadId, turnId);
       } else if (turnId) {
-        const turnKey = codexTurnKey(session.threadId, turnId);
-        context.completedAgentMessagesByTurnKey.delete(turnKey);
-        context.tokenUsageByTurnKey.delete(turnKey);
-        context.modelByTurnKey.delete(turnKey);
+        clearTurnScopedStreamingState(context, session.threadId, turnId);
       }
       const shouldSettleActiveTurn = activeTurn && (!turnId || activeTurn.turnId === turnId);
       if (shouldSettleActiveTurn) {

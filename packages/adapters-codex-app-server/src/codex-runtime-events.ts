@@ -19,16 +19,27 @@ import type {
 export type CodexRuntimeStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
+  receivedAt: string;
   message: unknown;
+};
+
+export type BufferedCodexServerRequest = {
+  request: CodexServerRequestRecord;
+  receivedAt: string;
 };
 
 export type BufferedCodexRuntimeEvent =
   | { kind: "notification"; notification: CodexNotificationRecord }
-  | { kind: "server_request"; runtimeId: string; request: CodexServerRequestRecord };
+  | {
+      kind: "server_request";
+      runtimeId: string;
+      request: CodexServerRequestRecord;
+      receivedAt: string;
+    };
 
 export class CodexRuntimeEventBuffer {
   readonly notificationsByThreadId = new Map<string, CodexNotificationRecord[]>();
-  readonly serverRequestsByRuntimeId = new Map<string, Map<string, CodexServerRequestRecord[]>>();
+  readonly serverRequestsByRuntimeId = new Map<string, Map<string, BufferedCodexServerRequest[]>>();
 
   takeNotifications(threadId: string): CodexNotificationRecord[] {
     const notifications = this.notificationsByThreadId.get(threadId) ?? [];
@@ -36,12 +47,12 @@ export class CodexRuntimeEventBuffer {
     return notifications;
   }
 
-  takeServerRequests(threadId: string, runtimeId?: string): CodexServerRequestRecord[] {
+  takeServerRequests(threadId: string, runtimeId?: string): BufferedCodexServerRequest[] {
     if (runtimeId) {
       return this.takeServerRequestsForRuntime(threadId, runtimeId);
     }
 
-    const requests: CodexServerRequestRecord[] = [];
+    const requests: BufferedCodexServerRequest[] = [];
     for (const runtime of [...this.serverRequestsByRuntimeId.keys()]) {
       requests.push(...this.takeServerRequestsForRuntime(threadId, runtime));
     }
@@ -51,7 +62,7 @@ export class CodexRuntimeEventBuffer {
   private takeServerRequestsForRuntime(
     threadId: string,
     runtimeId: string,
-  ): CodexServerRequestRecord[] {
+  ): BufferedCodexServerRequest[] {
     const requestsByThreadId = this.serverRequestsByRuntimeId.get(runtimeId);
     const requests = requestsByThreadId?.get(threadId) ?? [];
     requestsByThreadId?.delete(threadId);
@@ -94,17 +105,25 @@ export class CodexRuntimeEventBuffer {
 
   bufferRuntimeStreamEvent(
     threadId: string,
-    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "message">,
+    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
   ): BufferedCodexRuntimeEvent {
     if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message);
+      const notification = parseNotificationRecord(event.message, event.receivedAt);
       this.bufferNotificationForThread(threadId, notification);
       return { kind: "notification", notification };
     }
 
     const request = parseServerRequestRecord(event.message);
-    this.bufferServerRequestForThread(threadId, event.runtimeId, request);
-    return { kind: "server_request", runtimeId: event.runtimeId, request };
+    this.bufferServerRequestForThread(threadId, event.runtimeId, {
+      request,
+      receivedAt: event.receivedAt,
+    });
+    return {
+      kind: "server_request",
+      runtimeId: event.runtimeId,
+      request,
+      receivedAt: event.receivedAt,
+    };
   }
 
   private bufferNotificationForThread(threadId: string, notification: CodexNotificationRecord) {
@@ -116,7 +135,7 @@ export class CodexRuntimeEventBuffer {
   private bufferServerRequestForThread(
     threadId: string,
     runtimeId: string,
-    request: CodexServerRequestRecord,
+    request: BufferedCodexServerRequest,
   ) {
     const requestsByThreadId = this.serverRequestsByRuntimeId.get(runtimeId) ?? new Map();
     const buffered = requestsByThreadId.get(threadId) ?? [];

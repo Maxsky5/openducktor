@@ -21,6 +21,8 @@ const codexStatusNotification = {
   params: { threadId: "thread-1", status: { type: "idle" } },
 } satisfies CodexAppServerProtocolMessage;
 
+const receivedAt = "2026-07-06T12:00:00.000Z";
+
 describe("createCodexAppServerCommandHandlers", () => {
   test("logs Codex policy-bearing requests through the host logger", async () => {
     const infos: string[] = [];
@@ -174,6 +176,7 @@ describe("createCodexAppServerCommandHandlers", () => {
           {
             runtimeId: input.runtimeId,
             kind: "notification" as const,
+            receivedAt,
             message: codexStatusNotification,
           },
         ]);
@@ -224,7 +227,12 @@ describe("createCodexAppServerCommandHandlers", () => {
     await expect(
       router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
     ).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
+      {
+        runtimeId: "runtime-1",
+        kind: "notification",
+        receivedAt,
+        message: codexStatusNotification,
+      },
     ]);
     await expect(
       router.invoke("codex_app_server_respond", {

@@ -768,8 +768,8 @@ export class CodexAppServerAdapter
       validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),
       ensureRuntimeEventSubscription: (runtimeId) =>
         this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId),
-      bindActiveTurnId: (activeTurn, turnId) =>
-        this.runtimeEvents.bindActiveTurnId(activeTurn, turnId),
+      bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
+        this.runtimeEvents.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       bindPendingInputToActiveTurn: (externalSessionId, activeTurn) =>
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>

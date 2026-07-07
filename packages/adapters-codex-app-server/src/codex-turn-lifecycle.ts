@@ -33,7 +33,7 @@ export type CodexTurnLifecycleContext = {
     model: AgentModelSelection,
   ): Promise<void>;
   ensureRuntimeEventSubscription(runtimeId: string): Promise<void>;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   handleBufferedRuntimeEvents(
@@ -173,11 +173,15 @@ export const startCodexTurnForSession = async (
   const handledRequestKeys = new Set<string>();
   const activeTurnState: ActiveCodexTurn = {
     session,
+    startedAtMs: Number.POSITIVE_INFINITY,
+    turnStartRequestSentAtMs: null,
     turnStartPromise: Promise.resolve({}),
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {
       turnSettled = true;
-      context.activeTurnsBySessionId.delete(session.threadId);
+      if (context.activeTurnsBySessionId.get(session.threadId) === activeTurnState) {
+        context.activeTurnsBySessionId.delete(session.threadId);
+      }
     },
     handledRequestKeys,
     queuedUserMessages: [],
@@ -216,6 +220,7 @@ export const startCodexTurnForSession = async (
     }),
   );
 
+  activeTurnState.turnStartRequestSentAtMs = Date.now();
   const turnStartPromise = client
     .turnStart({
       approvalPolicy: policy.approvalPolicy,
@@ -227,13 +232,17 @@ export const startCodexTurnForSession = async (
       effort: toTransportModelSelection(model).effort,
     })
     .then((result) => {
+      const turnStartedAtMs = Date.now();
       const turnId = extractTurnId(result);
       if (turnId) {
-        context.bindActiveTurnId(activeTurnState, turnId);
+        context.bindActiveTurnId(activeTurnState, turnId, turnStartedAtMs);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
       if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
-        context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+        const currentActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
+        if (!currentActiveTurn || currentActiveTurn === activeTurnState) {
+          context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+        }
         activeTurnState.markTurnSettled();
       }
       return result;

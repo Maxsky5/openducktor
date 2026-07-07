@@ -401,6 +401,14 @@ export const extractThreadIdFromParams = (value: unknown): string | null => {
 
 export const codexTurnKey = (threadId: string, turnId: string): string => `${threadId}:${turnId}`;
 
+const assertParseableNotificationReceivedAt = (receivedAt: string): void => {
+  if (!Number.isFinite(Date.parse(receivedAt))) {
+    throw new Error(
+      `Codex app-server notification has an unparsable receivedAt timestamp '${receivedAt}'.`,
+    );
+  }
+};
+
 export const isTerminalTurnStatus = (value: unknown): boolean => {
   if (!isPlainObject(value)) {
     return false;
@@ -507,9 +515,11 @@ export const parseNotificationRecord = (
   if (typeof method !== "string" || method.trim().length === 0) {
     throw new Error("Codex app-server notification is missing method.");
   }
-  const parsedReceivedAt =
-    receivedAt ??
-    (typeof value.receivedAt === "string" ? value.receivedAt : new Date().toISOString());
+  const parsedReceivedAt = receivedAt ?? value.receivedAt;
+  if (typeof parsedReceivedAt !== "string" || parsedReceivedAt.trim().length === 0) {
+    throw new Error("Codex app-server notification is missing receivedAt.");
+  }
+  assertParseableNotificationReceivedAt(parsedReceivedAt);
   return {
     method: method.trim(),
     ...(params !== undefined ? { params } : {}),

@@ -21,6 +21,8 @@ const codexApprovalRequest = {
   },
 } satisfies CodexAppServerProtocolMessage;
 
+const receivedAt = "2026-07-06T12:00:00.000Z";
+
 describe("createCodexAppServerTransportRegistry", () => {
   test("routes app-server operations to the registered runtime transport", async () => {
     const calls: unknown[] = [];
@@ -69,11 +71,13 @@ describe("createCodexAppServerTransportRegistry", () => {
           {
             runtimeId: "runtime-1",
             kind: "notification" as const,
+            receivedAt,
             message: codexStatusNotification,
           },
           {
             runtimeId: "runtime-1",
             kind: "server_request" as const,
+            receivedAt,
             message: codexApprovalRequest,
           },
         ]);
@@ -93,8 +97,18 @@ describe("createCodexAppServerTransportRegistry", () => {
       ),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
-      { runtimeId: "runtime-1", kind: "server_request", message: codexApprovalRequest },
+      {
+        runtimeId: "runtime-1",
+        kind: "notification",
+        receivedAt,
+        message: codexStatusNotification,
+      },
+      {
+        runtimeId: "runtime-1",
+        kind: "server_request",
+        receivedAt,
+        message: codexApprovalRequest,
+      },
     ]);
     await expect(
       Effect.runPromise(

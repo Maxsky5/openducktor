@@ -45,6 +45,7 @@ export type CodexAppServerBufferedEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
   message: unknown;
+  receivedAt: string;
 };
 
 type RuntimeEnsureErrorInit = {
@@ -287,12 +288,20 @@ const parseCodexAppServerBufferedEvent = (value: unknown): CodexAppServerBuffere
     throw new Error("Expected Codex app-server buffered event payload");
   }
 
-  const event = value as { runtimeId?: unknown; kind?: unknown; message?: unknown };
+  const event = value as {
+    runtimeId?: unknown;
+    kind?: unknown;
+    message?: unknown;
+    receivedAt?: unknown;
+  };
   if (typeof event.runtimeId !== "string" || event.runtimeId.trim().length === 0) {
     throw new Error("Expected Codex app-server buffered event runtimeId");
   }
   if (event.kind !== "notification" && event.kind !== "server_request") {
     throw new Error("Expected Codex app-server buffered event kind");
+  }
+  if (typeof event.receivedAt !== "string" || event.receivedAt.trim().length === 0) {
+    throw new Error("Expected Codex app-server buffered event receivedAt");
   }
   if (!("message" in value)) {
     throw new Error("Expected Codex app-server buffered event message");
@@ -302,6 +311,7 @@ const parseCodexAppServerBufferedEvent = (value: unknown): CodexAppServerBuffere
     runtimeId: event.runtimeId,
     kind: event.kind,
     message: event.message,
+    receivedAt: event.receivedAt,
   };
 };
 

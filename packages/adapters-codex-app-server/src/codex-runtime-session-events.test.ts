@@ -17,11 +17,42 @@ const flushRuntimeEvents = async (): Promise<void> => {
   await waitForRuntimeEvent();
 };
 
-type RuntimeListener = (event: {
+const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
+
+type RuntimeEventInput = {
   runtimeId: string;
   kind: "notification" | "server_request";
   message: unknown;
-}) => void;
+};
+
+type RuntimeListener = (event: RuntimeEventInput) => void;
+
+const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
+  ...event,
+  receivedAt: runtimeEventReceivedAt,
+});
+
+const bufferedServerRequestEvent = (
+  message: unknown,
+  runtimeId = "runtime-1",
+  receivedAt = runtimeEventReceivedAt,
+) => ({
+  runtimeId,
+  kind: "server_request" as const,
+  receivedAt,
+  message,
+});
+
+const bufferedNotificationEvent = (
+  message: unknown,
+  runtimeId = "runtime-1",
+  receivedAt = runtimeEventReceivedAt,
+) => ({
+  runtimeId,
+  kind: "notification" as const,
+  receivedAt,
+  message,
+});
 
 const createRuntimeEvents = (
   overrides: Partial<ConstructorParameters<typeof CodexRuntimeSessionEvents>[0]> = {},
@@ -70,6 +101,8 @@ const createActiveTurn = (
   turnModel: AgentModelSelection = model,
 ): ActiveCodexTurn => ({
   session: createSession(threadId),
+  startedAtMs: Date.now(),
+  turnStartRequestSentAtMs: 0,
   turnStartPromise: Promise.resolve({}),
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
@@ -77,6 +110,23 @@ const createActiveTurn = (
   queuedUserMessages: [],
   model: turnModel,
 });
+
+const createSettlingActiveTurn = (
+  threadId: string,
+  turnModel: AgentModelSelection = model,
+): { activeTurn: ActiveCodexTurn; isSettled: () => boolean } => {
+  let settled = false;
+  return {
+    activeTurn: {
+      ...createActiveTurn(threadId, turnModel),
+      isTurnSettled: () => settled,
+      markTurnSettled: () => {
+        settled = true;
+      },
+    },
+    isSettled: () => settled,
+  };
+};
 
 const createChildThreadSnapshot = (
   childThreadId: string,
@@ -128,7 +178,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -178,7 +228,7 @@ describe("CodexRuntimeSessionEvents", () => {
     sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -233,31 +283,23 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       takeBufferedEvents: async () => [
-        {
-          runtimeId: "runtime-1",
-          kind: "server_request",
-          message: {
-            id: "buffered-approval-1",
-            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-            params: {
-              threadId: "thread-buffered-order",
-              turnId: "turn-buffered-order",
-              itemId: "call-buffered-order",
-              command: "curl -I https://example.com",
-            },
+        bufferedServerRequestEvent({
+          id: "buffered-approval-1",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {
+            threadId: "thread-buffered-order",
+            turnId: "turn-buffered-order",
+            itemId: "call-buffered-order",
+            command: "curl -I https://example.com",
           },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "serverRequest/resolved",
-            params: {
-              threadId: "thread-buffered-order",
-              requestId: "buffered-approval-1",
-            },
+        }),
+        bufferedNotificationEvent({
+          method: "serverRequest/resolved",
+          params: {
+            threadId: "thread-buffered-order",
+            requestId: "buffered-approval-1",
           },
-        },
+        }),
       ],
       sessions,
       pendingInput,
@@ -270,53 +312,228 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
   });
 
+  test("uses server-request receipt time when binding a buffered active turn", async () => {
+    const requestReceivedAt = "2000-01-01T00:00:00.000Z";
+    const idleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-server-request-receipt");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedServerRequestEvent(
+          {
+            id: "question-receipt-1",
+            method: "item/tool/requestUserInput",
+            params: {
+              threadId: session.threadId,
+              turnId: "turn-receipt",
+              questions: [
+                {
+                  id: "question-item-1",
+                  header: "Choose",
+                  question: "Proceed?",
+                  options: ["Yes", "No"],
+                },
+              ],
+            },
+          },
+          session.runtimeId,
+          requestReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          idleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      pendingInput,
+      activeTurnsBySessionId,
+    });
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBe("turn-receipt");
+    expect(activeTurn.startedAtMs).toBe(Date.parse(requestReceivedAt));
+    expect(isSettled()).toBe(true);
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: session.threadId,
+        timestamp: idleReceivedAt,
+      }),
+    );
+  });
+
+  test("does not first-bind before the turn start request is sent", () => {
+    const session = createSession("thread-unstarted-turn");
+    const runtimeEvents = createRuntimeEvents();
+    const activeTurn = createActiveTurn(session.threadId);
+    activeTurn.turnStartRequestSentAtMs = null;
+
+    const didBind = runtimeEvents.bindActiveTurnId(activeTurn, "turn-too-early");
+
+    expect(didBind).toBe(false);
+    expect(activeTurn.turnId).toBeUndefined();
+  });
+
+  test("does not first-bind an active turn from old buffered turn evidence", async () => {
+    const staleTurnStartedReceivedAt = "2000-01-01T00:00:00.000Z";
+    const staleIdleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-stale-turn-start");
+    const sessions = new Map([[session.threadId, session]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    activeTurn.startedAtMs = Number.POSITIVE_INFINITY;
+    activeTurn.turnStartRequestSentAtMs = Date.parse("2000-01-01T00:00:02.000Z");
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedNotificationEvent(
+          {
+            method: "turn/started",
+            params: {
+              threadId: session.threadId,
+              turn: { id: "turn-old" },
+            },
+          },
+          session.runtimeId,
+          staleTurnStartedReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          staleIdleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      activeTurnsBySessionId,
+    });
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBeUndefined();
+    expect(activeTurn.startedAtMs).toBe(Number.POSITIVE_INFINITY);
+    expect(isSettled()).toBe(false);
+    expect(emittedEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+      }),
+    );
+  });
+
+  test("lowers the active-turn cutoff when same-turn start evidence is older", async () => {
+    const originalStartedAtMs = Date.parse("2100-01-01T00:00:00.000Z");
+    const turnStartedReceivedAt = "2000-01-01T00:00:00.000Z";
+    const idleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-same-turn-cutoff");
+    const sessions = new Map([[session.threadId, session]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedNotificationEvent(
+          {
+            method: "turn/started",
+            params: {
+              threadId: session.threadId,
+              turn: { id: "turn-same" },
+            },
+          },
+          session.runtimeId,
+          turnStartedReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          idleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      activeTurnsBySessionId,
+    });
+    runtimeEvents.bindActiveTurnId(activeTurn, "turn-same", originalStartedAtMs);
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBe("turn-same");
+    expect(activeTurn.startedAtMs).toBe(Date.parse(turnStartedReceivedAt));
+    expect(isSettled()).toBe(true);
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: session.threadId,
+        timestamp: idleReceivedAt,
+      }),
+    );
+  });
+
   test("does not replay token-usage drained requests resolved in the same batch", async () => {
     const session = createSession("thread-drained-resolution");
     const sessions = new Map([[session.threadId, session]]);
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       takeBufferedEvents: async () => [
-        {
-          runtimeId: "runtime-1",
-          kind: "server_request",
-          message: {
-            id: "drained-approval-1",
-            method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-            params: {
-              threadId: "thread-drained-resolution",
-              turnId: "turn-drained-resolution",
-              itemId: "call-drained-resolution",
-              command: "curl -I https://example.com",
+        bufferedServerRequestEvent({
+          id: "drained-approval-1",
+          method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+          params: {
+            threadId: "thread-drained-resolution",
+            turnId: "turn-drained-resolution",
+            itemId: "call-drained-resolution",
+            command: "curl -I https://example.com",
+          },
+        }),
+        bufferedNotificationEvent({
+          method: "serverRequest/resolved",
+          params: {
+            threadId: "thread-drained-resolution",
+            requestId: "drained-approval-1",
+          },
+        }),
+        bufferedNotificationEvent({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "thread-drained-resolution",
+            turnId: "turn-drained-resolution",
+            tokenUsage: {
+              total: { totalTokens: 1_000 },
+              last: { totalTokens: 100 },
+              modelContextWindow: 200_000,
             },
           },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "serverRequest/resolved",
-            params: {
-              threadId: "thread-drained-resolution",
-              requestId: "drained-approval-1",
-            },
-          },
-        },
-        {
-          runtimeId: "runtime-1",
-          kind: "notification",
-          message: {
-            method: "thread/tokenUsage/updated",
-            params: {
-              threadId: "thread-drained-resolution",
-              turnId: "turn-drained-resolution",
-              tokenUsage: {
-                total: { totalTokens: 1_000 },
-                last: { totalTokens: 100 },
-                modelContextWindow: 200_000,
-              },
-            },
-          },
-        },
+        }),
       ],
       sessions,
       pendingInput,
@@ -348,7 +565,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -431,7 +648,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -497,7 +714,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -563,7 +780,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const pendingInput = new CodexPendingInputState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -619,7 +836,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,
@@ -668,7 +885,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (runtimeId, next) => {
-        listeners.set(runtimeId, next);
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
         return () => undefined;
       },
       sessions,
@@ -744,7 +961,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const subagents = new CodexSubagentLinkState();
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
-        listener = next;
+        listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
       sessions,

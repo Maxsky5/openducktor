@@ -2,7 +2,10 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
-import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
+import type {
+  CodexAppServerProtocolMessage,
+  CodexAppServerStreamEvent,
+} from "../../ports/codex-app-server-port";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
 const createChild = (
@@ -16,6 +19,25 @@ const createChild = (
 };
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+const notificationEvent = (message: unknown) =>
+  expect.objectContaining({
+    runtimeId: "runtime-1",
+    kind: "notification" as const,
+    receivedAt: expect.any(String),
+    message,
+  });
+
+const serverRequestEvent = (message: unknown) =>
+  expect.objectContaining({
+    runtimeId: "runtime-1",
+    kind: "server_request" as const,
+    receivedAt: expect.any(String),
+    message,
+  });
+
+const receivedAtFrom = (event: unknown): string =>
+  (event as Pick<CodexAppServerStreamEvent, "receivedAt">).receivedAt;
 
 const recordClearTimeouts = () => {
   const originalClearTimeout = globalThis.clearTimeout;
@@ -78,12 +100,10 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(notification)}\n`);
 
     await expect(response).resolves.toEqual({ data: [], nextCursor: null });
-    expect(emitted).toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: notification },
-    ]);
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: notification },
-    ]);
+    expect(emitted).toEqual([notificationEvent(notification)]);
+    const bufferedEvents = await Effect.runPromise(transport.takeBufferedEvents());
+    expect(bufferedEvents).toEqual([notificationEvent(notification)]);
+    expect(bufferedEvents[0]?.receivedAt).toBe(receivedAtFrom(emitted[0]));
 
     await Effect.runPromise(transport.close());
   });
@@ -107,11 +127,9 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(notification)}\n`);
     await waitForStreamEvents();
 
-    expect(emitted).toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: notification },
-    ]);
+    expect(emitted).toEqual([notificationEvent(notification)]);
     await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: notification },
+      notificationEvent(notification),
     ]);
 
     await Effect.runPromise(transport.close());
@@ -139,9 +157,9 @@ describe("createCodexAppServerTransport", () => {
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
-    expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
+    expect(emitted).toEqual([serverRequestEvent(request)]);
     await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "server_request", message: request },
+      serverRequestEvent(request),
     ]);
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
@@ -187,12 +205,9 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(resolved)}\n`);
     await waitForStreamEvents();
 
-    expect(emitted).toEqual([
-      { runtimeId: "runtime-1", kind: "server_request", message: request },
-      { runtimeId: "runtime-1", kind: "notification", message: resolved },
-    ]);
+    expect(emitted).toEqual([serverRequestEvent(request), notificationEvent(resolved)]);
     await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: resolved },
+      notificationEvent(resolved),
     ]);
 
     await Effect.runPromise(transport.close());
@@ -240,8 +255,8 @@ describe("createCodexAppServerTransport", () => {
     await waitForStreamEvents();
 
     await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "server_request", message: stringRequest },
-      { runtimeId: "runtime-1", kind: "notification", message: resolvedNumericRequest },
+      serverRequestEvent(stringRequest),
+      notificationEvent(resolvedNumericRequest),
     ]);
 
     await Effect.runPromise(transport.close());
@@ -271,7 +286,7 @@ describe("createCodexAppServerTransport", () => {
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
-    expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
+    expect(emitted).toEqual([serverRequestEvent(request)]);
 
     await Effect.runPromise(transport.close());
   });

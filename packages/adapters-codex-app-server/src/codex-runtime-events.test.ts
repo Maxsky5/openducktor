@@ -6,6 +6,7 @@ const request = (id: number, threadId: string) => ({
   method: "item/tool/requestUserInput",
   params: { threadId, turnId: `turn-${id}` },
 });
+const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("CodexRuntimeEventSubscriptions", () => {
   test("removes a failed synchronous subscription so the runtime can retry", async () => {
@@ -30,19 +31,21 @@ describe("CodexRuntimeEventBuffer", () => {
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-1",
       kind: "server_request",
+      receivedAt,
       message: request(1, "child-thread"),
     });
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-2",
       kind: "server_request",
+      receivedAt,
       message: request(2, "child-thread"),
     });
 
     expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([
-      request(1, "child-thread"),
+      { request: request(1, "child-thread"), receivedAt },
     ]);
     expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      request(2, "child-thread"),
+      { request: request(2, "child-thread"), receivedAt },
     ]);
   });
 
@@ -51,11 +54,13 @@ describe("CodexRuntimeEventBuffer", () => {
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-1",
       kind: "server_request",
+      receivedAt,
       message: request(1, "child-thread"),
     });
     buffer.bufferRuntimeStreamEvent("child-thread", {
       runtimeId: "runtime-2",
       kind: "server_request",
+      receivedAt,
       message: request(2, "child-thread"),
     });
 
@@ -63,7 +68,7 @@ describe("CodexRuntimeEventBuffer", () => {
 
     expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([]);
     expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      request(2, "child-thread"),
+      { request: request(2, "child-thread"), receivedAt },
     ]);
   });
 });

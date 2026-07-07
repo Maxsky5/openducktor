@@ -83,6 +83,19 @@ const waitForSessionIdleEvent = async (
   await waitForSessionIdleEvent(events, deadline);
 };
 
+const waitForSessionEvent = async (
+  events: Array<{ type?: string }>,
+  type: string,
+  deadline = Date.now() + 1_000,
+): Promise<void> => {
+  if (events.some((event) => event.type === type) || Date.now() >= deadline) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForSessionEvent(events, type, deadline);
+};
+
 const waitForCodexEventListener = async (
   bridge: { listener?: (payload: unknown) => void },
   deadline = Date.now() + 1_000,
@@ -310,7 +323,21 @@ describe("createCodexAppServerRuntimeAdapter", () => {
 
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
+        kind: "server_request",
+        message: { method: "item/tool/requestUserInput" },
+      });
+      await waitForSessionEvent(events, "session_error");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_error",
+          message: "Codex app-server stream event is missing receivedAt.",
+        }),
+      );
+
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
         kind: "notification",
+        receivedAt: "2026-02-22T09:00:01.000Z",
         message: {
           method: "turn/completed",
           params: {
@@ -326,6 +353,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
         kind: "notification",
+        receivedAt: "2026-02-22T09:00:02.000Z",
         message: {
           method: "skills/changed",
           params: { cwd: "/repo" },

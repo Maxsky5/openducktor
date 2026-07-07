@@ -35,6 +35,7 @@ import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import {
+  type BufferedCodexServerRequest,
   CodexRuntimeEventBuffer,
   CodexRuntimeEventSubscriptions,
   type CodexRuntimeStreamEvent,
@@ -90,6 +91,23 @@ const waitForRestoredUsageReplayTick = (): Promise<void> =>
 
 const restoredContextCaptureKey = (runtimeId: string, threadId: string): string =>
   `${runtimeId}:${threadId}`;
+
+const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
+  const receivedAtMs = Date.parse(receivedAt);
+  if (!Number.isFinite(receivedAtMs)) {
+    throw new Error(
+      `Codex app-server stream event has an unparsable receivedAt timestamp '${receivedAt}'.`,
+    );
+  }
+  return receivedAtMs;
+};
+
+const serverRequestFromRuntimeEvent = (
+  event: Pick<CodexRuntimeStreamEvent, "message" | "receivedAt">,
+): BufferedCodexServerRequest => ({
+  request: parseServerRequestRecord(event.message),
+  receivedAt: event.receivedAt,
+});
 
 export class CodexRuntimeSessionEvents {
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
@@ -187,13 +205,32 @@ export class CodexRuntimeSessionEvents {
     this.clearBufferedResolvedServerRequests(externalSessionId, runtimeId);
   }
 
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean {
     if (activeTurn.turnId && activeTurn.turnId !== turnId) {
       return false;
     }
 
+    if (startedAtMs !== undefined && !Number.isFinite(startedAtMs)) {
+      throw new Error("Codex active turn was bound with an invalid start timestamp.");
+    }
+
     const didBind = !activeTurn.turnId;
+    if (didBind) {
+      const turnStartRequestSentAtMs = activeTurn.turnStartRequestSentAtMs;
+      if (turnStartRequestSentAtMs === null) {
+        return false;
+      }
+      if (startedAtMs !== undefined && startedAtMs < turnStartRequestSentAtMs) {
+        return false;
+      }
+    }
+
     activeTurn.turnId = turnId;
+    if (startedAtMs !== undefined && (didBind || startedAtMs < activeTurn.startedAtMs)) {
+      activeTurn.startedAtMs = startedAtMs;
+    } else if (didBind) {
+      activeTurn.startedAtMs = Date.now();
+    }
     this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
     return didBind;
   }
@@ -359,6 +396,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {
+    this.assertRuntimeStreamEventReceivedAt(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
       if (event.kind === "server_request") {
@@ -367,7 +405,7 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message);
+      const notification = parseNotificationRecord(event.message, event.receivedAt);
       if (notification.method === "serverRequest/resolved") {
         this.handleServerRequestResolvedNotification(event.runtimeId, notification);
         return;
@@ -567,7 +605,7 @@ export class CodexRuntimeSessionEvents {
 
   private bufferRuntimeStreamEvent(
     threadId: string,
-    event: { runtimeId: string; kind: "notification" | "server_request"; message: unknown },
+    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
   ): void {
     this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
@@ -627,22 +665,24 @@ export class CodexRuntimeSessionEvents {
 
   private async processRuntimeStreamEventForSession(
     session: CodexSessionState,
-    event: { kind: "notification" | "server_request"; message: unknown },
+    event: Pick<CodexRuntimeStreamEvent, "kind" | "receivedAt" | "message">,
   ): Promise<void> {
     if (event.kind === "notification") {
-      await this.handlePendingNotifications(session, [parseNotificationRecord(event.message)]);
+      await this.handlePendingNotifications(session, [
+        parseNotificationRecord(event.message, event.receivedAt),
+      ]);
       return;
     }
-    await this.processServerRequestsForSession(session, [parseServerRequestRecord(event.message)]);
+    await this.processServerRequestsForSession(session, [serverRequestFromRuntimeEvent(event)]);
   }
 
   private async processServerRequestsForSession(
     session: CodexSessionState,
-    requests: CodexServerRequestRecord[],
+    requests: BufferedCodexServerRequest[],
     handledRequestKeysOverride?: Set<string>,
   ): Promise<boolean> {
     const ownerThreadIds = new Set(
-      requests.map((request) => extractThreadIdFromParams(request.params) ?? session.threadId),
+      requests.map(({ request }) => extractThreadIdFromParams(request.params) ?? session.threadId),
     );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
     const handledRequestKeys =
@@ -666,6 +706,7 @@ export class CodexRuntimeSessionEvents {
     preferredHandledRequestKeys: Set<string>,
     event: CodexRuntimeStreamEvent,
   ): Promise<void> {
+    this.assertRuntimeStreamEventReceivedAt(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (event.kind === "notification") {
       await this.processBufferedNotification(preferredSession, threadId, event);
@@ -690,7 +731,7 @@ export class CodexRuntimeSessionEvents {
         : undefined;
     await this.processServerRequestsForSession(
       targetSession,
-      [parseServerRequestRecord(event.message)],
+      [serverRequestFromRuntimeEvent(event)],
       handledRequestKeys,
     );
   }
@@ -700,7 +741,7 @@ export class CodexRuntimeSessionEvents {
     threadId: string | null,
     event: CodexRuntimeStreamEvent,
   ): Promise<void> {
-    const notification = parseNotificationRecord(event.message);
+    const notification = parseNotificationRecord(event.message, event.receivedAt);
     if (notification.method === "serverRequest/resolved") {
       this.handleServerRequestResolvedNotification(event.runtimeId, notification);
       return;
@@ -764,15 +805,16 @@ export class CodexRuntimeSessionEvents {
   private async handleServerRequests(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
-    requests: unknown[],
+    requests: BufferedCodexServerRequest[],
   ): Promise<boolean> {
     let hasPendingInput = false;
-    for (const request of requests) {
+    for (const { request, receivedAt } of requests) {
       hasPendingInput =
         (await this.handleServerRequest(
           session,
-          parseServerRequestRecord(request),
+          request,
           handledRequestKeys,
+          receivedAtMsFromRuntimeStreamEvent(receivedAt),
         )) || hasPendingInput;
     }
     return hasPendingInput;
@@ -809,7 +851,7 @@ export class CodexRuntimeSessionEvents {
     if (event.kind !== "notification") {
       return null;
     }
-    const notification = parseNotificationRecord(event.message);
+    const notification = parseNotificationRecord(event.message, event.receivedAt);
     if (notification.method !== "serverRequest/resolved") {
       return null;
     }
@@ -832,6 +874,7 @@ export class CodexRuntimeSessionEvents {
   private bufferUnprocessedServerRequest(
     runtimeId: string,
     request: CodexServerRequestRecord,
+    receivedAt: string,
   ): void {
     const threadId = extractThreadIdFromParams(request.params);
     if (!threadId) {
@@ -841,6 +884,7 @@ export class CodexRuntimeSessionEvents {
     this.bufferRuntimeStreamEvent(threadId, {
       runtimeId,
       kind: "server_request",
+      receivedAt,
       message: request,
     });
   }
@@ -909,7 +953,8 @@ export class CodexRuntimeSessionEvents {
       eventMapperPipeline: this.eventMapperPipeline,
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
-      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
+        this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       bufferNotification: (notification) =>
@@ -922,12 +967,14 @@ export class CodexRuntimeSessionEvents {
     session: CodexSessionState,
     rawRequest: CodexServerRequestRecord,
     handledRequestKeys: Set<string>,
+    requestReceivedAtMs?: number,
   ): Promise<boolean> {
     return handleCodexServerRequest(
       this.serverRequestContext(),
       session,
       rawRequest,
       handledRequestKeys,
+      requestReceivedAtMs,
     );
   }
 
@@ -938,7 +985,8 @@ export class CodexRuntimeSessionEvents {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       subagents: this.deps.subagents,
       sessionForThreadId: (threadId) => this.deps.sessions.get(threadId),
-      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
+        this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
@@ -963,11 +1011,11 @@ export class CodexRuntimeSessionEvents {
           const request = parseServerRequestRecord(event.message);
           const requestKey = this.serverRequestBatchKey(event.runtimeId, request);
           if (!requestKey || !resolvedRequestKeys.has(requestKey)) {
-            this.bufferUnprocessedServerRequest(event.runtimeId, request);
+            this.bufferUnprocessedServerRequest(event.runtimeId, request, event.receivedAt);
           }
           continue;
         }
-        const notification = parseNotificationRecord(event.message);
+        const notification = parseNotificationRecord(event.message, event.receivedAt);
         if (notification.method === "serverRequest/resolved") {
           this.handleServerRequestResolvedNotification(event.runtimeId, notification);
           continue;
@@ -1070,6 +1118,15 @@ export class CodexRuntimeSessionEvents {
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private assertRuntimeStreamEventReceivedAt(
+    event: Pick<CodexRuntimeStreamEvent, "receivedAt">,
+  ): void {
+    const receivedAt = (event as { receivedAt?: unknown }).receivedAt;
+    if (typeof receivedAt !== "string" || receivedAt.trim().length === 0) {
+      throw new Error("Codex app-server stream event is missing receivedAt.");
+    }
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {

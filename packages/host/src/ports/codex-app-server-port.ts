@@ -62,6 +62,7 @@ export type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError"
 export type CodexAppServerStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
+  receivedAt: string;
   message: CodexAppServerProtocolMessage;
 };
 export type CodexAppServerThreadEntry = {

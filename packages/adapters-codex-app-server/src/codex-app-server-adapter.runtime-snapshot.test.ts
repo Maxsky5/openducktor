@@ -14,6 +14,21 @@ import {
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexAppServerAdapter, CodexJsonRpcRequest } from "./index";
 
+const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
+
+type RuntimeEventInput = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: unknown;
+};
+
+type RuntimeListener = (event: RuntimeEventInput) => void;
+
+const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
+  ...event,
+  receivedAt: runtimeEventReceivedAt,
+});
+
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
@@ -622,7 +637,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     const subscribeEvents = mock(async (runtimeId: string, listener) => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       transport.emitRestoredUsage = (message) =>
-        listener({ runtimeId, kind: "notification", message });
+        listener(withRuntimeReceivedAt({ runtimeId, kind: "notification", message }));
       return () => {};
     });
     const { adapter } = createHarness({
@@ -878,11 +893,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("streams messages and completion after refresh session preparation", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);
@@ -962,11 +975,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("streams child transcript events after read-only subscription materializes inventory thread", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const transport = new ChildThreadListTransport("runtime-live", false);
@@ -1008,11 +1019,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("streams child transcript events for a learned subagent route absent from inventory", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const transport = new MutableThreadListTransport("runtime-live", false);
@@ -1101,15 +1110,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("routes child server requests through routes learned from refreshed inventory", async () => {
-    const streamListeners: Array<
-      (event: {
-        runtimeId: string;
-        kind: "notification" | "server_request";
-        message: unknown;
-      }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const transport = new ParentWithChildThreadListTransport("runtime-live", false);
@@ -1206,11 +1209,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("does not resurrect an idle local session from stale active thread inventory", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const transport = new MutableThreadListTransport("runtime-live", false);
@@ -1291,11 +1292,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("streams messages and completion after refresh resume stream", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
-      streamListeners.push(listener);
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => {};
     });
     const takeBufferedEvents = mock(async () => [] as unknown[]);

@@ -24,6 +24,8 @@ const codexApprovalRequest = {
   },
 } satisfies CodexAppServerProtocolMessage;
 
+const receivedAt = "2026-07-06T12:00:00.000Z";
+
 const createCodexAppServerService = (
   ...args: Parameters<typeof createEffectCodexAppServerService>
 ) => createEffectCodexAppServerService(...args);
@@ -54,8 +56,13 @@ const createPort = (): {
       takeBufferedEvents(runtimeId) {
         calls.push({ method: "takeBufferedEvents", runtimeId });
         return Effect.succeed([
-          { runtimeId, kind: "notification" as const, message: codexStatusNotification },
-          { runtimeId, kind: "server_request" as const, message: codexApprovalRequest },
+          {
+            runtimeId,
+            kind: "notification" as const,
+            receivedAt,
+            message: codexStatusNotification,
+          },
+          { runtimeId, kind: "server_request" as const, receivedAt, message: codexApprovalRequest },
         ]);
       },
       respond(input) {
@@ -81,8 +88,18 @@ describe("createCodexAppServerService", () => {
     await expect(
       Effect.runPromise(service.takeBufferedEvents({ runtimeId: "runtime-1" })),
     ).resolves.toEqual([
-      { runtimeId: "runtime-1", kind: "notification", message: codexStatusNotification },
-      { runtimeId: "runtime-1", kind: "server_request", message: codexApprovalRequest },
+      {
+        runtimeId: "runtime-1",
+        kind: "notification",
+        receivedAt,
+        message: codexStatusNotification,
+      },
+      {
+        runtimeId: "runtime-1",
+        kind: "server_request",
+        receivedAt,
+        message: codexApprovalRequest,
+      },
     ]);
     await expect(
       Effect.runPromise(
