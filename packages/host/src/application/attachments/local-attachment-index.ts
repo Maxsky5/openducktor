@@ -15,41 +15,37 @@ export type StagedAttachmentIndex = {
   directoryModifiedTimeMs: number | null;
 };
 
+type StagedAttachmentIndexLoadResult =
+  | {
+      _tag: "indexed";
+      attachment: IndexedStagedAttachment;
+    }
+  | {
+      _tag: "skipped";
+    };
+
 export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): string => {
-  if (entry.fileName.length <= 37) {
+  const uuidPrefixMatch = uuidPrefixPattern.exec(entry.fileName);
+  if (!uuidPrefixMatch) {
     return entry.fileName;
   }
-  if (!uuidPrefixPattern.test(entry.fileName)) {
-    return entry.fileName;
-  }
-  return entry.fileName.slice(37);
+  return entry.fileName.slice(uuidPrefixMatch[0].length);
 };
 
 const hasNestedNodeErrorCode = (error: unknown, code: string): boolean => {
-  if (typeof error !== "object" || error === null) {
-    return false;
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (typeof current === "object" && current !== null) {
+    if (visited.has(current)) {
+      return false;
+    }
+    visited.add(current);
+    if ("code" in current && current.code === code) {
+      return true;
+    }
+    current = "cause" in current ? current.cause : undefined;
   }
-  if (
-    "code" in error &&
-    (
-      error as {
-        code?: unknown;
-      }
-    ).code === code
-  ) {
-    return true;
-  }
-  return (
-    "cause" in error &&
-    hasNestedNodeErrorCode(
-      (
-        error as {
-          cause?: unknown;
-        }
-      ).cause,
-      code,
-    )
-  );
+  return false;
 };
 
 const createNoStagedAttachmentMatchError = (displayName: string): HostValidationError =>
@@ -118,6 +114,32 @@ const removeIndexedStagedAttachment = (
   index.byLookupToken.set(lookupToken, remainingMatches);
 };
 
+const readIndexedStagedAttachment = (
+  localAttachmentPort: LocalAttachmentPort,
+  entry: LocalAttachmentEntry,
+): Effect.Effect<StagedAttachmentIndexLoadResult, HostOperationError> =>
+  localAttachmentPort.modifiedTimeMs(entry.path).pipe(
+    Effect.map(
+      (modifiedTimeMs): StagedAttachmentIndexLoadResult => ({
+        _tag: "indexed",
+        attachment: { entry, modifiedTimeMs },
+      }),
+    ),
+    Effect.catchAll((error) => {
+      if (hasNestedNodeErrorCode(error, "ENOENT")) {
+        return Effect.succeed({ _tag: "skipped" as const });
+      }
+      return Effect.fail(
+        new HostOperationError({
+          operation: "local_attachment.stat_staged_attachment",
+          message: `Failed to inspect staged attachment entry: ${errorMessage(error)}`,
+          cause: error,
+          details: { path: entry.path },
+        }),
+      );
+    }),
+  );
+
 export const loadStagedAttachmentIndex = (
   localAttachmentPort: LocalAttachmentPort,
   attachmentDirectory: string,
@@ -147,17 +169,17 @@ export const loadStagedAttachmentIndex = (
       directoryModifiedTimeMs,
     };
     const indexedAttachments = yield* Effect.all(
-      entries.map((entry) =>
-        localAttachmentPort
-          .modifiedTimeMs(entry.path)
-          .pipe(Effect.map((modifiedTimeMs) => ({ entry, modifiedTimeMs }))),
-      ),
+      entries.map((entry) => readIndexedStagedAttachment(localAttachmentPort, entry)),
+      { concurrency: "unbounded" },
     );
     for (const attachment of indexedAttachments) {
+      if (attachment._tag === "skipped") {
+        continue;
+      }
       addIndexedStagedAttachment(
         index,
-        readStagedAttachmentOriginalName(attachment.entry),
-        attachment,
+        readStagedAttachmentOriginalName(attachment.attachment.entry),
+        attachment.attachment,
       );
     }
     return index;
@@ -184,6 +206,7 @@ export const resolveIndexedStagedAttachment = (
     if (!matches || matches.length === 0) {
       return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
     }
+    // Stale entries are pruned while scanning, so iterate over a stable snapshot.
     for (const match of [...matches]) {
       const exists = yield* localAttachmentPort.exists(match.entry.path).pipe(
         Effect.mapError(

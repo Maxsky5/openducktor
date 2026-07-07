@@ -178,6 +178,7 @@ export const createLocalAttachmentService = (
         },
       );
     }
+    pendingAttachments.length = 0;
   };
   const getStagedAttachmentIndex = (
     attachmentDirectory: string,
