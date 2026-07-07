@@ -14,7 +14,7 @@ export const CODEX_USER_INPUT_REQUEST_METHOD = "item/tool/requestUserInput";
 export type ActiveCodexTurn = {
   session: CodexSessionState;
   startedAtMs: number;
-  turnEvidenceMinReceivedAtMs: number;
+  turnStartRequestSentAtMs: number | null;
   turnStartPromise: Promise<CodexTurnStartResult>;
   isTurnSettled: () => boolean;
   markTurnSettled: () => void;

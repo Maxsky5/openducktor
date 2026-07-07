@@ -102,7 +102,7 @@ const createActiveTurn = (
 ): ActiveCodexTurn => ({
   session: createSession(threadId),
   startedAtMs: Date.now(),
-  turnEvidenceMinReceivedAtMs: 0,
+  turnStartRequestSentAtMs: 0,
   turnStartPromise: Promise.resolve({}),
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
@@ -377,6 +377,18 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
+  test("does not first-bind before the turn start request is sent", () => {
+    const session = createSession("thread-unstarted-turn");
+    const runtimeEvents = createRuntimeEvents();
+    const activeTurn = createActiveTurn(session.threadId);
+    activeTurn.turnStartRequestSentAtMs = null;
+
+    const didBind = runtimeEvents.bindActiveTurnId(activeTurn, "turn-too-early");
+
+    expect(didBind).toBe(false);
+    expect(activeTurn.turnId).toBeUndefined();
+  });
+
   test("does not first-bind an active turn from old buffered turn evidence", async () => {
     const staleTurnStartedReceivedAt = "2000-01-01T00:00:00.000Z";
     const staleIdleReceivedAt = "2000-01-01T00:00:01.000Z";
@@ -386,7 +398,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const emittedEvents: unknown[] = [];
     const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
     activeTurn.startedAtMs = Number.POSITIVE_INFINITY;
-    activeTurn.turnEvidenceMinReceivedAtMs = Date.parse("2000-01-01T00:00:02.000Z");
+    activeTurn.turnStartRequestSentAtMs = Date.parse("2000-01-01T00:00:02.000Z");
     const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
     sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
     const runtimeEvents = createRuntimeEvents({

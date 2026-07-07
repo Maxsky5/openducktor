@@ -215,12 +215,14 @@ export class CodexRuntimeSessionEvents {
     }
 
     const didBind = !activeTurn.turnId;
-    if (
-      didBind &&
-      startedAtMs !== undefined &&
-      startedAtMs < activeTurn.turnEvidenceMinReceivedAtMs
-    ) {
-      return false;
+    if (didBind) {
+      const turnStartRequestSentAtMs = activeTurn.turnStartRequestSentAtMs;
+      if (turnStartRequestSentAtMs === null) {
+        return false;
+      }
+      if (startedAtMs !== undefined && startedAtMs < turnStartRequestSentAtMs) {
+        return false;
+      }
     }
 
     activeTurn.turnId = turnId;
