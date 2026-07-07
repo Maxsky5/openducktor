@@ -4,11 +4,12 @@ import { HostResourceError } from "../../effect/host-errors";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
-const taskRowsOrderBy = [
+const taskLaneOrderBy = [
+  // Open tasks are backlog-priority ordered; every other lane keeps newer activity last.
   asc(sql`case when ${tasks.status} = 'open' then 0 else 1 end`),
   asc(sql`case when ${tasks.status} = 'open' then ${tasks.priority} else 0 end`),
   desc(sql`case when ${tasks.status} = 'open' then ${tasks.createdAt} else null end`),
-  asc(sql`case when ${tasks.status} != 'open' then ${tasks.updatedAt} else null end`),
+  asc(sql`case when ${tasks.status} <> 'open' then ${tasks.updatedAt} else null end`),
   asc(tasks.id),
 ] as const;
 
@@ -24,7 +25,7 @@ export const taskRows = (
               database
                 .select()
                 .from(tasks)
-                .orderBy(...taskRowsOrderBy),
+                .orderBy(...taskLaneOrderBy),
             "sqliteTaskStore.taskRows.selectTasks",
           )
         : yield* session.execute(
@@ -33,7 +34,7 @@ export const taskRows = (
                 .select()
                 .from(tasks)
                 .where(where)
-                .orderBy(...taskRowsOrderBy),
+                .orderBy(...taskLaneOrderBy),
             "sqliteTaskStore.taskRows.selectTasks",
           );
     return rows;
