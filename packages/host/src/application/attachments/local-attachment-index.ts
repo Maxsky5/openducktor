@@ -52,7 +52,7 @@ const compareNewestStagedAttachmentFirst = (
   (right.modifiedTimeMs ?? Number.NEGATIVE_INFINITY) -
   (left.modifiedTimeMs ?? Number.NEGATIVE_INFINITY);
 
-export const readStagedAttachmentDirectoryModifiedTimeMs = (
+const readStagedAttachmentDirectoryModifiedTimeMs = (
   localAttachmentPort: LocalAttachmentPort,
   attachmentDirectory: string,
 ): Effect.Effect<number | null, HostOperationError> =>
