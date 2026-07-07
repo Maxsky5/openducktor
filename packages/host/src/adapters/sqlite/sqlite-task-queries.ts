@@ -1,8 +1,16 @@
-import { asc, desc, eq, inArray, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+
+const taskRowsOrderBy = [
+  asc(sql`case when ${tasks.status} = 'open' then 0 else 1 end`),
+  asc(sql`case when ${tasks.status} = 'open' then ${tasks.priority} else 0 end`),
+  desc(sql`case when ${tasks.status} = 'open' then ${tasks.createdAt} else null end`),
+  asc(sql`case when ${tasks.status} != 'open' then ${tasks.updatedAt} else null end`),
+  asc(tasks.id),
+] as const;
 
 export const taskRows = (
   session: TaskStoreSession,
@@ -13,7 +21,10 @@ export const taskRows = (
       where === undefined
         ? yield* session.execute(
             (database) =>
-              database.select().from(tasks).orderBy(desc(tasks.updatedAt), asc(tasks.id)),
+              database
+                .select()
+                .from(tasks)
+                .orderBy(...taskRowsOrderBy),
             "sqliteTaskStore.taskRows.selectTasks",
           )
         : yield* session.execute(
@@ -22,7 +33,7 @@ export const taskRows = (
                 .select()
                 .from(tasks)
                 .where(where)
-                .orderBy(desc(tasks.updatedAt), asc(tasks.id)),
+                .orderBy(...taskRowsOrderBy),
             "sqliteTaskStore.taskRows.selectTasks",
           );
     return rows;
