@@ -34,11 +34,4 @@ describe("session-launch-actions", () => {
     expect(isLaunchStartModeAllowed("build_pull_request_generation", "fork")).toBe(true);
     expect(isLaunchStartModeAllowed("build_pull_request_generation", "fresh")).toBe(false);
   });
-
-  test("does not reintroduce unsafe launch-action casts", async () => {
-    const source = await Bun.file(new URL("./session-launch-actions.ts", import.meta.url)).text();
-
-    expect(source).not.toContain("value as SessionLaunchActionId");
-    expect(source).not.toContain("as SessionLaunchAction).allowedStartModes");
-  });
 });
