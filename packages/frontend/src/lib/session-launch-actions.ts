@@ -119,8 +119,8 @@ export const defaultSessionLaunchActionForRole = (role: AgentRole): SessionLaunc
   return action.id;
 };
 
-export const isSessionLaunchActionId = (value: string | null): value is SessionLaunchActionId =>
-  value !== null && sessionLaunchActionIdSet.has(value);
+export const isSessionLaunchActionId = (value: unknown): value is SessionLaunchActionId =>
+  typeof value === "string" && sessionLaunchActionIdSet.has(value);
 
 export const isLaunchStartModeAllowed = (
   actionId: SessionLaunchActionId,

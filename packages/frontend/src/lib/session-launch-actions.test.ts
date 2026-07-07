@@ -22,9 +22,12 @@ describe("session-launch-actions", () => {
     }
 
     expect(isSessionLaunchActionId(null)).toBe(false);
+    expect(isSessionLaunchActionId(undefined)).toBe(false);
     expect(isSessionLaunchActionId("")).toBe(false);
     expect(isSessionLaunchActionId("qa_review ")).toBe(false);
     expect(isSessionLaunchActionId("unknown")).toBe(false);
+    expect(isSessionLaunchActionId(123)).toBe(false);
+    expect(isSessionLaunchActionId({})).toBe(false);
   });
 
   test("checks allowed start modes for each launch action", () => {
