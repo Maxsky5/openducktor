@@ -32,17 +32,25 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
   receivedAt: runtimeEventReceivedAt,
 });
 
-const bufferedServerRequestEvent = (message: unknown, runtimeId = "runtime-1") => ({
+const bufferedServerRequestEvent = (
+  message: unknown,
+  runtimeId = "runtime-1",
+  receivedAt = runtimeEventReceivedAt,
+) => ({
   runtimeId,
   kind: "server_request" as const,
-  receivedAt: runtimeEventReceivedAt,
+  receivedAt,
   message,
 });
 
-const bufferedNotificationEvent = (message: unknown, runtimeId = "runtime-1") => ({
+const bufferedNotificationEvent = (
+  message: unknown,
+  runtimeId = "runtime-1",
+  receivedAt = runtimeEventReceivedAt,
+) => ({
   runtimeId,
   kind: "notification" as const,
-  receivedAt: runtimeEventReceivedAt,
+  receivedAt,
   message,
 });
 
@@ -101,6 +109,23 @@ const createActiveTurn = (
   queuedUserMessages: [],
   model: turnModel,
 });
+
+const createSettlingActiveTurn = (
+  threadId: string,
+  turnModel: AgentModelSelection = model,
+): { activeTurn: ActiveCodexTurn; isSettled: () => boolean } => {
+  let settled = false;
+  return {
+    activeTurn: {
+      ...createActiveTurn(threadId, turnModel),
+      isTurnSettled: () => settled,
+      markTurnSettled: () => {
+        settled = true;
+      },
+    },
+    isSettled: () => settled,
+  };
+};
 
 const createChildThreadSnapshot = (
   childThreadId: string,
@@ -284,6 +309,127 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(hasPendingInput).toBe(false);
     expect(pendingInput.approval("buffered-approval-1")).toBeUndefined();
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
+  });
+
+  test("uses server-request receipt time when binding a buffered active turn", async () => {
+    const requestReceivedAt = "2000-01-01T00:00:00.000Z";
+    const idleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-server-request-receipt");
+    const sessions = new Map([[session.threadId, session]]);
+    const pendingInput = new CodexPendingInputState();
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedServerRequestEvent(
+          {
+            id: "question-receipt-1",
+            method: "item/tool/requestUserInput",
+            params: {
+              threadId: session.threadId,
+              turnId: "turn-receipt",
+              questions: [
+                {
+                  id: "question-item-1",
+                  header: "Choose",
+                  question: "Proceed?",
+                  options: ["Yes", "No"],
+                },
+              ],
+            },
+          },
+          session.runtimeId,
+          requestReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          idleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      pendingInput,
+      activeTurnsBySessionId,
+    });
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBe("turn-receipt");
+    expect(activeTurn.startedAtMs).toBe(Date.parse(requestReceivedAt));
+    expect(isSettled()).toBe(true);
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: session.threadId,
+        timestamp: idleReceivedAt,
+      }),
+    );
+  });
+
+  test("lowers the active-turn cutoff when same-turn start evidence is older", async () => {
+    const originalStartedAtMs = Date.parse("2100-01-01T00:00:00.000Z");
+    const turnStartedReceivedAt = "2000-01-01T00:00:00.000Z";
+    const idleReceivedAt = "2000-01-01T00:00:01.000Z";
+    const session = createSession("thread-same-turn-cutoff");
+    const sessions = new Map([[session.threadId, session]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const { activeTurn, isSettled } = createSettlingActiveTurn(session.threadId);
+    const activeTurnsBySessionId = new Map([[session.threadId, activeTurn]]);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedNotificationEvent(
+          {
+            method: "turn/started",
+            params: {
+              threadId: session.threadId,
+              turn: { id: "turn-same" },
+            },
+          },
+          session.runtimeId,
+          turnStartedReceivedAt,
+        ),
+        bufferedNotificationEvent(
+          {
+            method: "thread/status/changed",
+            params: {
+              threadId: session.threadId,
+              status: { type: "idle" },
+            },
+          },
+          session.runtimeId,
+          idleReceivedAt,
+        ),
+      ],
+      sessions,
+      sessionEvents,
+      activeTurnsBySessionId,
+    });
+    runtimeEvents.bindActiveTurnId(activeTurn, "turn-same", originalStartedAtMs);
+
+    await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+
+    expect(activeTurn.turnId).toBe("turn-same");
+    expect(activeTurn.startedAtMs).toBe(Date.parse(turnStartedReceivedAt));
+    expect(isSettled()).toBe(true);
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: session.threadId,
+        timestamp: idleReceivedAt,
+      }),
+    );
   });
 
   test("does not replay token-usage drained requests resolved in the same batch", async () => {

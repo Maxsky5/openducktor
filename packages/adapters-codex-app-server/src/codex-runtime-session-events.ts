@@ -35,6 +35,7 @@ import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import {
+  type BufferedCodexServerRequest,
   CodexRuntimeEventBuffer,
   CodexRuntimeEventSubscriptions,
   type CodexRuntimeStreamEvent,
@@ -90,6 +91,23 @@ const waitForRestoredUsageReplayTick = (): Promise<void> =>
 
 const restoredContextCaptureKey = (runtimeId: string, threadId: string): string =>
   `${runtimeId}:${threadId}`;
+
+const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
+  const receivedAtMs = Date.parse(receivedAt);
+  if (!Number.isFinite(receivedAtMs)) {
+    throw new Error(
+      `Codex app-server stream event has an unparsable receivedAt timestamp '${receivedAt}'.`,
+    );
+  }
+  return receivedAtMs;
+};
+
+const serverRequestFromRuntimeEvent = (
+  event: Pick<CodexRuntimeStreamEvent, "message" | "receivedAt">,
+): BufferedCodexServerRequest => ({
+  request: parseServerRequestRecord(event.message),
+  receivedAt: event.receivedAt,
+});
 
 export class CodexRuntimeSessionEvents {
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
@@ -192,13 +210,16 @@ export class CodexRuntimeSessionEvents {
       return false;
     }
 
+    if (startedAtMs !== undefined && !Number.isFinite(startedAtMs)) {
+      throw new Error("Codex active turn was bound with an invalid start timestamp.");
+    }
+
     const didBind = !activeTurn.turnId;
     activeTurn.turnId = turnId;
-    if (didBind) {
-      if (startedAtMs !== undefined && !Number.isFinite(startedAtMs)) {
-        throw new Error("Codex active turn was bound with an invalid start timestamp.");
-      }
-      activeTurn.startedAtMs = startedAtMs ?? Date.now();
+    if (startedAtMs !== undefined && (didBind || startedAtMs < activeTurn.startedAtMs)) {
+      activeTurn.startedAtMs = startedAtMs;
+    } else if (didBind) {
+      activeTurn.startedAtMs = Date.now();
     }
     this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
     return didBind;
@@ -642,16 +663,16 @@ export class CodexRuntimeSessionEvents {
       ]);
       return;
     }
-    await this.processServerRequestsForSession(session, [parseServerRequestRecord(event.message)]);
+    await this.processServerRequestsForSession(session, [serverRequestFromRuntimeEvent(event)]);
   }
 
   private async processServerRequestsForSession(
     session: CodexSessionState,
-    requests: CodexServerRequestRecord[],
+    requests: BufferedCodexServerRequest[],
     handledRequestKeysOverride?: Set<string>,
   ): Promise<boolean> {
     const ownerThreadIds = new Set(
-      requests.map((request) => extractThreadIdFromParams(request.params) ?? session.threadId),
+      requests.map(({ request }) => extractThreadIdFromParams(request.params) ?? session.threadId),
     );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
     const handledRequestKeys =
@@ -700,7 +721,7 @@ export class CodexRuntimeSessionEvents {
         : undefined;
     await this.processServerRequestsForSession(
       targetSession,
-      [parseServerRequestRecord(event.message)],
+      [serverRequestFromRuntimeEvent(event)],
       handledRequestKeys,
     );
   }
@@ -774,15 +795,16 @@ export class CodexRuntimeSessionEvents {
   private async handleServerRequests(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
-    requests: unknown[],
+    requests: BufferedCodexServerRequest[],
   ): Promise<boolean> {
     let hasPendingInput = false;
-    for (const request of requests) {
+    for (const { request, receivedAt } of requests) {
       hasPendingInput =
         (await this.handleServerRequest(
           session,
-          parseServerRequestRecord(request),
+          request,
           handledRequestKeys,
+          receivedAtMsFromRuntimeStreamEvent(receivedAt),
         )) || hasPendingInput;
     }
     return hasPendingInput;
@@ -935,12 +957,14 @@ export class CodexRuntimeSessionEvents {
     session: CodexSessionState,
     rawRequest: CodexServerRequestRecord,
     handledRequestKeys: Set<string>,
+    requestReceivedAtMs?: number,
   ): Promise<boolean> {
     return handleCodexServerRequest(
       this.serverRequestContext(),
       session,
       rawRequest,
       handledRequestKeys,
+      requestReceivedAtMs,
     );
   }
 
@@ -951,7 +975,8 @@ export class CodexRuntimeSessionEvents {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       subagents: this.deps.subagents,
       sessionForThreadId: (threadId) => this.deps.sessions.get(threadId),
-      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
+        this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>

@@ -42,10 +42,10 @@ describe("CodexRuntimeEventBuffer", () => {
     });
 
     expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([
-      request(1, "child-thread"),
+      { request: request(1, "child-thread"), receivedAt },
     ]);
     expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      request(2, "child-thread"),
+      { request: request(2, "child-thread"), receivedAt },
     ]);
   });
 
@@ -68,7 +68,7 @@ describe("CodexRuntimeEventBuffer", () => {
 
     expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([]);
     expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      request(2, "child-thread"),
+      { request: request(2, "child-thread"), receivedAt },
     ]);
   });
 });

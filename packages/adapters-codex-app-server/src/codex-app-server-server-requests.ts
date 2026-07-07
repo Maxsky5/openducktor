@@ -61,7 +61,7 @@ export type CodexServerRequestHandlerContext = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   subagents: CodexSubagentLinkState;
   sessionForThreadId(threadId: string): CodexSessionState | undefined;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
 };
@@ -142,6 +142,7 @@ export const handleCodexServerRequest = async (
   session: CodexSessionState,
   rawRequest: CodexServerRequestRecord,
   handledRequestKeys: Set<string>,
+  requestReceivedAtMs?: number,
 ): Promise<boolean> => {
   const requestId = rawRequest.id;
   const requestKey = requestId !== undefined ? codexServerRequestKey(requestId) : undefined;
@@ -169,7 +170,11 @@ export const handleCodexServerRequest = async (
     (routeContext.ownerThreadId === routeContext.policySession.threadId
       ? context.activeTurnsBySessionId.get(routeContext.policySession.threadId)
       : undefined);
-  if (requestTurnId && activeTurn && context.bindActiveTurnId(activeTurn, requestTurnId)) {
+  if (
+    requestTurnId &&
+    activeTurn &&
+    context.bindActiveTurnId(activeTurn, requestTurnId, requestReceivedAtMs)
+  ) {
     context.flushQueuedUserMessagesLater(activeTurn);
   }
 
@@ -226,7 +231,7 @@ export const handleCodexServerRequest = async (
         `Codex question request thread '${parsed.threadId}' does not match request owner '${routeContext.ownerThreadId}'.`,
       );
     }
-    if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId)) {
+    if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId, requestReceivedAtMs)) {
       context.flushQueuedUserMessagesLater(activeTurn);
     }
     const questionInput = {
