@@ -8,6 +8,8 @@ import type {
   SkillDescriptor as ContractsSkillDescriptor,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
+  SubagentCatalog as ContractsSubagentCatalog,
+  SubagentDescriptor as ContractsSubagentDescriptor,
   FileContent,
   FileDiff,
   RepoRuntimeRef,
@@ -69,6 +71,8 @@ export type AgentSkillReference = ContractsSkillDescriptor;
 export type AgentSkillCatalog = ContractsSkillCatalog;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
+export type AgentSubagentReference = ContractsSubagentDescriptor;
+export type AgentSubagentCatalog = ContractsSubagentCatalog;
 export type AgentSubagentExecutionMode = ContractsRuntimeSubagentExecutionMode;
 export type AgentSubagentStatus = "pending" | "running" | "completed" | "cancelled" | "error";
 export type ExternalSessionId = string;
@@ -133,6 +137,10 @@ export type AgentUserMessagePart =
       skill: AgentSkillReference;
     }
   | {
+      kind: "subagent_reference";
+      subagent: AgentSubagentReference;
+    }
+  | {
       kind: "attachment";
       attachment: AgentAttachmentReference;
     };
@@ -160,12 +168,22 @@ export type AgentUserMessageDisplayPart =
       sourceText?: AgentUserMessageSourceText;
     }
   | {
+      kind: "subagent_reference";
+      subagent: AgentSubagentReference;
+      sourceText?: AgentUserMessageSourceText;
+    }
+  | {
       kind: "attachment";
       attachment: AgentAttachmentReference;
     };
 
 export type AgentUserMessagePromptFileReference = {
   file: AgentFileReference;
+  sourceText: AgentUserMessageSourceText;
+};
+
+export type AgentUserMessagePromptSubagentReference = {
+  subagent: AgentSubagentReference;
   sourceText: AgentUserMessageSourceText;
 };
 

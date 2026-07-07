@@ -140,6 +140,50 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("normalizes OpenCode agent parts into subagent display parts", () => {
+    const parts: Part[] = [
+      {
+        id: "text-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "text",
+        text: "ask @reviewer now",
+      } as Part,
+      {
+        id: "agent-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "agent",
+        name: "reviewer",
+        source: {
+          value: "@reviewer",
+          start: 4,
+          end: 13,
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "text",
+        text: "ask @reviewer now",
+      },
+      {
+        kind: "subagent_reference",
+        subagent: {
+          id: "reviewer",
+          name: "reviewer",
+          label: "reviewer",
+        },
+        sourceText: {
+          value: "@reviewer",
+          start: 4,
+          end: 13,
+        },
+      },
+    ]);
+  });
+
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
     const parts: Part[] = [
       {
@@ -543,6 +587,24 @@ describe("message-normalizers", () => {
         },
       ]),
     ).toBe("@src/alpha.ts @src/beta.ts");
+
+    expect(
+      readVisibleUserTextFromDisplayParts([
+        {
+          kind: "subagent_reference",
+          subagent: {
+            id: "reviewer",
+            name: "reviewer",
+            label: "Reviewer",
+          },
+          sourceText: {
+            value: "@reviewer",
+            start: 0,
+            end: 9,
+          },
+        },
+      ]),
+    ).toBe("@reviewer");
   });
 
   test("sanitizeAssistantMessage trims surrounding whitespace", () => {

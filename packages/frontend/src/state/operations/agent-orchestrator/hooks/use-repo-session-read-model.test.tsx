@@ -106,6 +106,7 @@ const createHarnessState = () => {
         },
         loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
         loadRepoRuntimeSkills: async () => ({ skills: [] }),
+        loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
         loadRepoRuntimeFileSearch: async () => [],
       }}
     >

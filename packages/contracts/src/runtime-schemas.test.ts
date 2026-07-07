@@ -159,8 +159,14 @@ describe("runtime schemas", () => {
 
   test("Codex descriptor enables file search with structured file and folder references", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsFileSearch).toBe(true);
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsSubagentReferences).toBe(
+      false,
+    );
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toEqual(
       expect.arrayContaining(["text", "skill_mention", "file_reference", "folder_reference"]),
+    );
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).not.toContain(
+      "subagent_reference",
     );
   });
 
@@ -1232,6 +1238,7 @@ describe("runtime schemas", () => {
             ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
             supportsFileSearch: true,
             supportedParts: ["text", "slash_command"],
+            supportsSubagentReferences: false,
           },
         }),
       },
@@ -1313,6 +1320,7 @@ describe("runtime schemas", () => {
             "file_reference",
             "folder_reference",
             "skill_mention",
+            "subagent_reference",
             "app_mention",
             "plugin_mention",
             "runtime_specific",
@@ -1320,6 +1328,7 @@ describe("runtime schemas", () => {
           supportsSlashCommands: true,
           supportsFileSearch: true,
           supportsSkillReferences: true,
+          supportsSubagentReferences: true,
         },
       }),
     });
@@ -1363,6 +1372,43 @@ describe("runtime schemas", () => {
         }),
       },
       "Runtime descriptors that do not support skill references must not declare skill mention prompt parts.",
+    );
+  });
+
+  test("runtime descriptor validates subagent reference capability invariants", () => {
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          promptInput: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+            supportedParts: ["text", "file_reference", "folder_reference"],
+            supportsSlashCommands: false,
+            supportsSubagentReferences: true,
+          },
+        }),
+      },
+      "Runtime descriptors that support subagent references must declare subagent reference prompt parts.",
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...CODEX_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          promptInput: {
+            ...CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+            supportedParts: [
+              "text",
+              "skill_mention",
+              "file_reference",
+              "folder_reference",
+              "subagent_reference",
+            ],
+            supportsSubagentReferences: false,
+          },
+        }),
+      },
+      "Runtime descriptors that do not support subagent references must not declare subagent reference prompt parts.",
     );
   });
 

@@ -112,6 +112,9 @@ describe("agent-runtime capability policies", () => {
     expect(runtimeSupportsCapability(runtimeWithoutTodos, "optionalSurfaces.supportsTodos")).toBe(
       false,
     );
+    expect(
+      runtimeSupportsCapability(runtimeWithTodos, "promptInput.supportsSubagentReferences"),
+    ).toBe(true);
   });
 
   test("fails fast on runtime descriptor schema violations before registration", () => {
@@ -129,6 +132,7 @@ describe("agent-runtime capability policies", () => {
           ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
           supportsFileSearch: true,
           supportedParts: ["text"],
+          supportsSubagentReferences: false,
         },
       },
     } as unknown as RuntimeDescriptor;

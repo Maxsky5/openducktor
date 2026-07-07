@@ -1,6 +1,7 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
+  AgentSubagentReference,
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
   AgentUserMessageSourceText,
@@ -158,6 +159,33 @@ const normalizeFileReferencePart = (
   };
 };
 
+type OpenCodeAgentPart = {
+  id?: string;
+  type: "agent";
+  name?: string;
+  source?: unknown;
+};
+
+const normalizeSubagentReferencePart = (
+  part: OpenCodeAgentPart,
+): AgentUserMessageDisplayPart | null => {
+  const name = typeof part.name === "string" ? part.name.trim() : "";
+  if (name.length === 0) {
+    return null;
+  }
+  const subagent: AgentSubagentReference = {
+    id: name,
+    name,
+    label: name,
+  };
+  const sourceText = normalizeSourceText(part.source);
+  return {
+    kind: "subagent_reference",
+    subagent,
+    ...(sourceText ? { sourceText } : {}),
+  };
+};
+
 const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
   return text.startsWith(AUTO_SLASH_COMMAND_OPEN) && text.includes(AUTO_SLASH_COMMAND_CLOSE);
 };
@@ -190,6 +218,14 @@ export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessag
       const fileReference = normalizeFileReferencePart(part);
       if (fileReference) {
         normalizedParts.push(fileReference);
+      }
+      continue;
+    }
+
+    if (part.type === "agent") {
+      const subagentReference = normalizeSubagentReferencePart(part as OpenCodeAgentPart);
+      if (subagentReference) {
+        normalizedParts.push(subagentReference);
       }
     }
   }
@@ -278,6 +314,10 @@ export const readVisibleUserTextFromDisplayParts = (
 
     if (part.kind === "file_reference") {
       return [{ kind: "file_reference", file: part.file }];
+    }
+
+    if (part.kind === "subagent_reference") {
+      return [{ kind: "subagent_reference", subagent: part.subagent }];
     }
 
     return [];

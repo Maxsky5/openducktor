@@ -11,6 +11,7 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentSubagentCatalog,
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -123,6 +124,16 @@ const ALTERNATE_CATALOG: AgentModelCatalog = {
       mode: "primary",
       hidden: false,
       color: "#0ea5e9",
+    },
+  ],
+};
+
+const SUBAGENT_CATALOG: AgentSubagentCatalog = {
+  subagents: [
+    {
+      id: "reviewer",
+      name: "reviewer",
+      label: "Reviewer",
     },
   ],
 };
@@ -248,6 +259,7 @@ const createHookHarness = (
     },
     loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
     loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -634,6 +646,7 @@ describe("useAgentStudioChatComposer", () => {
       expect(harness.getLatest().supportsSlashCommands).toBe(false);
       expect(harness.getLatest().supportsFileSearch).toBe(true);
       expect(harness.getLatest().supportsSkillReferences).toBe(true);
+      expect(harness.getLatest().supportsSubagentReferences).toBe(false);
       expect(harness.getLatest().supportsProfiles).toBe(false);
     } finally {
       await harness.unmount();
@@ -670,6 +683,33 @@ describe("useAgentStudioChatComposer", () => {
         },
         "src",
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads repo subagents through the repo runtime before a session starts", async () => {
+    const loadSubagents = mock(async () => SUBAGENT_CATALOG);
+    const harness = createHookHarness(
+      createBaseProps({
+        loadSubagents,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.subagents.length === 1);
+
+      expect(harness.getLatest().supportsSubagentReferences).toBe(true);
+      expect(harness.getLatest().subagents).toEqual(SUBAGENT_CATALOG.subagents);
+      expect(loadSubagents).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      });
     } finally {
       await harness.unmount();
     }

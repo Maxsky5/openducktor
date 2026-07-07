@@ -217,6 +217,7 @@ function runtimeDefinitionsValue() {
       commands: [],
     }),
     loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   };
 }

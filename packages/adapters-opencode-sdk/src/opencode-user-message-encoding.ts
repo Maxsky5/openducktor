@@ -1,6 +1,7 @@
 import {
   type AgentUserMessagePart,
   type AgentUserMessagePromptFileReference,
+  type AgentUserMessagePromptSubagentReference,
   normalizeAgentUserMessageParts,
 } from "@openducktor/core";
 
@@ -18,6 +19,9 @@ const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => 
   }
   if (part.kind === "skill_mention") {
     throw new Error("OpenCode does not support skill reference user message parts.");
+  }
+  if (part.kind === "subagent_reference") {
+    return `@${part.subagent.name}`;
   }
   return null;
 };
@@ -57,10 +61,12 @@ const buildOpenCodeMessageEncoding = (
 ): {
   text: string;
   fileReferences: AgentUserMessagePromptFileReference[];
+  subagentReferences: AgentUserMessagePromptSubagentReference[];
 } => {
   const normalized = normalizeAgentUserMessageParts(parts);
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
+  const subagentReferences: AgentUserMessagePromptSubagentReference[] = [];
   let previousPart: AgentUserMessagePart | null = null;
   let skippedStructuredPart = false;
 
@@ -98,12 +104,28 @@ const buildOpenCodeMessageEncoding = (
       continue;
     }
 
+    if (part.kind === "subagent_reference") {
+      const start = text.length;
+      text += encodedPart;
+      subagentReferences.push({
+        subagent: part.subagent,
+        sourceText: {
+          value: encodedPart,
+          start,
+          end: text.length,
+        },
+      });
+      previousPart = part;
+      skippedStructuredPart = false;
+      continue;
+    }
+
     text += encodedPart;
     previousPart = part;
     skippedStructuredPart = false;
   }
 
-  return { text, fileReferences };
+  return { text, fileReferences, subagentReferences };
 };
 
 export const buildOpenCodeVisibleText = (parts: AgentUserMessagePart[]): string => {
@@ -115,6 +137,7 @@ export const buildOpenCodePromptText = (
 ): {
   text: string;
   fileReferences: AgentUserMessagePromptFileReference[];
+  subagentReferences: AgentUserMessagePromptSubagentReference[];
 } => {
   return buildOpenCodeMessageEncoding(parts);
 };

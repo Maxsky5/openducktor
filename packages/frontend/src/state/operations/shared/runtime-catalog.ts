@@ -5,6 +5,7 @@ import type {
   AgentModelCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -14,6 +15,7 @@ export type RuntimeCatalogOperations = {
   loadRepoRuntimeCatalog(runtimeRef: RepoRuntimeRef): Promise<AgentModelCatalog>;
   loadRepoRuntimeSlashCommands(runtimeRef: RepoRuntimeRef): Promise<AgentSlashCommandCatalog>;
   loadRepoRuntimeSkills(runtimeRef: RuntimeWorkingDirectoryRef): Promise<AgentSkillCatalog>;
+  loadRepoRuntimeSubagents(runtimeRef: RuntimeWorkingDirectoryRef): Promise<AgentSubagentCatalog>;
   loadRepoRuntimeFileSearch(
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -33,6 +35,8 @@ export const createHostRuntimeCatalogOperations = (
     getAdapter(runtimeRef.runtimeKind).listAvailableSlashCommands(runtimeRef),
   loadRepoRuntimeSkills: async (runtimeRef) =>
     getAdapter(runtimeRef.runtimeKind).listAvailableSkills(runtimeRef),
+  loadRepoRuntimeSubagents: async (runtimeRef) =>
+    getAdapter(runtimeRef.runtimeKind).listAvailableSubagents(runtimeRef),
   loadRepoRuntimeFileSearch: async (runtimeRef, query) =>
     getAdapter(runtimeRef.runtimeKind).searchFiles({
       ...runtimeRef,

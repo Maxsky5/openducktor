@@ -123,6 +123,8 @@ import type {
   SlashCommandDescriptor,
   SlashCommandSource,
   SoftGuardrails,
+  SubagentCatalog,
+  SubagentDescriptor,
   SystemCheck,
   SystemListOpenInToolsRequest,
   SystemOpenInToolId,
@@ -424,6 +426,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "slashCommandDescriptorSchema",
   "slashCommandSourceSchema",
   "slashCommandSourceValues",
+  "subagentCatalogSchema",
+  "subagentDescriptorSchema",
   "mandatoryRuntimeCapabilityKeys",
   "optionalRuntimeCapabilityKeys",
   "softGuardrailsSchema",
@@ -577,6 +581,8 @@ type ExportedTypeContract = {
   RuntimeSessionLifecycleCapabilities: RuntimeSessionLifecycleCapabilities;
   RuntimeStructuredInputCapabilities: RuntimeStructuredInputCapabilities;
   RuntimeWorkflowCapabilities: RuntimeWorkflowCapabilities;
+  SubagentCatalog: SubagentCatalog;
+  SubagentDescriptor: SubagentDescriptor;
   RepoRuntimeHealthCheck: RepoRuntimeHealthCheck;
   RepoStoreAttachmentHealth: RepoStoreAttachmentHealth;
   RepoStoreHealth: RepoStoreHealth;

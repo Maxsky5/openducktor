@@ -44,6 +44,7 @@ export type AgentStudioChatModelSelectionContext = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
+  supportsSubagentReferences: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
@@ -52,6 +53,10 @@ export type AgentStudioChatModelSelectionContext = {
   skills: AgentChatModel["composer"]["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  subagentCatalog: AgentChatModel["composer"]["subagentCatalog"];
+  subagents: AgentChatModel["composer"]["subagents"];
+  subagentsError: string | null;
+  isSubagentsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -246,6 +251,7 @@ export function useAgentStudioChatModel({
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
       supportsSkillReferences: modelSelection.supportsSkillReferences,
+      supportsSubagentReferences: modelSelection.supportsSubagentReferences,
       slashCommandCatalog: modelSelection.slashCommandCatalog,
       slashCommands: modelSelection.slashCommands,
       slashCommandsError: modelSelection.slashCommandsError,
@@ -254,6 +260,10 @@ export function useAgentStudioChatModel({
       skills: modelSelection.skills,
       skillsError: modelSelection.skillsError,
       isSkillsLoading: modelSelection.isSkillsLoading,
+      subagentCatalog: modelSelection.subagentCatalog,
+      subagents: modelSelection.subagents,
+      subagentsError: modelSelection.subagentsError,
+      isSubagentsLoading: modelSelection.isSubagentsLoading,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
       modelOptions: modelSelection.modelOptions,
@@ -270,6 +280,7 @@ export function useAgentStudioChatModel({
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,
       modelSelection.isSkillsLoading,
+      modelSelection.isSubagentsLoading,
       modelSelection.modelGroups,
       modelSelection.modelOptions,
       modelSelection.onSelectAgent,
@@ -284,10 +295,14 @@ export function useAgentStudioChatModel({
       modelSelection.skillCatalog,
       modelSelection.skills,
       modelSelection.skillsError,
+      modelSelection.subagentCatalog,
+      modelSelection.subagents,
+      modelSelection.subagentsError,
       modelSelection.supportsFileSearch,
       modelSelection.supportsProfiles,
       modelSelection.supportsSkillReferences,
       modelSelection.supportsSlashCommands,
+      modelSelection.supportsSubagentReferences,
       modelSelection.variantOptions,
       selectedSession.pendingInput.waitingInputPlaceholder,
       selectedSessionIdentity,

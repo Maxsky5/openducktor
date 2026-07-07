@@ -291,12 +291,16 @@ function AgentChatComposerFormView({
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
     skills,
     skillsError,
     isSkillsLoading,
+    subagents,
+    subagentsError,
+    isSubagentsLoading,
     searchFiles,
     agentOptions,
     modelOptions,
@@ -392,12 +396,16 @@ function AgentChatComposerFormView({
             supportsSlashCommands={supportsSlashCommands}
             supportsFileSearch={supportsFileSearch}
             supportsSkillReferences={supportsSkillReferences}
+            supportsSubagentReferences={supportsSubagentReferences}
             slashCommands={slashCommands}
             slashCommandsError={slashCommandsError}
             isSlashCommandsLoading={isSlashCommandsLoading}
             skills={skills}
             skillsError={skillsError}
             isSkillsLoading={isSkillsLoading}
+            subagents={subagents}
+            subagentsError={subagentsError}
+            isSubagentsLoading={isSubagentsLoading}
             searchFiles={searchFiles}
           />
 
@@ -541,7 +549,10 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
+    supportsFileSearch,
     supportsSkillReferences,
+    supportsSubagentReferences,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -738,9 +749,21 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
-  let composerPlaceholder = supportsSkillReferences
-    ? "@ for files; / for commands; $ for skills"
-    : "@ for files; / for commands";
+  let referencePlaceholder: string | null = null;
+  if (supportsFileSearch && supportsSubagentReferences) {
+    referencePlaceholder = "@ for files and subagents";
+  } else if (supportsSubagentReferences) {
+    referencePlaceholder = "@ for subagents";
+  } else if (supportsFileSearch) {
+    referencePlaceholder = "@ for files";
+  }
+  const composerPlaceholderParts = [
+    referencePlaceholder,
+    supportsSlashCommands ? "/ for commands" : null,
+    supportsSkillReferences ? "$ for skills" : null,
+  ].filter((part): part is string => Boolean(part));
+  let composerPlaceholder =
+    composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }

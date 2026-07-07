@@ -63,6 +63,15 @@ type OpenCodePromptPart =
           end: number;
         };
       };
+    }
+  | {
+      type: "agent";
+      name: string;
+      source: {
+        value: string;
+        start: number;
+        end: number;
+      };
     };
 
 const toCommandModelInput = (
@@ -96,6 +105,21 @@ const toPromptFilePart = (
   };
 };
 
+const toPromptSubagentPart = (
+  subagentReference: ReturnType<typeof buildOpenCodePromptText>["subagentReferences"][number],
+): Extract<OpenCodePromptPart, { type: "agent" }> => {
+  const name = subagentReference.subagent.name.trim();
+  if (name.length === 0) {
+    throw new Error("OpenCode subagent references require a non-empty name.");
+  }
+
+  return {
+    type: "agent",
+    name,
+    source: subagentReference.sourceText,
+  };
+};
+
 const toPromptParts = (
   parts: SendAgentUserMessageInput["parts"],
   workingDirectory: string,
@@ -106,6 +130,7 @@ const toPromptParts = (
     ...promptText.fileReferences.map((fileReference) =>
       toPromptFilePart(fileReference, workingDirectory),
     ),
+    ...promptText.subagentReferences.map(toPromptSubagentPart),
     ...parts.flatMap((part) => {
       if (part.kind !== "attachment") {
         return [];
@@ -146,13 +171,14 @@ const toSlashCommandExecutionRequest = (
       (part) =>
         part.kind === "file_reference" ||
         part.kind === "attachment" ||
-        part.kind === "skill_mention",
+        part.kind === "skill_mention" ||
+        part.kind === "subagent_reference",
     )
   ) {
     throw toOpenCodeRequestError(
       "run slash command",
       new Error(
-        "OpenCode slash commands do not support structured attachments, file references, or skill references.",
+        "OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
       ),
     );
   }
@@ -268,6 +294,9 @@ const toAdmittedUserDisplayParts = (
     }
     if (part.kind === "skill_mention") {
       return { kind: "skill_mention", skill: part.skill };
+    }
+    if (part.kind === "subagent_reference") {
+      return { kind: "subagent_reference", subagent: part.subagent };
     }
     if (part.kind === "attachment") {
       return { kind: "attachment", attachment: part.attachment };

@@ -17,6 +17,7 @@ import type {
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentStreamPart,
+  AgentSubagentCatalog,
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
   AgentUserMessageState,
@@ -130,6 +131,8 @@ export type ListAgentModelsInput = RepoRuntimeRef;
 export type ListAgentSlashCommandsInput = RepoRuntimeRef;
 
 export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
+
+export type ListAgentSubagentsInput = RuntimeWorkingDirectoryRef;
 
 export type SearchAgentFilesInput = RuntimeWorkingDirectoryRef & {
   query: string;
@@ -250,6 +253,7 @@ export interface AgentCatalogPort {
   listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
   listAvailableSlashCommands(input: ListAgentSlashCommandsInput): Promise<AgentSlashCommandCatalog>;
   listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog>;
+  listAvailableSubagents(input: ListAgentSubagentsInput): Promise<AgentSubagentCatalog>;
   searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 

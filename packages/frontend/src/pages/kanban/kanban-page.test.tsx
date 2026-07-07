@@ -513,6 +513,7 @@ const renderPage = async (
                                   loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
                                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
                                   loadRepoRuntimeSkills: async () => ({ skills: [] }),
+                                  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
                                   loadRepoRuntimeFileSearch: async () => [],
                                 }}
                               >

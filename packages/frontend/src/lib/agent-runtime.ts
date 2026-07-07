@@ -196,6 +196,8 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.promptInput.supportsFileSearch;
     case "promptInput.supportsSkillReferences":
       return runtimeDescriptor.capabilities.promptInput.supportsSkillReferences;
+    case "promptInput.supportsSubagentReferences":
+      return runtimeDescriptor.capabilities.promptInput.supportsSubagentReferences;
     case "optionalSurfaces.supportsProfiles":
       return runtimeDescriptor.capabilities.optionalSurfaces.supportsProfiles;
     case "optionalSurfaces.supportsVariants":

@@ -32,12 +32,10 @@ function AgentChatInlineSkillReferenceChip({
       title={title}
       {...props}
     >
-      <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME} title={title}>
+      <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME}>
         <Blocks className="size-3.5" />
       </span>
-      <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME} title={title}>
-        {skill.name}
-      </span>
+      <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME}>{skill.name}</span>
     </Badge>
   );
 }

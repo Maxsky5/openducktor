@@ -21,6 +21,7 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
   },
   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
   loadRepoRuntimeSkills: async () => ({ skills: [] }),
+  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
   loadRepoRuntimeFileSearch: async () => [],
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -1383,6 +1384,50 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("please");
   });
 
+  test("renders user subagent references as inline chips inside the user message text", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-subagent-ref",
+          role: "user",
+          content: "ask @reviewer please",
+          timestamp: "2026-02-22T10:28:40.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "ask @reviewer please",
+              },
+              {
+                kind: "subagent_reference",
+                subagent: {
+                  id: "reviewer",
+                  name: "reviewer",
+                  label: "Reviewer",
+                },
+                sourceText: {
+                  value: "@reviewer",
+                  start: 4,
+                  end: 13,
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("ask ");
+    expect(html).toContain(">reviewer<");
+    expect(html).not.toContain(">@reviewer<");
+    expect(html).toContain("bg-teal-100");
+    expect(html).toContain("lucide-bot");
+    expect(html).toContain("please");
+  });
+
   test("renders ordered user skill reference parts at their transcript position", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -1429,6 +1474,52 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("Tell me the purpose of please");
     expect(html).not.toContain(">$create-pr<");
     expect(html).toContain("mx-1");
+  });
+
+  test("renders ordered user subagent reference parts at their transcript position", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "ordered-user-subagent-ref",
+          role: "user",
+          content: "Ask reviewer to inspect this",
+          timestamp: "2026-02-22T10:28:47.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "Ask ",
+              },
+              {
+                kind: "subagent_reference",
+                subagent: {
+                  id: "reviewer",
+                  name: "reviewer",
+                  label: "Reviewer",
+                },
+              },
+              {
+                kind: "text",
+                text: " to inspect this",
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    const leadingTextIndex = html.indexOf("Ask ");
+    const chipTextIndex = html.indexOf(">reviewer<");
+    const trailingTextIndex = html.indexOf(" to inspect this");
+
+    expect(leadingTextIndex).toBeGreaterThanOrEqual(0);
+    expect(chipTextIndex).toBeGreaterThan(leadingTextIndex);
+    expect(trailingTextIndex).toBeGreaterThan(chipTextIndex);
+    expect(html).toContain("lucide-bot");
+    expect(html).not.toContain("Ask  to inspect this");
   });
 
   test("renders history-loaded skill source text against the raw message content", () => {

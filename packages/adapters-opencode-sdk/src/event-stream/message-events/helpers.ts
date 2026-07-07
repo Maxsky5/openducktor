@@ -48,17 +48,24 @@ export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: str
   return parts;
 };
 
+const isTerminalAssistantFinish = (value: string | undefined): boolean =>
+  value === "stop" || value === "error";
+
+const isTerminalStepFinishReason = (value: string | undefined): boolean => value === "stop";
+
 export const hasTerminalStopSignalInParts = (
   parts: Part[],
   finish: string | undefined,
 ): boolean => {
-  if (finish === "stop") {
+  if (isTerminalAssistantFinish(finish)) {
     return true;
   }
 
   return parts.some(
     (part) =>
-      part.type === "step-finish" && typeof part.reason === "string" && part.reason === "stop",
+      part.type === "step-finish" &&
+      typeof part.reason === "string" &&
+      isTerminalStepFinishReason(part.reason),
   );
 };
 
@@ -68,7 +75,7 @@ const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
     return (
       record !== undefined &&
       readStringProp(record, ["type"]) === "step-finish" &&
-      readStringProp(record, ["reason"]) === "stop"
+      isTerminalStepFinishReason(readStringProp(record, ["reason"]))
     );
   });
 };

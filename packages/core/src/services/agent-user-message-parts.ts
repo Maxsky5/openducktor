@@ -15,6 +15,9 @@ const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string | nul
   if (part.kind === "skill_mention") {
     return `$${part.skill.name}`;
   }
+  if (part.kind === "subagent_reference") {
+    return `@${part.subagent.name}`;
+  }
   return null;
 };
 

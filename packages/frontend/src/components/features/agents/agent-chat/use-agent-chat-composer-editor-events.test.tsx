@@ -99,10 +99,10 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
   const onAddFiles = mock(() => {});
   const onSend = mock(() => {});
   const closeSlashMenu = mock(() => {});
-  const closeFileMenu = mock(() => {});
+  const closeReferenceMenu = mock(() => {});
   const closeSkillMenu = mock(() => {});
   const syncMenusForSelectionTarget = mock(() => {});
-  const moveActiveFileIndex = mock(() => false);
+  const moveActiveReferenceIndex = mock(() => false);
   const moveActiveSlashIndex = mock(() => false);
   const moveActiveSkillIndex = mock(() => false);
   const applyEditResult = mock(() => true);
@@ -110,6 +110,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
   const selectSkillReference = mock(() => {});
+  const selectSubagentReference = mock(() => {});
   const selectFileSearchResult = mock(() => {});
 
   const args: EventsHookArgs = {
@@ -121,18 +122,19 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     latestDraftRef,
     selection,
     slashMenuState: null,
-    fileMenuState: null,
+    referenceMenuState: null,
     skillMenuState: null,
     filteredSlashCommands: [],
     filteredSkills: [],
+    referenceMenuItems: [],
     activeSlashIndex: 0,
     activeSkillIndex: 0,
-    activeFileIndex: 0,
+    activeReferenceIndex: 0,
     closeSlashMenu,
-    closeFileMenu,
+    closeReferenceMenu,
     closeSkillMenu,
     syncMenusForSelectionTarget,
-    moveActiveFileIndex,
+    moveActiveReferenceIndex,
     moveActiveSlashIndex,
     moveActiveSkillIndex,
     applyEditResult,
@@ -140,6 +142,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
     selectSkillReference,
+    selectSubagentReference,
     selectFileSearchResult,
   };
 
@@ -159,7 +162,8 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     onEditorInput,
     onAddFiles,
     closeSlashMenu,
-    closeFileMenu,
+    closeReferenceMenu,
+    closeSkillMenu,
     insertNewlineAtSelectionTarget,
   };
 };
@@ -190,7 +194,8 @@ describe("useAgentChatComposerEditorEvents", () => {
       data: null,
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeSkillMenu).toHaveBeenCalledTimes(1);
     expect(setup.selection.resolveSelectionTargetForLineBreak).toHaveBeenCalledWith(
       setup.root,
       setup.sourceDraft,
@@ -218,7 +223,8 @@ describe("useAgentChatComposerEditorEvents", () => {
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
     expect(setup.selection.clearPendingInputState).toHaveBeenCalledTimes(1);
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
-    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeReferenceMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeSkillMenu).toHaveBeenCalledTimes(1);
     expect(setup.onAddFiles).toHaveBeenCalledWith([file]);
     expect(setup.onDraftChange).not.toHaveBeenCalled();
     expect(setup.onEditorInput).not.toHaveBeenCalled();

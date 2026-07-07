@@ -6,6 +6,7 @@ import {
   createComposerAttachment,
   createFileReferenceSegment,
   createSlashCommandSegment,
+  createSubagentReferenceSegment,
   createTextSegment,
   draftToSerializedText,
   normalizeComposerDraft,
@@ -35,7 +36,40 @@ const SKILL = {
   title: "Review",
 };
 
+const SUBAGENT = {
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+  description: "Reviews the requested change.",
+};
+
 describe("applyComposerDraftEdit", () => {
+  test("inserts subagent references from an @query range and serializes them", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("ask @rev now", "text-1")],
+      attachments: [],
+    };
+
+    const result = applyComposerDraftEdit(draft, {
+      type: "insert_subagent_reference",
+      textSegmentId: "text-1",
+      rangeStart: 4,
+      rangeEnd: 8,
+      subagent: SUBAGENT,
+    });
+
+    expect(result?.draft.segments).toEqual([
+      expect.objectContaining({ id: "text-1", kind: "text", text: "ask " }),
+      expect.objectContaining({ kind: "subagent_reference", subagent: SUBAGENT }),
+      expect.objectContaining({ kind: "text", text: " now" }),
+    ]);
+    expect(result?.focusTarget).toEqual({
+      segmentId: expect.any(String),
+      offset: 0,
+    });
+    expect(draftToSerializedText(result?.draft ?? draft)).toBe("ask @reviewer now");
+  });
+
   test("inserts skill references in the middle of text and serializes them", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("use $rev now", "text-1")],
@@ -296,6 +330,35 @@ describe("applyComposerDraftEdit", () => {
       focusTarget: {
         segmentId: "text-before",
         offset: 6,
+      },
+    });
+  });
+
+  test("removes a subagent reference and merges adjacent text segments", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("before ", "text-before"),
+        createSubagentReferenceSegment(SUBAGENT, "subagent-1"),
+        createTextSegment(" after", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const result = applyComposerDraftEdit(draft, {
+      type: "remove_subagent_reference",
+      segmentId: "subagent-1",
+    });
+
+    expect(result).toEqual({
+      draft: {
+        segments: [
+          expect.objectContaining({ id: "text-before", kind: "text", text: "before  after" }),
+        ],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 7,
       },
     });
   });

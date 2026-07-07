@@ -172,6 +172,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
                   loadRepoRuntimeCatalog: async () => createModalCatalog(),
                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
                   loadRepoRuntimeSkills: async () => ({ skills: [] }),
+                  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
                   loadRepoRuntimeFileSearch: async () => [],
                 },
               },

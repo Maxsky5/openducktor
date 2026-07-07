@@ -8,6 +8,8 @@ import {
   createComposerAttachment,
   createFileReferenceSegment,
   createSkillReferenceSegment,
+  createSlashCommandSegment,
+  createSubagentReferenceSegment,
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
@@ -151,14 +153,34 @@ const SKILL_ANALYZE = {
 
 const SKILLS = [SKILL_REVIEW, SKILL_ANALYZE];
 
+const SUBAGENT_REVIEWER = {
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+  description: "Review the selected change.",
+};
+
+const SUBAGENT_DOCS = {
+  id: "docs",
+  name: "docs",
+  label: "Docs",
+  description: "Update documentation.",
+};
+
+const SUBAGENTS = [SUBAGENT_REVIEWER, SUBAGENT_DOCS];
+
 const EditorHarness = ({
   slashCommandsError,
   slashCommands,
   supportsFileSearch = true,
   supportsSkillReferences = false,
+  supportsSubagentReferences = false,
   skills = [],
   skillsError = null,
   isSkillsLoading = false,
+  subagents = [],
+  subagentsError = null,
+  isSubagentsLoading = false,
   searchFiles = async () => [],
   onSend,
   initialDraft = createComposerDraft(""),
@@ -169,9 +191,13 @@ const EditorHarness = ({
   slashCommands: typeof COMMANDS;
   supportsFileSearch?: boolean;
   supportsSkillReferences?: boolean;
+  supportsSubagentReferences?: boolean;
   skills?: typeof SKILLS;
   skillsError?: string | null;
   isSkillsLoading?: boolean;
+  subagents?: typeof SUBAGENTS;
+  subagentsError?: string | null;
+  isSubagentsLoading?: boolean;
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
@@ -196,6 +222,7 @@ const EditorHarness = ({
         onSend={onSend ?? (() => {})}
         supportsSlashCommands={true}
         supportsFileSearch={supportsFileSearch}
+        supportsSubagentReferences={supportsSubagentReferences}
         slashCommands={slashCommands}
         slashCommandsError={slashCommandsError}
         isSlashCommandsLoading={false}
@@ -204,6 +231,9 @@ const EditorHarness = ({
         skills={skills}
         skillsError={skillsError}
         isSkillsLoading={isSkillsLoading}
+        subagents={subagents}
+        subagentsError={subagentsError}
+        isSubagentsLoading={isSubagentsLoading}
         onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>
@@ -490,6 +520,52 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(screen.getByText("review")).toBeDefined();
+    });
+  });
+
+  test("closes the skill menu when inserting a newline", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "$");
+
+    await screen.findByRole("button", { name: /\$review/i });
+
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
+    });
+  });
+
+  test("closes the skill menu when pasting plain text", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "$");
+
+    await screen.findByRole("button", { name: /\$review/i });
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        plainText: "pasted",
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
     });
   });
 
@@ -983,12 +1059,12 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "@a");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     });
 
     typeIntoEditor(rendered.container, "@ab");
 
-    expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+    expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     expect(screen.queryByText("Searching files...")).toBeNull();
 
     if (!resolveSecondSearch) {
@@ -998,7 +1074,7 @@ describe("AgentChatComposerEditor", () => {
     finishSecondSearch([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /ab.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /ab.ts/i })).toBeDefined();
     });
   });
 
@@ -1016,7 +1092,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1041,7 +1117,7 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "check @");
 
-    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 
     await waitFor(() => {
@@ -1051,6 +1127,176 @@ describe("AgentChatComposerEditor", () => {
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(searchFiles).toHaveBeenCalledWith("");
+  });
+
+  test("shows subagents in the @ menu alongside files", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSubagentReferences={true}
+        subagents={SUBAGENTS}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@rev");
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
+    });
+    expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
+    expect(
+      screen.getByRole("option", { name: /@reviewer/i }).querySelector(".lucide-bot"),
+    ).toBeDefined();
+  });
+
+  test("selects a subagent reference without submitting the message", async () => {
+    const onSend = mock(() => {});
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSubagentReferences={true}
+        subagents={[SUBAGENT_REVIEWER]}
+        searchFiles={searchFiles}
+        onSend={onSend}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "ask @rev");
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const chip = rendered.container.querySelector("[data-chip-segment-id]");
+      expect(chip?.textContent).toContain("reviewer");
+      expect(chip?.getAttribute("data-subagent-reference-name")).toBe("reviewer");
+    });
+    expect(screen.getByTestId("draft-state").textContent).toContain('"kind":"subagent_reference"');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(searchFiles).toHaveBeenCalledWith("rev");
+  });
+
+  test("shows subagents without searching files when only subagent references are supported", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsFileSearch={false}
+        supportsSubagentReferences={true}
+        subagents={[SUBAGENT_REVIEWER]}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@rev");
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
+    });
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+
+  test("keeps leading text editable before reference chips", async () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const scenarios = [
+      {
+        name: "file",
+        segment: createFileReferenceSegment(file, "file-chip"),
+        visibleText: "main.ts",
+      },
+      {
+        name: "skill",
+        segment: createSkillReferenceSegment(SKILL_REVIEW, "skill-chip"),
+        visibleText: "review",
+      },
+      {
+        name: "subagent",
+        segment: createSubagentReferenceSegment(SUBAGENT_REVIEWER, "subagent-chip"),
+        visibleText: "reviewer",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const leadingSegmentId = `${scenario.name}-leading-text`;
+      const rendered = render(
+        <EditorHarness
+          slashCommands={COMMANDS}
+          slashCommandsError={null}
+          initialDraft={{
+            segments: [
+              createTextSegment("", leadingSegmentId),
+              scenario.segment,
+              createTextSegment("", `${scenario.name}-trailing-text`),
+            ],
+            attachments: [],
+          }}
+        />,
+      );
+
+      const leadingEditable = rendered.container.querySelector(
+        `[data-text-segment-id="${leadingSegmentId}"]`,
+      );
+      if (!(leadingEditable instanceof HTMLElement)) {
+        throw new Error("Expected leading editable text segment before chip");
+      }
+      expect(leadingEditable.textContent).toBe("\u200B");
+
+      leadingEditable.textContent = `before ${scenario.name} `;
+      const textNode = leadingEditable.firstChild;
+      if (textNode) {
+        const range = document.createRange();
+        range.setStart(textNode, leadingEditable.textContent.length);
+        range.collapse(true);
+        const selection = globalThis.getSelection?.();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      fireEvent.input(leadingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+      await waitFor(
+        () => {
+          const composerRoot = rendered.container.querySelector("[data-composer-content-root]");
+          expect(composerRoot?.textContent).toContain(`before ${scenario.name} `);
+          expect(composerRoot?.textContent).toContain(scenario.visibleText);
+        },
+        { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+      );
+
+      rendered.unmount();
+    }
+  });
+
+  test("keeps text before a leading slash command blocked", () => {
+    const compactCommand = COMMANDS[0];
+    if (!compactCommand) {
+      throw new Error("Expected compact slash command fixture");
+    }
+
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("", "leading-text"),
+            createSlashCommandSegment(compactCommand, "slash-chip"),
+            createTextSegment("", "trailing-text"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const leadingEditable = rendered.container.querySelector(
+      '[data-text-segment-id="leading-text"]',
+    );
+    expect(leadingEditable?.textContent).toBe("");
   });
 
   test("shows the full file path in a hover tooltip for composer file chips", async () => {
@@ -1064,7 +1310,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1507,7 +1753,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1538,7 +1784,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1589,7 +1835,7 @@ describe("AgentChatComposerEditor", () => {
       throw new Error("Expected leading text segment");
     }
 
-    expect(firstTextSegment.textContent).toBe("");
+    expect(firstTextSegment.textContent).toBe("\u200B");
 
     firstTextSegment.textContent = "before ";
     fireEvent.input(firstTextSegment);
@@ -1640,7 +1886,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1690,7 +1936,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1751,7 +1997,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1825,7 +2071,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1894,7 +2140,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "@");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1941,7 +2187,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -1988,7 +2234,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check @");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 
@@ -2094,7 +2340,7 @@ describe("AgentChatComposerEditor", () => {
     );
 
     typeIntoEditor(rendered.container, "check @");
-    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 
     await waitFor(() => {
@@ -2167,7 +2413,7 @@ describe("AgentChatComposerEditor", () => {
     });
 
     await waitFor(() => {
-      expect(within(rendered.container).getByRole("button", { name: /main.ts/i })).toBeDefined();
+      expect(within(rendered.container).getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
   });
 });

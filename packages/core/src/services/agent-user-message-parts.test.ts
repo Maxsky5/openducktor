@@ -26,6 +26,12 @@ const createSkillReference = () => ({
   title: "Review",
 });
 
+const createSubagentReference = () => ({
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+});
+
 const createAttachment = () => ({
   id: "attachment-1",
   path: "/tmp/diagram.png",
@@ -85,6 +91,12 @@ describe("agent-user-message-parts", () => {
       hasMeaningfulAgentUserMessageParts([
         { kind: "text", text: "   " },
         { kind: "file_reference", file },
+      ]),
+    ).toBe(true);
+    expect(
+      hasMeaningfulAgentUserMessageParts([
+        { kind: "text", text: "   " },
+        { kind: "subagent_reference", subagent: createSubagentReference() },
       ]),
     ).toBe(true);
     expect(
@@ -181,6 +193,30 @@ describe("agent-user-message-parts", () => {
         { kind: "text", text: " now  " },
       ]),
     ).toBe("use $review now");
+  });
+
+  test("preserves subagent references and serializes them as subagent markers", () => {
+    const subagent = createSubagentReference();
+
+    expect(
+      normalizeAgentUserMessageParts([
+        { kind: "text", text: "  ask " },
+        { kind: "subagent_reference", subagent },
+        { kind: "text", text: " now  " },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "ask " },
+      { kind: "subagent_reference", subagent },
+      { kind: "text", text: " now" },
+    ]);
+
+    expect(
+      serializeAgentUserMessagePartsToText([
+        { kind: "text", text: "  ask " },
+        { kind: "subagent_reference", subagent },
+        { kind: "text", text: " now  " },
+      ]),
+    ).toBe("ask @reviewer now");
   });
 
   test("does not synthesize spaces before punctuation after file references", () => {

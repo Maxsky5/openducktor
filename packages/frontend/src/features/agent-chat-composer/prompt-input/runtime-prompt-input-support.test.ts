@@ -13,6 +13,7 @@ describe("runtime-prompt-input-support", () => {
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: false,
+      supportsSubagentReferences: true,
     });
   });
 
@@ -26,6 +27,7 @@ describe("runtime-prompt-input-support", () => {
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: true,
       supportsSkillReferences: true,
+      supportsSubagentReferences: false,
     });
   });
 
@@ -39,6 +41,7 @@ describe("runtime-prompt-input-support", () => {
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,
+      supportsSubagentReferences: false,
     });
   });
 
@@ -52,6 +55,7 @@ describe("runtime-prompt-input-support", () => {
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,
+      supportsSubagentReferences: false,
     });
   });
 });

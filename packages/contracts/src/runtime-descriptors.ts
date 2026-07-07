@@ -80,10 +80,17 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     pendingVisibility: ["live_snapshot"],
   },
   promptInput: {
-    supportedParts: ["text", "slash_command", "file_reference", "folder_reference"],
+    supportedParts: [
+      "text",
+      "slash_command",
+      "file_reference",
+      "folder_reference",
+      "subagent_reference",
+    ],
     supportsSlashCommands: true,
     supportsFileSearch: true,
     supportsSkillReferences: false,
+    supportsSubagentReferences: true,
   },
   optionalSurfaces: {
     supportsProfiles: true,
@@ -152,6 +159,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsSlashCommands: false,
     supportsFileSearch: true,
     supportsSkillReferences: true,
+    supportsSubagentReferences: false,
   },
   optionalSurfaces: {
     supportsProfiles: false,

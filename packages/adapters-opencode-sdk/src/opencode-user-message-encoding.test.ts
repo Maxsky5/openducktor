@@ -27,6 +27,12 @@ const ATTACHMENT = {
   mime: "image/png",
 };
 
+const SUBAGENT = {
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+};
+
 describe("opencode-user-message-encoding", () => {
   test("rejects skill references explicitly", () => {
     expect(() =>
@@ -67,6 +73,30 @@ describe("opencode-user-message-encoding", () => {
           },
         },
       ],
+      subagentReferences: [],
+    });
+  });
+
+  test("records subagent source spans for native agent prompt parts", () => {
+    const parts = [
+      { kind: "text" as const, text: "ask " },
+      { kind: "subagent_reference" as const, subagent: SUBAGENT },
+      { kind: "text" as const, text: " about this" },
+    ];
+
+    expect(buildOpenCodePromptText(parts)).toEqual({
+      text: "ask @reviewer about this",
+      fileReferences: [],
+      subagentReferences: [
+        {
+          subagent: SUBAGENT,
+          sourceText: {
+            value: "@reviewer",
+            start: 4,
+            end: 13,
+          },
+        },
+      ],
     });
   });
 
@@ -75,10 +105,11 @@ describe("opencode-user-message-encoding", () => {
       { kind: "file_reference" as const, file: FIRST_FILE },
       { kind: "attachment" as const, attachment: ATTACHMENT },
       { kind: "file_reference" as const, file: SECOND_FILE },
+      { kind: "subagent_reference" as const, subagent: SUBAGENT },
     ];
 
     expect(JSON.parse(buildQueuedRequestSignature(parts))).toEqual({
-      visible: "@src/a.ts @src/b.ts",
+      visible: "@src/a.ts @src/b.ts @reviewer",
       nonTextParts: [
         {
           kind: "file_reference",
@@ -98,6 +129,16 @@ describe("opencode-user-message-encoding", () => {
             value: "@src/b.ts",
             start: 10,
             end: 19,
+          },
+        },
+        {
+          kind: "subagent_reference",
+          id: "reviewer",
+          name: "reviewer",
+          sourceText: {
+            value: "@reviewer",
+            start: 20,
+            end: 29,
           },
         },
         {

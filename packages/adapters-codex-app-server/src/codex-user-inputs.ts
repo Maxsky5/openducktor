@@ -134,3 +134,7 @@ export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserIn
     return [toCodexMarkedTextInput(text, marker, marker), toCodexUserInput(part)];
   });
 };
+
+export const assertCodexUserMessagePartsSupported = (parts: AgentUserMessagePart[]): void => {
+  void toCodexTurnInputList(parts);
+};

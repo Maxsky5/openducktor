@@ -1,5 +1,33 @@
 import { describe, expect, mock, test } from "bun:test";
-import { listAvailableSlashCommands, searchFiles } from "./catalog-and-mcp";
+import {
+  listAvailableModels,
+  listAvailableSlashCommands,
+  listAvailableSubagents,
+  searchFiles,
+} from "./catalog-and-mcp";
+
+describe("catalog-and-mcp listAvailableModels", () => {
+  test("returns provider models without profile metadata when the runtime agent API is missing", async () => {
+    const catalog = await listAvailableModels(
+      (() => ({
+        config: {
+          providers: async () => ({
+            data: {
+              providers: [],
+              default: {},
+            },
+          }),
+        },
+      })) as never,
+      {
+        runtimeEndpoint: "http://127.0.0.1:1234",
+        workingDirectory: "/repo",
+      },
+    );
+
+    expect(catalog.profiles).toEqual([]);
+  });
+});
 
 describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("normalizes command payloads into a slash catalog", async () => {
@@ -120,6 +148,94 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         },
       ),
     ).rejects.toThrow(/Duplicate slash command trigger: review/);
+  });
+});
+
+describe("catalog-and-mcp listAvailableSubagents", () => {
+  test("filters visible non-primary agents into a subagent catalog", async () => {
+    const agents = mock(async () => ({
+      data: [
+        { name: " reviewer ", description: " Review changes ", hidden: false, mode: "subagent" },
+        { name: "planner", hidden: false, mode: "all" },
+        { name: "build", hidden: false, mode: "primary" },
+        { name: "secret", hidden: true, mode: "subagent" },
+        { name: "unknown", hidden: false, mode: "sidebar" },
+      ],
+      error: undefined,
+    }));
+    const createClient = mock(() => ({ app: { agents } }));
+
+    const catalog = await listAvailableSubagents(createClient as never, {
+      runtimeEndpoint: "http://127.0.0.1:1234",
+      workingDirectory: "/repo",
+    });
+
+    expect(createClient).toHaveBeenCalledWith({
+      runtimeEndpoint: "http://127.0.0.1:1234",
+      workingDirectory: "/repo",
+    });
+    expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
+    expect(catalog.subagents).toEqual([
+      {
+        id: "planner",
+        name: "planner",
+        label: "planner",
+      },
+      {
+        id: "reviewer",
+        name: "reviewer",
+        label: "reviewer",
+        description: "Review changes",
+      },
+    ]);
+  });
+
+  test("requires the runtime agent listing API", async () => {
+    await expect(
+      listAvailableSubagents((() => ({})) as never, {
+        runtimeEndpoint: "http://127.0.0.1:1234",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: list subagents: OpenCode runtime does not expose the agent listing API.",
+    );
+  });
+
+  test("rejects malformed agent payloads", async () => {
+    await expect(
+      listAvailableSubagents(
+        (() => ({
+          app: { agents: async () => ({ data: [{ description: "missing name" }] }) },
+        })) as never,
+        {
+          runtimeEndpoint: "http://127.0.0.1:1234",
+          workingDirectory: "/repo",
+        },
+      ),
+    ).rejects.toThrow(
+      "OpenCode request failed: list subagents: Invalid agent payload: expected agent 0 to include a name.",
+    );
+  });
+
+  test("rejects duplicate subagent ids after trimming runtime names", async () => {
+    await expect(
+      listAvailableSubagents(
+        (() => ({
+          app: {
+            agents: async () => ({
+              data: [
+                { name: " reviewer", mode: "subagent" },
+                { name: "reviewer ", mode: "all" },
+              ],
+            }),
+          },
+        })) as never,
+        {
+          runtimeEndpoint: "http://127.0.0.1:1234",
+          workingDirectory: "/repo",
+        },
+      ),
+    ).rejects.toThrow(/Duplicate subagent id: reviewer/);
   });
 });
 

@@ -43,6 +43,12 @@ const IMAGE_ATTACHMENT = {
   mime: "image/png",
 };
 
+const SUBAGENT_REFERENCE = {
+  id: "reviewer",
+  name: "reviewer",
+  label: "Reviewer",
+};
+
 const createSession = (overrides?: {
   commandResult?: { data?: unknown; error?: unknown; response?: unknown };
   promptAsyncResult?: { data?: unknown; error?: unknown; response?: unknown };
@@ -342,6 +348,43 @@ describe("message-execution", () => {
     });
   });
 
+  test("routes subagent references through native prompt agent parts", async () => {
+    const { session, command, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-1",
+        parts: [
+          { kind: "text", text: "ask " },
+          { kind: "subagent_reference", subagent: SUBAGENT_REFERENCE },
+          { kind: "text", text: " to review" },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
+      tools: {},
+      parts: [
+        { type: "text", text: "ask @reviewer to review" },
+        {
+          type: "agent",
+          name: "reviewer",
+          source: {
+            value: "@reviewer",
+            start: 4,
+            end: 13,
+          },
+        },
+      ],
+    });
+    expect(command).not.toHaveBeenCalled();
+  });
+
   test("keeps file-reference spans aligned when attachments are skipped from prompt text", async () => {
     const { session, promptAsync } = createSession();
 
@@ -547,7 +590,7 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
     );
   });
 
@@ -567,7 +610,7 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
     );
   });
 
@@ -594,7 +637,27 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
+    );
+  });
+
+  test("fails explicitly when a slash command message also contains a subagent reference", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "subagent_reference", subagent: SUBAGENT_REFERENCE },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
     );
   });
 

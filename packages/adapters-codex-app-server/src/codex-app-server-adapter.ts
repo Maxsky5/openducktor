@@ -17,6 +17,7 @@ import type {
   ListAgentModelsInput,
   ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
+  ListAgentSubagentsInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -88,6 +89,7 @@ import {
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexTurnForSession,
 } from "./codex-turn-lifecycle";
+import { assertCodexUserMessagePartsSupported } from "./codex-user-inputs";
 import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
@@ -287,6 +289,7 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
+    assertCodexUserMessagePartsSupported(input.parts);
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -325,6 +328,10 @@ export class CodexAppServerAdapter
         forceReload: false,
       }),
     );
+  }
+
+  async listAvailableSubagents(_: ListAgentSubagentsInput) {
+    return unsupported("listAvailableSubagents");
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

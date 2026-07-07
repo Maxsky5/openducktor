@@ -25,6 +25,7 @@ const buildModel = () => ({
   supportsSlashCommands: true,
   supportsFileSearch: true,
   supportsSkillReferences: false,
+  supportsSubagentReferences: false,
   slashCommandCatalog: { commands: [] },
   slashCommands: [],
   slashCommandsError: null,
@@ -33,6 +34,10 @@ const buildModel = () => ({
   skills: [],
   skillsError: null,
   isSkillsLoading: false,
+  subagentCatalog: null,
+  subagents: [],
+  subagentsError: null,
+  isSubagentsLoading: false,
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
   modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
@@ -92,6 +97,50 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("@ for files; / for commands; $ for skills");
+  });
+
+  test("includes subagents in the composer placeholder when supported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsSubagentReferences: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("@ for files and subagents; / for commands");
+  });
+
+  test("uses a subagent-only reference placeholder when file search is unsupported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsFileSearch: false,
+          supportsSubagentReferences: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("@ for subagents; / for commands");
+    expect(html).not.toContain("@ for files");
+  });
+
+  test("does not advertise @ references when files and subagents are unsupported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsFileSearch: false,
+          supportsSubagentReferences: false,
+        },
+      }),
+    );
+
+    expect(html).toContain("/ for commands");
+    expect(html).not.toContain("@ for files");
+    expect(html).not.toContain("@ for subagents");
   });
 
   test("hides stop and context widgets when not available", () => {
