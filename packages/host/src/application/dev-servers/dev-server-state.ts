@@ -10,6 +10,7 @@ import type { DevServerProcessHandle } from "../../ports/dev-server-process-port
 export type DevServerGroupRuntime = {
   processes: Map<string, DevServerProcessHandle>;
   state: DevServerGroupState;
+  terminalBufferedBytesByScriptId: Map<string, number>;
   terminalNextSequenceByScriptId: Map<string, number>;
 };
 
@@ -21,8 +22,6 @@ export const DEV_SERVER_TERM = "xterm-256color";
 
 const TERMINAL_BUFFER_CHUNK_LIMIT = 2_000;
 const TERMINAL_BUFFER_BYTE_LIMIT = 512 * 1024;
-
-const terminalBufferByteCounts = new WeakMap<DevServerTerminalChunk[], number>();
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -83,6 +82,24 @@ export const syncGroupState = (
   state.updatedAt = nowIso();
 };
 
+export const syncRuntimeTerminalBufferByteCounts = (runtime: DevServerGroupRuntime): void => {
+  const activeScriptIds = new Set(runtime.state.scripts.map((script) => script.scriptId));
+  for (const scriptId of runtime.terminalBufferedBytesByScriptId.keys()) {
+    if (!activeScriptIds.has(scriptId)) {
+      runtime.terminalBufferedBytesByScriptId.delete(scriptId);
+    }
+  }
+
+  for (const script of runtime.state.scripts) {
+    if (!runtime.terminalBufferedBytesByScriptId.has(script.scriptId)) {
+      runtime.terminalBufferedBytesByScriptId.set(
+        script.scriptId,
+        readTerminalBufferByteCount(script.bufferedTerminalChunks),
+      );
+    }
+  }
+};
+
 const nextTerminalSequenceFromReplay = (script: DevServerScriptState): number => {
   const lastChunk = script.bufferedTerminalChunks.at(-1);
   return lastChunk ? lastChunk.sequence + 1 : 0;
@@ -100,23 +117,17 @@ export const nextTerminalSequence = (
 };
 
 const readTerminalBufferByteCount = (chunks: DevServerTerminalChunk[]): number => {
-  const cachedByteCount = terminalBufferByteCounts.get(chunks);
-  if (cachedByteCount !== undefined) {
-    return cachedByteCount;
-  }
-
   let totalBytes = 0;
   for (const chunk of chunks) {
     totalBytes += chunk.data.length;
   }
-  terminalBufferByteCounts.set(chunks, totalBytes);
   return totalBytes;
 };
 
 const trimTerminalChunksWithByteCount = (
   chunks: DevServerTerminalChunk[],
   initialByteCount: number,
-): void => {
+): number => {
   let removeCount = 0;
   let totalBytes = initialByteCount;
 
@@ -135,16 +146,24 @@ const trimTerminalChunksWithByteCount = (
   if (removeCount > 0) {
     chunks.splice(0, removeCount);
   }
-  terminalBufferByteCounts.set(chunks, totalBytes);
+  return totalBytes;
 };
 
 export const appendTerminalChunk = (
-  chunks: DevServerTerminalChunk[],
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
   chunk: DevServerTerminalChunk,
 ): void => {
-  const totalBytes = readTerminalBufferByteCount(chunks) + chunk.data.length;
+  const chunks = script.bufferedTerminalChunks;
+  const currentBytes =
+    runtime.terminalBufferedBytesByScriptId.get(script.scriptId) ??
+    readTerminalBufferByteCount(chunks);
+  const totalBytes = currentBytes + chunk.data.length;
   chunks.push(chunk);
-  trimTerminalChunksWithByteCount(chunks, totalBytes);
+  runtime.terminalBufferedBytesByScriptId.set(
+    script.scriptId,
+    trimTerminalChunksWithByteCount(chunks, totalBytes),
+  );
 };
 
 export const resetTerminalChunks = (
@@ -152,7 +171,7 @@ export const resetTerminalChunks = (
   script: DevServerScriptState,
 ): void => {
   script.bufferedTerminalChunks = [];
-  terminalBufferByteCounts.set(script.bufferedTerminalChunks, 0);
+  runtime.terminalBufferedBytesByScriptId.set(script.scriptId, 0);
   runtime.terminalNextSequenceByScriptId.set(script.scriptId, 0);
 };
 

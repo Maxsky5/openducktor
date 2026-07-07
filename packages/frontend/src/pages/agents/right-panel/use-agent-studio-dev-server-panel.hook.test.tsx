@@ -794,31 +794,13 @@ describe("useAgentStudioDevServerPanel", () => {
     devServerGetState = async () => runningState;
     devServerStop = async () => stopDeferred.promise;
 
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+    const getLatest = harness.getLatest;
 
     try {
       await waitFor(() => {
@@ -869,7 +851,7 @@ describe("useAgentStudioDevServerPanel", () => {
       ]);
       expect(getLatest().scripts[0]?.status).toBe("stopped");
     } finally {
-      view.unmount();
+      harness.unmount();
     }
   });
 

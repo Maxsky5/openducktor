@@ -45,6 +45,7 @@ import {
   resetTerminalChunks,
   scriptHasLiveProcess,
   syncGroupState,
+  syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
 
 export type {
@@ -91,11 +92,13 @@ export const createDevServerService = ({
       const existing = groups.get(key);
       if (existing) {
         syncGroupState(existing.state, repoConfig, taskId, worktreePath);
+        syncRuntimeTerminalBufferByteCounts(existing);
         return existing;
       }
       const runtime = {
         processes: new Map<string, DevServerProcessHandle>(),
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
+        terminalBufferedBytesByScriptId: new Map<string, number>(),
         terminalNextSequenceByScriptId: new Map<string, number>(),
       };
       groups.set(key, runtime);
@@ -149,7 +152,7 @@ export const createDevServerService = ({
       data,
       timestamp: nowIso(),
     };
-    appendTerminalChunk(script.bufferedTerminalChunks, terminalChunk);
+    appendTerminalChunk(runtime, script, terminalChunk);
     runtime.state.updatedAt = nowIso();
     publish({
       type: "terminal_chunk",

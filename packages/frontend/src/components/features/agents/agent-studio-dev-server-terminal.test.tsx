@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { act, render, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { AgentStudioDevServerTerminal } from "./agent-studio-dev-server-terminal";
 
 if (typeof document === "undefined") {
@@ -10,8 +10,6 @@ if (typeof document === "undefined") {
 afterEach(() => {
   document.body.innerHTML = "";
 });
-
-const TERMINAL_WRITE_ACK_TIMEOUT_MS = 50;
 
 const createQueuedWriteTerminalHarness = (queuedData: string) => {
   const open = mock((_container: HTMLElement) => {});
@@ -62,53 +60,6 @@ const createQueuedWriteTerminalHarness = (queuedData: string) => {
     createTerminalBinding,
     queuedWrites,
     readScreen: () => screen,
-  };
-};
-
-const installTerminalWriteAckTimeoutControl = () => {
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalClearTimeout = globalThis.clearTimeout;
-  const callbacks = new Map<number, () => void>();
-  let nextTimeoutId = 1;
-
-  globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
-    if (delay === TERMINAL_WRITE_ACK_TIMEOUT_MS && typeof handler === "function") {
-      const timeoutId = -nextTimeoutId;
-      nextTimeoutId += 1;
-      callbacks.set(timeoutId, () => {
-        handler(...args);
-      });
-      return timeoutId as unknown as ReturnType<typeof globalThis.setTimeout>;
-    }
-
-    return originalSetTimeout(handler, delay, ...args);
-  }) as typeof globalThis.setTimeout;
-  globalThis.clearTimeout = ((timeoutId?: ReturnType<typeof globalThis.setTimeout>) => {
-    if (typeof timeoutId === "number" && callbacks.delete(timeoutId)) {
-      return;
-    }
-
-    originalClearTimeout(timeoutId);
-  }) as typeof globalThis.clearTimeout;
-
-  return {
-    restore: () => {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
-    },
-    runNext: async (): Promise<void> => {
-      const nextCallbackEntry = callbacks.entries().next().value;
-      if (!nextCallbackEntry) {
-        throw new Error("Expected a terminal write acknowledgement timeout to be scheduled.");
-      }
-
-      const [timeoutId, callback] = nextCallbackEntry;
-      callbacks.delete(timeoutId);
-      await act(async () => {
-        callback();
-        await Promise.resolve();
-      });
-    },
   };
 };
 
@@ -383,12 +334,9 @@ describe("AgentStudioDevServerTerminal", () => {
       />,
     );
 
-    await waitFor(
-      () => {
-        expect(screen).toBe("ready\r\nstalled\r\nstill live\r\n");
-      },
-      { timeout: 200 },
-    );
+    await waitFor(() => {
+      expect(screen).toBe("ready\r\nstalled\r\nstill live\r\n");
+    });
     expect(writes).toEqual(["ready\r\n", "stalled\r\n", "still live\r\n"]);
   });
 
@@ -603,34 +551,9 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(reset).toHaveBeenCalledTimes(2);
   });
 
-  test("drops stale pending writes when switching scripts", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
-    const fit = mock(() => {});
-    const dispose = mock(() => {});
+  test("drops queued replay writes when switching scripts", async () => {
     const onRendererError = () => {};
-    let screen = "";
-    const reset = mock(() => {
-      screen = "";
-    });
-    const clear = mock(() => {
-      screen = "";
-    });
-    const write = mock((data: string, callback?: () => void) => {
-      const delay = data.includes("frontend") ? 20 : 0;
-      setTimeout(() => {
-        screen += data;
-        callback?.();
-      }, delay);
-    });
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({});
-      return {
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
+    const terminalHarness = createQueuedWriteTerminalHarness("frontend\r\n");
 
     const view = render(
       <AgentStudioDevServerTerminal
@@ -648,12 +571,12 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(open).toHaveBeenCalled();
+      expect(terminalHarness.queuedWrites).toHaveLength(1);
     });
 
     view.rerender(
@@ -672,13 +595,16 @@ describe("AgentStudioDevServerTerminal", () => {
           resetToken: 0,
         }}
         onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
+        createTerminalBinding={terminalHarness.createTerminalBinding}
       />,
     );
 
     await waitFor(() => {
-      expect(screen).toBe("backend\r\n");
+      expect(terminalHarness.readScreen()).toBe("backend\r\n");
     });
+
+    terminalHarness.queuedWrites[0]?.();
+    expect(terminalHarness.readScreen()).toBe("backend\r\n");
   });
 
   test("drops queued incremental writes when switching scripts", async () => {
@@ -762,70 +688,6 @@ describe("AgentStudioDevServerTerminal", () => {
     await waitFor(() => {
       expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
     });
-
-    terminalHarness.queuedWrites[0]?.();
-    expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
-  });
-
-  test("drops timed-out replay writes when switching scripts", async () => {
-    const onRendererError = () => {};
-    const terminalHarness = createQueuedWriteTerminalHarness("stale replay\r\n");
-    const timeoutControl = installTerminalWriteAckTimeoutControl();
-
-    let view: ReturnType<typeof render>;
-    try {
-      view = render(
-        <AgentStudioDevServerTerminal
-          scriptId="frontend"
-          terminalBuffer={{
-            entries: [
-              {
-                scriptId: "frontend",
-                sequence: 0,
-                data: "stale replay\r\n",
-                timestamp: "2026-03-19T15:30:00.000Z",
-              },
-            ],
-            lastSequence: 0,
-            resetToken: 0,
-          }}
-          onRendererError={onRendererError}
-          createTerminalBinding={terminalHarness.createTerminalBinding}
-        />,
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(terminalHarness.queuedWrites).toHaveLength(1);
-      await timeoutControl.runNext();
-    } finally {
-      timeoutControl.restore();
-    }
-
-    await act(async () => {
-      view.rerender(
-        <AgentStudioDevServerTerminal
-          scriptId="backend"
-          terminalBuffer={{
-            entries: [
-              {
-                scriptId: "backend",
-                sequence: 0,
-                data: "backend ready\r\n",
-                timestamp: "2026-03-19T15:30:01.000Z",
-              },
-            ],
-            lastSequence: 0,
-            resetToken: 0,
-          }}
-          onRendererError={onRendererError}
-          createTerminalBinding={terminalHarness.createTerminalBinding}
-        />,
-      );
-      await Promise.resolve();
-    });
-    expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
 
     terminalHarness.queuedWrites[0]?.();
     expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
