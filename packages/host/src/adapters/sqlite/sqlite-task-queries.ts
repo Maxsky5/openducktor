@@ -8,8 +8,8 @@ const taskLaneOrderBy = [
   // Open tasks are backlog-priority ordered; every other lane keeps newer activity last.
   asc(sql`case when ${tasks.status} = 'open' then 0 else 1 end`),
   asc(sql`case when ${tasks.status} = 'open' then ${tasks.priority} else 0 end`),
-  desc(sql`case when ${tasks.status} = 'open' then ${tasks.createdAt} else null end`),
-  asc(sql`case when ${tasks.status} <> 'open' then ${tasks.updatedAt} else null end`),
+  desc(sql`case when ${tasks.status} = 'open' then ${tasks.createdAt} else 0 end`),
+  asc(sql`case when ${tasks.status} <> 'open' then ${tasks.updatedAt} else 0 end`),
   asc(tasks.id),
 ] as const;
 

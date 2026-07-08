@@ -256,6 +256,57 @@ describe("createOdtMcpBridgeService", () => {
     ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
     expect(events).toEqual([{ repoPath: "/repo", taskId: "task-new" }]);
   });
+  test("orders task search results by recent activity before applying the result limit", async () => {
+    const taskService = createTaskService({
+      listTasks(input: unknown) {
+        expect(input).toEqual({ repoPath: "/repo" });
+        return Effect.succeed([
+          taskCard({
+            id: "open-newer",
+            title: "Open newer",
+            status: "open",
+            updatedAt: "2026-05-10T10:03:00.000Z",
+          }),
+          taskCard({
+            id: "open-middle",
+            title: "Open middle",
+            status: "open",
+            updatedAt: "2026-05-10T10:02:00.000Z",
+          }),
+          taskCard({
+            id: "open-older",
+            title: "Open older",
+            status: "open",
+            updatedAt: "2026-05-10T10:01:00.000Z",
+          }),
+          taskCard({
+            id: "recent-progress",
+            title: "Recent progress",
+            status: "in_progress",
+            updatedAt: "2026-05-10T12:00:00.000Z",
+          }),
+        ]);
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.invoke("odt_search_tasks", {
+          workspaceId: "repo",
+          limit: 2,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      results: [{ task: { id: "recent-progress" } }, { task: { id: "open-newer" } }],
+      limit: 2,
+      totalCount: 4,
+      hasMore: true,
+    });
+  });
   test("links pull requests through the task service provider lookup path", async () => {
     let currentTask = taskCard({ status: "human_review" });
     const linkPullRequestCalls: unknown[] = [];

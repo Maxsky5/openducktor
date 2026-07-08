@@ -203,6 +203,15 @@ export const describeTaskStorePortContract = (
         olderSpecReady.id,
         newerSpecReady.id,
       ]);
+
+      const filteredTasks = await run(store.listTasks({ repoPath, doneVisibleDays: 0 }));
+
+      expect(filteredTasks.filter((task) => task.status === "open").map((task) => task.id)).toEqual(
+        [newerHighPriorityOpen.id, olderHighPriorityOpen.id, newestLowPriorityOpen.id],
+      );
+      expect(
+        filteredTasks.filter((task) => task.status === "spec_ready").map((task) => task.id),
+      ).toEqual([olderSpecReady.id, newerSpecReady.id]);
     });
 
     test("stores workflow documents and exposes the current metadata/read-model state", async () => {
