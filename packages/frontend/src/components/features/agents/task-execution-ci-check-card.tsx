@@ -20,10 +20,10 @@ const CHECK_ICON_BY_VARIANT = {
 } as const;
 
 const CHECK_TEXT_CLASS_BY_VARIANT = {
-  danger: "text-destructive-surface-foreground",
+  danger: "text-destructive-muted",
   secondary: "text-muted-foreground",
-  success: "text-success-surface-foreground",
-  warning: "text-warning-surface-foreground",
+  success: "text-success-muted",
+  warning: "text-warning-muted",
 } as const;
 
 export function TaskExecutionCiCheckCard({

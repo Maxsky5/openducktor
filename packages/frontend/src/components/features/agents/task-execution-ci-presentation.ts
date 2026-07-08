@@ -5,23 +5,6 @@ import type {
   PullRequestReviewContext,
 } from "@openducktor/contracts";
 
-type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
-
-export const aggregateBadgeVariant = (
-  status: PullRequestReviewAggregateStatus,
-): "success" | "danger" | "warning" | "secondary" => {
-  if (status === "success") {
-    return "success";
-  }
-  if (status === "failure") {
-    return "danger";
-  }
-  if (status === "pending") {
-    return "warning";
-  }
-  return "secondary";
-};
-
 export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string => {
   if (status === "success") {
     return "Passing";
@@ -112,9 +95,6 @@ export const providerLabel = (providerId: PullRequestReviewContext["providerId"]
   return providerId;
 };
 
-export const stateLabel = (state: LoadedPullRequestReviewContext["pullRequest"]["state"]): string =>
-  state.replaceAll("_", " ");
-
 export const sourceLabel = (source: PullRequestReviewComment["source"]): string => {
   if (source === "review_thread") {
     return "Review thread";
@@ -125,16 +105,51 @@ export const sourceLabel = (source: PullRequestReviewComment["source"]): string 
   return "Comment";
 };
 
+const BOT_LOGIN_SUFFIX = "[bot]";
+const AUTOMATION_LOGIN_PATTERNS = [
+  /bot$/i,
+  /-bot$/i,
+  /\bbot\b/i,
+  /automation/i,
+  /actions/i,
+  /renovate/i,
+  /dependabot/i,
+];
+
+// Some AI/code-review services use regular GitHub users instead of GitHub Apps.
+const KNOWN_AUTOMATION_LOGIN_SUBSTRINGS = [
+  "chatgpt-codex-connector",
+  "code-assist",
+  "codex",
+  "codex-connector",
+  "copilot",
+  "qodo",
+  "coderabbit",
+  "codium",
+  "sonarcloud",
+  "sonarqube",
+  "sourcery-ai",
+  "deepsource",
+  "snyk",
+  "codecov",
+  "greptile",
+  "ellipsis",
+  "graphite-app",
+  "reviewer-gpt",
+  "-reviewer",
+];
+
 export const isBotCommentAuthor = (author: string | null): boolean => {
-  const normalized = author?.trim().toLowerCase() ?? "";
-  return (
-    normalized.includes("bot") ||
-    normalized.includes("code-assist") ||
-    normalized.includes("copilot") ||
-    normalized.includes("dependabot") ||
-    normalized.includes("renovate") ||
-    normalized.includes("coderabbit")
-  );
+  const trimmedAuthor = author?.trim() ?? "";
+  const normalized = trimmedAuthor.toLowerCase();
+
+  if (normalized.endsWith(BOT_LOGIN_SUFFIX)) {
+    return true;
+  }
+  if (KNOWN_AUTOMATION_LOGIN_SUBSTRINGS.some((needle) => normalized.includes(needle))) {
+    return true;
+  }
+  return AUTOMATION_LOGIN_PATTERNS.some((pattern) => pattern.test(trimmedAuthor));
 };
 
 export const commentLocationLabel = (comment: PullRequestReviewComment): string | null => {

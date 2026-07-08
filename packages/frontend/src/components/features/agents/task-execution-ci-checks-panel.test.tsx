@@ -7,6 +7,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
+import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 
 const queryInput = {
   repoPath: "/repo",
@@ -40,7 +41,7 @@ const loadedContext = {
   comments: [
     {
       id: "thread-comment-1",
-      author: "reviewer",
+      author: "codex",
       body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
@@ -142,10 +143,9 @@ describe("TaskExecutionCiChecksPanel", () => {
   test("renders provider-neutral PR, check, and review-thread metadata", () => {
     const html = renderLoadedPanel();
 
-    expect(html).toContain("#42");
+    expect(html).toContain("PR #42");
     expect(html).toContain("Rework task execution panel");
     expect(html).toContain("GitHub");
-    expect(html).toContain("draft");
     expect(html).toContain("1 failing");
     expect(html).toContain("Unit tests");
     expect(html).toContain("CI");
@@ -158,6 +158,8 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("All");
     expect(html).toContain("Humans");
     expect(html).toContain("Bots");
+    expect(html).toContain("codex");
+    expect(html).toContain("Bot");
     expect(html).toContain("Needs review");
     expect(html).toContain("Thread thread-1");
     expect(html).toContain("Unresolved");
@@ -167,5 +169,13 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("2026-07-08T10:06:00Z");
     expect(html).toContain("Updated");
     expect(html).toContain("2026-07-08T10:07:00Z");
+    expect(html).not.toContain("Open pull request #42");
+  });
+
+  test("classifies common automation authors as bots", () => {
+    expect(isBotCommentAuthor("codex")).toBe(true);
+    expect(isBotCommentAuthor("github-actions[bot]")).toBe(true);
+    expect(isBotCommentAuthor("gemini-code-assist")).toBe(true);
+    expect(isBotCommentAuthor("reviewer")).toBe(false);
   });
 });
