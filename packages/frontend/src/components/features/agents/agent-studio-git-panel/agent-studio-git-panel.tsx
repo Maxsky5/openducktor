@@ -80,8 +80,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const displayedFileStatuses = displayedScopeState.fileStatuses;
   const displayedUncommittedFileCount = displayedScopeState.uncommittedFileCount;
   const displayedError = displayedScopeState.error;
-  const displayedIsLoading =
-    (diffScope === model.diffScope && model.isLoading) || !displayedScopeLoaded;
+  const displayedIsInitialLoading = !displayedScopeLoaded;
   const hasUncommittedFiles = displayedUncommittedFileCount > 0;
   const hasFiles = displayedFileDiffs.length > 0;
   const pendingReset = model.pendingReset ?? null;
@@ -260,7 +259,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           commitsAheadBehind={displayedScopeState.commitsAheadBehind}
           upstreamAheadBehind={displayedScopeState.upstreamAheadBehind ?? null}
           upstreamStatus={displayedScopeState.upstreamStatus}
-          isLoading={displayedIsLoading}
+          isLoading={model.isLoading}
           isCommitting={model.isCommitting ?? false}
           isPushing={model.isPushing ?? false}
           isRebasing={model.isRebasing ?? false}
@@ -318,7 +317,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
             />
           ) : (
             <EmptyDiffState
-              isLoading={displayedIsLoading}
+              isLoading={displayedIsInitialLoading}
               contextMode={model.contextMode ?? "worktree"}
               diffScope={diffScope}
               upstreamStatus={displayedScopeState.upstreamStatus}

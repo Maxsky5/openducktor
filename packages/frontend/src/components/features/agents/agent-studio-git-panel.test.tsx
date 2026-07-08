@@ -394,6 +394,36 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("keeps loaded empty state visible while refreshing in the background", async () => {
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            fileDiffs: [],
+            fileStatuses: [],
+            uncommittedFileCount: 0,
+            isLoading: true,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(hasVisibleText(root, "No changes detected")).toBe(true);
+    expect(hasVisibleText(root, "Scanning for changes...")).toBe(false);
+    expect(findByTestId(root, "agent-studio-git-refresh-button").element.innerHTML).toContain(
+      "animate-spin",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("shows an invalid task target branch banner without falling back to a repo target label", async () => {
     let renderer: RenderResult | null = null;
     await act(async () => {

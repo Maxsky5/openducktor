@@ -217,6 +217,52 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
+  test("keeps cached task worktree context while the git tab is inactive", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      taskWorktreeQueryKeys.taskWorktree({
+        repoPath: "/repo",
+        taskId: "task-25",
+        taskVersion: "2026-02-22T12:00:00.000Z",
+      }),
+      { workingDirectory: "/repo/.worktrees/task-25" },
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        isGitTabActive: false,
+        selectedView: createSelectedView({
+          taskId: "task-25",
+          selectedTask: createTaskCardFixture({
+            id: "task-25",
+            updatedAt: "2026-02-22T12:00:00.000Z",
+          }),
+        }),
+      }),
+      { queryClient },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isEnabled).toBe(false);
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-25",
+        status: "idle",
+        shouldBlockDiffLoading: true,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-25",
+        worktreeResolutionTaskId: "task-25",
+        shouldBlockDiffLoading: true,
+      });
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("uses a direct non-repo session working directory without querying", async () => {
     const harness = createHookHarness(
       createBaseArgs({

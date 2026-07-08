@@ -164,11 +164,12 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     isRightPanelOpen,
   });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
-  const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
+  const hasGitContext = buildToolsBootstrap.repoPath != null && hasSelectedTask;
+  const repoPath = hasGitContext ? buildToolsBootstrap.repoPath : null;
   const devServerRepoPath = buildToolsBootstrap.isDevServerEnabled
     ? buildToolsBootstrap.repoPath
     : null;
-  const taskId = isEnabled ? selectedTaskId : null;
+  const taskId = hasGitContext ? selectedTaskId : null;
   const taskWorktreeVersion = selectedView.selectedTask?.updatedAt ?? null;
   const devServerTaskId =
     buildToolsBootstrap.isDevServerEnabled && hasSelectedTask
@@ -179,24 +180,27 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     repoPath,
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
   });
-  const shouldQueryTaskWorktree =
-    isEnabled &&
+  const shouldUseTaskWorktreeQuery =
     gitPanelContextMode === "worktree" &&
     repoPath != null &&
     taskId != null &&
     directWorktreePath == null;
+  const shouldQueryTaskWorktree = isEnabled && shouldUseTaskWorktreeQuery;
   const taskWorktreeOptions = taskWorktreeQueryOptions({
     repoPath: repoPath ?? "",
     taskId: taskId ?? "",
     hostClient: dependencies.taskWorktreeHost,
-    taskVersion: shouldQueryTaskWorktree && !directWorktreePath ? taskWorktreeVersion : null,
+    taskVersion: shouldUseTaskWorktreeQuery ? taskWorktreeVersion : null,
   });
   const taskWorktreeQuery = useQuery({
     ...taskWorktreeOptions,
     enabled: shouldQueryTaskWorktree,
   });
   const queriedWorktree =
-    shouldQueryTaskWorktree && repoPath != null && taskId != null && taskWorktreeQuery.isSuccess
+    shouldUseTaskWorktreeQuery &&
+    repoPath != null &&
+    taskId != null &&
+    taskWorktreeQuery.data !== undefined
       ? resolveQueriedBuildWorktreePath({
           repoPath,
           taskId,
@@ -227,14 +231,15 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     error: worktreeError,
   });
   const shouldBlockDiffLoading =
-    gitPanelContextMode === "worktree" &&
-    shouldQueryTaskWorktree &&
-    (worktreeError != null || worktreePath == null);
+    !isEnabled ||
+    (gitPanelContextMode === "worktree" &&
+      shouldQueryTaskWorktree &&
+      (worktreeError != null || worktreePath == null));
 
   const diffData = dependencies.useDiffData({
     repoPath,
     worktreePath,
-    worktreeResolutionTaskId: shouldQueryTaskWorktree ? taskId : null,
+    worktreeResolutionTaskId: shouldUseTaskWorktreeQuery ? taskId : null,
     shouldBlockDiffLoading,
     isWorktreeResolutionResolving: isWorktreeResolving,
     worktreeResolutionError: worktreeError,
