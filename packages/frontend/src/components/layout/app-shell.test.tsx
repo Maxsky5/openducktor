@@ -290,10 +290,11 @@ describe("AppShell", () => {
 
     const diagnosticsButton = screen.getByRole("button", {
       hidden: true,
-      name: "Open diagnostics",
+      name: "Open diagnostics: Critical issue",
     });
     const diagnosticsIcon = diagnosticsButton.querySelector("svg");
     expect(diagnosticsButton.className).toContain("size-8");
+    expect(diagnosticsButton.getAttribute("title")).toBe("Open diagnostics: Critical issue");
     expect(diagnosticsButton.textContent?.trim()).toBe("");
     expect(diagnosticsIcon?.getAttribute("class")).toContain("text-destructive-accent");
     await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
@@ -304,7 +305,7 @@ describe("AppShell", () => {
 
     renderAppShellForTest();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open diagnostics" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics: / }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
   });

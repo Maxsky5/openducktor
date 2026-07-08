@@ -90,6 +90,8 @@ export function DiagnosticsPanel({
     setOpen(true);
   }, [autoOpenedByRepo, workspaceRepoPath, model.criticalReasons.length]);
 
+  const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
+
   const trigger =
     triggerVariant === "icon" ? (
       <Button
@@ -98,8 +100,8 @@ export function DiagnosticsPanel({
         variant="outline"
         className={cn("size-8", triggerClassName)}
         onClick={() => setOpen(true)}
-        aria-label="Open diagnostics"
-        title="Open diagnostics"
+        aria-label={iconTriggerLabel}
+        title={iconTriggerLabel}
       >
         <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
       </Button>
