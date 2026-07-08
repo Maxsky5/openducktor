@@ -534,6 +534,211 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  test("ignores a mutation result that resolves after the active task changes", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async (_repoPath, taskId) =>
+      buildState({
+        taskId,
+        worktreePath: `/tmp/worktree/${taskId}`,
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+    const restartDeferred = createDeferred<DevServerGroupState>();
+    devServerRestart = async () => restartDeferred.promise;
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-7");
+      });
+
+      await act(async () => {
+        harness.getLatest().onRestart();
+      });
+
+      act(() => {
+        harness.update({
+          repoPath: "/repo",
+          taskId: "task-8",
+          repoSettings,
+          enabled: true,
+        });
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+      });
+
+      await act(async () => {
+        restartDeferred.resolve(
+          buildState({
+            taskId: "task-7",
+            worktreePath: "/tmp/worktree/task-7",
+            updatedAt: "2026-03-19T15:31:00.000Z",
+            scripts: [
+              buildScript({
+                status: "running",
+                pid: 5252,
+                startedAt: "2026-03-19T15:31:00.000Z",
+                bufferedTerminalChunks: [
+                  {
+                    scriptId: "frontend",
+                    sequence: 0,
+                    data: "task seven restarted output\r\n",
+                    timestamp: "2026-03-19T15:31:00.000Z",
+                  },
+                ],
+              }),
+            ],
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+      });
+      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("replaces a returned task terminal buffer after its sequence resets while inactive", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const taskStateByTaskId = new Map<string, DevServerGroupState>([
+      [
+        "task-7",
+        buildState({
+          taskId: "task-7",
+          worktreePath: "/tmp/worktree/task-7",
+          scripts: [
+            buildScript({
+              status: "running",
+              pid: 4242,
+              startedAt: "2026-03-19T15:30:00.000Z",
+              bufferedTerminalChunks: [
+                {
+                  scriptId: "frontend",
+                  sequence: 7,
+                  data: "old task seven output\r\n",
+                  timestamp: "2026-03-19T15:30:00.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      [
+        "task-8",
+        buildState({
+          taskId: "task-8",
+          worktreePath: "/tmp/worktree/task-8",
+          scripts: [
+            buildScript({
+              status: "running",
+              pid: 5252,
+              startedAt: "2026-03-19T15:30:30.000Z",
+            }),
+          ],
+        }),
+      ],
+    ]);
+    devServerGetState = async (_repoPath, taskId) => {
+      const state = taskStateByTaskId.get(taskId);
+      if (!state) {
+        throw new Error(`Missing test state for ${taskId}.`);
+      }
+
+      return state;
+    };
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "old task seven output\r\n",
+        );
+      });
+
+      act(() => {
+        harness.update({
+          repoPath: "/repo",
+          taskId: "task-8",
+          repoSettings,
+          enabled: true,
+        });
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+      });
+
+      taskStateByTaskId.set(
+        "task-7",
+        buildState({
+          taskId: "task-7",
+          worktreePath: "/tmp/worktree/task-7",
+          updatedAt: "2026-03-19T15:31:00.000Z",
+          scripts: [
+            buildScript({
+              status: "running",
+              pid: 6262,
+              startedAt: "2026-03-19T15:31:00.000Z",
+              bufferedTerminalChunks: [
+                {
+                  scriptId: "frontend",
+                  sequence: 0,
+                  data: "new task seven output\r\n",
+                  timestamp: "2026-03-19T15:31:00.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+
+      act(() => {
+        harness.update({
+          repoPath: "/repo",
+          taskId: "task-7",
+          repoSettings,
+          enabled: true,
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual(["new task seven output\r\n"]);
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

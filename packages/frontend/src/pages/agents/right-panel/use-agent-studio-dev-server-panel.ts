@@ -36,6 +36,11 @@ type UseAgentStudioDevServerPanelArgs = {
   enabled: boolean;
 };
 
+type DevServerMutationVariables = {
+  repoPath: string;
+  taskId: string;
+};
+
 type DevServerPanelLocalState = {
   liveState: DevServerGroupState | null;
   actionError: string | null;
@@ -194,16 +199,16 @@ export function useAgentStudioDevServerPanel({
     }
 
     if (queryData) {
-      hydrateTerminalBuffersFromState(queryData, selectedScriptIdRef.current);
+      hydrateTerminalBuffersFromState(queryData, effectiveSelectedScriptId);
       dispatchLocalState({ type: "liveStateChanged", state: queryData });
     }
   }, [
     clearTerminalBuffers,
+    effectiveSelectedScriptId,
     hydrateTerminalBuffersFromState,
     queryData,
     queryEnabled,
     resetSelectedScript,
-    selectedScriptIdRef,
     taskMemoryKey,
   ]);
 
@@ -213,6 +218,27 @@ export function useAgentStudioDevServerPanel({
       dispatchLocalState({ type: "liveStateChanged", state: nextState });
     },
     [selectedScriptIdRef, syncTerminalBuffersFromMutationState],
+  );
+
+  const isActiveMutationScope = useCallback(
+    (scope: DevServerMutationVariables): boolean => {
+      return scope.repoPath === repoPath && scope.taskId === taskId;
+    },
+    [repoPath, taskId],
+  );
+
+  const syncMutationSuccessState = useCallback(
+    (nextState: DevServerGroupState): void => {
+      queryClient.setQueryData(
+        devServerQueryKeys.state(nextState.repoPath, nextState.taskId),
+        nextState,
+      );
+
+      if (nextState.repoPath === repoPath && nextState.taskId === taskId) {
+        syncQueryState(nextState);
+      }
+    },
+    [queryClient, repoPath, syncQueryState, taskId],
   );
 
   const restoreCachedState = useCallback((): void => {
@@ -227,102 +253,92 @@ export function useAgentStudioDevServerPanel({
     dispatchLocalState({ type: "liveStateChanged", state: cachedState });
   }, [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId]);
 
-  const invalidateState = useCallback((): void => {
-    if (!repoPath || !taskId) {
-      return;
-    }
-
-    void queryClient.invalidateQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId),
-      exact: true,
-      refetchType: "active",
-    });
-  }, [queryClient, repoPath, taskId]);
-
-  const startMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerStart(repoPath, taskId);
+  const invalidateState = useCallback(
+    (scope: DevServerMutationVariables): void => {
+      void queryClient.invalidateQueries({
+        queryKey: devServerQueryKeys.state(scope.repoPath, scope.taskId),
+        exact: true,
+        refetchType: "active",
+      });
     },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
+    [queryClient],
+  );
+
+  const startMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
+    mutationFn: async (scope): Promise<DevServerGroupState> => {
+      return hostClient.devServerStart(scope.repoPath, scope.taskId);
+    },
+    onMutate: (scope) => {
+      if (isActiveMutationScope(scope)) {
+        dispatchLocalState({ type: "actionStarted" });
+        beginMutationReplaySync(effectiveState);
+      }
     },
     onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      syncMutationSuccessState(data);
+    },
+    onError: (error: unknown, scope) => {
+      if (isActiveMutationScope(scope)) {
+        cancelMutationReplaySync();
+        restoreCachedState();
+        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
       }
-      syncQueryState(data);
     },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      restoreCachedState();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
+    onSettled: (_data, error, scope) => {
       if (error) {
-        invalidateState();
+        invalidateState(scope);
       }
     },
   });
 
-  const stopMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerStop(repoPath, taskId);
+  const stopMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
+    mutationFn: async (scope): Promise<DevServerGroupState> => {
+      return hostClient.devServerStop(scope.repoPath, scope.taskId);
     },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
+    onMutate: (scope) => {
+      if (isActiveMutationScope(scope)) {
+        dispatchLocalState({ type: "actionStarted" });
+        beginMutationReplaySync(effectiveState);
+      }
     },
     onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      syncMutationSuccessState(data);
+    },
+    onError: (error: unknown, scope) => {
+      if (isActiveMutationScope(scope)) {
+        cancelMutationReplaySync();
+        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
       }
-      syncQueryState(data);
     },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
+    onSettled: (_data, error, scope) => {
       if (error) {
-        invalidateState();
+        invalidateState(scope);
       }
     },
   });
 
-  const restartMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerRestart(repoPath, taskId);
+  const restartMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
+    mutationFn: async (scope): Promise<DevServerGroupState> => {
+      return hostClient.devServerRestart(scope.repoPath, scope.taskId);
     },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
+    onMutate: (scope) => {
+      if (isActiveMutationScope(scope)) {
+        dispatchLocalState({ type: "actionStarted" });
+        beginMutationReplaySync(effectiveState);
+      }
     },
     onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      syncMutationSuccessState(data);
+    },
+    onError: (error: unknown, scope) => {
+      if (isActiveMutationScope(scope)) {
+        cancelMutationReplaySync();
+        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
       }
-      syncQueryState(data);
     },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
+    onSettled: (_data, error, scope) => {
       if (error) {
-        invalidateState();
+        invalidateState(scope);
       }
     },
   });
@@ -449,19 +465,31 @@ export function useAgentStudioDevServerPanel({
     isRestartPending: restartMutation.isPending,
     onSelectScript,
     onStart: () => {
+      if (!repoPath || !taskId) {
+        return;
+      }
+
       dispatchLocalState({ type: "actionStarted" });
       if (effectiveState) {
         const optimisticState = buildOptimisticStartingState(effectiveState);
         replaceTerminalBuffersFromState(optimisticState, selectedScriptIdRef.current);
         dispatchLocalState({ type: "liveStateChanged", state: optimisticState });
       }
-      startMutation.mutate();
+      startMutation.mutate({ repoPath, taskId });
     },
     onStop: () => {
-      stopMutation.mutate();
+      if (!repoPath || !taskId) {
+        return;
+      }
+
+      stopMutation.mutate({ repoPath, taskId });
     },
     onRestart: () => {
-      restartMutation.mutate();
+      if (!repoPath || !taskId) {
+        return;
+      }
+
+      restartMutation.mutate({ repoPath, taskId });
     },
   };
 }

@@ -288,10 +288,24 @@ const subscribeSseChannelEffect = (
         if (!shouldEmitControlEvents) {
           return;
         }
+        let hasListenerError = false;
+        let listenerError: unknown;
+        const warningPayload = browserLiveControlEvent(
+          BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+          event.data,
+        );
         for (const currentListener of listeners.values()) {
-          currentListener(
-            browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, event.data),
-          );
+          try {
+            currentListener(warningPayload);
+          } catch (error) {
+            if (!hasListenerError) {
+              listenerError = error;
+            }
+            hasListenerError = true;
+          }
+        }
+        if (hasListenerError) {
+          throw listenerError;
         }
       };
 

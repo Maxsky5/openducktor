@@ -51,19 +51,18 @@ export const useAgentStudioDevServerTerminalBuffers = (
   scopeKey: string | null,
 ): UseAgentStudioDevServerTerminalBuffersResult => {
   const activeScopeKey = scopeKey ?? "__no-dev-server-task__";
-  const terminalBuffersByScopeRef = useRef<Map<string, DevServerTerminalBufferStore> | null>(null);
-  if (terminalBuffersByScopeRef.current === null) {
-    terminalBuffersByScopeRef.current = new Map();
-  }
-  const terminalBuffersByScope = terminalBuffersByScopeRef.current;
-  let terminalBuffers = terminalBuffersByScope.get(activeScopeKey);
-  if (!terminalBuffers) {
-    terminalBuffers = createDevServerTerminalBufferStore();
-    terminalBuffersByScope.set(activeScopeKey, terminalBuffers);
-  }
+  const terminalBuffersRef = useRef<DevServerTerminalBufferStore | null>(null);
+  const terminalBuffersScopeRef = useRef<string | null>(null);
   const pendingMutationReplaySyncRef = useRef<PendingMutationReplaySync | null>(null);
   const [selectedScriptTerminalBufferState, setSelectedScriptTerminalBufferState] =
     useState<SelectedScriptTerminalBufferState | null>(null);
+
+  if (terminalBuffersRef.current === null || terminalBuffersScopeRef.current !== activeScopeKey) {
+    terminalBuffersRef.current = createDevServerTerminalBufferStore();
+    terminalBuffersScopeRef.current = activeScopeKey;
+    pendingMutationReplaySyncRef.current = null;
+  }
+  const terminalBuffers = terminalBuffersRef.current;
 
   const syncSelectedScriptTerminalBuffer = useCallback(
     (scriptId: string | null): void => {

@@ -254,6 +254,33 @@ export const getDevServerTerminalBuffer = (
   };
 };
 
+const isLaterTimestamp = (candidate: string | null, baseline: string | null): boolean => {
+  return candidate !== null && baseline !== null && candidate > baseline;
+};
+
+const isLaterSequenceResetSnapshot = (
+  currentContext: DevServerTerminalBufferReplacementContext,
+  script: DevServerScriptState,
+  nextChunks: readonly DevServerTerminalChunk[],
+  nextWindow: DevServerTerminalSequenceWindow,
+): boolean => {
+  if (
+    nextWindow.firstSequence !== 0 ||
+    nextWindow.lastSequence === null ||
+    currentContext.current.lastSequence === null ||
+    nextWindow.lastSequence >= currentContext.current.lastSequence
+  ) {
+    return false;
+  }
+
+  const currentLastTimestamp = currentContext.currentEntries.at(-1)?.timestamp ?? null;
+  const nextFirstTimestamp = nextChunks[0]?.timestamp ?? null;
+  return (
+    isLaterTimestamp(nextFirstTimestamp, currentLastTimestamp) ||
+    isLaterTimestamp(script.startedAt, currentLastTimestamp)
+  );
+};
+
 export const getDevServerTerminalBufferReplacement = (
   currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
@@ -318,6 +345,13 @@ export const getDevServerTerminalBufferReplacement = (
   }
 
   if (nextWindow.lastSequence < currentWindow.lastSequence) {
+    if (isLaterSequenceResetSnapshot(currentContext, script, nextChunks, nextWindow)) {
+      return {
+        snapshotWindow: nextWindow,
+        terminalChunks: nextChunks,
+      };
+    }
+
     return null;
   }
 
