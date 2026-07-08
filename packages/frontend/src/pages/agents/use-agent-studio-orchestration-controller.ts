@@ -4,10 +4,12 @@ import type {
   GitTargetBranch,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
+  TaskExecutionSelectedFile,
+  TaskExecutionSelectedFilePreviewModel,
 } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
@@ -50,6 +52,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
   repoSettings: RepoSettingsInput | null;
+  githubIntegrationEnabled: boolean;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   hasActiveGitConflict: boolean;
@@ -66,11 +69,13 @@ type UseAgentStudioOrchestrationControllerResult = {
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
-  agentStudioWorkspaceSidebarModel: ReturnType<
+  taskExecutionDocumentPanelModel: ReturnType<
     typeof useAgentStudioPageModels
-  >["agentStudioWorkspaceSidebarModel"];
+  >["taskExecutionDocumentPanelModel"];
   agentChatModel: ReturnType<typeof useAgentStudioPageModels>["agentChatModel"];
   rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
+  taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
+  onSelectTaskExecutionFile: (file: TaskExecutionSelectedFile) => void;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
 };
 
@@ -194,6 +199,7 @@ export function useAgentStudioOrchestrationController({
   branches,
   runtimeDefinitions,
   repoSettings,
+  githubIntegrationEnabled,
   workspaceRepoPath,
   selection,
   hasActiveGitConflict,
@@ -212,6 +218,8 @@ export function useAgentStudioOrchestrationController({
     handleReorderTab,
   } = selection;
   const selectedSession = view.selectedSession;
+  const [taskExecutionSelectedFile, setTaskExecutionSelectedFile] =
+    useState<TaskExecutionSelectedFile | null>(null);
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     scheduleQueryUpdate,
@@ -446,7 +454,7 @@ export function useAgentStudioOrchestrationController({
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
-    agentStudioWorkspaceSidebarModel,
+    taskExecutionDocumentPanelModel,
     agentChatModel,
   } = useAgentStudioPageModels(pageModelsArgs);
 
@@ -454,7 +462,40 @@ export function useAgentStudioOrchestrationController({
     role: selectedSessionContext.role,
     hasTaskContext: Boolean(selectedSessionContext.taskId),
     hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
+    hasGithubIntegration: githubIntegrationEnabled,
   });
+  const selectedSessionIdentity = selectedSession.identity;
+  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
+  const selectedSessionExternalId = selectedSessionIdentity?.externalSessionId ?? null;
+  const taskExecutionFileRootKey = selectedSessionIdentity
+    ? (selectedSessionWorkingDirectory ?? "__missing_session_working_directory__")
+    : (workspaceRepoPath ?? "__missing_workspace_repo_path__");
+  const taskExecutionFileContextKey = [
+    view.taskId ?? "__missing_task__",
+    selectedSessionExternalId ?? "__no_selected_session__",
+    taskExecutionFileRootKey,
+  ].join("\0");
+  const previousTaskExecutionFileContextKeyRef = useRef(taskExecutionFileContextKey);
+  useEffect(() => {
+    if (previousTaskExecutionFileContextKeyRef.current === taskExecutionFileContextKey) {
+      return;
+    }
+    previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
+    setTaskExecutionSelectedFile(null);
+  }, [taskExecutionFileContextKey]);
+  const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
+    setTaskExecutionSelectedFile(file);
+  }, []);
+  const closeTaskExecutionSelectedFilePreview = useCallback(() => {
+    setTaskExecutionSelectedFile(null);
+  }, []);
+  const taskExecutionSelectedFilePreviewModel = useMemo<TaskExecutionSelectedFilePreviewModel>(
+    () => ({
+      selectedFile: taskExecutionSelectedFile,
+      onClose: closeTaskExecutionSelectedFilePreview,
+    }),
+    [closeTaskExecutionSelectedFilePreview, taskExecutionSelectedFile],
+  );
 
   return {
     repoSettings,
@@ -465,9 +506,11 @@ export function useAgentStudioOrchestrationController({
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
-    agentStudioWorkspaceSidebarModel,
+    taskExecutionDocumentPanelModel,
     agentChatModel,
     rightPanel,
+    taskExecutionSelectedFilePreviewModel,
+    onSelectTaskExecutionFile,
     startSessionRequest,
   };
 }

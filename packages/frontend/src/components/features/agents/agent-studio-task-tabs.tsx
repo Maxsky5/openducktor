@@ -27,9 +27,9 @@ import {
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
-  AgentStudioRightPanelToggleButton,
-  type AgentStudioRightPanelToggleModel,
-} from "./agent-studio-right-panel";
+  TaskExecutionPanelToggleButton,
+  type TaskExecutionPanelToggleModel,
+} from "./task-execution-panel";
 import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
@@ -266,7 +266,7 @@ export function AgentStudioTaskTabs({
   rightPanelToggleModel,
 }: {
   model: AgentStudioTaskTabsModel;
-  rightPanelToggleModel?: AgentStudioRightPanelToggleModel | null;
+  rightPanelToggleModel?: TaskExecutionPanelToggleModel | null;
 }): ReactElement {
   const {
     tabs,
@@ -402,7 +402,7 @@ export function AgentStudioTaskTabs({
         </div>
         {rightPanelToggleModel ? (
           <div className="flex shrink-0 items-center pl-0.5">
-            <AgentStudioRightPanelToggleButton model={rightPanelToggleModel} />
+            <TaskExecutionPanelToggleButton model={rightPanelToggleModel} />
           </div>
         ) : null}
       </div>

@@ -170,7 +170,7 @@ export const githubProviderStatus = (
       available: true,
     };
   });
-const runGithubCommand = (
+export const runGithubCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
   host: string,

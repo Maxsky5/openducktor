@@ -79,10 +79,17 @@ const createFakeFilesystem = ({
         }),
     }),
   exists: (path) => Effect.succeed(existingPaths.has(path)),
+  readFileBytes: () => Effect.succeed(new Uint8Array()),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
   parent: (path) => {
     const parent = path.split("/").slice(0, -1).join("/");
     return parent.length > 0 ? parent : null;
+  },
+  relative: (from, to) => {
+    if (to.startsWith(`${from}/`)) {
+      return to.slice(from.length + 1);
+    }
+    return to;
   },
 });
 const createService = (filesystem: FilesystemPort): FilesystemService =>

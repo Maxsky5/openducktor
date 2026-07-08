@@ -8,7 +8,7 @@ import {
 } from "./agent-studio-test-utils";
 import { toRightPanelStorageKey } from "./agents-page-selection";
 import {
-  buildAgentStudioRightPanelModel,
+  buildTaskExecutionPanelModel,
   useAgentStudioRightPanel,
 } from "./use-agent-studio-right-panel";
 
@@ -137,65 +137,93 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   onRestart: () => {},
 };
 
+const fileExplorerModel = {
+  rootPath: "/repo",
+  unavailableReason: null,
+  isActive: false,
+  selectedFile: null,
+  onSelectFile: () => {},
+};
+
+const tabs = [
+  { id: "document" as const, label: "Document" },
+  { id: "git" as const, label: "Git" },
+  { id: "file_explorer" as const, label: "File explorer" },
+];
+
+const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  role: "spec",
+  hasDocumentPanel: true,
+  hasGithubIntegration: false,
+  ...overrides,
+});
+
 describe("useAgentStudioRightPanel", () => {
-  test("builds builder tools panel model when panel kind is build_tools", () => {
-    const model = buildAgentStudioRightPanelModel({
-      panelKind: "build_tools",
-      documentsModel,
+  test("builds task execution panel model with git and dev server models", () => {
+    const model = buildTaskExecutionPanelModel({
+      tabs,
+      activeTabId: "git",
+      documentModel: documentsModel,
       diffModel,
+      fileExplorerModel,
+      ciChecksModel: null,
       devServerModel,
+      onActiveTabChange: () => {},
     });
 
     expect(model).not.toBeNull();
-    expect(model?.kind).toBe("build_tools");
-    if (model?.kind === "build_tools") {
-      expect(model.diffModel.diffScope).toBe("target");
-      expect(model.diffModel.commitAll).toBe(diffModel.commitAll);
-      expect(model.diffModel.rebaseOntoTarget).toBe(diffModel.rebaseOntoTarget);
-      expect(model.diffModel.pushBranch).toBe(diffModel.pushBranch);
-      expect(model.devServerModel.mode).toBe("stopped");
-    }
+    expect(model?.activeTabId).toBe("git");
+    expect(model?.gitModel.diffScope).toBe("target");
+    expect(model?.gitModel.commitAll).toBe(diffModel.commitAll);
+    expect(model?.gitModel.rebaseOntoTarget).toBe(diffModel.rebaseOntoTarget);
+    expect(model?.gitModel.pushBranch).toBe(diffModel.pushBranch);
+    expect(model?.devServerModel?.mode).toBe("stopped");
   });
 
-  test("builds documents panel model for non-build panel kind", () => {
-    const model = buildAgentStudioRightPanelModel({
-      panelKind: "documents",
-      documentsModel,
+  test("builds document tab model when document tab is available", () => {
+    const model = buildTaskExecutionPanelModel({
+      tabs,
+      activeTabId: "document",
+      documentModel: documentsModel,
       diffModel,
-      devServerModel,
+      fileExplorerModel,
+      ciChecksModel: null,
+      devServerModel: null,
+      onActiveTabChange: () => {},
     });
 
-    expect(model).toEqual({
-      kind: "documents",
-      documentsModel,
-    });
+    expect(model?.documentModel).toBe(documentsModel);
+    expect(model?.tabs.map((tab) => tab.id)).toEqual(["document", "git", "file_explorer"]);
   });
 
-  test("returns documents panel open by default for spec role when available", async () => {
-    const harness = createHookHarness({
-      role: "spec",
-      hasDocumentPanel: true,
-    });
+  test("returns task execution panel open by default for spec role when available", async () => {
+    const harness = createHookHarness(createHookArgs());
 
     await harness.mount();
 
-    expect(harness.getLatest().panelKind).toBe("documents");
+    expect(harness.getLatest().activeTabId).toBe("document");
+    expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual([
+      "document",
+      "git",
+      "file_explorer",
+    ]);
     expect(harness.getLatest().isPanelOpen).toBe(true);
-    expect(harness.getLatest().rightPanelToggleModel?.kind).toBe("documents");
+    expect(harness.getLatest().rightPanelToggleModel?.kind).toBe("task_execution");
 
     await harness.unmount();
   });
 
   test("hides panel and toggle when no task context is active", async () => {
-    const harness = createHookHarness({
-      role: "spec",
-      hasTaskContext: false,
-      hasDocumentPanel: true,
-    });
+    const harness = createHookHarness(
+      createHookArgs({
+        hasTaskContext: false,
+      }),
+    );
 
     await harness.mount();
 
-    expect(harness.getLatest().panelKind).toBeNull();
+    expect(harness.getLatest().activeTabId).toBeNull();
+    expect(harness.getLatest().tabs).toEqual([]);
     expect(harness.getLatest().isPanelOpen).toBe(false);
     expect(harness.getLatest().rightPanelToggleModel).toBeNull();
 
@@ -203,10 +231,7 @@ describe("useAgentStudioRightPanel", () => {
   });
 
   test("persists open state per role when switching roles", async () => {
-    const harness = createHookHarness({
-      role: "spec",
-      hasDocumentPanel: true,
-    });
+    const harness = createHookHarness(createHookArgs());
 
     await harness.mount();
     await harness.run((state) => {
@@ -215,44 +240,51 @@ describe("useAgentStudioRightPanel", () => {
 
     expect(harness.getLatest().isPanelOpen).toBe(false);
 
-    await harness.update({
-      role: "planner",
-      hasDocumentPanel: true,
-    });
+    await harness.update(
+      createHookArgs({
+        role: "planner",
+      }),
+    );
     expect(harness.getLatest().isPanelOpen).toBe(true);
 
-    await harness.update({
-      role: "spec",
-      hasDocumentPanel: true,
-    });
+    await harness.update(
+      createHookArgs({
+        role: "spec",
+      }),
+    );
     expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.unmount();
   });
 
-  test("hides panel and toggle when document role has no active document", async () => {
-    const harness = createHookHarness({
-      role: "spec",
-      hasDocumentPanel: false,
-    });
+  test("omits document tab when document role has no active document", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "spec",
+        hasDocumentPanel: false,
+      }),
+    );
 
     await harness.mount();
 
-    expect(harness.getLatest().panelKind).toBeNull();
-    expect(harness.getLatest().isPanelOpen).toBe(false);
-    expect(harness.getLatest().rightPanelToggleModel).toBeNull();
+    expect(harness.getLatest().activeTabId).toBe("git");
+    expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual(["git", "file_explorer"]);
+    expect(harness.getLatest().isPanelOpen).toBe(true);
+    expect(harness.getLatest().rightPanelToggleModel?.kind).toBe("task_execution");
 
     await harness.unmount();
   });
 
-  test("uses build tools panel state for build role when available", async () => {
-    const harness = createHookHarness({
-      role: "build",
-      hasDocumentPanel: false,
-    });
+  test("uses git tab state for build role when available", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "build",
+        hasDocumentPanel: false,
+      }),
+    );
 
     await harness.mount();
-    expect(harness.getLatest().panelKind).toBe("build_tools");
+    expect(harness.getLatest().activeTabId).toBe("git");
     expect(harness.getLatest().isPanelOpen).toBe(true);
 
     await harness.run((state) => {
@@ -260,28 +292,34 @@ describe("useAgentStudioRightPanel", () => {
     });
     expect(harness.getLatest().isPanelOpen).toBe(false);
 
-    await harness.update({
-      role: "spec",
-      hasDocumentPanel: true,
-    });
-    expect(harness.getLatest().panelKind).toBe("documents");
+    await harness.update(
+      createHookArgs({
+        role: "spec",
+        hasDocumentPanel: true,
+      }),
+    );
+    expect(harness.getLatest().activeTabId).toBe("document");
     expect(harness.getLatest().isPanelOpen).toBe(true);
 
-    await harness.update({
-      role: "build",
-      hasDocumentPanel: false,
-    });
-    expect(harness.getLatest().panelKind).toBe("build_tools");
+    await harness.update(
+      createHookArgs({
+        role: "build",
+        hasDocumentPanel: false,
+      }),
+    );
+    expect(harness.getLatest().activeTabId).toBe("git");
     expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.unmount();
   });
 
   test("persists build panel state globally and restores across sessions", async () => {
-    const harness = createHookHarness({
-      role: "build",
-      hasDocumentPanel: false,
-    });
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "build",
+        hasDocumentPanel: false,
+      }),
+    );
 
     await harness.mount();
     expect(harness.getLatest().isPanelOpen).toBe(true);
@@ -298,10 +336,12 @@ describe("useAgentStudioRightPanel", () => {
     const persisted = JSON.parse(persistedRaw ?? "{}");
     expect(persisted.build).toBe(false);
 
-    const secondHarness = createHookHarness({
-      role: "build",
-      hasDocumentPanel: false,
-    });
+    const secondHarness = createHookHarness(
+      createHookArgs({
+        role: "build",
+        hasDocumentPanel: false,
+      }),
+    );
 
     await secondHarness.mount();
     expect(secondHarness.getLatest().isPanelOpen).toBe(false);
@@ -314,10 +354,12 @@ describe("useAgentStudioRightPanel", () => {
       JSON.stringify({ openInToolId: "zed", build: true }),
     );
 
-    const harness = createHookHarness({
-      role: "build",
-      hasDocumentPanel: false,
-    });
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "build",
+        hasDocumentPanel: false,
+      }),
+    );
 
     await harness.mount();
     await harness.run((state) => {
@@ -341,10 +383,7 @@ describe("useAgentStudioRightPanel", () => {
     try {
       globalThis.localStorage.setItem(toRightPanelStorageKey(), "{bad-json");
 
-      const harness = createHookHarness({
-        role: "spec",
-        hasDocumentPanel: true,
-      });
+      const harness = createHookHarness(createHookArgs());
 
       await harness.mount();
 

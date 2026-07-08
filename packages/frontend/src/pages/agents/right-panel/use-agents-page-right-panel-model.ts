@@ -1,5 +1,6 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
@@ -11,7 +12,7 @@ import type { useTasksState, useWorkspaceState } from "@/state";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
-import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
+import { buildTaskExecutionPanelModel } from "./use-agent-studio-right-panel";
 
 export type AgentStudioGitConflictQuickActionContext = {
   conflict: GitConflict;
@@ -24,9 +25,13 @@ export type UseAgentsPageRightPanelModelArgs = {
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
+  tabs: Parameters<typeof buildTaskExecutionPanelModel>[0]["tabs"];
+  activeTabId: Parameters<typeof buildTaskExecutionPanelModel>[0]["activeTabId"];
+  onActiveTabChange: Parameters<typeof buildTaskExecutionPanelModel>[0]["onActiveTabChange"];
   isPanelOpen: boolean;
-  documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
+  documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectFile: (file: TaskExecutionSelectedFile) => void;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
@@ -55,6 +60,11 @@ type BuildAgentsPageDiffModelArgs = {
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
+};
+
+type FileExplorerRoot = {
+  rootPath: string | null;
+  unavailableReason: string | null;
 };
 
 function collectUnmergedFilePaths(
@@ -149,14 +159,53 @@ export function buildAgentsPageDiffModel({
   };
 }
 
+export const resolveTaskExecutionFileExplorerRoot = ({
+  workspaceRepoPath,
+  selectedSessionIdentity,
+}: {
+  workspaceRepoPath: string | null;
+  selectedSessionIdentity: BuildToolsSelectedView["selectedSession"]["identity"];
+}): FileExplorerRoot => {
+  if (selectedSessionIdentity) {
+    const workingDirectory = selectedSessionIdentity.workingDirectory;
+    if (typeof workingDirectory === "string" && workingDirectory.trim().length > 0) {
+      return {
+        rootPath: workingDirectory,
+        unavailableReason: null,
+      };
+    }
+
+    return {
+      rootPath: null,
+      unavailableReason: "Selected session has no working directory.",
+    };
+  }
+
+  if (workspaceRepoPath) {
+    return {
+      rootPath: workspaceRepoPath,
+      unavailableReason: null,
+    };
+  }
+
+  return {
+    rootPath: null,
+    unavailableReason: "No repository is selected.",
+  };
+};
+
 export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
   activeBranch,
   selectedView,
-  panelKind,
+  tabs,
+  activeTabId,
+  onActiveTabChange,
   isPanelOpen,
   documentsModel,
+  selectedFile,
+  onSelectFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -165,12 +214,13 @@ export function useAgentsPageRightPanelModel({
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const isGitTabActive = activeTabId === "git" && isPanelOpen;
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    panelKind,
-    isPanelOpen,
+    isGitTabActive,
+    isRightPanelOpen: isPanelOpen,
     repoSettings,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
@@ -249,19 +299,77 @@ export function useAgentsPageRightPanelModel({
     ],
   );
 
+  const fileExplorerRoot = useMemo(
+    () =>
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath,
+        selectedSessionIdentity: selectedView.selectedSession.identity,
+      }),
+    [selectedView.selectedSession.identity, workspaceRepoPath],
+  );
+  const fileExplorerModel = useMemo(
+    () => ({
+      ...fileExplorerRoot,
+      isActive: activeTabId === "file_explorer" && isPanelOpen,
+      selectedFile,
+      onSelectFile,
+    }),
+    [activeTabId, fileExplorerRoot, isPanelOpen, onSelectFile, selectedFile],
+  );
+  const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
+  const ciChecksModel = useMemo(
+    () =>
+      tabs.some((tab) => tab.id === "ci_checks")
+        ? {
+            isActive: activeTabId === "ci_checks" && isPanelOpen,
+            queryInput: workspaceRepoPath
+              ? {
+                  repoPath: workspaceRepoPath,
+                  ...(selectedView.taskId ? { taskId: selectedView.taskId } : {}),
+                  ...(selectedView.selectedSession.identity?.workingDirectory
+                    ? {
+                        workingDirectory: selectedView.selectedSession.identity.workingDirectory,
+                      }
+                    : {}),
+                }
+              : null,
+          }
+        : null,
+    [
+      activeTabId,
+      isPanelOpen,
+      selectedView.selectedSession.identity?.workingDirectory,
+      selectedView.taskId,
+      tabs,
+      workspaceRepoPath,
+    ],
+  );
   const rightPanelModel = useMemo(
     () =>
-      buildAgentStudioRightPanelModel({
-        panelKind,
-        documentsModel,
+      buildTaskExecutionPanelModel({
+        tabs,
+        activeTabId,
+        documentModel: documentsModel,
         diffModel,
-        devServerModel,
+        fileExplorerModel,
+        ciChecksModel,
+        devServerModel: visibleDevServerModel,
+        onActiveTabChange,
       }),
-    [panelKind, documentsModel, diffModel, devServerModel],
+    [
+      activeTabId,
+      ciChecksModel,
+      diffModel,
+      documentsModel,
+      fileExplorerModel,
+      onActiveTabChange,
+      tabs,
+      visibleDevServerModel,
+    ],
   );
 
   return {
-    isRightPanelVisible: Boolean(panelKind && isPanelOpen),
+    isRightPanelVisible: Boolean(activeTabId && isPanelOpen),
     rightPanelModel,
     refreshWorktree: buildToolsSnapshot.refreshWorktree,
   };

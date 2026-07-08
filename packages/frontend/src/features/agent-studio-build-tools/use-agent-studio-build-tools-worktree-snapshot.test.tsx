@@ -177,8 +177,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   activeBranch: { name: "main", detached: false },
   selectedView: createSelectedView(),
-  panelKind: "build_tools",
-  isPanelOpen: true,
+  isGitTabActive: true,
+  isRightPanelOpen: true,
   repoSettings: null,
   ...overrides,
 });
@@ -198,7 +198,9 @@ beforeEach(async () => {
 
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("disables the snapshot when the build-tools panel is closed", async () => {
-    const harness = createHookHarness(createBaseArgs({ isPanelOpen: false }));
+    const harness = createHookHarness(
+      createBaseArgs({ isGitTabActive: false, isRightPanelOpen: false }),
+    );
 
     try {
       await harness.mount();

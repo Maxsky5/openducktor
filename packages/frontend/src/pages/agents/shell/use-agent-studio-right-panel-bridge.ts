@@ -9,7 +9,7 @@ type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelecti
 
 type AgentStudioRightPanelPanelState = Pick<
   UseAgentsPageRightPanelModelArgs,
-  "panelKind" | "isPanelOpen"
+  "tabs" | "activeTabId" | "isPanelOpen" | "onActiveTabChange"
 >;
 
 type UseAgentStudioRightPanelBridgeArgs = {
@@ -19,6 +19,8 @@ type UseAgentStudioRightPanelBridgeArgs = {
   selection: AgentStudioRightPanelBridgeSelection;
   panel: AgentStudioRightPanelPanelState;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
+  selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
+  onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
@@ -34,9 +36,13 @@ export type AgentStudioRightPanelRuntimeModel = {
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
-  panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
+  tabs: UseAgentsPageRightPanelModelArgs["tabs"];
+  activeTabId: UseAgentsPageRightPanelModelArgs["activeTabId"];
+  onActiveTabChange: UseAgentsPageRightPanelModelArgs["onActiveTabChange"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
+  selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
+  onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
@@ -49,7 +55,7 @@ export type AgentStudioRightPanelRuntimeModel = {
 
 export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
-  "panelKind" | "isPanelOpen"
+  "activeTabId" | "isPanelOpen"
 > & {
   selectedView: {
     role: AgentStudioOrchestrationSelectionContext["view"]["role"];
@@ -71,8 +77,10 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
   UseAgentStudioRightPanelBridgeArgs,
   "panel"
 > & {
-  panelKind: NonNullable<AgentStudioRightPanelPanelState["panelKind"]>;
+  activeTabId: NonNullable<AgentStudioRightPanelPanelState["activeTabId"]>;
+  tabs: AgentStudioRightPanelPanelState["tabs"];
   isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
+  onActiveTabChange: AgentStudioRightPanelPanelState["onActiveTabChange"];
 };
 
 function buildAgentStudioRightPanelBridgeModel({
@@ -80,9 +88,13 @@ function buildAgentStudioRightPanelBridgeModel({
   branches,
   activeBranch,
   selection,
-  panelKind,
+  activeTabId,
+  tabs,
   isPanelOpen,
+  onActiveTabChange,
   documentsModel,
+  selectedFile,
+  onSelectFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -92,7 +104,7 @@ function buildAgentStudioRightPanelBridgeModel({
 }: BuildAgentStudioRightPanelBridgeModelArgs): AgentStudioRightPanelBridgeModel {
   return {
     buildWorktreeRefresh: {
-      panelKind,
+      activeTabId,
       isPanelOpen,
       selectedView: {
         role: selection.view.role,
@@ -104,9 +116,13 @@ function buildAgentStudioRightPanelBridgeModel({
       activeBranch,
       branches,
       selectedView: selection.view,
-      panelKind,
+      tabs,
+      activeTabId,
+      onActiveTabChange,
       isPanelOpen,
       documentsModel,
+      selectedFile,
+      onSelectFile,
       repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
@@ -124,6 +140,8 @@ export function useAgentStudioRightPanelBridge({
   selection,
   panel,
   documentsModel,
+  selectedFile,
+  onSelectFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -131,12 +149,14 @@ export function useAgentStudioRightPanelBridge({
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentStudioRightPanelBridgeArgs): AgentStudioRightPanelShellModel {
-  const panelKind = panel.panelKind;
+  const activeTabId = panel.activeTabId;
+  const tabs = panel.tabs;
   const isPanelOpen = panel.isPanelOpen;
-  const isRightPanelVisible = Boolean(panelKind && isPanelOpen);
+  const onActiveTabChange = panel.onActiveTabChange;
+  const isRightPanelVisible = Boolean(activeTabId && isPanelOpen);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
-    if (!isRightPanelVisible || !panelKind) {
+    if (!isRightPanelVisible || !activeTabId) {
       return null;
     }
 
@@ -145,9 +165,13 @@ export function useAgentStudioRightPanelBridge({
       branches,
       activeBranch,
       selection,
-      panelKind,
+      activeTabId,
+      tabs,
       isPanelOpen,
+      onActiveTabChange,
       documentsModel,
+      selectedFile,
+      onSelectFile,
       repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
@@ -161,15 +185,19 @@ export function useAgentStudioRightPanelBridge({
     branches,
     detectingPullRequestTaskId,
     documentsModel,
+    activeTabId,
     isPanelOpen,
     isRightPanelVisible,
     onDetectPullRequest,
+    onSelectFile,
+    onActiveTabChange,
     onGitConflictQuickActionContextChange,
     onResolveGitConflict,
-    panelKind,
     repoSettings,
+    selectedFile,
     selection,
     setTaskTargetBranch,
+    tabs,
   ]);
 
   return {

@@ -8,7 +8,7 @@ import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 
-export type AgentStudioWorkspaceDocument = {
+export type TaskExecutionDocument = {
   title: string;
   description: string;
   emptyState: string;
@@ -33,8 +33,8 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   return DOCUMENT_UPDATED_AT_FORMATTER.format(value);
 };
 
-export type AgentStudioWorkspaceSidebarModel = {
-  activeDocument: AgentStudioWorkspaceDocument | null;
+export type TaskExecutionDocumentPanelModel = {
+  activeDocument: TaskExecutionDocument | null;
 };
 
 type DocumentSectionProps = {
@@ -55,7 +55,7 @@ function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactE
           <DocumentCopyButton
             markdown={document.markdown}
             dataTestId="copy-agent-studio-document-content"
-            errorLogContext="AgentStudioWorkspaceSidebar"
+            errorLogContext="TaskExecutionDocumentPanel"
             className="absolute top-2 right-2 z-10"
           />
         </>
@@ -66,10 +66,10 @@ function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactE
   );
 }
 
-export function AgentStudioWorkspaceSidebar({
+export function TaskExecutionDocumentPanel({
   model,
 }: {
-  model: AgentStudioWorkspaceSidebarModel;
+  model: TaskExecutionDocumentPanelModel;
 }): ReactElement {
   const [modalSnapshot, setModalSnapshot] = useState<{
     markdown: string;

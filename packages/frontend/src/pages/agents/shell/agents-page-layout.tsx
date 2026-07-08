@@ -2,7 +2,9 @@ import { type ComponentProps, memo, type ReactElement, type ReactNode, useMemo }
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
+import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
 import {
@@ -19,6 +21,7 @@ const PANEL_CONTAINMENT_STYLE = {
 type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
   chatContent: ReactElement;
+  selectedFilePreviewContent: ReactNode;
   isRightPanelVisible: boolean;
   rightPanelContent: ReactNode;
 };
@@ -31,6 +34,7 @@ type AgentChatPaneProps = {
 function AgentsPageWorkspace({
   hasSelectedTask,
   chatContent,
+  selectedFilePreviewContent,
   isRightPanelVisible,
   rightPanelContent,
 }: AgentsPageWorkspaceProps): ReactElement {
@@ -43,23 +47,29 @@ function AgentsPageWorkspace({
   }
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-      <ResizablePanel defaultSize={63} minSize={35}>
-        <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
-          {chatContent}
-        </div>
-      </ResizablePanel>
-      {isRightPanelVisible ? (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={37} minSize={30}>
-            <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
-              {rightPanelContent}
-            </div>
-          </ResizablePanel>
-        </>
-      ) : null}
-    </ResizablePanelGroup>
+    <DiffWorkerProvider>
+      <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+        <ResizablePanel defaultSize={63} minSize={35}>
+          <div
+            className="flex h-full min-h-0 flex-col overflow-hidden"
+            style={PANEL_CONTAINMENT_STYLE}
+          >
+            {selectedFilePreviewContent}
+            <div className="min-h-0 flex-1 overflow-hidden">{chatContent}</div>
+          </div>
+        </ResizablePanel>
+        {isRightPanelVisible ? (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={37} minSize={30}>
+              <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
+                {rightPanelContent}
+              </div>
+            </ResizablePanel>
+          </>
+        ) : null}
+      </ResizablePanelGroup>
+    </DiffWorkerProvider>
   );
 }
 
@@ -85,6 +95,9 @@ export type AgentsPageLayoutModel = {
   hasSelectedTask: boolean;
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
   chatModel: ComponentProps<typeof AgentChatSurface>["model"];
+  taskExecutionSelectedFilePreviewModel: ComponentProps<
+    typeof TaskExecutionSelectedFilePreview
+  >["model"];
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
@@ -108,6 +121,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     hasSelectedTask,
     chatHeaderModel,
     chatModel,
+    taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,
     modalContent,
@@ -130,16 +144,27 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     () => <AgentStudioRightPanelBridge model={rightPanelBridge} />,
     [rightPanelBridge],
   );
+  const selectedFilePreviewContent = useMemo(
+    () => <TaskExecutionSelectedFilePreview model={taskExecutionSelectedFilePreviewModel} />,
+    [taskExecutionSelectedFilePreviewModel],
+  );
   const workspaceContent = useMemo(
     () => (
       <AgentsPageWorkspace
         hasSelectedTask={hasSelectedTask}
         chatContent={chatContent}
+        selectedFilePreviewContent={selectedFilePreviewContent}
         isRightPanelVisible={isRightPanelVisible}
         rightPanelContent={rightPanelContent}
       />
     ),
-    [chatContent, hasSelectedTask, isRightPanelVisible, rightPanelContent],
+    [
+      chatContent,
+      hasSelectedTask,
+      isRightPanelVisible,
+      rightPanelContent,
+      selectedFilePreviewContent,
+    ],
   );
   const modalContentElement = useMemo(
     () => <AgentsPageModalContent model={modalContent} />,

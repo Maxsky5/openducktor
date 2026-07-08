@@ -1,4 +1,4 @@
-import { access, readdir, realpath, stat } from "node:fs/promises";
+import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -34,6 +34,13 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       );
     });
   },
+  readFileBytes(inputPath) {
+    return Effect.tryPromise({
+      try: () => readFile(inputPath),
+      catch: (cause) =>
+        toHostOperationError(cause, "filesystem.readFileBytes", { path: inputPath }),
+    });
+  },
   stat(inputPath) {
     return Effect.gen(function* () {
       const metadata = yield* Effect.tryPromise({
@@ -45,6 +52,9 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       });
       return {
         isDirectory: metadata.isDirectory(),
+        isFile: metadata.isFile(),
+        size: metadata.size,
+        mtimeMs: metadata.mtimeMs,
       };
     });
   },
@@ -59,6 +69,9 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   },
   join(...paths) {
     return path.join(...paths);
+  },
+  relative(from, to) {
+    return path.relative(from, to);
   },
   parent(inputPath) {
     const parentPath = path.dirname(inputPath);

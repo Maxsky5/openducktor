@@ -157,6 +157,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    listFiles() {
+      return Effect.succeed([]);
+    },
     getCurrentBranch(workingDir) {
       return Effect.tryPromise({
         try: async () => {

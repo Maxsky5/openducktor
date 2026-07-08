@@ -12,20 +12,28 @@ export function useAgentStudioRepoSettings(args: {
   hostClient?: RepoConfigQueryHost;
 }): {
   repoSettings: RepoSettingsInput | null;
+  githubIntegrationEnabled: boolean;
   isLoadingRepoSettings: boolean;
 } {
   const { activeWorkspaceId, hostClient } = args;
-  const { data: repoSettings, isLoading } = useQuery({
+  const { data: repoSettingsResult, isLoading } = useQuery({
     ...repoConfigQueryOptions(
       activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
       hostClient,
     ),
     enabled: activeWorkspaceId !== null,
-    select: toRepoSettingsInput,
+    select: (config) => ({
+      repoSettings: toRepoSettingsInput(config),
+      githubIntegrationEnabled: config.git.providers.github?.enabled === true,
+    }),
   });
+  const repoSettings =
+    activeWorkspaceId !== null ? (repoSettingsResult?.repoSettings ?? null) : null;
 
   return {
-    repoSettings: activeWorkspaceId !== null ? (repoSettings ?? null) : null,
+    repoSettings,
+    githubIntegrationEnabled:
+      activeWorkspaceId !== null && repoSettingsResult?.githubIntegrationEnabled === true,
     isLoadingRepoSettings: activeWorkspaceId !== null && isLoading,
   };
 }

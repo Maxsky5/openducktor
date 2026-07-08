@@ -93,6 +93,7 @@ export type GitPort = {
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
+  listFiles(workingDir: string): Effect.Effect<string[], GitPortError>;
   getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
   getStatus(workingDir: string): Effect.Effect<FileStatus[], GitPortError>;
   getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;

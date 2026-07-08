@@ -92,6 +92,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    listFiles() {
+      return Effect.succeed([]);
+    },
     getCurrentBranch() {
       return Effect.tryPromise({
         try: async () => {

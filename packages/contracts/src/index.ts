@@ -13,6 +13,7 @@ export * from "./metadata-schemas";
 export * from "./odt-mcp-schemas";
 export * from "./odt-tool-names";
 export * from "./prompt-schemas";
+export * from "./pull-request-review-schemas";
 export * from "./run-schemas";
 export * from "./runtime-descriptors";
 export * from "./session-schemas";

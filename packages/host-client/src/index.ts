@@ -3,6 +3,7 @@ import { HostAgentClient } from "./build-runtime-client";
 import { HostFilesystemClient } from "./filesystem-client";
 import { HostGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
+import { HostPullRequestReviewClient } from "./pull-request-review-client";
 import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
@@ -34,7 +35,13 @@ const WORKSPACE_METHODS = [
 
 const FILESYSTEM_METHODS = [
   "filesystemListDirectory",
+  "filesystemListTree",
+  "filesystemReadTextFile",
 ] as const satisfies readonly MethodName<HostFilesystemClient>[];
+
+const PULL_REQUEST_REVIEW_METHODS = [
+  "pullRequestReviewContextGet",
+] as const satisfies readonly MethodName<HostPullRequestReviewClient>[];
 
 const SYSTEM_METHODS = [
   "systemGetPlatform",
@@ -127,6 +134,7 @@ const GIT_METHODS = [
 
 type WorkspaceMethodName = (typeof WORKSPACE_METHODS)[number];
 type FilesystemMethodName = (typeof FILESYSTEM_METHODS)[number];
+type PullRequestReviewMethodName = (typeof PULL_REQUEST_REVIEW_METHODS)[number];
 type SystemMethodName = (typeof SYSTEM_METHODS)[number];
 type TaskMethodName = (typeof TASK_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
@@ -134,6 +142,7 @@ type GitMethodName = (typeof GIT_METHODS)[number];
 
 type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
   Pick<HostFilesystemClient, FilesystemMethodName> &
+  Pick<HostPullRequestReviewClient, PullRequestReviewMethodName> &
   Pick<HostSystemClient, SystemMethodName> &
   Pick<HostTaskClient, TaskMethodName> &
   Pick<HostAgentClient, AgentMethodName> &
@@ -176,6 +185,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const metadataCache = new TaskMetadataCache();
   const workspaceClient = new HostWorkspaceClient(invokeFn);
   const filesystemClient = new HostFilesystemClient(invokeFn);
+  const pullRequestReviewClient = new HostPullRequestReviewClient(invokeFn);
   const systemClient = new HostSystemClient(invokeFn);
   const taskClient = new HostTaskClient(invokeFn, metadataCache);
   const agentClient = new HostAgentClient(invokeFn, metadataCache);
@@ -184,6 +194,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
 
   bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);
   bindDelegates(hostClient, filesystemClient, FILESYSTEM_METHODS);
+  bindDelegates(hostClient, pullRequestReviewClient, PULL_REQUEST_REVIEW_METHODS);
   bindDelegates(hostClient, systemClient, SYSTEM_METHODS);
   bindDelegates(hostClient, taskClient, TASK_METHODS);
   bindDelegates(hostClient, agentClient, AGENT_METHODS);

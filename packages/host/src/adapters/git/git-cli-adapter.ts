@@ -126,6 +126,19 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         return parseBranchRows(output);
       });
     },
+    listFiles(workingDirectory) {
+      return Effect.gen(function* () {
+        const output = yield* runGit(runner, workingDirectory, [
+          "ls-files",
+          "-co",
+          "--exclude-standard",
+          "-z",
+          "--",
+          ".",
+        ]);
+        return output.split("\0").filter((filePath) => filePath.length > 0);
+      });
+    },
     getCurrentBranch(workingDirectory) {
       return getCurrentBranchUnchecked(runner, workingDirectory);
     },

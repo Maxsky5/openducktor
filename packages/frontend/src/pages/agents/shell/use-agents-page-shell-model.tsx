@@ -38,6 +38,9 @@ type AgentsPageShellModel = {
     typeof useAgentStudioOrchestrationController
   >["agentStudioHeaderModel"];
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
+  taskExecutionSelectedFilePreviewModel: ReturnType<
+    typeof useAgentStudioOrchestrationController
+  >["taskExecutionSelectedFilePreviewModel"];
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
@@ -48,9 +51,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
-    activeWorkspaceId,
-  });
+  const { repoSettings, githubIntegrationEnabled, isLoadingRepoSettings } =
+    useAgentStudioRepoSettings({
+      activeWorkspaceId,
+    });
   const {
     isForegroundLoadingTasks,
     tasks,
@@ -120,6 +124,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     runtimeDefinitions,
     repoSettings,
+    githubIntegrationEnabled,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
@@ -145,7 +150,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeBranch,
     selection: orchestrationSelection,
     panel: orchestration.rightPanel,
-    documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
+    documentsModel: orchestration.taskExecutionDocumentPanelModel,
+    selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
+    onSelectFile: orchestration.onSelectTaskExecutionFile,
     repoSettings: orchestration.repoSettings,
     setTaskTargetBranch,
     detectingPullRequestTaskId,
@@ -182,6 +189,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
+    taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,
     modalContent,

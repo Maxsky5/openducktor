@@ -1,5 +1,5 @@
 import { memo, type ReactElement, useEffect } from "react";
-import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
+import { MemoizedTaskExecutionPanel } from "@/components/features/agents/task-execution-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import {
   type UseAgentsPageRightPanelModelArgs,
@@ -28,16 +28,16 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
     };
   }, [refreshWorktree, refreshWorktreeRef]);
 
-  return rightPanelModel ? <MemoizedAgentStudioRightPanel model={rightPanelModel} /> : null;
+  return rightPanelModel ? <MemoizedTaskExecutionPanel model={rightPanelModel} /> : null;
 });
 
 export function AgentsPageBuildWorktreeRefreshRuntime({
-  panelKind,
+  activeTabId,
   isPanelOpen,
   selectedView,
   refreshWorktreeRef,
 }: {
-  panelKind: "documents" | "build_tools" | null;
+  activeTabId: AgentStudioBuildWorktreeRefreshModel["activeTabId"];
   isPanelOpen: boolean;
   selectedView: AgentStudioBuildWorktreeRefreshModel["selectedView"];
   refreshWorktreeRef: WorktreeRefreshRef;
@@ -46,7 +46,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
 
   useAgentStudioBuildWorktreeRefresh({
     selectedView: {
-      role: panelKind === "build_tools" && isPanelOpen ? selectedView.role : null,
+      role: activeTabId === "git" && isPanelOpen ? selectedView.role : null,
       loadedSession: selectedView.loadedSession,
     },
     refreshWorktree,

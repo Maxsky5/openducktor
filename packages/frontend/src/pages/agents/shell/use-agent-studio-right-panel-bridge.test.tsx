@@ -15,8 +15,14 @@ type HookArgs = Parameters<typeof useAgentStudioRightPanelBridge>[0];
 
 const createPanelState = (
   panel: HookArgs["panel"] = {
-    panelKind: "build_tools",
+    tabs: [
+      { id: "document", label: "Document" },
+      { id: "git", label: "Git" },
+      { id: "file_explorer", label: "File explorer" },
+    ],
+    activeTabId: "git",
     isPanelOpen: true,
+    onActiveTabChange: mock(() => {}),
   },
 ): HookArgs["panel"] => panel;
 
@@ -75,6 +81,8 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   documentsModel: {
     activeDocument: null,
   },
+  selectedFile: null,
+  onSelectFile: mock(() => {}),
   repoSettings: null,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
@@ -110,12 +118,14 @@ describe("useAgentStudioRightPanelBridge", () => {
     }
   });
 
-  test("omits bridge props when no panel kind is selected", async () => {
+  test("omits bridge props when no tab is selected", async () => {
     const harness = createHookHarness(
       createArgs({
         panel: createPanelState({
-          panelKind: null,
+          tabs: [],
+          activeTabId: null,
           isPanelOpen: true,
+          onActiveTabChange: mock(() => {}),
         }),
       }),
     );
@@ -135,8 +145,14 @@ describe("useAgentStudioRightPanelBridge", () => {
     const harness = createHookHarness(
       createArgs({
         panel: createPanelState({
-          panelKind: "build_tools",
+          tabs: [
+            { id: "document", label: "Document" },
+            { id: "git", label: "Git" },
+            { id: "file_explorer", label: "File explorer" },
+          ],
+          activeTabId: "git",
           isPanelOpen: false,
+          onActiveTabChange: mock(() => {}),
         }),
       }),
     );

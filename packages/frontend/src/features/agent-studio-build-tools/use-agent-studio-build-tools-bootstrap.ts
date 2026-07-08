@@ -9,12 +9,13 @@ export type BuildToolsSelectedView = Pick<
 type UseAgentStudioBuildToolsBootstrapArgs = {
   workspaceRepoPath: string | null;
   selectedView: BuildToolsSelectedView;
-  panelKind: "documents" | "build_tools" | null;
-  isPanelOpen: boolean;
+  isGitTabActive: boolean;
+  isRightPanelOpen: boolean;
 };
 
 type BuildToolsBootstrapContext = {
   isEnabled: boolean;
+  isDevServerEnabled: boolean;
   repoPath: string | null;
   sessionWorkingDirectory: string | null;
   shouldEnableScheduledRefresh: boolean;
@@ -23,17 +24,16 @@ type BuildToolsBootstrapContext = {
 export function useAgentStudioBuildToolsBootstrap({
   workspaceRepoPath,
   selectedView,
-  panelKind,
-  isPanelOpen,
+  isGitTabActive,
+  isRightPanelOpen,
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
   const selectedSessionIdentity = selectedView.selectedSession.identity;
 
   return useMemo(() => {
-    const isVisibleBuildToolsPanel =
-      selectedView.role === "build" && panelKind === "build_tools" && isPanelOpen;
-    if (!isVisibleBuildToolsPanel) {
+    if (!workspaceRepoPath) {
       return {
         isEnabled: false,
+        isDevServerEnabled: false,
         repoPath: null,
         sessionWorkingDirectory: null,
         shouldEnableScheduledRefresh: false,
@@ -41,10 +41,17 @@ export function useAgentStudioBuildToolsBootstrap({
     }
 
     return {
-      isEnabled: Boolean(workspaceRepoPath),
+      isEnabled: isGitTabActive,
+      isDevServerEnabled: selectedView.role === "build" && isRightPanelOpen,
       repoPath: workspaceRepoPath,
       sessionWorkingDirectory: selectedSessionIdentity?.workingDirectory ?? null,
-      shouldEnableScheduledRefresh: Boolean(workspaceRepoPath && selectedSessionIdentity),
+      shouldEnableScheduledRefresh: Boolean(isGitTabActive && selectedSessionIdentity),
     };
-  }, [workspaceRepoPath, isPanelOpen, panelKind, selectedView.role, selectedSessionIdentity]);
+  }, [
+    workspaceRepoPath,
+    isGitTabActive,
+    isRightPanelOpen,
+    selectedView.role,
+    selectedSessionIdentity,
+  ]);
 }

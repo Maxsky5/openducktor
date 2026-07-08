@@ -35,8 +35,8 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  panelKind: "documents" | "build_tools" | null;
-  isPanelOpen: boolean;
+  isGitTabActive: boolean;
+  isRightPanelOpen: boolean;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
 };
 
@@ -118,8 +118,8 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    panelKind,
-    isPanelOpen,
+    isGitTabActive,
+    isRightPanelOpen,
     repoSettings,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
@@ -160,15 +160,21 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
     selectedView,
-    panelKind,
-    isPanelOpen,
+    isGitTabActive,
+    isRightPanelOpen,
   });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
+  const devServerRepoPath = buildToolsBootstrap.isDevServerEnabled
+    ? buildToolsBootstrap.repoPath
+    : null;
   const taskId = isEnabled ? selectedTaskId : null;
   const taskWorktreeVersion = selectedView.selectedTask?.updatedAt ?? null;
-  const devServerTaskId = isEnabled ? (selectedView.selectedTask?.id ?? null) : null;
-  const isDevServerEnabled = isEnabled && devServerTaskId != null;
+  const devServerTaskId =
+    buildToolsBootstrap.isDevServerEnabled && hasSelectedTask
+      ? (selectedView.selectedTask?.id ?? null)
+      : null;
+  const isDevServerEnabled = devServerRepoPath != null && devServerTaskId != null;
   const directWorktreePath = resolveDirectBuildWorktreePath({
     repoPath,
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
@@ -239,7 +245,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
   });
   const devServerModel = dependencies.useDevServerPanel({
-    repoPath,
+    repoPath: devServerRepoPath,
     taskId: devServerTaskId,
     repoSettings,
     enabled: isDevServerEnabled,
