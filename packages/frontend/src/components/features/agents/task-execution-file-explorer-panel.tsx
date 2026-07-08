@@ -127,15 +127,17 @@ function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactEl
 
   return (
     <div className="border-b border-border px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
-        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">Working dir</span>
-        <code
-          className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-          title={rootPath}
-          data-testid="task-execution-file-explorer-root-path"
-        >
-          {rootPath}
-        </code>
+      <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-medium leading-3 text-muted-foreground">Working dir</div>
+          <code
+            className="block min-w-0 truncate font-mono text-[11px] leading-4 text-foreground"
+            title={rootPath}
+            data-testid="task-execution-file-explorer-root-path"
+          >
+            {rootPath}
+          </code>
+        </div>
         <CopyIconButton
           copied={copied}
           ariaLabel="Copy working directory"
@@ -188,7 +190,7 @@ export function TaskExecutionFileExplorerPanel({
 
   const { model: fileTree } = useFileTree({
     preparedInput: EMPTY_TREE_INPUT,
-    initialExpansion: "open",
+    initialExpansion: "closed",
     fileTreeSearchMode: "hide-non-matches",
     search: true,
     icons: "complete",
@@ -243,7 +245,7 @@ export function TaskExecutionFileExplorerPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <FileExplorerRootPathHeader rootPath={rootPath} />
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden p-3">
         {treeQuery.isLoading ? (
           <FileExplorerUnavailableState message="Loading files..." />
         ) : fileTreeInputPaths.length === 0 ? (

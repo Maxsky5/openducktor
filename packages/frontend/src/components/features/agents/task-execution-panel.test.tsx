@@ -20,12 +20,15 @@ type TaskExecutionPanelToggleButtonComponent =
 
 let TaskExecutionPanel: TaskExecutionPanelComponent;
 let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
+let lastFileTreeOptions: Record<string, unknown> | null = null;
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
 const actualDevServerSettingsAction = await import("./agent-studio-dev-server-settings-action");
 
 beforeEach(async () => {
+  lastFileTreeOptions = null;
+
   mock.module("@pierre/trees", () => ({
     preparePresortedFileTreeInput: (paths: string[]) => ({ paths }),
     themeToTreeStyles: () => ({}),
@@ -33,14 +36,17 @@ beforeEach(async () => {
 
   mock.module("@pierre/trees/react", () => ({
     FileTree: () => createElement("div", { "data-testid": "mock-pierre-file-tree" }),
-    useFileTree: () => ({
-      model: {
-        resetPaths: () => {},
-        setGitStatus: () => {},
-        setIcons: () => {},
-        setSearch: () => {},
-      },
-    }),
+    useFileTree: (options: Record<string, unknown>) => {
+      lastFileTreeOptions = options;
+      return {
+        model: {
+          resetPaths: () => {},
+          setGitStatus: () => {},
+          setIcons: () => {},
+          setSearch: () => {},
+        },
+      };
+    },
   }));
 
   mock.module("./agent-studio-dev-server-settings-action", () => ({
@@ -332,6 +338,7 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("task-execution-file-explorer-copy-root-path");
     expect(html).toContain("Copy working directory");
     expect(html).not.toContain("Search files");
+    expect(lastFileTreeOptions?.initialExpansion).toBe("closed");
   });
 
   test("renders Dev Servers below the task execution panel", () => {
