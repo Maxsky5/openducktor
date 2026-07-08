@@ -7,7 +7,7 @@ import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
 import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
-import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-panel";
+import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;

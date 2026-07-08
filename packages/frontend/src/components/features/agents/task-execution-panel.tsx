@@ -20,10 +20,8 @@ import {
   TaskExecutionDocumentPanel,
   type TaskExecutionDocumentPanelModel,
 } from "./task-execution-document-panel";
-import {
-  TaskExecutionFileExplorerPanel,
-  type TaskExecutionFileExplorerPanelModel,
-} from "./task-execution-file-explorer-panel";
+import type { TaskExecutionFileExplorerPanelModel } from "./task-execution-file-explorer-model";
+import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 
 export type TaskExecutionPanelTabId = "document" | "git" | "file_explorer" | "ci_checks";
 

@@ -30,7 +30,7 @@ export type {
 export type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
-} from "./task-execution-file-explorer-panel";
+} from "./task-execution-file-explorer-model";
 export type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
 export type {
   TaskExecutionPanelModel,

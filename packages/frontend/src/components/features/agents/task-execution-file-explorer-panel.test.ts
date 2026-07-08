@@ -4,7 +4,7 @@ import {
   buildTaskExecutionFileTreeInputPaths,
   normalizeTaskExecutionFileTreeSelectionPath,
   resolveTaskExecutionFileTreeSelectionEntry,
-} from "./task-execution-file-explorer-panel";
+} from "./task-execution-file-explorer-model";
 
 const fileEntry = (path: string): WorkspaceFileTreeEntry => ({
   kind: "file",

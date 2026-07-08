@@ -1,5 +1,5 @@
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
-import type { GitStatusEntry, TreeThemeInput } from "@pierre/trees";
+import type { TreeThemeInput } from "@pierre/trees";
 import { preparePresortedFileTreeInput, themeToTreeStyles } from "@pierre/trees";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,19 +9,13 @@ import { useTheme } from "@/components/layout/theme-provider";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
 import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
-
-export type TaskExecutionSelectedFile = {
-  rootPath: string;
-  relativePath: string;
-};
-
-export type TaskExecutionFileExplorerPanelModel = {
-  rootPath: string | null;
-  unavailableReason: string | null;
-  isActive: boolean;
-  selectedFile: TaskExecutionSelectedFile | null;
-  onSelectFile: (file: TaskExecutionSelectedFile) => void;
-};
+import {
+  buildTaskExecutionFileTreeGitStatusEntries,
+  buildTaskExecutionFileTreeInputPaths,
+  resolveTaskExecutionFileTreeSelectionEntry,
+  type TaskExecutionFileExplorerPanelModel,
+  type TaskExecutionSelectedFile,
+} from "./task-execution-file-explorer-model";
 
 const EMPTY_TREE_INPUT = preparePresortedFileTreeInput([]);
 
@@ -83,45 +77,6 @@ const buildEntriesByPath = (
   return byPath;
 };
 
-export const buildTaskExecutionFileTreeInputPaths = (
-  entries: readonly WorkspaceFileTreeEntry[] | undefined,
-): string[] => (entries ?? []).filter((entry) => entry.kind === "file").map((entry) => entry.path);
-
-const buildGitStatusEntries = (
-  entries: readonly WorkspaceFileTreeEntry[] | undefined,
-): GitStatusEntry[] =>
-  (entries ?? [])
-    .filter((entry) => entry.kind === "file" && entry.gitStatus !== null)
-    .map((entry) => ({
-      path: entry.path,
-      status: entry.gitStatus as GitStatusEntry["status"],
-    }));
-
-export const normalizeTaskExecutionFileTreeSelectionPath = (path: string): string =>
-  path.startsWith("f::") ? path.slice(3) : path;
-
-export const resolveTaskExecutionFileTreeSelectionEntry = (
-  selectedPath: string,
-  entriesByPath: ReadonlyMap<string, WorkspaceFileTreeEntry>,
-): WorkspaceFileTreeEntry | null => {
-  const normalizedPath = normalizeTaskExecutionFileTreeSelectionPath(selectedPath);
-  const exactEntry = entriesByPath.get(normalizedPath);
-  if (exactEntry) {
-    return exactEntry;
-  }
-
-  let matchedEntry: WorkspaceFileTreeEntry | null = null;
-  for (const entry of entriesByPath.values()) {
-    if (entry.path.endsWith(`/${normalizedPath}`)) {
-      if (matchedEntry !== null) {
-        return null;
-      }
-      matchedEntry = entry;
-    }
-  }
-  return matchedEntry;
-};
-
 type SelectionContextRef = {
   entriesByPath: Map<string, WorkspaceFileTreeEntry>;
   rootPath: string | null;
@@ -170,7 +125,7 @@ export function TaskExecutionFileExplorerPanel({
     [treeQuery.data?.entries],
   );
   const gitStatusEntries = useMemo(
-    () => buildGitStatusEntries(treeQuery.data?.entries),
+    () => buildTaskExecutionFileTreeGitStatusEntries(treeQuery.data?.entries),
     [treeQuery.data?.entries],
   );
   const fileTreeInputPaths = useMemo(
