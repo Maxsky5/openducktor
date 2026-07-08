@@ -180,7 +180,12 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     [rightPanelBridge],
   );
   const selectedFilePreviewContent = useMemo(
-    () => <TaskExecutionSelectedFilePreview model={taskExecutionSelectedFilePreviewModel} />,
+    () => (
+      <TaskExecutionSelectedFilePreview
+        key={taskExecutionSelectedFilePreviewModel.previewSessionKey}
+        model={taskExecutionSelectedFilePreviewModel}
+      />
+    ),
     [taskExecutionSelectedFilePreviewModel],
   );
   const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;

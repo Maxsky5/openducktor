@@ -55,20 +55,19 @@ const renderPreview = (
   model: Omit<TaskExecutionSelectedFilePreviewModel, "previewSessionKey"> & {
     previewSessionKey?: number;
   },
+  theme: "light" | "dark" = "light",
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     previewSessionKey: 0,
     ...model,
   };
 
-  return createElement(
-    QueryProvider,
-    { useIsolatedClient: true },
-    createElement(
-      ThemeProvider,
-      null,
-      createElement(TaskExecutionSelectedFilePreview, { model: fullModel }),
-    ),
+  return (
+    <QueryProvider useIsolatedClient>
+      <ThemeProvider defaultTheme={theme}>
+        <TaskExecutionSelectedFilePreview model={fullModel} />
+      </ThemeProvider>
+    </QueryProvider>
   );
 };
 
@@ -125,6 +124,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  document.documentElement.classList.remove("dark", "light");
   await restoreMockedModules([
     ["@pierre/diffs/react", async () => actualDiffsReact],
     ["@/state/operations/host", async () => actualHost],
@@ -142,6 +142,23 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(codeViewProps?.className).toContain("h-full");
     expect(codeViewProps?.className).toContain("overflow-auto");
     expect(codeViewProps?.style?.["--diffs-font-size" as keyof CSSProperties]).toBe("12px");
+    expect(codeViewProps?.style?.backgroundColor).toBe(
+      "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))",
+    );
+    expect(codeViewProps?.style?.colorScheme).toBe("light");
+  });
+
+  test("uses the active theme color scheme for the CodeView scroll background", async () => {
+    const onClose = mock(() => {});
+
+    render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
+
+    await screen.findByText("const first = true;");
+    const codeViewProps = codeViewPropsHistory.at(-1);
+    expect(codeViewProps?.style?.colorScheme).toBe("dark");
+    expect(codeViewProps?.style?.backgroundColor).toBe(
+      "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))",
+    );
   });
 
   test("aligns CodeView layout metrics with preview CSS", async () => {
@@ -152,10 +169,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     const codeViewProps = codeViewPropsHistory.at(-1);
     expect(codeViewProps?.style?.["--diffs-line-height" as keyof CSSProperties]).toBe("18px");
+    expect(codeViewProps?.style?.["--diffs-gap-block" as keyof CSSProperties]).toBe("8px");
+    expect(codeViewProps?.style?.["--diffs-scrollbar-gutter-override" as keyof CSSProperties]).toBe(
+      "0px",
+    );
     expect(codeViewProps?.options?.itemMetrics?.lineHeight).toBe(18);
-    expect(codeViewProps?.options?.itemMetrics?.spacing).toBe(0);
-    expect(codeViewProps?.options?.itemMetrics?.paddingTop).toBe(0);
-    expect(codeViewProps?.options?.itemMetrics?.paddingBottom).toBe(0);
+    expect(codeViewProps?.options?.itemMetrics?.spacing).toBe(8);
+    expect(codeViewProps?.options?.itemMetrics?.paddingTop).toBe(8);
+    expect(codeViewProps?.options?.itemMetrics?.paddingBottom).toBe(8);
     expect(codeViewProps?.options?.layout).toEqual({
       paddingTop: 0,
       paddingBottom: 0,
@@ -193,6 +214,20 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByText("src/second.ts")).toBeTruthy();
     expect(screen.getByText("Loading file...")).toBeTruthy();
     expect(screen.queryByText("Loading...")).toBeNull();
+  });
+
+  test("remounts CodeView when the preview session changes", async () => {
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose, previewSessionKey: 0 }));
+
+    await screen.findByText("const first = true;");
+    expect(codeViewMountCount).toBe(1);
+
+    view.rerender(renderPreview({ selectedFile: firstFile, onClose, previewSessionKey: 1 }));
+
+    await screen.findByText("const first = true;");
+    expect(codeViewMountCount).toBe(2);
+    expect(codeViewUnmountCount).toBe(1);
   });
 
   test("remounts CodeView when the loaded file changes so scroll starts at the top", async () => {

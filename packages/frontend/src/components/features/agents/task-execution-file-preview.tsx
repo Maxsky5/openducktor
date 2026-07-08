@@ -18,10 +18,14 @@ export type TaskExecutionSelectedFilePreviewModel = {
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const CODE_VIEW_LINE_HEIGHT = 18;
-const CODE_VIEW_ROOT_STYLE = {
+const CODE_VIEW_CONTENT_PADDING = 8;
+const CODE_VIEW_BACKGROUND_COLOR =
+  "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))";
+const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": `${CODE_VIEW_LINE_HEIGHT}px`,
-  "--diffs-gap-block": "0px",
+  "--diffs-gap-block": `${CODE_VIEW_CONTENT_PADDING}px`,
+  "--diffs-scrollbar-gutter-override": "0px",
   "--diffs-tab-size": 2,
 } as CSSProperties;
 const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
@@ -119,9 +123,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       disableFileHeader: true,
       itemMetrics: {
         lineHeight: CODE_VIEW_LINE_HEIGHT,
-        spacing: 0,
-        paddingTop: 0,
-        paddingBottom: 0,
+        spacing: CODE_VIEW_CONTENT_PADDING,
+        paddingTop: CODE_VIEW_CONTENT_PADDING,
+        paddingBottom: CODE_VIEW_CONTENT_PADDING,
       },
       layout: {
         paddingTop: 0,
@@ -132,10 +136,20 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     }),
     [theme],
   );
+  const codeViewRootStyle = useMemo<CSSProperties>(
+    () => ({
+      ...CODE_VIEW_ROOT_BASE_STYLE,
+      backgroundColor: CODE_VIEW_BACKGROUND_COLOR,
+      colorScheme: theme,
+    }),
+    [theme],
+  );
   const codeViewFileId =
     visibleSnapshot?.result.kind === "text"
       ? `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`
       : null;
+  const codeViewRenderKey =
+    codeViewFileId !== null ? `${model.previewSessionKey}:${codeViewFileId}` : null;
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (visibleSnapshot?.result.kind !== "text" || !codeViewFileId) {
       return [];
@@ -187,9 +201,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
       <CodeView
-        key={codeViewFileId}
+        key={codeViewRenderKey}
         className="h-full min-h-0 overflow-auto"
-        style={CODE_VIEW_ROOT_STYLE}
+        style={codeViewRootStyle}
         items={codeViewItems}
         options={codeViewOptions}
       />

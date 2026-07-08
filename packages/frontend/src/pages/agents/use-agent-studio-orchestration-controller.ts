@@ -79,6 +79,38 @@ type UseAgentStudioOrchestrationControllerResult = {
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
 };
 
+export type TaskExecutionFilePreviewState = {
+  selectedFile: TaskExecutionSelectedFile | null;
+  previewSessionKey: number;
+};
+
+export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewState => ({
+  selectedFile: null,
+  previewSessionKey: 0,
+});
+
+export const selectTaskExecutionFilePreviewState = (
+  state: TaskExecutionFilePreviewState,
+  selectedFile: TaskExecutionSelectedFile,
+): TaskExecutionFilePreviewState => ({
+  selectedFile,
+  previewSessionKey:
+    state.selectedFile === null ? state.previewSessionKey + 1 : state.previewSessionKey,
+});
+
+export const clearTaskExecutionFilePreviewState = (
+  state: TaskExecutionFilePreviewState,
+): TaskExecutionFilePreviewState => {
+  if (state.selectedFile === null) {
+    return state;
+  }
+
+  return {
+    selectedFile: null,
+    previewSessionKey: state.previewSessionKey + 1,
+  };
+};
+
 type AgentStudioPageModelsViewContext = Pick<
   AgentStudioOrchestrationSelectionContext["view"],
   "taskId"
@@ -218,9 +250,9 @@ export function useAgentStudioOrchestrationController({
     handleReorderTab,
   } = selection;
   const selectedSession = view.selectedSession;
-  const [taskExecutionSelectedFile, setTaskExecutionSelectedFile] =
-    useState<TaskExecutionSelectedFile | null>(null);
-  const [taskExecutionFilePreviewSessionKey, setTaskExecutionFilePreviewSessionKey] = useState(0);
+  const [taskExecutionFilePreviewState, setTaskExecutionFilePreviewState] = useState(
+    createTaskExecutionFilePreviewState,
+  );
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     scheduleQueryUpdate,
@@ -482,16 +514,16 @@ export function useAgentStudioOrchestrationController({
       return;
     }
     previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
-    setTaskExecutionSelectedFile(null);
-    setTaskExecutionFilePreviewSessionKey((sessionKey) => sessionKey + 1);
+    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
   }, [taskExecutionFileContextKey]);
   const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
-    setTaskExecutionSelectedFile(file);
+    setTaskExecutionFilePreviewState((state) => selectTaskExecutionFilePreviewState(state, file));
   }, []);
   const closeTaskExecutionSelectedFilePreview = useCallback(() => {
-    setTaskExecutionSelectedFile(null);
-    setTaskExecutionFilePreviewSessionKey((sessionKey) => sessionKey + 1);
+    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
   }, []);
+  const taskExecutionSelectedFile = taskExecutionFilePreviewState.selectedFile;
+  const taskExecutionFilePreviewSessionKey = taskExecutionFilePreviewState.previewSessionKey;
   const taskExecutionSelectedFilePreviewModel = useMemo<TaskExecutionSelectedFilePreviewModel>(
     () => ({
       selectedFile: taskExecutionSelectedFile,
