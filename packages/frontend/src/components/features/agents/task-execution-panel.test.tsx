@@ -266,6 +266,11 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("task-execution-tab-git");
     expect(html).toContain("task-execution-tab-file_explorer");
     expect(html).toContain("task-execution-tab-ci_checks");
+    expect(html.match(/task-execution-tab-separator/g)?.length).toBe(3);
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("bg-transparent");
+    expect(html).toContain("bg-selected-surface");
+    expect(html).toContain("text-selected-accent");
     expect(html).toContain("Document");
     expect(html).toContain("Git");
     expect(html).toContain("File explorer");
