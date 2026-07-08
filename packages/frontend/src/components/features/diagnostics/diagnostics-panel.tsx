@@ -1,5 +1,5 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -17,7 +17,17 @@ import {
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
-export function DiagnosticsPanel(): ReactElement {
+type DiagnosticsPanelProps = {
+  autoOpenedByRepo?: Set<string>;
+  triggerClassName?: string;
+  triggerVariant?: "summary" | "icon";
+};
+
+export function DiagnosticsPanel({
+  autoOpenedByRepo: sharedAutoOpenedByRepo,
+  triggerClassName,
+  triggerVariant = "summary",
+}: DiagnosticsPanelProps): ReactElement {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
@@ -35,11 +45,11 @@ export function DiagnosticsPanel(): ReactElement {
   } = useChecksState();
   const { runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
   const [isOpen, setOpen] = useState(false);
-  const autoOpenedByRepoRef = useRef<Set<string> | null>(null);
-  if (autoOpenedByRepoRef.current === null) {
-    autoOpenedByRepoRef.current = new Set();
+  const localAutoOpenedByRepoRef = useRef<Set<string> | null>(null);
+  if (localAutoOpenedByRepoRef.current === null) {
+    localAutoOpenedByRepoRef.current = new Set();
   }
-  const autoOpenedByRepo = autoOpenedByRepoRef.current;
+  const autoOpenedByRepo = sharedAutoOpenedByRepo ?? localAutoOpenedByRepoRef.current;
 
   const model = useMemo(
     () =>
@@ -71,20 +81,56 @@ export function DiagnosticsPanel(): ReactElement {
     ],
   );
 
-  useEffect(() => {
-    if (!workspaceRepoPath || model.criticalReasons.length === 0) {
-      return;
-    }
-    if (autoOpenedByRepo.has(workspaceRepoPath)) {
-      return;
-    }
-    autoOpenedByRepo.add(workspaceRepoPath);
-    setOpen(true);
-  }, [autoOpenedByRepo, workspaceRepoPath, model.criticalReasons.length]);
+  const shouldAutoOpen =
+    workspaceRepoPath !== null &&
+    model.criticalReasons.length > 0 &&
+    !autoOpenedByRepo.has(workspaceRepoPath);
+  const sheetOpen = isOpen || shouldAutoOpen;
 
-  return (
-    <>
-      <div className="space-y-1.5">
+  const markAutoOpenedForWorkspace = (): boolean => {
+    if (!shouldAutoOpen || workspaceRepoPath === null) {
+      return false;
+    }
+
+    autoOpenedByRepo.add(workspaceRepoPath);
+    return true;
+  };
+
+  const handleSheetOpenAutoFocus = (): void => {
+    if (markAutoOpenedForWorkspace() && !isOpen) {
+      setOpen(true);
+    }
+  };
+
+  const handleSheetOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) {
+      markAutoOpenedForWorkspace();
+    }
+
+    setOpen(nextOpen);
+  };
+
+  const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
+
+  const trigger =
+    triggerVariant === "icon" ? (
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        className={cn("size-8", triggerClassName)}
+        onClick={() => setOpen(true)}
+        aria-label={iconTriggerLabel}
+        title={iconTriggerLabel}
+      >
+        {model.isSummaryChecking ? (
+          <RefreshCcw className={cn("size-4 animate-spin", model.summaryState.iconClass)} />
+        ) : (
+          <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+        )}
+      </Button>
+    ) : (
+      <div className={cn("space-y-1.5", triggerClassName)}>
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -120,9 +166,17 @@ export function DiagnosticsPanel(): ReactElement {
           </p>
         ) : null}
       </div>
+    );
 
-      <Sheet open={isOpen} onOpenChange={setOpen}>
-        <SheetContent side="right" className="overflow-y-auto">
+  return (
+    <>
+      {trigger}
+      <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
+        <SheetContent
+          side="right"
+          className="overflow-y-auto"
+          onOpenAutoFocus={handleSheetOpenAutoFocus}
+        >
           <SheetHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
