@@ -1,17 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import {
+  buildTaskExecutionFileTreeGitStatusEntries,
   buildTaskExecutionFileTreeInputPaths,
   normalizeTaskExecutionFileTreeSelectionPath,
   resolveTaskExecutionFileTreeSelectionEntry,
 } from "./task-execution-file-explorer-model";
 
-const fileEntry = (path: string): WorkspaceFileTreeEntry => ({
+const fileEntry = (
+  path: string,
+  gitStatus: WorkspaceFileTreeEntry["gitStatus"] = null,
+): WorkspaceFileTreeEntry => ({
   kind: "file",
   path,
   size: 24,
   mtimeMs: 1_760_000_000_000,
-  gitStatus: null,
+  gitStatus,
 });
 
 const directoryEntry = (path: string): WorkspaceFileTreeEntry => ({
@@ -42,6 +46,38 @@ describe("buildTaskExecutionFileTreeInputPaths", () => {
         fileEntry(".agent/.shared/charts.csv"),
       ]),
     ).toEqual([".agent/.shared/charts.csv"]);
+  });
+});
+
+describe("buildTaskExecutionFileTreeGitStatusEntries", () => {
+  test("includes ancestor directories for changed files", () => {
+    expect(
+      buildTaskExecutionFileTreeGitStatusEntries([
+        directoryEntry("packages"),
+        directoryEntry("packages/frontend"),
+        fileEntry("packages/frontend/src/App.tsx", "modified"),
+      ]),
+    ).toEqual([
+      { path: "packages", status: "modified" },
+      { path: "packages/frontend", status: "modified" },
+      { path: "packages/frontend/src", status: "modified" },
+      { path: "packages/frontend/src/App.tsx", status: "modified" },
+    ]);
+  });
+
+  test("deduplicates shared ancestors and keeps file statuses exact", () => {
+    expect(
+      buildTaskExecutionFileTreeGitStatusEntries([
+        fileEntry("packages/frontend/src/App.tsx", "added"),
+        fileEntry("packages/frontend/src/index.ts", "deleted"),
+      ]),
+    ).toEqual([
+      { path: "packages", status: "modified" },
+      { path: "packages/frontend", status: "modified" },
+      { path: "packages/frontend/src", status: "modified" },
+      { path: "packages/frontend/src/App.tsx", status: "added" },
+      { path: "packages/frontend/src/index.ts", status: "deleted" },
+    ]);
   });
 });
 
