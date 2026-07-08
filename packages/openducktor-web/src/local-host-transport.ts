@@ -180,6 +180,29 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
+const dispatchBrowserSseWarning = (
+  listeners: Iterable<BrowserSseListener>,
+  warningPayload: unknown,
+): void => {
+  let didListenerThrow = false;
+  let firstListenerError: unknown;
+
+  for (const currentListener of listeners) {
+    try {
+      currentListener(warningPayload);
+    } catch (error) {
+      if (!didListenerThrow) {
+        firstListenerError = error;
+      }
+      didListenerThrow = true;
+    }
+  }
+
+  if (didListenerThrow) {
+    throw firstListenerError;
+  }
+};
+
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
@@ -256,21 +279,10 @@ const subscribeSseChannelEffect = (
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
             `EventSource ${path} reported an error after opening.`,
           );
-          let hasListenerError = false;
-          let listenerError: unknown;
-          for (const currentListener of listeners.values()) {
-            try {
-              currentListener(warningPayload);
-            } catch (error) {
-              if (!hasListenerError) {
-                listenerError = error;
-              }
-              hasListenerError = true;
-            }
-          }
-          hasReportedPostOpenError = true;
-          if (hasListenerError) {
-            throw listenerError;
+          try {
+            dispatchBrowserSseWarning(listeners.values(), warningPayload);
+          } finally {
+            hasReportedPostOpenError = true;
           }
           return;
         }
@@ -288,25 +300,11 @@ const subscribeSseChannelEffect = (
         if (!shouldEmitControlEvents) {
           return;
         }
-        let hasListenerError = false;
-        let listenerError: unknown;
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
           event.data,
         );
-        for (const currentListener of listeners.values()) {
-          try {
-            currentListener(warningPayload);
-          } catch (error) {
-            if (!hasListenerError) {
-              listenerError = error;
-            }
-            hasListenerError = true;
-          }
-        }
-        if (hasListenerError) {
-          throw listenerError;
-        }
+        dispatchBrowserSseWarning(listeners.values(), warningPayload);
       };
 
       eventSource.addEventListener("message", handleMessage as EventListener);
