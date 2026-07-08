@@ -52,6 +52,32 @@ export function useTaskMutationCommands({
 }: UseTaskMutationCommandsArgs): TaskMutationCommands {
   const queryClient = useQueryClient();
 
+  const prepareCleanupTargets = useCallback(
+    async (repoPath: string, taskIds: string[]): Promise<TaskChatDraftCleanupPlan> =>
+      prepareTaskChatDraftCleanupTargets({
+        queryClient,
+        repoPath,
+        workspaceId: activeWorkspaceId,
+        taskIds,
+      }),
+    [activeWorkspaceId, queryClient],
+  );
+
+  const prepareClosingCleanupTargets = useCallback(
+    async (
+      repoPath: string,
+      taskId: string,
+      status: TaskStatus,
+    ): Promise<TaskChatDraftCleanupPlan> => {
+      if (status !== "closed") {
+        return emptyTaskChatDraftCleanupPlan();
+      }
+
+      return prepareCleanupTargets(repoPath, [taskId]);
+    },
+    [prepareCleanupTargets],
+  );
+
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
       requireActiveRepo(activeRepoPath);
@@ -109,12 +135,7 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "remove-task", taskIds: taskIdsToRemove },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
-            queryClient,
-            repoPath,
-            workspaceId: activeWorkspaceId,
-            taskIds: taskIdsToRemove,
-          });
+          const cleanupTargets = await prepareCleanupTargets(repoPath, taskIdsToRemove);
           await host.taskDelete(repoPath, taskId, deleteSubtasks);
           runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
         },
@@ -123,7 +144,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to delete task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation, tasks],
+    [prepareCleanupTargets, runTaskMutation, tasks],
   );
 
   const closeTask = useCallback(
@@ -131,12 +152,7 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
-            queryClient,
-            repoPath,
-            workspaceId: activeWorkspaceId,
-            taskIds: [taskId],
-          });
+          const cleanupTargets = await prepareCleanupTargets(repoPath, [taskId]);
           await host.taskClose(repoPath, taskId);
           runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
         },
@@ -145,7 +161,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to close task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [prepareCleanupTargets, runTaskMutation],
   );
 
   const transitionTask = useCallback(
@@ -153,15 +169,7 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets =
-            status === "closed"
-              ? await prepareTaskChatDraftCleanupTargets({
-                  queryClient,
-                  repoPath,
-                  workspaceId: activeWorkspaceId,
-                  taskIds: [taskId],
-                })
-              : emptyTaskChatDraftCleanupPlan();
+          const cleanupTargets = await prepareClosingCleanupTargets(repoPath, taskId, status);
           await host.taskTransition(repoPath, taskId, status, reason);
           runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
         },
@@ -169,7 +177,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to transition task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [prepareClosingCleanupTargets, runTaskMutation],
   );
 
   const humanApproveTask = useCallback(
@@ -177,12 +185,7 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
-            queryClient,
-            repoPath,
-            workspaceId: activeWorkspaceId,
-            taskIds: [taskId],
-          });
+          const cleanupTargets = await prepareCleanupTargets(repoPath, [taskId]);
           await host.humanApprove(repoPath, taskId);
           runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
         },
@@ -191,7 +194,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to approve task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [prepareCleanupTargets, runTaskMutation],
   );
 
   const humanRequestChangesTask = useCallback(

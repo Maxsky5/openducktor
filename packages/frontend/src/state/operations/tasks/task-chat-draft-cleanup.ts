@@ -15,6 +15,12 @@ export type TaskChatDraftCleanupPlan = {
 const toError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
+const reportTaskChatDraftCleanupFailure = (error: unknown): void => {
+  toast.error("Task updated, but chat draft cleanup failed", {
+    description: errorMessage(error),
+  });
+};
+
 export const prepareTaskChatDraftCleanupTargets = async ({
   queryClient,
   repoPath,
@@ -59,9 +65,7 @@ export const prepareTaskChatDraftCleanupTargets = async ({
 
 export const runTaskChatDraftCleanupAfterSuccess = (plan: TaskChatDraftCleanupPlan): boolean => {
   if (plan.error) {
-    toast.error("Task updated, but chat draft cleanup failed", {
-      description: errorMessage(plan.error),
-    });
+    reportTaskChatDraftCleanupFailure(plan.error);
     return false;
   }
 
@@ -74,9 +78,7 @@ export const runTaskChatDraftCleanupAfterSuccess = (plan: TaskChatDraftCleanupPl
     clearAgentChatDraftsForTargets(targets);
     return true;
   } catch (error) {
-    toast.error("Task updated, but chat draft cleanup failed", {
-      description: errorMessage(error),
-    });
+    reportTaskChatDraftCleanupFailure(error);
     return false;
   }
 };
