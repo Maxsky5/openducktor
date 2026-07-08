@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { AppearanceSettings } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act } from "react";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
+
+enableReactActEnvironment();
 
 const createAppearanceSettings = (
   overrides: Partial<AppearanceSettings> = {},
@@ -58,11 +62,26 @@ const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
   };
 };
 
-const changeHorizontalScrollbarVisibility = (
+const changeHorizontalScrollbarVisibility = async (
   value: AppearanceSettings["horizontalScrollbarVisibility"],
-): void => {
-  fireEvent.change(screen.getByLabelText("Horizontal Scrollbars"), {
-    target: { value },
+): Promise<void> => {
+  const labelByValue = {
+    system: "System default",
+    show: "Show",
+    hide: "Hide",
+  } satisfies Record<AppearanceSettings["horizontalScrollbarVisibility"], string>;
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Horizontal Scrollbars" }));
+  });
+
+  const matchingLabels = await screen.findAllByText(labelByValue[value]);
+  await act(async () => {
+    const optionLabel = matchingLabels.at(-1);
+    if (!optionLabel) {
+      throw new Error(`Expected ${labelByValue[value]} option to be rendered`);
+    }
+    fireEvent.click(optionLabel);
   });
 };
 
@@ -71,16 +90,24 @@ afterEach(() => {
 });
 
 describe("settings appearance section", () => {
-  test("renders horizontal scrollbar visibility choices", () => {
+  test("renders horizontal scrollbar visibility choices", async () => {
     renderAppearanceSection(createAppearanceSettings());
 
     expect(screen.getByText("Appearance")).toBeDefined();
     expect(screen.getByText("Horizontal Scrollbars")).toBeDefined();
-    expect(
-      within(screen.getByLabelText("Horizontal Scrollbars"))
-        .getAllByRole("option")
-        .map((option) => option.textContent),
-    ).toEqual(["System default", "Show", "Hide"]);
+    expect(screen.getByRole("button", { name: "Horizontal Scrollbars" }).textContent).toContain(
+      "System default",
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Horizontal Scrollbars" }));
+    });
+
+    await screen.findByText("Show");
+
+    expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Show")).toBeDefined();
+    expect(screen.getByText("Hide")).toBeDefined();
     expect(
       screen.getByText(
         "System default shows horizontal scrollbars on Windows and Linux, and hides them on macOS. Choose Show or Hide to override it on every platform.",
@@ -91,27 +118,29 @@ describe("settings appearance section", () => {
   test("selects the saved visibility mode", () => {
     renderAppearanceSection(createAppearanceSettings({ horizontalScrollbarVisibility: "show" }));
 
-    expect((screen.getByLabelText("Horizontal Scrollbars") as HTMLSelectElement).value).toBe(
-      "show",
+    expect(screen.getByRole("button", { name: "Horizontal Scrollbars" }).textContent).toContain(
+      "Show",
     );
   });
 
   test("disables the select while settings interactions are disabled", () => {
     renderAppearanceSection(createAppearanceSettings(), true);
 
-    expect(screen.getByLabelText("Horizontal Scrollbars").hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Horizontal Scrollbars" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
-  test("updates the horizontal scrollbar mode without dropping unrelated appearance settings", () => {
+  test("updates the horizontal scrollbar mode without dropping unrelated appearance settings", async () => {
     const appearance = createAppearanceSettings();
     const { getLatestAppearance, onUpdateAppearance, rerenderLatest } =
       renderAppearanceSectionWithUpdates(appearance);
 
-    changeHorizontalScrollbarVisibility("show");
+    await changeHorizontalScrollbarVisibility("show");
     rerenderLatest();
-    changeHorizontalScrollbarVisibility("hide");
+    await changeHorizontalScrollbarVisibility("hide");
     rerenderLatest();
-    changeHorizontalScrollbarVisibility("system");
+    await changeHorizontalScrollbarVisibility("system");
 
     expect(onUpdateAppearance).toHaveBeenCalledTimes(3);
     expect(getLatestAppearance()).toEqual({
@@ -119,12 +148,12 @@ describe("settings appearance section", () => {
     });
   });
 
-  test("does not update when clicking the already active option", () => {
+  test("does not update when clicking the already active option", async () => {
     const appearance = createAppearanceSettings();
     const { getLatestAppearance, onUpdateAppearance } =
       renderAppearanceSectionWithUpdates(appearance);
 
-    changeHorizontalScrollbarVisibility("system");
+    await changeHorizontalScrollbarVisibility("system");
 
     expect(onUpdateAppearance).not.toHaveBeenCalled();
     expect(getLatestAppearance()).toEqual(appearance);
