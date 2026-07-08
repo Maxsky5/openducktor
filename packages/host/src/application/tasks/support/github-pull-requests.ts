@@ -211,12 +211,12 @@ export const runGithubRepositoryCommand = (
 ) =>
   Effect.gen(function* () {
     const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    const result = yield* githubCommand.systemCommands.runCommandAllowFailure(
+    const result = yield* runGithubCliCommand(
+      githubCommand.systemCommands,
       githubCommand.ghCommand,
       [...args, "--repo", githubRepositorySelector(repository)],
       {
         cwd: repoPath,
-        env: GH_NON_INTERACTIVE_ENV,
       },
     );
     if (result.ok) {

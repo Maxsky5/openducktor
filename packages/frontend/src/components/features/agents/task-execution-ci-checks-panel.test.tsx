@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
+import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 
 const queryInput = {
   repoPath: "/repo",
@@ -54,10 +55,13 @@ const loadedContext = {
   refreshedAt: "2026-07-08T10:08:00Z",
 } satisfies PullRequestReviewContext;
 
-const renderLoadedPanel = (): string => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), loadedContext);
+const noPullRequestContext = {
+  status: "no_pull_request",
+  providerId: "github",
+  reason: "No pull request found for the current branch.",
+} satisfies PullRequestReviewContext;
 
+const renderPanel = (queryClient = createQueryClient()): string => {
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
@@ -72,7 +76,51 @@ const renderLoadedPanel = (): string => {
   );
 };
 
+const renderLoadedPanel = (): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), loadedContext);
+
+  return renderPanel(queryClient);
+};
+
 describe("TaskExecutionCiChecksPanel", () => {
+  test("renders a useful loading state while review data is pending", () => {
+    const html = renderPanel();
+
+    expect(html).toContain("Loading CI checks");
+    expect(html).toContain("Reading the current pull request");
+  });
+
+  test("renders an actionable unavailable state with the provider reason", () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
+
+    const html = renderPanel(queryClient);
+
+    expect(html).toContain("No pull request found");
+    expect(html).toContain("Create or link a pull request");
+    expect(html).toContain("No pull request found for the current branch.");
+    expect(html).toContain("Refresh");
+  });
+
+  test("renders error states with context, details, and retry affordance", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionCiPanelState, {
+        kind: "error",
+        title: "Could not load CI checks",
+        message: "OpenDucktor could not read pull request review data from GitHub.",
+        detail: "Failed to fetch",
+        actionLabel: "Retry",
+        onAction: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Could not load CI checks");
+    expect(html).toContain("OpenDucktor could not read pull request review data from GitHub.");
+    expect(html).toContain("Failed to fetch");
+    expect(html).toContain("Retry");
+  });
+
   test("renders provider-neutral PR, check, and review-thread metadata", () => {
     const html = renderLoadedPanel();
 

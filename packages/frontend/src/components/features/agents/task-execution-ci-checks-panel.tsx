@@ -1,9 +1,13 @@
+import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { errorMessage } from "@/lib/errors";
 import { pullRequestReviewContextQueryOptions } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
-import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
+import {
+  TaskExecutionCiPanelState,
+  type TaskExecutionCiPanelStateProps,
+} from "./task-execution-ci-panel-state";
 
 export type TaskExecutionCiChecksPanelModel = {
   isActive: boolean;
@@ -12,6 +16,38 @@ export type TaskExecutionCiChecksPanelModel = {
     taskId?: string;
     workingDirectory?: string;
   } | null;
+};
+
+type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
+
+const pullRequestStateProps = (
+  context: NonLoadedPullRequestReviewContext,
+): TaskExecutionCiPanelStateProps => {
+  if (context.status === "no_pull_request") {
+    return {
+      title: "No pull request found",
+      message:
+        "Create or link a pull request for this branch to see CI checks and review comments.",
+      kind: "empty",
+      detail: context.reason,
+    };
+  }
+
+  if (context.status === "error") {
+    return {
+      title: "Could not load CI checks",
+      message: "GitHub returned an error while reading pull request checks or review comments.",
+      kind: "error",
+      detail: context.reason,
+    };
+  }
+
+  return {
+    title: "GitHub checks unavailable",
+    message: "Check the repository GitHub integration, GitHub CLI, and authentication.",
+    kind: "unavailable",
+    detail: context.reason,
+  };
 };
 
 export function TaskExecutionCiChecksPanel({
@@ -26,23 +62,62 @@ export function TaskExecutionCiChecksPanel({
   });
 
   if (!queryInput) {
-    return <TaskExecutionCiPanelState message="No repository is selected." />;
+    return (
+      <TaskExecutionCiPanelState
+        title="No repository selected"
+        message="Open a task in a repository to load pull request checks and review comments."
+      />
+    );
   }
 
   if (reviewQuery.isLoading) {
-    return <TaskExecutionCiPanelState message="Loading CI checks..." />;
+    return (
+      <TaskExecutionCiPanelState
+        title="Loading CI checks"
+        message="Reading the current pull request, check runs, and review threads from GitHub."
+        kind="loading"
+      />
+    );
   }
 
   if (reviewQuery.isError) {
-    return <TaskExecutionCiPanelState message={errorMessage(reviewQuery.error)} />;
+    return (
+      <TaskExecutionCiPanelState
+        title="Could not load CI checks"
+        message="OpenDucktor could not read pull request review data from GitHub."
+        detail={errorMessage(reviewQuery.error)}
+        kind="error"
+        actionLabel="Retry"
+        onAction={() => {
+          void reviewQuery.refetch();
+        }}
+      />
+    );
   }
 
   if (!reviewQuery.data) {
-    return <TaskExecutionCiPanelState message="No CI check data loaded." />;
+    return (
+      <TaskExecutionCiPanelState
+        title="No CI data loaded"
+        message="OpenDucktor has not received a pull request review snapshot yet."
+        actionLabel="Retry"
+        onAction={() => {
+          void reviewQuery.refetch();
+        }}
+      />
+    );
   }
 
   if (reviewQuery.data.status !== "loaded") {
-    return <TaskExecutionCiPanelState message={reviewQuery.data.reason} />;
+    return (
+      <TaskExecutionCiPanelState
+        {...pullRequestStateProps(reviewQuery.data)}
+        actionLabel="Refresh"
+        onAction={() => {
+          void reviewQuery.refetch();
+        }}
+      />
+    );
   }
 
   return (
