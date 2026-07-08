@@ -92,7 +92,7 @@ function TaskExecutionPanelTabTrigger({
           <TabsTrigger
             value={tab.id}
             aria-label={tab.label}
-            className="size-9 flex-none cursor-pointer rounded-md border border-transparent bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground data-[state=active]:border-selected-accent/50 data-[state=active]:bg-selected-surface data-[state=active]:text-selected-accent data-[state=active]:shadow-none"
+            className="relative size-9 flex-none cursor-pointer rounded-md border border-transparent bg-transparent p-0 text-muted-foreground shadow-none after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-5 after:-translate-x-1/2 after:rounded-full after:bg-transparent hover:bg-muted hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-selected-accent data-[state=active]:shadow-none data-[state=active]:after:bg-selected-accent"
             data-testid={`task-execution-tab-${tab.id}`}
           >
             <Icon className="size-5" aria-hidden="true" />
@@ -130,10 +130,10 @@ function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): 
         }}
         className="h-full min-h-0 gap-0 bg-card"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-3 border-b border-border pr-2 py-1">
           <TabsList
             aria-label="Task execution sections"
-            className="h-9 w-fit shrink-0 gap-2 rounded-none bg-transparent p-0"
+            className="h-9 w-fit shrink-0 gap-0 rounded-none bg-transparent p-0"
           >
             {model.tabs.map((tab, index) => (
               <TaskExecutionPanelTabTrigger key={tab.id} tab={tab} showSeparator={index > 0} />
