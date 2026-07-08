@@ -1967,6 +1967,60 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("deleteTask does not block host deletion when chat draft cleanup target lookup fails", async () => {
+    let isDeleted = false;
+    const taskDelete = mock(async () => {
+      isDeleted = true;
+      return { ok: true };
+    });
+    const agentSessionsList = mock(async () => {
+      throw new Error("session lookup failed");
+    });
+    const tasksList = mock(async () => (isDeleted ? [] : [makeTask("A", "open")]));
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+
+    const original = {
+      taskDelete: host.taskDelete,
+      agentSessionsList: host.agentSessionsList,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+      toastError: toast.error,
+    };
+    host.taskDelete = taskDelete;
+    host.agentSessionsList = agentSessionsList;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+
+      await harness.run(async (value) => {
+        await value.deleteTask("A");
+      });
+
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(taskDelete).toHaveBeenCalledWith("/repo", "A", false);
+      expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+        description: "session lookup failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskDelete = original.taskDelete;
+      host.agentSessionsList = original.agentSessionsList;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+      toast.error = original.toastError;
+    }
+  });
+
   test("closeTask calls the host close route and refreshes the task", async () => {
     let isClosed = false;
     const taskClose = mock(async () => {

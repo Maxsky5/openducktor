@@ -10,6 +10,7 @@ import {
 import {
   flushAgentChatDraft,
   resetAgentChatDraftStoreForTests,
+  setAgentChatDraftAttachmentStagerForTests,
   setAgentChatDraftStorageForTests,
 } from "./agent-chat-draft-store";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
@@ -109,6 +110,17 @@ const sessionIdentity = (externalSessionId: string): AgentChatDraftSessionIdenti
   workspaceId: "workspace-repo",
   externalSessionId,
 });
+
+const createDeferred = <T,>() => {
+  let resolve: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+  };
+};
 
 const getEditorRoot = (container: HTMLElement): HTMLElement => {
   const editorRoot = container.querySelector('[contenteditable="true"]');
@@ -313,6 +325,71 @@ describe("AgentChatComposer attachments", () => {
 
     await waitFor(() => {
       expect(onSend).toHaveBeenCalledTimes(1);
+      expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+    });
+  });
+
+  test("clears a successfully sent attachment draft when staging resolves during send", async () => {
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    const stagedPath = createDeferred<string>();
+    const sendResult = createDeferred<boolean>();
+    const onSend = mock(() => sendResult.promise);
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftAttachmentStagerForTests(mock(() => stagedPath.promise));
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          onSend,
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: identity,
+          selectedModelDescriptor: {
+            id: "openai/gpt-5.3-codex",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5.3-codex",
+            modelName: "GPT-5.3 Codex",
+            variants: ["high"],
+            contextWindow: 400_000,
+            outputLimit: 128_000,
+            attachmentSupport: {
+              image: false,
+              audio: false,
+              video: false,
+              pdf: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    const attachmentInput = container.querySelector('input[type="file"]');
+    if (!(attachmentInput instanceof HTMLInputElement)) {
+      throw new Error("Expected hidden attachment input");
+    }
+    fireEvent.change(attachmentInput, {
+      target: { files: [file] },
+    });
+    typeIntoComposer(container, "send with attachment");
+    const flushPromise = flushAgentChatDraft(identity);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+    });
+
+    stagedPath.resolve("/tmp/staged/brief.pdf");
+    await flushPromise;
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toContain(
+      "/tmp/staged/brief.pdf",
+    );
+
+    sendResult.resolve(true);
+
+    await waitFor(() => {
       expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
     });
   });

@@ -57,6 +57,8 @@ export const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const encoder = new TextEncoder();
 const ATTACHMENT_KINDS = new Set<AgentAttachmentKind>(["image", "audio", "video", "pdf"]);
+const FILE_REFERENCE_KINDS = new Set(["directory", "css", "code", "image", "video", "default"]);
+const SLASH_COMMAND_SOURCES = new Set(["command", "mcp", "skill", "custom"]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -66,6 +68,12 @@ const isNonEmptyString = (value: unknown): value is string =>
 
 const optionalString = (value: unknown): value is string | undefined =>
   typeof value === "undefined" || typeof value === "string";
+
+const optionalNonEmptyString = (value: unknown): value is string | undefined =>
+  typeof value === "undefined" || isNonEmptyString(value);
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
 export const toAgentChatDraftStorageKey = ({
   workspaceId,
@@ -80,6 +88,61 @@ export const isAgentChatDraftStorageKey = (key: string): boolean =>
 
 export const measureAgentChatDraftPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
+
+const isValidSlashCommand = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.trigger) &&
+    isNonEmptyString(value.title) &&
+    optionalString(value.description) &&
+    (typeof value.source === "undefined" ||
+      (typeof value.source === "string" && SLASH_COMMAND_SOURCES.has(value.source))) &&
+    (typeof value.hints === "undefined" || isStringArray(value.hints))
+  );
+};
+
+const isValidFileReference = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.path) &&
+    isNonEmptyString(value.name) &&
+    typeof value.kind === "string" &&
+    FILE_REFERENCE_KINDS.has(value.kind)
+  );
+};
+
+const isValidSkillReference = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.name) &&
+    isNonEmptyString(value.path) &&
+    optionalNonEmptyString(value.title) &&
+    optionalNonEmptyString(value.displayName) &&
+    optionalString(value.description) &&
+    optionalString(value.color)
+  );
+};
+
+const isValidSubagentReference = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.name) &&
+    optionalNonEmptyString(value.label) &&
+    optionalString(value.description)
+  );
+};
 
 const toPersistedAttachment = (
   attachment: AgentChatComposerAttachment,
@@ -150,13 +213,13 @@ const isValidSegment = (segment: unknown): segment is AgentChatComposerSegment =
     case "text":
       return typeof segment.text === "string";
     case "slash_command":
-      return isRecord(segment.command);
+      return isValidSlashCommand(segment.command);
     case "file_reference":
-      return isRecord(segment.file);
+      return isValidFileReference(segment.file);
     case "skill_mention":
-      return isRecord(segment.skill);
+      return isValidSkillReference(segment.skill);
     case "subagent_reference":
-      return isRecord(segment.subagent);
+      return isValidSubagentReference(segment.subagent);
     default:
       return false;
   }

@@ -23,6 +23,7 @@ type DraftMemoryEntry = {
   taskId: string;
   draft: AgentChatComposerDraft;
   version: number;
+  userVersion: number;
   persistedVersion: number;
   maxTimeoutId: DraftTimerId | null;
   trailingTimeoutId: DraftTimerId | null;
@@ -46,6 +47,7 @@ let nowProvider = (): Date => new Date();
 let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
   console.error(error);
 };
+let didRunExpiredCleanup = false;
 
 const getDraftStorage = (): DraftStorage => {
   if (storageOverride) {
@@ -70,6 +72,7 @@ const createEntry = (
   taskId,
   draft,
   version: 0,
+  userVersion: 0,
   persistedVersion: 0,
   maxTimeoutId: null,
   trailingTimeoutId: null,
@@ -153,9 +156,9 @@ const findUnpersistableAttachment = (
 const stageAttachmentForEntry = async (
   entry: DraftMemoryEntry,
   attachment: AgentChatComposerAttachment,
-): Promise<void> => {
+): Promise<boolean> => {
   if (!attachment.file || entry.stagingAttachmentIds.has(attachment.id)) {
-    return;
+    return false;
   }
 
   entry.stagingAttachmentIds.add(attachment.id);
@@ -163,7 +166,7 @@ const stageAttachmentForEntry = async (
     const stagedPath = await attachmentStager(attachment.file);
     const currentEntry = readEntry(entry.identity);
     if (!currentEntry) {
-      return;
+      return false;
     }
 
     let didUpdateAttachment = false;
@@ -181,7 +184,7 @@ const stageAttachmentForEntry = async (
     });
 
     if (!didUpdateAttachment) {
-      return;
+      return false;
     }
 
     currentEntry.draft = {
@@ -189,36 +192,43 @@ const stageAttachmentForEntry = async (
       attachments: nextAttachments,
     };
     currentEntry.version += 1;
-    scheduleEntryFlush(currentEntry);
-  } catch (error) {
-    reportPersistenceError(
-      error instanceof Error
-        ? error
-        : new Error(`Failed to stage chat draft attachment "${attachment.name}".`),
-    );
+    return true;
   } finally {
     entry.stagingAttachmentIds.delete(attachment.id);
   }
 };
 
-const persistEntrySnapshot = async (entry: DraftMemoryEntry, version: number): Promise<void> => {
+const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
   const storage = getDraftStorage();
-  const unpersistableAttachment = findUnpersistableAttachment(entry.draft);
-  if (unpersistableAttachment) {
+  while (true) {
+    const unpersistableAttachment = findUnpersistableAttachment(entry.draft);
+    if (!unpersistableAttachment) {
+      break;
+    }
+
     removeAgentChatDraftFromStorage({ storage, identity: entry.identity });
-    entry.persistedVersion = version;
     if (!unpersistableAttachment.file) {
-      reportPersistenceError(
-        new Error(
-          `Attachment "${unpersistableAttachment.name}" cannot be persisted because it has no local file path.`,
-        ),
+      throw new Error(
+        `Attachment "${unpersistableAttachment.name}" cannot be persisted because it has no local file path.`,
       );
+    }
+
+    const didStage = await stageAttachmentForEntry(entry, unpersistableAttachment);
+    const currentEntry = readEntry(entry.identity);
+    if (!currentEntry) {
       return;
     }
-    await stageAttachmentForEntry(entry, unpersistableAttachment);
-    return;
+    if (
+      !didStage &&
+      findUnpersistableAttachment(currentEntry.draft)?.id === unpersistableAttachment.id
+    ) {
+      throw new Error(
+        `Attachment "${unpersistableAttachment.name}" could not be prepared for chat draft persistence.`,
+      );
+    }
   }
 
+  const version = entry.version;
   writeAgentChatDraftToStorage({
     storage,
     identity: entry.identity,
@@ -227,6 +237,22 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry, version: number): P
     updatedAt: nowProvider().toISOString(),
   });
   entry.persistedVersion = version;
+};
+
+const cleanupExpiredAgentChatDraftsOnce = (): void => {
+  if (didRunExpiredCleanup) {
+    return;
+  }
+  didRunExpiredCleanup = true;
+  try {
+    cleanupExpiredAgentChatDrafts();
+  } catch (error) {
+    reportPersistenceError(
+      error instanceof Error
+        ? error
+        : new Error("Failed to clean expired chat drafts from storage.", { cause: error }),
+    );
+  }
 };
 
 export const hydrateAgentChatDraft = (
@@ -238,6 +264,8 @@ export const hydrateAgentChatDraft = (
     existing.taskId = taskId;
     return existing.draft;
   }
+
+  cleanupExpiredAgentChatDraftsOnce();
 
   let draft = createEmptyComposerDraft();
   try {
@@ -265,12 +293,13 @@ export const setAgentChatDraft = (
 ): number => {
   const entry = upsertEntry(identity, taskId, draft);
   entry.version += 1;
+  entry.userVersion += 1;
   scheduleEntryFlush(entry);
-  return entry.version;
+  return entry.userVersion;
 };
 
 export const readAgentChatDraftVersion = (identity: AgentChatDraftSessionIdentity): number | null =>
-  readEntry(identity)?.version ?? null;
+  readEntry(identity)?.userVersion ?? null;
 
 export const clearAgentChatDraft = (
   identity: AgentChatDraftSessionIdentity,
@@ -284,7 +313,7 @@ export const clearAgentChatDraft = (
   if (
     typeof options?.onlyIfVersion === "number" &&
     entry &&
-    entry.version !== options.onlyIfVersion
+    entry.userVersion !== options.onlyIfVersion
   ) {
     return false;
   }
@@ -320,17 +349,25 @@ export const flushAgentChatDraft = (identity: AgentChatDraftSessionIdentity): Pr
   clearEntryTimers(entry);
   entry.isFlushing = true;
   entry.flushRequestedAfterCurrent = false;
-  const version = entry.version;
-  const flushPromise = persistEntrySnapshot(entry, version)
+  const userVersion = entry.userVersion;
+  let didFail = false;
+  const flushPromise = persistEntrySnapshot(entry)
     .catch((error) => {
-      entry.persistedVersion = version;
+      didFail = true;
       reportPersistenceError(error);
     })
     .finally(() => {
       entry.isFlushing = false;
       entry.flushPromise = null;
-      if (entry.version !== entry.persistedVersion || entry.flushRequestedAfterCurrent) {
-        entry.flushRequestedAfterCurrent = false;
+      const hasNewUserChanges = entry.userVersion !== userVersion;
+      entry.flushRequestedAfterCurrent = false;
+      if (didFail) {
+        if (hasNewUserChanges) {
+          scheduleEntryFlush(entry);
+        }
+        return;
+      }
+      if (entry.version !== entry.persistedVersion) {
         scheduleEntryFlush(entry);
       }
     });
@@ -402,6 +439,7 @@ export const resetAgentChatDraftStoreForTests = (): void => {
   storageOverride = null;
   attachmentStager = stageLocalAttachmentFile;
   nowProvider = () => new Date();
+  didRunExpiredCleanup = false;
   persistenceErrorReporter = (error) => {
     console.error(error);
   };

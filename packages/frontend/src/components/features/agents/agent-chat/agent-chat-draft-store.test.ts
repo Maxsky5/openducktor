@@ -124,10 +124,11 @@ describe("agent chat draft store", () => {
     setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:01.000Z"));
 
     const firstHydration = hydrateAgentChatDraft(identity, "task-1");
+    const getItemCallsAfterFirstHydration = getItem.mock.calls.length;
     const secondHydration = hydrateAgentChatDraft(identity, "task-1");
 
     expect(firstHydration.segments).toEqual(secondHydration.segments);
-    expect(getItem).toHaveBeenCalledTimes(1);
+    expect(getItem.mock.calls.length).toBe(getItemCallsAfterFirstHydration);
   });
 
   test("coalesces dirty writes instead of writing on every draft change", async () => {
@@ -198,12 +199,37 @@ describe("agent chat draft store", () => {
     });
 
     await flushAgentChatDraft(identity);
-    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
-
-    await flushAgentChatDraft(identity);
     const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
     expect(raw).toContain("/tmp/staged/brief.pdf");
     expect(raw).not.toContain("base64");
+  });
+
+  test("runs expired draft cleanup during first hydration only", () => {
+    const storage = createMemoryStorage();
+    const expiredIdentity = { workspaceId: "workspace", externalSessionId: "expired" };
+    const freshIdentity = { workspaceId: "workspace", externalSessionId: "fresh" };
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
+    writeAgentChatDraftToStorage({
+      storage,
+      identity: expiredIdentity,
+      taskId: "task-1",
+      draft: buildDraft("expired"),
+      updatedAt: "2026-07-01T09:59:59.000Z",
+    });
+    writeAgentChatDraftToStorage({
+      storage,
+      identity: freshIdentity,
+      taskId: "task-2",
+      draft: buildDraft("fresh"),
+      updatedAt: "2026-07-08T09:00:00.000Z",
+    });
+
+    hydrateAgentChatDraft(freshIdentity, "task-2");
+    hydrateAgentChatDraft(freshIdentity, "task-2");
+
+    expect(storage.getItem(toAgentChatDraftStorageKey(expiredIdentity))).toBeNull();
+    expect(storage.getItem(toAgentChatDraftStorageKey(freshIdentity))).not.toBeNull();
   });
 
   test("removes stale storage and reports staging failures without dropping memory", async () => {
@@ -247,6 +273,28 @@ describe("agent chat draft store", () => {
     expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
     expect(errors[0]?.message).toBe("stage failed");
     expect(hydrateAgentChatDraft(identity, "task-1").attachments?.[0]?.file).toBe(file);
+  });
+
+  test("does not mark failed storage writes as persisted", async () => {
+    const errors: Error[] = [];
+    const setItem = mock((_key: string, _value: string) => {
+      throw new Error("quota exceeded");
+    });
+    const storage = createMemoryStorage({ setItem });
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftPersistenceErrorReporter((error) => {
+      errors.push(error);
+    });
+
+    setAgentChatDraft(identity, "task-1", buildDraft("retry me"));
+    await flushAgentChatDraft(identity);
+    await flushAgentChatDraft(identity);
+
+    expect(setItem).toHaveBeenCalledTimes(2);
+    expect(errors.map((error) => error.message)).toEqual([
+      expect.stringContaining("Failed to persist chat draft storage key"),
+      expect.stringContaining("Failed to persist chat draft storage key"),
+    ]);
   });
 
   test("clears storage only when the submitted draft version is still current", () => {

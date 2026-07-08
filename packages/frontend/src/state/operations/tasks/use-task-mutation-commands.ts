@@ -11,6 +11,7 @@ import { host } from "../shared/host";
 import {
   prepareTaskChatDraftCleanupTargets,
   runTaskChatDraftCleanupAfterSuccess,
+  type TaskChatDraftCleanupPlan,
 } from "./task-chat-draft-cleanup";
 import { collectTaskDeletionIds } from "./task-deletion-ids";
 import type { TaskMutationRunner } from "./task-mutation-runner";
@@ -26,6 +27,11 @@ type UseTaskMutationCommandsArgs = {
   tasks: TaskCard[];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
 };
+
+const emptyTaskChatDraftCleanupPlan = (): TaskChatDraftCleanupPlan => ({
+  targets: [],
+  error: null,
+});
 
 export type TaskMutationCommands = {
   createTask: (input: TaskCreateInput) => Promise<void>;
@@ -155,7 +161,7 @@ export function useTaskMutationCommands({
                   workspaceId: activeWorkspaceId,
                   taskIds: [taskId],
                 })
-              : [];
+              : emptyTaskChatDraftCleanupPlan();
           await host.taskTransition(repoPath, taskId, status, reason);
           runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
         },

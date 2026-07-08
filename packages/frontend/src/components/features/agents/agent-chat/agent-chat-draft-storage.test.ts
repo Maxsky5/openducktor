@@ -154,6 +154,37 @@ describe("agent chat draft storage", () => {
     expect(storage.getItem("unrelated")).toBe("kept");
   });
 
+  test("removes payloads with malformed nested reference segments", () => {
+    const storage = createMemoryStorage();
+    const key = toAgentChatDraftStorageKey(identity);
+    storage.setItem(
+      key,
+      JSON.stringify({
+        version: 1,
+        workspaceId: identity.workspaceId,
+        externalSessionId: identity.externalSessionId,
+        taskId: "task-1",
+        updatedAt: "2026-07-01T10:00:00.000Z",
+        draft: {
+          segments: [
+            { id: "text-1", kind: "text", text: "Use " },
+            { id: "skill-1", kind: "skill_mention", skill: {} },
+          ],
+          attachments: [],
+        },
+      }),
+    );
+
+    const result = readAgentChatDraftFromStorage({
+      storage,
+      identity,
+      now: new Date("2026-07-02T10:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("invalid");
+    expect(storage.getItem(key)).toBeNull();
+  });
+
   test("removes drafts older than seven days during restore", () => {
     const storage = createMemoryStorage();
     const key = toAgentChatDraftStorageKey(identity);
