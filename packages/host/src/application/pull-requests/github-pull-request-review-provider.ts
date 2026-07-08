@@ -15,7 +15,10 @@ import type {
   GithubCommandDependencies,
   GithubPullRequestContext,
 } from "../tasks/support/github-pull-requests";
-import { runGithubCommand } from "../tasks/support/github-pull-requests";
+import {
+  runGithubCommand,
+  runGithubRepositoryCommand,
+} from "../tasks/support/github-pull-requests";
 import { parseReviewThreads, REVIEW_THREADS_QUERY } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
@@ -308,10 +311,10 @@ const parsePullView = (
 export const createGithubPullRequestReviewProvider = (): GithubPullRequestReviewProvider => ({
   read(input) {
     return Effect.gen(function* () {
-      const pullViewPayload = yield* runGithubCommand(
+      const pullViewPayload = yield* runGithubRepositoryCommand(
         input.dependencies,
         input.repoPath,
-        input.context.repository.host,
+        input.context.repository,
         [
           "pr",
           "view",
@@ -330,10 +333,10 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             }),
         ),
       );
-      const checksPayload = yield* runGithubCommand(
+      const checksPayload = yield* runGithubRepositoryCommand(
         input.dependencies,
         input.repoPath,
-        input.context.repository.host,
+        input.context.repository,
         [
           "pr",
           "checks",

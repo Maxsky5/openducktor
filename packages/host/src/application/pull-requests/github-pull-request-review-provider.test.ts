@@ -5,9 +5,10 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
 import { createGithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
-const createDependencies = (): GithubCommandDependencies => {
+const createDependencies = (commands: string[][] = []): GithubCommandDependencies => {
   const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
     runCommandAllowFailure: (_command, args) => {
+      commands.push(args);
       const command = args.join(" ");
       if (command.includes("pr view")) {
         return Effect.succeed({
@@ -186,5 +187,45 @@ describe("createGithubPullRequestReviewProvider", () => {
       ["thread-comment-1", "thread-1", true, "packages/frontend/src/panel.tsx", 12],
       ["thread-comment-2", "thread-2", false, "packages/host/src/provider.ts", 33],
     ]);
+  });
+
+  test("scopes pull request gh commands with --repo instead of --hostname", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+    const commands: string[][] = [];
+
+    await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies(commands),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    const pullRequestCommands = commands.filter((args) => args[0] === "pr");
+    expect(pullRequestCommands).toEqual([
+      [
+        "pr",
+        "view",
+        "42",
+        "--json",
+        "number,title,url,state,isDraft,comments,reviews,latestReviews",
+        "--repo",
+        "openai/openducktor",
+      ],
+      [
+        "pr",
+        "checks",
+        "42",
+        "--json",
+        "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
+        "--repo",
+        "openai/openducktor",
+      ],
+    ]);
+    expect(pullRequestCommands.flat()).not.toContain("--hostname");
   });
 });

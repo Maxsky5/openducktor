@@ -198,6 +198,38 @@ export const runGithubCommand = (
       }),
     );
   });
+const githubRepositorySelector = (repository: GitProviderRepository): string => {
+  const host = repository.host.trim();
+  const prefix = host.toLowerCase() === "github.com" ? "" : `${host}/`;
+  return `${prefix}${repository.owner.trim()}/${repository.name.trim()}`;
+};
+export const runGithubRepositoryCommand = (
+  dependencies: GithubCommandDependencies,
+  repoPath: string,
+  repository: GitProviderRepository,
+  args: string[],
+) =>
+  Effect.gen(function* () {
+    const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
+    const result = yield* githubCommand.systemCommands.runCommandAllowFailure(
+      githubCommand.ghCommand,
+      [...args, "--repo", githubRepositorySelector(repository)],
+      {
+        cwd: repoPath,
+        env: GH_NON_INTERACTIVE_ENV,
+      },
+    );
+    if (result.ok) {
+      return result.stdout;
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        field: "gh",
+        message: combinedCommandOutput(result.stdout, result.stderr) || "gh command failed.",
+        details: { repoPath, repository: repositoryKey(repository) },
+      }),
+    );
+  });
 const matchingGithubRemoteNames = (
   gitPort: GitPort,
   repoPath: string,
