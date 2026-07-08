@@ -101,25 +101,29 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     }),
     [theme],
   );
+  const codeViewFileId =
+    visibleSnapshot?.result.kind === "text"
+      ? `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`
+      : null;
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
-    if (visibleSnapshot?.result.kind !== "text") {
+    if (visibleSnapshot?.result.kind !== "text" || !codeViewFileId) {
       return [];
     }
 
     const file: FileContents = {
       name: visibleSnapshot.selectedFile.relativePath,
       contents: visibleSnapshot.result.contents,
-      cacheKey: `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}:${visibleSnapshot.result.size}:${contentHash(visibleSnapshot.result.contents)}`,
+      cacheKey: `${codeViewFileId}:${visibleSnapshot.result.size}:${contentHash(visibleSnapshot.result.contents)}`,
     };
 
     return [
       {
-        id: `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`,
+        id: codeViewFileId,
         type: "file",
         file,
       },
     ];
-  }, [visibleSnapshot]);
+  }, [codeViewFileId, visibleSnapshot]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -149,11 +153,15 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = <FilePreviewState message={errorMessage(fileQuery.error)} />;
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
-  } else if (codeViewItems.length > 0) {
+  } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
-      <div className="h-full min-h-0 overflow-auto" style={CODE_VIEW_WRAPPER_STYLE}>
-        <CodeView items={codeViewItems} options={codeViewOptions} />
-      </div>
+      <CodeView
+        key={codeViewFileId}
+        className="h-full min-h-0 overflow-auto"
+        style={CODE_VIEW_WRAPPER_STYLE}
+        items={codeViewItems}
+        options={codeViewOptions}
+      />
     );
   } else {
     body = <FilePreviewState message="No file selected." />;
