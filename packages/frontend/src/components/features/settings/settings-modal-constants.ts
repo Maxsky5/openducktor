@@ -36,12 +36,12 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   icon: LucideIcon;
 }> = [
   { id: "general", label: "General", icon: SlidersHorizontal },
+  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "git", label: "Git", icon: FolderGit2 },
   { id: "runtimes", label: "Agent Runtimes", icon: Cpu },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "System Prompts", icon: MessageSquareText },
   { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
-  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },

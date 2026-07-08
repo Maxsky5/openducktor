@@ -37,6 +37,32 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Autopilot");
   });
 
+  test("renders Appearance directly after General", () => {
+    const errorCountById = {
+      general: 0,
+      git: 0,
+      repositories: 0,
+      prompts: 0,
+      "reusable-prompts": 0,
+      appearance: 0,
+      chat: 0,
+      kanban: 0,
+      autopilot: 0,
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsSidebar, {
+        section: "general",
+        disabled: false,
+        errorCountById,
+        onChange: () => {},
+      }),
+    );
+
+    expect(html.indexOf("General")).toBeLessThan(html.indexOf("Appearance"));
+    expect(html.indexOf("Appearance")).toBeLessThan(html.indexOf("Git"));
+  });
+
   test("renders chat section as active when selected", () => {
     const errorCountById = {
       general: 0,

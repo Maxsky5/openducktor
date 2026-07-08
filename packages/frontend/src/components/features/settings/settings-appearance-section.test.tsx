@@ -51,12 +51,12 @@ const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
   };
 };
 
-const clickHorizontalScrollbarOption = (label: string): void => {
-  fireEvent.click(
-    within(screen.getByRole("group", { name: "Horizontal Scrollbars" })).getByRole("button", {
-      name: label,
-    }),
-  );
+const changeHorizontalScrollbarVisibility = (
+  value: AppearanceSettings["horizontalScrollbarVisibility"],
+): void => {
+  fireEvent.change(screen.getByLabelText("Horizontal Scrollbars"), {
+    target: { value },
+  });
 };
 
 afterEach(() => {
@@ -70,30 +70,29 @@ describe("settings appearance section", () => {
     expect(screen.getByText("Appearance")).toBeDefined();
     expect(screen.getByText("Horizontal Scrollbars")).toBeDefined();
     expect(
-      within(screen.getByRole("group", { name: "Horizontal Scrollbars" }))
-        .getAllByRole("button")
-        .map((button) => button.textContent),
+      within(screen.getByLabelText("Horizontal Scrollbars"))
+        .getAllByRole("option")
+        .map((option) => option.textContent),
     ).toEqual(["System default", "Show", "Hide"]);
+    expect(
+      screen.getByText(
+        "System default shows horizontal scrollbars on Windows and Linux, and hides them on macOS. Choose Show or Hide to override it on every platform.",
+      ),
+    ).toBeDefined();
   });
 
-  test("marks the saved visibility mode as active", () => {
+  test("selects the saved visibility mode", () => {
     renderAppearanceSection(createAppearanceSettings({ horizontalScrollbarVisibility: "show" }));
 
-    expect(
-      within(screen.getByRole("group", { name: "Horizontal Scrollbars" }))
-        .getByRole("button", { name: "Show" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect((screen.getByLabelText("Horizontal Scrollbars") as HTMLSelectElement).value).toBe(
+      "show",
+    );
   });
 
-  test("disables every option while settings interactions are disabled", () => {
+  test("disables the select while settings interactions are disabled", () => {
     renderAppearanceSection(createAppearanceSettings(), true);
 
-    const options = within(
-      screen.getByRole("group", { name: "Horizontal Scrollbars" }),
-    ).getAllByRole("button");
-    expect(options).toHaveLength(3);
-    expect(options.every((button) => button.hasAttribute("disabled"))).toBe(true);
+    expect(screen.getByLabelText("Horizontal Scrollbars").hasAttribute("disabled")).toBe(true);
   });
 
   test("updates the horizontal scrollbar mode without dropping unrelated appearance settings", () => {
@@ -101,11 +100,11 @@ describe("settings appearance section", () => {
     const { getLatestAppearance, onUpdateAppearance, rerenderLatest } =
       renderAppearanceSectionWithUpdates(appearance);
 
-    clickHorizontalScrollbarOption("Show");
+    changeHorizontalScrollbarVisibility("show");
     rerenderLatest();
-    clickHorizontalScrollbarOption("Hide");
+    changeHorizontalScrollbarVisibility("hide");
     rerenderLatest();
-    clickHorizontalScrollbarOption("System default");
+    changeHorizontalScrollbarVisibility("system");
 
     expect(onUpdateAppearance).toHaveBeenCalledTimes(3);
     expect(getLatestAppearance()).toEqual({
@@ -118,7 +117,7 @@ describe("settings appearance section", () => {
     const { getLatestAppearance, onUpdateAppearance } =
       renderAppearanceSectionWithUpdates(appearance);
 
-    clickHorizontalScrollbarOption("System default");
+    changeHorizontalScrollbarVisibility("system");
 
     expect(onUpdateAppearance).not.toHaveBeenCalled();
     expect(getLatestAppearance()).toEqual(appearance);
