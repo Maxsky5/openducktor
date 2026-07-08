@@ -100,8 +100,8 @@ function TaskExecutionPanelTabTrigger({
           >
             <span
               className={cn(
-                "inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground/70 group-hover:bg-muted group-hover:text-foreground/80",
-                isActive ? "text-primary group-hover:text-primary" : "",
+                "inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground/60 group-hover:bg-muted group-hover:text-foreground/80",
+                isActive ? "text-foreground group-hover:text-foreground" : "",
               )}
               data-testid={isActive ? "task-execution-tab-active-icon" : undefined}
             >

@@ -27,6 +27,9 @@ let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 let secondFileReadMode: "pending" | "resolve" = "pending";
 
+const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diffs-dark-bg))";
+const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
+
 const actualDiffsReact = await import("@pierre/diffs/react");
 const actualHost = await import("@/state/operations/host");
 
@@ -149,11 +152,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(codeViewProps?.className).toContain("[&>div]:min-h-full");
     expect(codeViewProps?.className).toContain("[&>div>div:last-child]:min-h-full");
     expect(codeViewProps?.style?.["--diffs-font-size" as keyof CSSProperties]).toBe("12px");
-    expect(codeViewProps?.style?.backgroundColor).toBeUndefined();
+    expect(codeViewProps?.style?.backgroundColor).toBe(CODE_VIEW_BACKGROUND_COLOR);
     expect(codeViewProps?.style?.colorScheme).toBe("light");
   });
 
-  test("uses the active theme color scheme without a copied background color", async () => {
+  test("paints the CodeView scroll root from PierreDiffs background variables", async () => {
     const onClose = mock(() => {});
 
     render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
@@ -161,7 +164,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     const codeViewProps = codeViewPropsHistory.at(-1);
     expect(codeViewProps?.style?.colorScheme).toBe("dark");
-    expect(codeViewProps?.style?.backgroundColor).toBeUndefined();
+    expect(codeViewProps?.style?.["--diffs-light-bg" as keyof CSSProperties]).toBe("#ffffff");
+    expect(codeViewProps?.style?.["--diffs-dark-bg" as keyof CSSProperties]).toBe("#0a0a0a");
+    expect(codeViewProps?.style?.["--diffs-bg" as keyof CSSProperties]).toBe(
+      CODE_VIEW_DIFFS_BACKGROUND,
+    );
+    expect(codeViewProps?.style?.backgroundColor).toBe(CODE_VIEW_BACKGROUND_COLOR);
     expect(codeViewProps?.options?.unsafeCSS).toContain("background-color: var(--diffs-bg)");
   });
 
