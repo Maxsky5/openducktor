@@ -103,24 +103,38 @@ const createRuntimeHealthPort = (
 const createSystemCommandPort = ({
   missingCommands = [],
   ghAuthResult = { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" },
+  calls = [],
+  versionCalls = [],
   versionForCommand,
 }: {
   missingCommands?: string[];
   ghAuthResult?: SystemCommandRunResult;
+  calls?: Array<{
+    command: string;
+    args: string[];
+    options: Parameters<SystemCommandPort["runCommandAllowFailure"]>[2];
+  }>;
+  versionCalls?: Array<{
+    command: string;
+    args: string[];
+    options: Parameters<SystemCommandPort["versionCommand"]>[2];
+  }>;
   versionForCommand?: (command: string) => string | null | undefined;
 } = {}): SystemCommandPort => {
   const missing = new Set(missingCommands);
   const port: SystemCommandPort = {
     resolveCommandPath: (command) => Effect.succeed(missing.has(command) ? null : command),
-    versionCommand: (command, _args, _options) => {
+    versionCommand: (command, args, options) => {
+      versionCalls.push({ command, args, options });
       const version = versionForCommand?.(command);
       return Effect.succeed(
         missing.has(command) ? null : version === undefined ? `${command} version 1.0.0` : version,
       );
     },
-    runCommandAllowFailure: (command) =>
+    runCommandAllowFailure: (command, args, options) =>
       Effect.tryPromise({
         try: async () => {
+          calls.push({ command, args, options });
           if (command === "gh") {
             return ghAuthResult;
           }
@@ -189,6 +203,16 @@ const createSystemDiagnosticsServiceForTest = (
   });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
+    const commandCalls: Array<{
+      command: string;
+      args: string[];
+      options: Parameters<SystemCommandPort["runCommandAllowFailure"]>[2];
+    }> = [];
+    const versionCommandCalls: Array<{
+      command: string;
+      args: string[];
+      options: Parameters<SystemCommandPort["versionCommand"]>[2];
+    }> = [];
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(),
       runtimeHealth: createRuntimeHealthPort({
@@ -201,7 +225,10 @@ describe("createSystemDiagnosticsService", () => {
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
         },
       }),
-      systemCommands: createSystemCommandPort(),
+      systemCommands: createSystemCommandPort({
+        calls: commandCalls,
+        versionCalls: versionCommandCalls,
+      }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.runtimeCheck(true));
@@ -219,6 +246,22 @@ describe("createSystemDiagnosticsService", () => {
       }),
     ]);
     expect(check.errors).toEqual([]);
+    expect(commandCalls.find((call) => call.command === "gh")?.options?.env).toMatchObject({
+      GH_PROMPT_DISABLED: "1",
+      NO_COLOR: "1",
+      CLICOLOR: "0",
+      CLICOLOR_FORCE: "0",
+      FORCE_COLOR: "0",
+    });
+    const ghVersionCall = versionCommandCalls.find((call) => call.command === "gh");
+    expect(ghVersionCall?.args).toEqual(["--version"]);
+    expect(ghVersionCall?.options?.env).toMatchObject({
+      GH_PROMPT_DISABLED: "1",
+      NO_COLOR: "1",
+      CLICOLOR: "0",
+      CLICOLOR_FORCE: "0",
+      FORCE_COLOR: "0",
+    });
   });
   test("runtimeCheck caches fresh results unless force refresh is requested", async () => {
     let version = "1.0.0";

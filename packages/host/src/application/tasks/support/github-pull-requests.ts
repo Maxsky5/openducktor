@@ -10,10 +10,10 @@ import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../../ports/system-command-port";
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
+import { runGithubCliCommand } from "../../git/github-cli";
 import { parseGithubRemoteUrl } from "../../git/github-repository-detection-service";
 import {
   combinedCommandOutput,
-  GH_NON_INTERACTIVE_ENV,
   GITHUB_PROVIDER_ID,
   type GithubPullRequestContext,
   type GithubPullRequestSyncPolicy,
@@ -123,11 +123,12 @@ export const githubProviderStatus = (
       };
     }
     const authStatusResult = yield* Effect.either(
-      dependencies.systemCommands.runCommandAllowFailure(
-        ghCommand,
-        ["auth", "status", "--hostname", repository.host],
-        { env: GH_NON_INTERACTIVE_ENV },
-      ),
+      runGithubCliCommand(dependencies.systemCommands, ghCommand, [
+        "auth",
+        "status",
+        "--hostname",
+        repository.host,
+      ]),
     );
     if (authStatusResult._tag === "Left") {
       return {
@@ -178,12 +179,12 @@ const runGithubCommand = (
   Effect.gen(function* () {
     const hostArgs = host.trim() ? ["--hostname", host.trim(), ...args] : args;
     const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    const result = yield* githubCommand.systemCommands.runCommandAllowFailure(
+    const result = yield* runGithubCliCommand(
+      githubCommand.systemCommands,
       githubCommand.ghCommand,
       hostArgs,
       {
         cwd: repoPath,
-        env: GH_NON_INTERACTIVE_ENV,
       },
     );
     if (result.ok) {
@@ -241,13 +242,12 @@ const probeResolvedGithubAuthOrThrow = (
   host: string,
 ) =>
   Effect.gen(function* () {
-    const result = yield* dependencies.systemCommands.runCommandAllowFailure(
-      dependencies.ghCommand,
-      ["auth", "status", "--hostname", host],
-      {
-        env: GH_NON_INTERACTIVE_ENV,
-      },
-    );
+    const result = yield* runGithubCliCommand(dependencies.systemCommands, dependencies.ghCommand, [
+      "auth",
+      "status",
+      "--hostname",
+      host,
+    ]);
     if (result.ok) {
       return;
     }
