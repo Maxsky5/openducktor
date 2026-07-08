@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { memo, type ReactElement, useCallback, useEffect, useState } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
@@ -64,6 +64,11 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
   );
+  const diagnosticsAutoOpenedByRepoRef = useRef<Set<string> | null>(null);
+  if (diagnosticsAutoOpenedByRepoRef.current === null) {
+    diagnosticsAutoOpenedByRepoRef.current = new Set();
+  }
+  const diagnosticsAutoOpenedByRepo = diagnosticsAutoOpenedByRepoRef.current;
   const hasActiveWorkspace = activeWorkspace !== null;
   const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
   const agentActivity = useShellAgentActivity(activeWorkspace?.repoPath ?? null);
@@ -146,7 +151,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
 
                   <BranchSwitcher />
 
-                  <DiagnosticsPanel />
+                  <DiagnosticsPanel autoOpenedByRepo={diagnosticsAutoOpenedByRepo} />
 
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} />
                   <AgentActivityCard
@@ -180,6 +185,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                 </Button>
                 <div className="flex w-full justify-center border-t border-sidebar-border pt-2">
                   <DiagnosticsPanel
+                    autoOpenedByRepo={diagnosticsAutoOpenedByRepo}
                     triggerClassName="text-sidebar-muted-foreground hover:text-sidebar-foreground"
                     triggerVariant="icon"
                   />

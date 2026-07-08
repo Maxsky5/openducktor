@@ -1,5 +1,5 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -18,11 +18,13 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
 type DiagnosticsPanelProps = {
+  autoOpenedByRepo?: Set<string>;
   triggerClassName?: string;
   triggerVariant?: "summary" | "icon";
 };
 
 export function DiagnosticsPanel({
+  autoOpenedByRepo: sharedAutoOpenedByRepo,
   triggerClassName,
   triggerVariant = "summary",
 }: DiagnosticsPanelProps): ReactElement {
@@ -43,11 +45,11 @@ export function DiagnosticsPanel({
   } = useChecksState();
   const { runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
   const [isOpen, setOpen] = useState(false);
-  const autoOpenedByRepoRef = useRef<Set<string> | null>(null);
-  if (autoOpenedByRepoRef.current === null) {
-    autoOpenedByRepoRef.current = new Set();
+  const localAutoOpenedByRepoRef = useRef<Set<string> | null>(null);
+  if (localAutoOpenedByRepoRef.current === null) {
+    localAutoOpenedByRepoRef.current = new Set();
   }
-  const autoOpenedByRepo = autoOpenedByRepoRef.current;
+  const autoOpenedByRepo = sharedAutoOpenedByRepo ?? localAutoOpenedByRepoRef.current;
 
   const model = useMemo(
     () =>
@@ -79,16 +81,17 @@ export function DiagnosticsPanel({
     ],
   );
 
-  useEffect(() => {
-    if (!workspaceRepoPath || model.criticalReasons.length === 0) {
-      return;
-    }
-    if (autoOpenedByRepo.has(workspaceRepoPath)) {
-      return;
-    }
+  const shouldAutoOpen =
+    workspaceRepoPath !== null &&
+    model.criticalReasons.length > 0 &&
+    !autoOpenedByRepo.has(workspaceRepoPath);
+
+  if (shouldAutoOpen) {
     autoOpenedByRepo.add(workspaceRepoPath);
-    setOpen(true);
-  }, [autoOpenedByRepo, workspaceRepoPath, model.criticalReasons.length]);
+    if (!isOpen) {
+      setOpen(true);
+    }
+  }
 
   const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
 
@@ -103,7 +106,11 @@ export function DiagnosticsPanel({
         aria-label={iconTriggerLabel}
         title={iconTriggerLabel}
       >
-        <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+        {model.isSummaryChecking ? (
+          <RefreshCcw className={cn("size-4 animate-spin", model.summaryState.iconClass)} />
+        ) : (
+          <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+        )}
       </Button>
     ) : (
       <div className={cn("space-y-1.5", triggerClassName)}>

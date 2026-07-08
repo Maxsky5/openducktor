@@ -135,6 +135,7 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
 });
 
 type RenderAppShellForTestOptions = {
+  isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
 };
 
@@ -195,7 +196,7 @@ const renderAppShellForTest = (
                       runtimeDefinitions: [],
                       availableRuntimeDefinitions: [],
                       agentRuntimes: settingsSnapshot.agentRuntimes,
-                      isLoadingRuntimeDefinitions: false,
+                      isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
                       runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
                       refreshRuntimeDefinitions: async () => [],
                       loadRepoRuntimeCatalog: async () => {
@@ -288,6 +289,7 @@ describe("AppShell", () => {
 
     renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
 
+    // Critical diagnostics auto-open the modal sheet, so Radix hides background controls.
     const diagnosticsButton = screen.getByRole("button", {
       hidden: true,
       name: "Open diagnostics: Critical issue",
@@ -300,6 +302,18 @@ describe("AppShell", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
   });
 
+  test("shows checking state in the collapsed diagnostics trigger", () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+
+    renderAppShellForTest({ isLoadingRuntimeDefinitions: true });
+
+    const diagnosticsButton = screen.getByRole("button", {
+      name: "Open diagnostics: Checking...",
+    });
+    const diagnosticsIcon = diagnosticsButton.querySelector("svg");
+    expect(diagnosticsIcon?.getAttribute("class")).toContain("animate-spin");
+  });
+
   test("opens diagnostics from the collapsed sidebar trigger", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
 
@@ -308,6 +322,26 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics: / }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
+  });
+
+  test("does not auto-open diagnostics again after dismissing and toggling the sidebar", async () => {
+    renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull();
   });
 
   test("stores collapsed and restores the collapsed sidebar after remount", () => {
