@@ -16,6 +16,7 @@ import type {
   GithubPullRequestContext,
 } from "../tasks/support/github-pull-requests";
 import { runGithubCommand } from "../tasks/support/github-pull-requests";
+import { parseReviewThreads, REVIEW_THREADS_QUERY } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
   bucket?: unknown;
@@ -351,6 +352,33 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             }),
         ),
       );
+      const reviewThreadsPayload = yield* runGithubCommand(
+        input.dependencies,
+        input.repoPath,
+        input.context.repository.host,
+        [
+          "api",
+          "graphql",
+          "-f",
+          `query=${REVIEW_THREADS_QUERY}`,
+          "-F",
+          `owner=${input.context.repository.owner}`,
+          "-F",
+          `name=${input.context.repository.name}`,
+          "-F",
+          `number=${input.pullRequestNumber}`,
+        ],
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostValidationError({
+              field: "github.review_threads",
+              message: errorMessage(cause),
+              cause,
+              details: { pullRequestNumber: input.pullRequestNumber },
+            }),
+        ),
+      );
       const view = yield* Effect.try({
         try: () => parsePullView(pullViewPayload),
         catch: (cause) =>
@@ -369,13 +397,22 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             cause,
           }),
       });
+      const reviewThreadComments = yield* Effect.try({
+        try: () => parseReviewThreads(reviewThreadsPayload),
+        catch: (cause) =>
+          new HostValidationError({
+            field: "github.review_threads",
+            message: errorMessage(cause),
+            cause,
+          }),
+      });
       return pullRequestReviewContextSchema.parse({
         status: "loaded",
         providerId: "github",
         pullRequest: view.pullRequest,
         aggregateStatus: aggregateChecks(checks),
         checks,
-        comments: view.comments,
+        comments: [...view.comments, ...reviewThreadComments],
         refreshedAt: new Date().toISOString(),
       });
     });

@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { QueryProvider } from "@/lib/query-provider";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import type {
@@ -57,9 +57,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  mock.module("@pierre/trees", () => actualPierreTrees);
-  mock.module("@pierre/trees/react", () => actualPierreTreesReact);
-  mock.module("./agent-studio-dev-server-settings-action", () => actualDevServerSettingsAction);
+  await restoreMockedModules([
+    ["@pierre/trees", async () => actualPierreTrees],
+    ["@pierre/trees/react", async () => actualPierreTreesReact],
+    [
+      "./agent-studio-dev-server-settings-action",
+      async () => actualDevServerSettingsAction,
+    ],
+  ]);
 });
 
 const emptyDoc = {
@@ -217,7 +222,7 @@ const renderPanel = (model: TaskExecutionPanelModel): string =>
     createElement(
       QueryProvider,
       { useIsolatedClient: true },
-      createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
+      createElement(TaskExecutionPanel, { model }),
     ),
   );
 

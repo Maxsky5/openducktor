@@ -236,13 +236,28 @@ export const createWorkspaceFilesService = (
         })),
       ];
       for (const filePath of filePaths) {
-        const metadata = yield* statFile(filesystem, canonicalRoot, filePath);
+        const gitStatus = gitStatusByPath.get(filePath) ?? null;
+        const metadataResult = yield* Effect.either(statFile(filesystem, canonicalRoot, filePath));
+        if (metadataResult._tag === "Left") {
+          if (gitStatus !== "deleted") {
+            return yield* Effect.fail(metadataResult.left);
+          }
+          entries.push({
+            path: filePath,
+            kind: "file",
+            size: null,
+            mtimeMs: null,
+            gitStatus,
+          });
+          continue;
+        }
+        const metadata = metadataResult.right;
         entries.push({
           path: filePath,
           kind: "file",
           size: metadata.size ?? null,
           mtimeMs: metadata.mtimeMs ?? null,
-          gitStatus: gitStatusByPath.get(filePath) ?? null,
+          gitStatus,
         });
       }
       return workspaceFileTreeSchema.parse({

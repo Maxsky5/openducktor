@@ -115,6 +115,38 @@ describe("createWorkspaceFilesService", () => {
     });
   });
 
+  test("keeps deleted tracked files from failing the whole tree", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/README.md": { isDirectory: false, isFile: true, size: 12, mtimeMs: 10 },
+        },
+      }),
+      createFakeGitPort({
+        files: ["README.md", "src/deleted.ts"],
+        statuses: [{ path: "src/deleted.ts", status: "deleted", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toContainEqual({
+      path: "src/deleted.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "deleted",
+    });
+    expect(tree.entries).toContainEqual({
+      path: "README.md",
+      kind: "file",
+      size: 12,
+      mtimeMs: 10,
+      gitStatus: null,
+    });
+  });
+
   test("reads a contained text file", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
