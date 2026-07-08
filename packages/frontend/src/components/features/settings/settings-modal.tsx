@@ -22,6 +22,7 @@ import { useSettingsModalController } from "./use-settings-modal-controller";
 
 type SettingsModalProps = {
   triggerClassName?: string;
+  triggerIconOnly?: boolean;
   triggerSize?: "default" | "sm" | "lg" | "icon";
 };
 
@@ -46,7 +47,8 @@ const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
 
 export function SettingsModal({
   triggerClassName,
-  triggerSize = "sm",
+  triggerIconOnly = false,
+  triggerSize = triggerIconOnly ? "icon" : "sm",
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [navigation, setNavigation] =
@@ -98,9 +100,16 @@ export function SettingsModal({
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size={triggerSize} className={cn(triggerClassName)}>
+        <Button
+          type="button"
+          variant="outline"
+          size={triggerSize}
+          className={cn(triggerClassName)}
+          aria-label={triggerIconOnly ? "Settings" : undefined}
+          title={triggerIconOnly ? "Settings" : undefined}
+        >
           <Settings2 className="size-4" />
-          Settings
+          {triggerIconOnly ? null : "Settings"}
         </Button>
       </DialogTrigger>
 
