@@ -253,8 +253,6 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         <GitInfoHeader
           contextMode={model.contextMode ?? "worktree"}
           pullRequest={model.pullRequest ?? null}
-          openInTargetPath={model.openInTargetPath ?? null}
-          openInDisabledReason={model.openInDisabledReason ?? null}
           branch={displayedScopeState.branch}
           targetBranch={model.targetBranch}
           diffScope={diffScope}
@@ -281,7 +279,6 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           {...(model.onUpdateTargetBranch
             ? { onUpdateTargetBranch: model.onUpdateTargetBranch }
             : {})}
-          {...(model.openDirectoryInTool ? { openDirectoryInTool: model.openDirectoryInTool } : {})}
           setDiffScope={handleDiffScopeChange}
           onRefresh={() => {
             void model.refresh();

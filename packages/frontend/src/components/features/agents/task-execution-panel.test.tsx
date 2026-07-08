@@ -262,6 +262,10 @@ describe("TaskExecutionPanel", () => {
   test("renders configured tabs and document content", () => {
     const html = renderPanel(basePanelModel);
 
+    expect(html).toContain("task-execution-tab-document");
+    expect(html).toContain("task-execution-tab-git");
+    expect(html).toContain("task-execution-tab-file_explorer");
+    expect(html).toContain("task-execution-tab-ci_checks");
     expect(html).toContain("Document");
     expect(html).toContain("Git");
     expect(html).toContain("File explorer");
@@ -269,6 +273,21 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("Specification");
     expect(html).toContain("Current specification document for this task.");
     expect(html).toContain("Spec");
+  });
+
+  test("renders Open In in the shared panel header", () => {
+    const html = renderPanel({
+      ...basePanelModel,
+      gitModel: {
+        ...diffModel,
+        openInTargetPath: "/tmp/worktree/task-12",
+        openInDisabledReason: null,
+        openDirectoryInTool: async () => {},
+      },
+    });
+
+    expect(html).toContain("agent-studio-git-open-in-actions");
+    expect(html).toContain("agent-studio-git-open-in-default-button");
   });
 
   test("renders Git content as a tab without Dev Server content", () => {

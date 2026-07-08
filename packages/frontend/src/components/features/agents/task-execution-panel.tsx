@@ -1,15 +1,25 @@
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import {
+  FileText,
+  FolderTree,
+  GitBranch,
+  ListChecks,
+  type LucideIcon,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
 import { AgentStudioDevServerSettingsAction } from "./agent-studio-dev-server-settings-action";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
+import { OpenInMenu } from "./agent-studio-git-panel/open-in-menu";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import { shouldUseExpandedDevServerLayout } from "./agent-studio-right-panel-layout";
 import {
@@ -52,43 +62,87 @@ const panelLabel = "task execution";
 const isTaskExecutionPanelTabId = (value: string): value is TaskExecutionPanelTabId =>
   value === "document" || value === "git" || value === "file_explorer" || value === "ci_checks";
 
+const taskExecutionPanelTabIcons = {
+  document: FileText,
+  git: GitBranch,
+  file_explorer: FolderTree,
+  ci_checks: ListChecks,
+} satisfies Record<TaskExecutionPanelTabId, LucideIcon>;
+
+function TaskExecutionPanelTabTrigger({ tab }: { tab: TaskExecutionPanelTab }): ReactElement {
+  const Icon = taskExecutionPanelTabIcons[tab.id];
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <TabsTrigger
+          value={tab.id}
+          aria-label={tab.label}
+          className="h-7 w-8 flex-none px-0"
+          data-testid={`task-execution-tab-${tab.id}`}
+        >
+          <Icon className="size-4" aria-hidden="true" />
+          <span className="sr-only">{tab.label}</span>
+        </TabsTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <p>{tab.label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TaskExecutionPanelOpenIn({ model }: { model: AgentStudioGitPanelModel }): ReactElement {
+  return (
+    <OpenInMenu
+      contextMode={model.contextMode ?? "worktree"}
+      targetPath={model.openInTargetPath ?? null}
+      disabledReason={model.openInDisabledReason ?? null}
+      onOpenInTool={model.openDirectoryInTool}
+    />
+  );
+}
+
 function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): ReactElement {
   return (
-    <Tabs
-      value={model.activeTabId}
-      onValueChange={(value) => {
-        if (isTaskExecutionPanelTabId(value)) {
-          model.onActiveTabChange(value);
-        }
-      }}
-      className="h-full min-h-0 gap-0 bg-card"
-    >
-      <div className="border-b border-border px-3 py-2">
-        <TabsList className="grid h-8 w-full grid-cols-[repeat(auto-fit,minmax(0,1fr))] rounded-md">
-          {model.tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="h-full text-xs">
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </div>
-      {model.documentModel ? (
-        <TabsContent value="document" className="min-h-0 overflow-hidden">
-          <TaskExecutionDocumentPanel model={model.documentModel} />
+    <TooltipProvider>
+      <Tabs
+        value={model.activeTabId}
+        onValueChange={(value) => {
+          if (isTaskExecutionPanelTabId(value)) {
+            model.onActiveTabChange(value);
+          }
+        }}
+        className="h-full min-h-0 gap-0 bg-card"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+          <TabsList aria-label="Task execution sections" className="h-9 w-fit shrink-0 rounded-lg">
+            {model.tabs.map((tab) => (
+              <TaskExecutionPanelTabTrigger key={tab.id} tab={tab} />
+            ))}
+          </TabsList>
+          <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end">
+            <TaskExecutionPanelOpenIn model={model.gitModel} />
+          </div>
+        </div>
+        {model.documentModel ? (
+          <TabsContent value="document" className="min-h-0 overflow-hidden">
+            <TaskExecutionDocumentPanel model={model.documentModel} />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="git" className="min-h-0 overflow-hidden">
+          <AgentStudioGitPanel model={model.gitModel} />
         </TabsContent>
-      ) : null}
-      <TabsContent value="git" className="min-h-0 overflow-hidden">
-        <AgentStudioGitPanel model={model.gitModel} />
-      </TabsContent>
-      <TabsContent value="file_explorer" className="min-h-0 overflow-hidden">
-        <TaskExecutionFileExplorerPanel model={model.fileExplorerModel} />
-      </TabsContent>
-      {model.ciChecksModel ? (
-        <TabsContent value="ci_checks" className="min-h-0 overflow-hidden">
-          <TaskExecutionCiChecksPanel model={model.ciChecksModel} />
+        <TabsContent value="file_explorer" className="min-h-0 overflow-hidden">
+          <TaskExecutionFileExplorerPanel model={model.fileExplorerModel} />
         </TabsContent>
-      ) : null}
-    </Tabs>
+        {model.ciChecksModel ? (
+          <TabsContent value="ci_checks" className="min-h-0 overflow-hidden">
+            <TaskExecutionCiChecksPanel model={model.ciChecksModel} />
+          </TabsContent>
+        ) : null}
+      </Tabs>
+    </TooltipProvider>
   );
 }
 
