@@ -12,7 +12,10 @@ import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-por
 import type { GitPort } from "../../ports/git-port";
 
 export type WorkspaceFilesService = {
-  listTree(input: { rootPath: string }): Effect.Effect<WorkspaceFileTree, HostValidationError>;
+  listTree(input: {
+    rootPath: string;
+    targetBranch?: string;
+  }): Effect.Effect<WorkspaceFileTree, HostValidationError>;
   readTextFile(input: {
     rootPath: string;
     relativePath: string;
@@ -204,13 +207,27 @@ export const createWorkspaceFilesService = (
         );
       }
 
-      const filePaths = (yield* gitPort.listFiles(canonicalRoot).pipe(
+      const listedFilePaths = yield* gitPort.listFiles(canonicalRoot).pipe(
         Effect.mapError((cause) =>
           toHostValidationError(cause, `Unable to list Git files for '${canonicalRoot}'.`, {
             rootPath: canonicalRoot,
           }),
         ),
-      )).sort(compareWorkspacePaths);
+      );
+      const targetDiffs = input.targetBranch
+        ? yield* gitPort.getDiff(canonicalRoot, input.targetBranch).pipe(
+            Effect.mapError((cause) =>
+              toHostValidationError(
+                cause,
+                `Unable to read Git diff for '${canonicalRoot}' against '${input.targetBranch}'.`,
+                {
+                  rootPath: canonicalRoot,
+                  targetBranch: input.targetBranch,
+                },
+              ),
+            ),
+          )
+        : [];
       const statuses = yield* gitPort.getStatus(canonicalRoot).pipe(
         Effect.mapError((cause) =>
           toHostValidationError(cause, `Unable to read Git status for '${canonicalRoot}'.`, {
@@ -218,9 +235,17 @@ export const createWorkspaceFilesService = (
           }),
         ),
       );
-      const gitStatusByPath = new Map(
-        statuses.map((status) => [status.path, normalizeGitStatus(status.status)]),
-      );
+      const filePathSet = new Set(listedFilePaths);
+      const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
+      for (const diff of targetDiffs) {
+        filePathSet.add(diff.file);
+        gitStatusByPath.set(diff.file, normalizeGitStatus(diff.type));
+      }
+      for (const status of statuses) {
+        filePathSet.add(status.path);
+        gitStatusByPath.set(status.path, normalizeGitStatus(status.status));
+      }
+      const filePaths = [...filePathSet].sort(compareWorkspacePaths);
       const directoryPaths = directoryPathsForFiles(filePaths);
       const paths = [
         ...directoryPaths.map((directoryPath) => `${directoryPath}/`),

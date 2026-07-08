@@ -50,31 +50,23 @@ describe("buildTaskExecutionFileTreeInputPaths", () => {
 });
 
 describe("buildTaskExecutionFileTreeGitStatusEntries", () => {
-  test("includes ancestor directories for changed files", () => {
+  test("passes changed file statuses to PierreTrees", () => {
     expect(
       buildTaskExecutionFileTreeGitStatusEntries([
         directoryEntry("packages"),
         directoryEntry("packages/frontend"),
         fileEntry("packages/frontend/src/App.tsx", "modified"),
       ]),
-    ).toEqual([
-      { path: "packages", status: "modified" },
-      { path: "packages/frontend", status: "modified" },
-      { path: "packages/frontend/src", status: "modified" },
-      { path: "packages/frontend/src/App.tsx", status: "modified" },
-    ]);
+    ).toEqual([{ path: "packages/frontend/src/App.tsx", status: "modified" }]);
   });
 
-  test("deduplicates shared ancestors and keeps file statuses exact", () => {
+  test("keeps file statuses exact", () => {
     expect(
       buildTaskExecutionFileTreeGitStatusEntries([
         fileEntry("packages/frontend/src/App.tsx", "added"),
         fileEntry("packages/frontend/src/index.ts", "deleted"),
       ]),
     ).toEqual([
-      { path: "packages", status: "modified" },
-      { path: "packages/frontend", status: "modified" },
-      { path: "packages/frontend/src", status: "modified" },
       { path: "packages/frontend/src/App.tsx", status: "added" },
       { path: "packages/frontend/src/index.ts", status: "deleted" },
     ]);

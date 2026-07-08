@@ -8,6 +8,15 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
+type WorkspaceFileTreeInput = {
+  rootPath: string;
+  targetBranch?: string | null;
+};
+
+const normalizeWorkspaceFileTreeInput = (
+  input: string | WorkspaceFileTreeInput,
+): WorkspaceFileTreeInput => (typeof input === "string" ? { rootPath: input } : input);
+
 const filesystemListDirectory = async (
   invokeFn: InvokeFn,
   path?: string,
@@ -18,9 +27,13 @@ const filesystemListDirectory = async (
 
 const filesystemListTree = async (
   invokeFn: InvokeFn,
-  rootPath: string,
+  input: string | WorkspaceFileTreeInput,
 ): Promise<WorkspaceFileTree> => {
-  const payload = await invokeFn("filesystem_list_tree", { rootPath });
+  const treeInput = normalizeWorkspaceFileTreeInput(input);
+  const payload = await invokeFn("filesystem_list_tree", {
+    rootPath: treeInput.rootPath,
+    ...(treeInput.targetBranch ? { targetBranch: treeInput.targetBranch } : {}),
+  });
   return workspaceFileTreeSchema.parse(payload);
 };
 
@@ -39,8 +52,8 @@ export class HostFilesystemClient {
     return filesystemListDirectory(this.invokeFn, path);
   }
 
-  async filesystemListTree(rootPath: string): Promise<WorkspaceFileTree> {
-    return filesystemListTree(this.invokeFn, rootPath);
+  async filesystemListTree(input: string | WorkspaceFileTreeInput): Promise<WorkspaceFileTree> {
+    return filesystemListTree(this.invokeFn, input);
   }
 
   async filesystemReadTextFile(input: {

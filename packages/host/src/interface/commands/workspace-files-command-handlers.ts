@@ -1,11 +1,15 @@
 import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
-import { requireRecord, requireString } from "./command-inputs";
+import { optionalString, requireRecord, requireString } from "./command-inputs";
 
-const parseListTreeInput = (args: Record<string, unknown> | undefined): { rootPath: string } => {
+const parseListTreeInput = (
+  args: Record<string, unknown> | undefined,
+): { rootPath: string; targetBranch?: string } => {
   const record = requireRecord(args, "filesystem_list_tree input");
+  const targetBranch = optionalString(record.targetBranch, "targetBranch");
   return {
     rootPath: requireString(record.rootPath, "rootPath"),
+    ...(targetBranch ? { targetBranch } : {}),
   };
 };
 

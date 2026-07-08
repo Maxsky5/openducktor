@@ -310,11 +310,12 @@ export function useAgentsPageRightPanelModel({
   const fileExplorerModel = useMemo(
     () => ({
       ...fileExplorerRoot,
+      targetBranch: diffData.targetBranch ?? null,
       isActive: activeTabId === "file_explorer" && isPanelOpen,
       selectedFile,
       onSelectFile,
     }),
-    [activeTabId, fileExplorerRoot, isPanelOpen, onSelectFile, selectedFile],
+    [activeTabId, diffData.targetBranch, fileExplorerRoot, isPanelOpen, onSelectFile, selectedFile],
   );
   const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
   const ciChecksModel = useMemo(

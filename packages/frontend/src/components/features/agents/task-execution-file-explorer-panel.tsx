@@ -158,7 +158,7 @@ export function TaskExecutionFileExplorerPanel({
 }): ReactElement {
   const rootPath = model.rootPath;
   const treeQuery = useQuery({
-    ...workspaceFileTreeQueryOptions(rootPath ?? "__inactive_file_tree__"),
+    ...workspaceFileTreeQueryOptions(rootPath ?? "__inactive_file_tree__", model.targetBranch),
     enabled: model.isActive && rootPath !== null,
   });
   const { theme } = useTheme();

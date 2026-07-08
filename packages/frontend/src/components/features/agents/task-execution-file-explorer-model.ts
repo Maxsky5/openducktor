@@ -8,6 +8,7 @@ export type TaskExecutionSelectedFile = {
 
 export type TaskExecutionFileExplorerPanelModel = {
   rootPath: string | null;
+  targetBranch: string | null;
   unavailableReason: string | null;
   isActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
@@ -26,50 +27,22 @@ export const buildTaskExecutionFileTreeInputPaths = (
   return paths;
 };
 
-const buildAncestorDirectoryPaths = (filePath: string): string[] => {
-  const segments = filePath.split("/").filter(Boolean);
-  const ancestors: string[] = [];
-  for (let length = 1; length < segments.length; length += 1) {
-    ancestors.push(segments.slice(0, length).join("/"));
-  }
-  return ancestors;
-};
-
 export const buildTaskExecutionFileTreeGitStatusEntries = (
   entries: readonly WorkspaceFileTreeEntry[] | undefined,
 ): GitStatusEntry[] => {
-  const statusByPath = new Map<string, GitStatusEntry["status"]>();
-  const pathOrder: string[] = [];
-  const addStatus = (path: string, status: GitStatusEntry["status"]) => {
-    const previousStatus = statusByPath.get(path);
-    if (previousStatus === undefined) {
-      pathOrder.push(path);
-      statusByPath.set(path, status);
-      return;
-    }
-    if (previousStatus !== status) {
-      statusByPath.set(path, "modified");
-    }
-  };
+  const gitStatusEntries: GitStatusEntry[] = [];
 
   for (const entry of entries ?? []) {
-    if (entry.gitStatus === null) {
+    if (entry.kind !== "file" || entry.gitStatus === null) {
       continue;
     }
-
-    const status = entry.gitStatus as GitStatusEntry["status"];
-    if (entry.kind === "file") {
-      for (const ancestorPath of buildAncestorDirectoryPaths(entry.path)) {
-        addStatus(ancestorPath, "modified");
-      }
-    }
-    addStatus(entry.path, status);
+    gitStatusEntries.push({
+      path: entry.path,
+      status: entry.gitStatus as GitStatusEntry["status"],
+    });
   }
 
-  return pathOrder.map((path) => ({
-    path,
-    status: statusByPath.get(path) ?? "modified",
-  }));
+  return gitStatusEntries;
 };
 
 export const normalizeTaskExecutionFileTreeSelectionPath = (path: string): string =>

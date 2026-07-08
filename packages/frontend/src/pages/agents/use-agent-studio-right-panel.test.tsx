@@ -139,6 +139,7 @@ const devServerModel: AgentStudioDevServerPanelModel = {
 
 const fileExplorerModel = {
   rootPath: "/repo",
+  targetBranch: "origin/main",
   unavailableReason: null,
   isActive: false,
   selectedFile: null,

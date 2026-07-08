@@ -220,6 +220,7 @@ const basePanelModel = {
   gitModel: diffModel,
   fileExplorerModel: {
     rootPath: null,
+    targetBranch: null,
     unavailableReason: "No repository is selected.",
     isActive: false,
     selectedFile: null,
@@ -246,7 +247,10 @@ const renderPanelWithFileTreeData = (
   fileTree: WorkspaceFileTree,
 ): string => {
   const queryClient = createQueryClient();
-  queryClient.setQueryData(filesystemQueryKeys.tree(fileTree.rootPath), fileTree);
+  queryClient.setQueryData(
+    filesystemQueryKeys.tree(fileTree.rootPath, model.fileExplorerModel.targetBranch),
+    fileTree,
+  );
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
@@ -354,6 +358,7 @@ describe("TaskExecutionPanel", () => {
       documentModel: null,
       fileExplorerModel: {
         rootPath: "/repo/.worktrees/task-12",
+        targetBranch: "origin/main",
         unavailableReason: null,
         isActive: true,
         selectedFile: null,
@@ -382,6 +387,7 @@ describe("TaskExecutionPanel", () => {
         documentModel: null,
         fileExplorerModel: {
           rootPath: "/repo/.worktrees/task-12",
+          targetBranch: "origin/main",
           unavailableReason: null,
           isActive: true,
           selectedFile: null,

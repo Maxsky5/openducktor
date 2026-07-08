@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { FileStatus } from "@openducktor/contracts";
+import type { FileDiff, FileStatus } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
@@ -57,15 +57,18 @@ const createFakeGitPort = ({
   isRepository = true,
   files = [],
   statuses = [],
+  diffs = [],
 }: {
   isRepository?: boolean;
   files?: string[];
   statuses?: FileStatus[];
+  diffs?: FileDiff[];
 } = {}): GitPort =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
     listFiles: () => Effect.succeed(files),
     getStatus: () => Effect.succeed(statuses),
+    getDiff: () => Effect.succeed(diffs),
   }) as unknown as GitPort;
 
 describe("createWorkspaceFilesService", () => {
@@ -144,6 +147,67 @@ describe("createWorkspaceFilesService", () => {
       size: 12,
       mtimeMs: 10,
       gitStatus: null,
+    });
+  });
+
+  test("marks target-branch diff files even when the worktree is clean", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/apps/api/src/lib/auth.ts": {
+            isDirectory: false,
+            isFile: true,
+            size: 12,
+            mtimeMs: 10,
+          },
+          "/repo/apps/web/src/components/LandingPage.tsx": {
+            isDirectory: false,
+            isFile: true,
+            size: 42,
+            mtimeMs: 20,
+          },
+        },
+      }),
+      createFakeGitPort({
+        files: ["apps/api/src/lib/auth.ts", "apps/web/src/components/LandingPage.tsx"],
+        statuses: [],
+        diffs: [
+          {
+            file: "apps/api/src/lib/auth.ts",
+            type: "modified",
+            additions: 2,
+            deletions: 1,
+            diff: "",
+          },
+          {
+            file: "apps/web/src/components/LandingPage.tsx",
+            type: "modified",
+            additions: 4,
+            deletions: 1,
+            diff: "",
+          },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries).toContainEqual({
+      path: "apps/api/src/lib/auth.ts",
+      kind: "file",
+      size: 12,
+      mtimeMs: 10,
+      gitStatus: "modified",
+    });
+    expect(tree.entries).toContainEqual({
+      path: "apps/web/src/components/LandingPage.tsx",
+      kind: "file",
+      size: 42,
+      mtimeMs: 20,
+      gitStatus: "modified",
     });
   });
 
