@@ -41,7 +41,7 @@ const loadedContext = {
     {
       id: "thread-comment-1",
       author: "reviewer",
-      body: "This thread still needs work.",
+      body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
       updatedAt: "2026-07-08T10:07:00Z",
@@ -142,9 +142,11 @@ describe("TaskExecutionCiChecksPanel", () => {
   test("renders provider-neutral PR, check, and review-thread metadata", () => {
     const html = renderLoadedPanel();
 
-    expect(html).toContain("#42 Rework task execution panel");
+    expect(html).toContain("#42");
+    expect(html).toContain("Rework task execution panel");
     expect(html).toContain("GitHub");
     expect(html).toContain("draft");
+    expect(html).toContain("1 failing");
     expect(html).toContain("Unit tests");
     expect(html).toContain("CI");
     expect(html).toContain("1 suite failed");
@@ -153,8 +155,14 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("Completed");
     expect(html).toContain("2026-07-08T10:05:00Z");
     expect(html).toContain("Review thread");
+    expect(html).toContain("All");
+    expect(html).toContain("Humans");
+    expect(html).toContain("Bots");
+    expect(html).toContain("Needs review");
     expect(html).toContain("Thread thread-1");
     expect(html).toContain("Unresolved");
+    expect(html).toContain("<strong>This thread still needs work.</strong>");
+    expect(html).toContain("isAnyLoading");
     expect(html).toContain("Created");
     expect(html).toContain("2026-07-08T10:06:00Z");
     expect(html).toContain("Updated");
