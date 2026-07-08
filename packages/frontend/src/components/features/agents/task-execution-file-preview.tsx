@@ -1,5 +1,5 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
-import type { CodeViewFileItem, FileContents } from "@pierre/diffs";
+import type { CodeViewFileItem, CodeViewOptions, FileContents } from "@pierre/diffs";
 import { CodeView } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
@@ -12,15 +12,29 @@ import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-m
 
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;
+  previewSessionKey: number;
   onClose: () => void;
 };
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
-const CODE_VIEW_WRAPPER_STYLE = {
+const CODE_VIEW_LINE_HEIGHT = 18;
+const CODE_VIEW_ROOT_STYLE = {
   "--diffs-font-size": "12px",
-  "--diffs-line-height": "1.5",
+  "--diffs-line-height": `${CODE_VIEW_LINE_HEIGHT}px`,
+  "--diffs-gap-block": "0px",
   "--diffs-tab-size": 2,
 } as CSSProperties;
+const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
+[data-column-number],
+[data-gutter-buffer] {
+  padding-left: 0.5ch;
+  padding-right: 0.75ch;
+}
+
+[data-line-number-content] {
+  min-width: 2ch;
+}
+`;
 
 type FilePreviewSnapshot = {
   selectedFile: TaskExecutionSelectedFile;
@@ -63,6 +77,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
 }): ReactElement | null {
   const selectedFile = model.selectedFile;
   const committedSnapshotRef = useRef<FilePreviewSnapshot | null>(null);
+  const committedSnapshotSessionKeyRef = useRef(model.previewSessionKey);
+  if (committedSnapshotSessionKeyRef.current !== model.previewSessionKey) {
+    committedSnapshotSessionKeyRef.current = model.previewSessionKey;
+    committedSnapshotRef.current = null;
+  }
   const fileQuery = useQuery({
     ...workspaceTextFileQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
@@ -92,12 +111,24 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
     fileQuery.isFetching;
-  const codeViewOptions = useMemo(
+  const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
       themeType: theme,
       overflow: "wrap" as const,
       disableFileHeader: true,
+      itemMetrics: {
+        lineHeight: CODE_VIEW_LINE_HEIGHT,
+        spacing: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+      },
+      layout: {
+        paddingTop: 0,
+        paddingBottom: 0,
+        gap: 0,
+      },
+      unsafeCSS: CODE_VIEW_PREVIEW_UNSAFE_CSS,
     }),
     [theme],
   );
@@ -158,7 +189,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       <CodeView
         key={codeViewFileId}
         className="h-full min-h-0 overflow-auto"
-        style={CODE_VIEW_WRAPPER_STYLE}
+        style={CODE_VIEW_ROOT_STYLE}
         items={codeViewItems}
         options={codeViewOptions}
       />

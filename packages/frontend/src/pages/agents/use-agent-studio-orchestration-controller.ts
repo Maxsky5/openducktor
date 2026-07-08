@@ -220,6 +220,7 @@ export function useAgentStudioOrchestrationController({
   const selectedSession = view.selectedSession;
   const [taskExecutionSelectedFile, setTaskExecutionSelectedFile] =
     useState<TaskExecutionSelectedFile | null>(null);
+  const [taskExecutionFilePreviewSessionKey, setTaskExecutionFilePreviewSessionKey] = useState(0);
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     scheduleQueryUpdate,
@@ -482,19 +483,26 @@ export function useAgentStudioOrchestrationController({
     }
     previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
     setTaskExecutionSelectedFile(null);
+    setTaskExecutionFilePreviewSessionKey((sessionKey) => sessionKey + 1);
   }, [taskExecutionFileContextKey]);
   const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
     setTaskExecutionSelectedFile(file);
   }, []);
   const closeTaskExecutionSelectedFilePreview = useCallback(() => {
     setTaskExecutionSelectedFile(null);
+    setTaskExecutionFilePreviewSessionKey((sessionKey) => sessionKey + 1);
   }, []);
   const taskExecutionSelectedFilePreviewModel = useMemo<TaskExecutionSelectedFilePreviewModel>(
     () => ({
       selectedFile: taskExecutionSelectedFile,
+      previewSessionKey: taskExecutionFilePreviewSessionKey,
       onClose: closeTaskExecutionSelectedFilePreview,
     }),
-    [closeTaskExecutionSelectedFilePreview, taskExecutionSelectedFile],
+    [
+      closeTaskExecutionSelectedFilePreview,
+      taskExecutionFilePreviewSessionKey,
+      taskExecutionSelectedFile,
+    ],
   );
 
   return {
