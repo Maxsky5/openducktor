@@ -9,6 +9,7 @@ import {
 } from "./use-agent-studio-dev-server-terminal";
 
 type AgentStudioDevServerTerminalProps = {
+  scopeKey: string;
   scriptId: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   onRendererError: (message: string | null) => void;
@@ -16,6 +17,7 @@ type AgentStudioDevServerTerminalProps = {
 };
 
 export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTerminal({
+  scopeKey,
   scriptId,
   terminalBuffer,
   onRendererError,
@@ -30,7 +32,7 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
 
   useDevServerTerminalRendering({
     ...terminalRenderController,
-    scriptId,
+    terminalIdentityKey: `${scopeKey}::${scriptId}`,
     terminalBuffer,
     onRendererError,
   });

@@ -19,7 +19,7 @@ export type CreateTerminalBinding = (
 ) => TerminalBinding;
 
 type RenderedTerminalState = {
-  scriptId: string | null;
+  terminalIdentityKey: string | null;
   resetToken: number | null;
   lastSequence: number | null;
 };
@@ -39,7 +39,7 @@ type UseDevServerTerminalBindingArgs = {
 };
 
 type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
-  scriptId: string;
+  terminalIdentityKey: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   onRendererError: (message: string | null) => void;
 };
@@ -122,7 +122,7 @@ const wireTerminalSelectionCopy = (binding: TerminalBinding): void => {
 
 const resetRenderedTerminalState = (renderedStateRef: { current: RenderedTerminalState }): void => {
   renderedStateRef.current = {
-    scriptId: null,
+    terminalIdentityKey: null,
     resetToken: null,
     lastSequence: null,
   };
@@ -222,13 +222,13 @@ const readAppendedTerminalOutput = (
 
 const renderTerminalBuffer = ({
   binding,
-  scriptId,
+  terminalIdentityKey,
   terminalBuffer,
   renderedStateRef,
   recreateTerminalBinding,
 }: {
   binding: TerminalBinding;
-  scriptId: string;
+  terminalIdentityKey: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   renderedStateRef: { current: RenderedTerminalState };
   recreateTerminalBinding: () => TerminalBinding | null;
@@ -236,11 +236,12 @@ const renderTerminalBuffer = ({
   const entries = terminalBuffer?.entries ?? [];
   const nextResetToken = terminalBuffer?.resetToken ?? 0;
   const nextLastSequence = terminalBuffer?.lastSequence ?? null;
-  const didScriptChange = renderedStateRef.current.scriptId !== scriptId;
+  const didTerminalIdentityChange =
+    renderedStateRef.current.terminalIdentityKey !== terminalIdentityKey;
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
 
-  if (didScriptChange || didResetTokenChange) {
-    const hasRenderedCurrentBinding = renderedStateRef.current.scriptId !== null;
+  if (didTerminalIdentityChange || didResetTokenChange) {
+    const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
     if (!activeBinding) {
       throw new Error("Cannot recreate dev server terminal before replay without a container");
@@ -251,7 +252,7 @@ const renderTerminalBuffer = ({
     writeTerminalOutput(activeBinding.terminal, readTerminalReplayOutput(entries));
     activeBinding.fitAddon.fit();
     renderedStateRef.current = {
-      scriptId,
+      terminalIdentityKey,
       resetToken: nextResetToken,
       lastSequence: nextLastSequence,
     };
@@ -272,7 +273,7 @@ export const useDevServerTerminalBinding = ({
 }: UseDevServerTerminalBindingArgs): TerminalRenderController => {
   const bindingRef = useRef<TerminalBinding | null>(null);
   const renderedStateRef = useRef<RenderedTerminalState>({
-    scriptId: null,
+    terminalIdentityKey: null,
     resetToken: null,
     lastSequence: null,
   });
@@ -337,7 +338,7 @@ export const useDevServerTerminalRendering = ({
   renderQueueRef,
   renderGenerationRef,
   recreateTerminalBinding,
-  scriptId,
+  terminalIdentityKey,
   terminalBuffer,
   onRendererError,
 }: UseDevServerTerminalRenderingArgs): void => {
@@ -360,7 +361,7 @@ export const useDevServerTerminalRendering = ({
 
         renderTerminalBuffer({
           binding: queuedBinding,
-          scriptId,
+          terminalIdentityKey,
           terminalBuffer,
           renderedStateRef,
           recreateTerminalBinding,
@@ -381,7 +382,7 @@ export const useDevServerTerminalRendering = ({
     renderQueueRef,
     renderedStateRef,
     recreateTerminalBinding,
-    scriptId,
+    terminalIdentityKey,
     terminalBuffer,
   ]);
 };

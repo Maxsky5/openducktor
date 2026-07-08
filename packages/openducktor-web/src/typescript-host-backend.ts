@@ -266,10 +266,31 @@ const writeSseEvent = (event: BufferedHostEvent): string =>
   [`id: ${event.id}`, ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join(
     "\n",
   );
+const writeSseNamedEvent = (eventName: string, data: string): string =>
+  [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
 const SSE_READY_COMMENT = ": openducktor-ready\n\n";
+
+const streamWarningSubject = (streamPath: string): string => {
+  if (streamPath === "dev-server-events") {
+    return "Dev server stream";
+  }
+  if (streamPath === "task-events") {
+    return "Task stream";
+  }
+  if (streamPath === "codex-app-server-events") {
+    return "Codex app-server stream";
+  }
+  return "Event stream";
+};
+
+const skippedReplayWarningMessage = (streamPath: string, skippedEventCount: number): string => {
+  const eventLabel = skippedEventCount === 1 ? "event" : "events";
+  return `${streamWarningSubject(streamPath)} skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
+};
 
 const createSseResponse = (
   stream: BufferedHostEventStream,
+  streamPath: string,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
   options: { includeRecentWhenNoLastEventId?: boolean } = {},
@@ -279,7 +300,18 @@ const createSseResponse = (
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(SSE_READY_COMMENT));
-      for (const event of stream.replayAfter(lastEventId, options)) {
+      const replay = stream.replayAfterWithDiagnostics(lastEventId, options);
+      if (replay.skippedEventCount > 0) {
+        controller.enqueue(
+          encoder.encode(
+            writeSseNamedEvent(
+              "stream-warning",
+              skippedReplayWarningMessage(streamPath, replay.skippedEventCount),
+            ),
+          ),
+        );
+      }
+      for (const event of replay.events) {
         controller.enqueue(encoder.encode(writeSseEvent(event)));
       }
       unsubscribe = stream.subscribe((event) => {
@@ -509,6 +541,7 @@ const routeCorsRequest = ({
       requestTimeouts?.timeout(request, 0);
       return createSseResponse(
         eventBus.streamFor(streamChannel),
+        streamPath,
         yield* parseLastEventId(request),
         corsHeaders,
         { includeRecentWhenNoLastEventId: INITIAL_REPLAY_STREAM_PATHS.has(streamPath) },

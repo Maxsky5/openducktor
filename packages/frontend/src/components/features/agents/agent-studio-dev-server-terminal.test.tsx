@@ -90,6 +90,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -141,6 +142,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -165,6 +167,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -196,6 +199,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -250,6 +254,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -274,6 +279,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -304,6 +310,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -366,6 +373,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -390,6 +398,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -412,6 +421,84 @@ describe("AgentStudioDevServerTerminal", () => {
       expect(screen).toBe("Starting `cd apps/web && pnpm dev`\r\n");
     });
     expect(clear).toHaveBeenCalledTimes(2);
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+
+  test("replays from scratch when the task scope changes with the same script id", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    let screen = "";
+    const reset = mock(() => {
+      screen = "";
+    });
+    const clear = mock(() => {
+      screen = "";
+    });
+    const write = mock((data: string, callback?: () => void) => {
+      screen += data;
+      callback?.();
+    });
+    const dispose = mock(() => {});
+    const onRendererError = () => {};
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 7,
+              data: "task one output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+          lastSequence: 7,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("task one output\r\n");
+    });
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-2"
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "task two output\r\n",
+              timestamp: "2026-03-19T15:31:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("task two output\r\n");
+    });
     expect(reset).toHaveBeenCalledTimes(2);
   });
 
@@ -454,6 +541,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -485,6 +573,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -522,6 +611,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -557,6 +647,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -581,6 +672,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="backend"
         terminalBuffer={{
           entries: [
@@ -613,6 +705,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -637,6 +730,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -667,6 +761,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="backend"
         terminalBuffer={{
           entries: [
@@ -698,6 +793,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={null}
         onRendererError={onRendererError}
@@ -741,6 +837,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
     const view = render(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -766,6 +863,7 @@ describe("AgentStudioDevServerTerminal", () => {
     shouldThrow = true;
     view.rerender(
       <AgentStudioDevServerTerminal
+        scopeKey="/repo::task-1"
         scriptId="frontend"
         terminalBuffer={{
           entries: [
@@ -841,6 +939,7 @@ describe("AgentStudioDevServerTerminal", () => {
     try {
       render(
         <AgentStudioDevServerTerminal
+          scopeKey="/repo::task-1"
           scriptId="frontend"
           terminalBuffer={{
             entries: [

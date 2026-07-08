@@ -477,6 +477,63 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  test("does not expose the previous task terminal buffer after the task scope changes", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async (_repoPath, taskId) =>
+      buildState({
+        taskId,
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+            bufferedTerminalChunks:
+              taskId === "task-7"
+                ? [
+                    {
+                      scriptId: "frontend",
+                      sequence: 7,
+                      data: "previous task output\r\n",
+                      timestamp: "2026-03-19T15:30:00.000Z",
+                    },
+                  ]
+                : [],
+          }),
+        ],
+      });
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "previous task output\r\n",
+        );
+      });
+
+      act(() => {
+        harness.update({
+          repoPath: "/repo",
+          taskId: "task-8",
+          repoSettings,
+          enabled: true,
+        });
+      });
+
+      expect(harness.getLatest().selectedScriptTerminalBuffer).toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

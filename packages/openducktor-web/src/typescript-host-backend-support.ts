@@ -19,6 +19,10 @@ export type BufferedHostEvent = {
   id: number;
   payload: string;
 };
+export type BufferedHostEventReplay = {
+  events: BufferedHostEvent[];
+  skippedEventCount: number;
+};
 type JsonRpcRequestId = string | number;
 type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
@@ -120,6 +124,26 @@ export class BufferedHostEventStream {
       return options.includeRecentWhenNoLastEventId ? [...this.recent] : [];
     }
     return this.recent.filter((event) => event.id > lastSeenId);
+  }
+
+  replayAfterWithDiagnostics(
+    lastSeenId: number | null,
+    options: { includeRecentWhenNoLastEventId?: boolean } = {},
+  ): BufferedHostEventReplay {
+    const events = this.replayAfter(lastSeenId, options);
+    if (lastSeenId === null) {
+      return { events, skippedEventCount: 0 };
+    }
+
+    const firstAvailableEventId = this.recent[0]?.id ?? null;
+    if (firstAvailableEventId === null || lastSeenId >= firstAvailableEventId - 1) {
+      return { events, skippedEventCount: 0 };
+    }
+
+    return {
+      events,
+      skippedEventCount: firstAvailableEventId - lastSeenId - 1,
+    };
   }
 
   subscribe(listener: (event: BufferedHostEvent) => void): HostEventUnsubscribe {

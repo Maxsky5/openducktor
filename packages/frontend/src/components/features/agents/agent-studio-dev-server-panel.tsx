@@ -138,6 +138,8 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
+  const terminalScopeKey =
+    model.repoPath && model.taskId ? `${model.repoPath}::${model.taskId}` : "__no-task__";
   const selectedScriptTerminalBuffer =
     model.selectedScriptTerminalBuffer ??
     (selectedScriptContent
@@ -356,6 +358,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
                 <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
                   <AgentStudioDevServerTerminal
+                    scopeKey={terminalScopeKey}
                     scriptId={selectedScriptContent.scriptId}
                     terminalBuffer={selectedScriptTerminalBuffer}
                     onRendererError={setRendererError}

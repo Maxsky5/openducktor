@@ -262,6 +262,58 @@ describe("TypeScript web host backend", () => {
     }
   });
 
+  test("emits a stream warning when dev-server SSE replay cannot cover the reconnect gap", async () => {
+    const eventBus = new BufferedHostEventBus();
+    for (let index = 0; index < 258; index += 1) {
+      eventBus.publish("openducktor://dev-server-event", {
+        type: "terminal_chunk",
+        repoPath: "/repo",
+        taskId: "task-1",
+        terminalChunk: {
+          scriptId: "web",
+          sequence: index,
+          data: `line-${index}\r\n`,
+          timestamp: "2026-03-19T15:30:00.000Z",
+        },
+      });
+    }
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/dev-server-events", {
+        method: "GET",
+        headers: {
+          "last-event-id": "1",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+      }),
+      { eventBus },
+    );
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Expected SSE response body.");
+    }
+    try {
+      const readyChunk = await readImmediateStreamChunk(reader);
+      expect(readyChunk.done).toBe(false);
+      expect(new TextDecoder().decode(readyChunk.value)).toBe(": openducktor-ready\n\n");
+
+      const warningChunk = await readImmediateStreamChunk(reader);
+      expect(warningChunk.done).toBe(false);
+      expect(new TextDecoder().decode(warningChunk.value)).toBe(
+        "event: stream-warning\n" +
+          "data: Dev server stream skipped 1 event; reconnect will replay buffered events.\n\n",
+      );
+
+      const replayChunk = await readImmediateStreamChunk(reader);
+      expect(replayChunk.done).toBe(false);
+      expect(new TextDecoder().decode(replayChunk.value)).toContain('"data":"line-2\\r\\n"');
+    } finally {
+      await reader.cancel();
+    }
+  });
+
   test("does not replay Codex app-server requests after resolved notifications", () => {
     const eventBus = new BufferedHostEventBus();
     eventBus.publish("openducktor://codex-app-server-event", {

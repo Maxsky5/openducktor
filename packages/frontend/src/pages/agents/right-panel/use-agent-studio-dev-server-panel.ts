@@ -110,7 +110,7 @@ export function useAgentStudioDevServerPanel({
     selectedScriptTerminalBuffer,
     syncSelectedScriptTerminalBuffer,
     syncTerminalBuffersFromMutationState,
-  } = useAgentStudioDevServerTerminalBuffers();
+  } = useAgentStudioDevServerTerminalBuffers(taskMemoryKey);
 
   const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
     useAgentStudioDevServerStateQuery({
@@ -182,7 +182,6 @@ export function useAgentStudioDevServerPanel({
     previousTaskMemoryKeyRef.current = taskMemoryKey;
 
     if (scopeChanged) {
-      clearTerminalBuffers();
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
     }
