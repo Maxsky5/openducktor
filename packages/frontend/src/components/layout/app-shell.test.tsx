@@ -41,8 +41,20 @@ const activeWorkspace = {
   effectiveWorktreeBasePath: null,
 } satisfies WorkspaceRecord;
 
+type MemoryStorageOverrides = {
+  getItem?: (key: string) => string | null;
+  setItem?: (key: string, value: string) => void;
+};
+
 class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>();
+  readonly #getItemOverride: MemoryStorageOverrides["getItem"];
+  readonly #setItemOverride: MemoryStorageOverrides["setItem"];
+
+  constructor(overrides: MemoryStorageOverrides = {}) {
+    this.#getItemOverride = overrides.getItem;
+    this.#setItemOverride = overrides.setItem;
+  }
 
   get length(): number {
     return this.#items.size;
@@ -53,6 +65,10 @@ class MemoryStorage implements Storage {
   }
 
   getItem(key: string): string | null {
+    if (this.#getItemOverride) {
+      return this.#getItemOverride(key);
+    }
+
     return this.#items.get(key) ?? null;
   }
 
@@ -65,6 +81,11 @@ class MemoryStorage implements Storage {
   }
 
   setItem(key: string, value: string): void {
+    if (this.#setItemOverride) {
+      this.#setItemOverride(key, value);
+      return;
+    }
+
     this.#items.set(key, value);
   }
 }
@@ -299,12 +320,10 @@ describe("AppShell", () => {
   });
 
   test("defaults opened when storage cannot be read", () => {
-    const storage = new MemoryStorage();
     const getItem = mock(() => {
       throw new Error("read failed");
     });
-    storage.getItem = getItem;
-    installLocalStorage(storage);
+    installLocalStorage(new MemoryStorage({ getItem }));
     const originalConsoleError = console.error;
     const consoleError = mock(() => undefined);
     console.error = consoleError;
@@ -321,12 +340,10 @@ describe("AppShell", () => {
   });
 
   test("keeps sidebar toggling in memory when storage cannot be written", () => {
-    const storage = new MemoryStorage();
     const setItem = mock(() => {
       throw new Error("write failed");
     });
-    storage.setItem = setItem;
-    installLocalStorage(storage);
+    installLocalStorage(new MemoryStorage({ setItem }));
     const originalConsoleError = console.error;
     const consoleError = mock(() => undefined);
     console.error = consoleError;
