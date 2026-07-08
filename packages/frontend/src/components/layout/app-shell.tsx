@@ -178,6 +178,12 @@ export const AppShell = memo(function AppShell(): ReactElement {
                 >
                   <PanelLeftOpen className="size-4" />
                 </Button>
+                <div className="flex w-full justify-center border-t border-sidebar-border pt-2">
+                  <DiagnosticsPanel
+                    triggerClassName="text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                    triggerVariant="icon"
+                  />
+                </div>
                 <div className="w-full border-t border-sidebar-border pt-2">
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
                 </div>

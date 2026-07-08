@@ -17,7 +17,15 @@ import {
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
-export function DiagnosticsPanel(): ReactElement {
+type DiagnosticsPanelProps = {
+  triggerClassName?: string;
+  triggerVariant?: "summary" | "icon";
+};
+
+export function DiagnosticsPanel({
+  triggerClassName,
+  triggerVariant = "summary",
+}: DiagnosticsPanelProps): ReactElement {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
@@ -82,9 +90,21 @@ export function DiagnosticsPanel(): ReactElement {
     setOpen(true);
   }, [autoOpenedByRepo, workspaceRepoPath, model.criticalReasons.length]);
 
-  return (
-    <>
-      <div className="space-y-1.5">
+  const trigger =
+    triggerVariant === "icon" ? (
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        className={cn("size-8", triggerClassName)}
+        onClick={() => setOpen(true)}
+        aria-label="Open diagnostics"
+        title="Open diagnostics"
+      >
+        <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+      </Button>
+    ) : (
+      <div className={cn("space-y-1.5", triggerClassName)}>
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -120,7 +140,11 @@ export function DiagnosticsPanel(): ReactElement {
           </p>
         ) : null}
       </div>
+    );
 
+  return (
+    <>
+      {trigger}
       <Sheet open={isOpen} onOpenChange={setOpen}>
         <SheetContent side="right" className="overflow-y-auto">
           <SheetHeader className="space-y-3">

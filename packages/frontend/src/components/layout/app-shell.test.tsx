@@ -134,6 +134,10 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
   switchBranch: async () => undefined,
 });
 
+type RenderAppShellForTestOptions = {
+  runtimeDefinitionsError?: string | null;
+};
+
 const createChecksState = (): ChecksStateContextValue => ({
   runtimeCheck: null,
   taskStoreCheck: null,
@@ -169,7 +173,9 @@ const createTasksState = (): TasksStateContextValue => ({
   humanRequestChangesTask: async () => undefined,
 });
 
-const renderAppShellForTest = (): ReturnType<typeof render> => {
+const renderAppShellForTest = (
+  options: RenderAppShellForTestOptions = {},
+): ReturnType<typeof render> => {
   const queryClient = createQueryClient();
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
@@ -190,7 +196,7 @@ const renderAppShellForTest = (): ReturnType<typeof render> => {
                       availableRuntimeDefinitions: [],
                       agentRuntimes: settingsSnapshot.agentRuntimes,
                       isLoadingRuntimeDefinitions: false,
-                      runtimeDefinitionsError: null,
+                      runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
                       refreshRuntimeDefinitions: async () => [],
                       loadRepoRuntimeCatalog: async () => {
                         throw new Error("loadRepoRuntimeCatalog is not used in this test");
@@ -275,6 +281,32 @@ describe("AppShell", () => {
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
     expect(collapsedSettingsButton.className).toContain("size-8");
     expect(collapsedSettingsButton.className).not.toContain("px-3");
+  });
+
+  test("keeps diagnostics available as a status-colored collapsed sidebar trigger", async () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+
+    renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
+
+    const diagnosticsButton = screen.getByRole("button", {
+      hidden: true,
+      name: "Open diagnostics",
+    });
+    const diagnosticsIcon = diagnosticsButton.querySelector("svg");
+    expect(diagnosticsButton.className).toContain("size-8");
+    expect(diagnosticsButton.textContent?.trim()).toBe("");
+    expect(diagnosticsIcon?.getAttribute("class")).toContain("text-destructive-accent");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
+  });
+
+  test("opens diagnostics from the collapsed sidebar trigger", async () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+
+    renderAppShellForTest();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open diagnostics" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
   });
 
   test("stores collapsed and restores the collapsed sidebar after remount", () => {
