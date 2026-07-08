@@ -53,6 +53,13 @@ export const createElectronShellBridge = (): ShellBridge => {
       electronApi,
       CODEX_APP_SERVER_EVENT_CHANNEL,
     ),
+    appUpdates: {
+      getState: () => electronApi.appUpdates.getState(),
+      check: (input) => electronApi.appUpdates.check(input),
+      download: () => electronApi.appUpdates.download(),
+      install: () => electronApi.appUpdates.install(),
+      subscribeState: async (listener) => electronApi.appUpdates.subscribe(listener),
+    },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
   };

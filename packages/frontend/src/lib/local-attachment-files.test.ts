@@ -3,6 +3,7 @@ import type { HostClient } from "@openducktor/host-client";
 import { resolveLocalAttachmentPreviewSrc } from "./local-attachment-files";
 import {
   configureShellBridge,
+  createDisabledAppUpdateBridge,
   createUnavailableShellBridge,
   type ShellBridge,
 } from "./shell-bridge";
@@ -15,6 +16,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     unsubscribe: () => {},
   }),
   subscribeTaskEvents: async () => () => {},
+  appUpdates: createDisabledAppUpdateBridge("Updates are unavailable in this test shell."),
   capabilities: {
     canOpenExternalUrls: true,
     canPreviewLocalAttachments: true,

@@ -17,6 +17,15 @@ import type {
   AgentWorkflows,
   AppearanceSettings,
   AppPlatform,
+  AppUpdateCheckInitiator,
+  AppUpdateCommandRejection,
+  AppUpdateCommandResult,
+  AppUpdateError,
+  AppUpdateErrorCode,
+  AppUpdateOperation,
+  AppUpdateState,
+  AppUpdateStateChangedEvent,
+  AppUpdateStatus,
   AutopilotActionId,
   AutopilotEventId,
   AutopilotRule,
@@ -185,6 +194,19 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
   "APP_PLATFORM_VALUES",
+  "appUpdateCheckInitiatorSchema",
+  "appUpdateCheckInitiatorValues",
+  "appUpdateCommandRejectionSchema",
+  "appUpdateCommandResultSchema",
+  "appUpdateErrorCodeSchema",
+  "appUpdateErrorCodeValues",
+  "appUpdateErrorSchema",
+  "appUpdateOperationSchema",
+  "appUpdateOperationValues",
+  "appUpdateStateChangedEventSchema",
+  "appUpdateStateSchema",
+  "appUpdateStatusSchema",
+  "appUpdateStatusValues",
   "CODEX_APP_SERVER_COMMAND_REQUEST_METHODS",
   "CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS",
   "CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS",
@@ -520,6 +542,15 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   AppearanceSettings: AppearanceSettings;
   AppPlatform: AppPlatform;
+  AppUpdateCheckInitiator: AppUpdateCheckInitiator;
+  AppUpdateCommandRejection: AppUpdateCommandRejection;
+  AppUpdateCommandResult: AppUpdateCommandResult;
+  AppUpdateError: AppUpdateError;
+  AppUpdateErrorCode: AppUpdateErrorCode;
+  AppUpdateOperation: AppUpdateOperation;
+  AppUpdateState: AppUpdateState;
+  AppUpdateStateChangedEvent: AppUpdateStateChangedEvent;
+  AppUpdateStatus: AppUpdateStatus;
   TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;

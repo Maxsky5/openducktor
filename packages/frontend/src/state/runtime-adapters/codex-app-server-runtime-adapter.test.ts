@@ -9,6 +9,7 @@ import type { HostClient } from "@openducktor/host-client";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
   configureShellBridge,
+  createDisabledAppUpdateBridge,
   createUnavailableShellBridge,
   type ShellBridge,
 } from "@/lib/shell-bridge";
@@ -64,6 +65,7 @@ const configureCodexTestShellBridge = (
     }),
     subscribeTaskEvents: async () => () => {},
     subscribeCodexAppServerEvents: async () => () => {},
+    appUpdates: createDisabledAppUpdateBridge("Updates are unavailable in this test shell."),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,

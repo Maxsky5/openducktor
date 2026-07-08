@@ -5,6 +5,7 @@ const displayedArtifactExtensions = new Set([
   ".app",
   ".appimage",
   ".appx",
+  ".blockmap",
   ".deb",
   ".dmg",
   ".exe",
@@ -12,7 +13,17 @@ const displayedArtifactExtensions = new Set([
   ".pacman",
   ".rpm",
   ".snap",
+  ".zip",
 ]);
+
+const updateMetadataPattern = /^latest(?:-[a-z0-9]+)*\.yml$/i;
+
+function isDisplayedArtifact(artifactPath) {
+  return (
+    displayedArtifactExtensions.has(path.extname(artifactPath).toLowerCase()) ||
+    updateMetadataPattern.test(path.basename(artifactPath))
+  );
+}
 
 function collectAppBundles(outDir) {
   const appBundles = [];
@@ -40,9 +51,7 @@ function collectAppBundles(outDir) {
 
 function selectPackageArtifacts(buildResult) {
   const installableArtifacts = buildResult.artifactPaths
-    .filter((artifactPath) =>
-      displayedArtifactExtensions.has(path.extname(artifactPath).toLowerCase()),
-    )
+    .filter((artifactPath) => isDisplayedArtifact(artifactPath))
     .map((artifactPath) => path.resolve(artifactPath));
 
   return [...collectAppBundles(buildResult.outDir), ...installableArtifacts].sort((left, right) =>

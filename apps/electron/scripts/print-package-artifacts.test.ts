@@ -30,18 +30,24 @@ describe("print package artifacts hook", () => {
     const releaseDir = makeTempReleaseDir();
     const appBundle = path.join(releaseDir, "mac-arm64", "OpenDucktor.app");
     const dmg = path.join(releaseDir, "OpenDucktor-0.3.1-arm64.dmg");
+    const zip = path.join(releaseDir, "OpenDucktor-0.3.1-arm64-mac.zip");
 
     expect(
       artifactHook.selectPackageArtifacts({
         artifactPaths: [
           `${dmg}.blockmap`,
           dmg,
-          path.join(releaseDir, "OpenDucktor-0.3.1-arm64-mac.zip"),
+          zip,
+          path.join(releaseDir, "latest-mac.yml"),
           path.join(releaseDir, "builder-debug.yml"),
         ],
         outDir: releaseDir,
       }),
-    ).toEqual([dmg, appBundle].sort((left, right) => left.localeCompare(right)));
+    ).toEqual(
+      [`${dmg}.blockmap`, dmg, appBundle, zip, path.join(releaseDir, "latest-mac.yml")].sort(
+        (left, right) => left.localeCompare(right),
+      ),
+    );
   });
 
   test("formats absolute artifact paths for terminal output", () => {

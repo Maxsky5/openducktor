@@ -22,13 +22,24 @@ import {
   isElectronError,
 } from "../effect/electron-errors";
 import {
+  ELECTRON_APP_UPDATE_CHECK_CHANNEL,
+  ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL,
+  ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
+  ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
+  ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_HOST_INVOKE_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
   type ElectronHostInvokeRequest,
 } from "../shared/electron-bridge-contract";
+import {
+  createElectronAppUpdateService,
+  type ElectronAppUpdateService,
+} from "./app-updates/electron-app-update-service";
+import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import {
@@ -94,6 +105,7 @@ type ElectronPreReadyRuntime = {
 };
 
 type ElectronReadyRuntime = ElectronPreReadyRuntime & {
+  appUpdateService: ElectronAppUpdateService;
   rendererSession: ElectronSession;
 };
 
@@ -373,6 +385,14 @@ const registerHostEventForwarding = (): void => {
   }
 };
 
+const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateService): void => {
+  appUpdateService.subscribe((state) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, state);
+    }
+  });
+};
+
 const resolveLocalAttachmentPathForPreviewEffect = (
   hostCommandRouter: EffectHostCommandRouter,
   filePath: string,
@@ -435,7 +455,28 @@ const resolveLocalAttachmentPathForPreview = (
 ): Promise<string> =>
   runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
-const registerIpcHandlers = (hostCommandRouter: EffectHostCommandRouter): void => {
+const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheckInput => {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "initiator" in input &&
+    (input.initiator === "settings" || input.initiator === "menu")
+  ) {
+    return { initiator: input.initiator };
+  }
+
+  throw new ElectronValidationError({
+    operation: "electron.ipc.app-update-check.validate",
+    message: "Expected update check initiator to be settings or menu.",
+    field: "initiator",
+    details: { input },
+  });
+};
+
+const registerIpcHandlers = (
+  hostCommandRouter: EffectHostCommandRouter,
+  appUpdateService: ElectronAppUpdateService,
+): void => {
   ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (_event, request: ElectronHostInvokeRequest) =>
     runElectronEffect(hostCommandRouter.invoke(request.command, request.args)),
   );
@@ -451,6 +492,17 @@ const registerIpcHandlers = (hostCommandRouter: EffectHostCommandRouter): void =
     );
     return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
+
+  ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () => appUpdateService.getState());
+
+  ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
+    const checkInput = readElectronAppUpdateCheckInput(input);
+    return appUpdateService.check(checkInput);
+  });
+
+  ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, () => appUpdateService.download());
+
+  ipcMain.handle(ELECTRON_APP_UPDATE_INSTALL_CHANNEL, () => appUpdateService.install());
 };
 
 const disposeHostEffect = (hostCommandRouter: EffectHostCommandRouter, reason: string) =>
@@ -517,6 +569,20 @@ const configureElectronReadyRuntimeEffect = ({
   Effect.try({
     try: () => {
       const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
+      const appUpdateService = createElectronAppUpdateService({
+        adapter: createElectronUpdaterAdapter(),
+        appImagePath: process.env.APPIMAGE,
+        currentVersion: app.getVersion(),
+        installDownloadedUpdate: (runInstall) =>
+          shutdownController.shutdownHostAndRun({
+            reason: "update-install",
+            runAfterShutdown: runInstall,
+          }),
+        isPackaged: app.isPackaged,
+        logger: electronMainLogger,
+        platform: process.platform,
+        resourcesPath: process.resourcesPath,
+      });
       configureElectronLoopbackCorsPolicy(
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),
@@ -527,11 +593,18 @@ const configureElectronReadyRuntimeEffect = ({
           resolveLocalAttachmentPathForPreview(hostCommandRouter, filePath),
         session: rendererSession,
       });
-      installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
-      registerIpcHandlers(hostCommandRouter);
+      installApplicationMenu({
+        isDevelopment,
+        appName: app.name || APPLICATION_NAME,
+        onCheckForUpdates: () => {
+          void appUpdateService.check({ initiator: "menu" });
+        },
+      });
+      registerIpcHandlers(hostCommandRouter, appUpdateService);
       registerHostEventForwarding();
+      registerAppUpdateStateForwarding(appUpdateService);
       configureElectronDockIcon();
-      return { hostCommandRouter, rendererSession };
+      return { appUpdateService, hostCommandRouter, rendererSession };
     },
     catch: (cause) =>
       mapStartupPreparationError(
@@ -543,8 +616,11 @@ const configureElectronReadyRuntimeEffect = ({
 
 const startupEffect = composeElectronMainStartupEffect({
   configureReady: configureElectronReadyRuntimeEffect,
-  createMainWindow: ({ rendererSession }) =>
-    createMainWindowEffect(rendererSession).pipe(Effect.asVoid),
+  createMainWindow: ({ appUpdateService, rendererSession }) =>
+    createMainWindowEffect(rendererSession).pipe(
+      Effect.tap(() => Effect.sync(() => appUpdateService.startBackgroundCheck())),
+      Effect.asVoid,
+    ),
   initializeHost: ({ hostCommandRouter }) => initializeHostEffect(hostCommandRouter),
   preparePreReady: prepareElectronPreReadyRuntimeEffect,
   registerActivateHandler: ({ rendererSession }) => {

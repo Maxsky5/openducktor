@@ -1,0 +1,149 @@
+import type { AppUpdateState } from "@openducktor/contracts";
+import { Download, RefreshCw, RotateCw } from "lucide-react";
+import type { ReactElement } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
+import {
+  canDownloadUpdate,
+  canInstallUpdate,
+  getAppUpdateStatusDisplay,
+} from "./app-update-display";
+
+type AppUpdateProgressProps = {
+  percent: number;
+};
+
+function AppUpdateProgress({ percent }: AppUpdateProgressProps): ReactElement {
+  return (
+    <div className="space-y-1.5">
+      <div
+        className="h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+      >
+        <div className="h-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="text-xs text-muted-foreground">{Math.round(percent)}% downloaded</p>
+    </div>
+  );
+}
+
+type VersionRowsProps = {
+  state: AppUpdateState;
+};
+
+function VersionRows({ state }: VersionRowsProps): ReactElement {
+  return (
+    <div className="grid gap-2 text-xs sm:grid-cols-2">
+      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <p className="text-muted-foreground">Current version</p>
+        <p className="font-medium text-foreground">{state.currentVersion}</p>
+      </div>
+      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <p className="text-muted-foreground">Available version</p>
+        <p className="font-medium text-foreground">{state.availableVersion ?? "None"}</p>
+      </div>
+    </div>
+  );
+}
+
+type SettingsAppUpdatesContentProps = {
+  disabled: boolean;
+  state: AppUpdateState;
+};
+
+function SettingsAppUpdatesContent({
+  disabled,
+  state,
+}: SettingsAppUpdatesContentProps): ReactElement {
+  const controller = useAppUpdateState();
+  const display = getAppUpdateStatusDisplay(controller.state ?? state);
+  const visibleState = controller.state ?? state;
+  const isBusy = controller.actionInFlight !== null || visibleState.status === "checking";
+  const downloadAllowed = canDownloadUpdate(visibleState);
+  const installAllowed = canInstallUpdate(visibleState);
+
+  return (
+    <div className="rounded-md border border-border bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Desktop Updates</h3>
+            <Badge variant={display.badgeVariant}>{display.label}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">{display.description}</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || isBusy}
+          onClick={() => {
+            void controller.checkFromSettings();
+          }}
+        >
+          <RefreshCw className={isBusy ? "animate-spin" : undefined} />
+          Check for Updates
+        </Button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <VersionRows state={visibleState} />
+        {visibleState.status === "downloading" && (
+          <AppUpdateProgress percent={visibleState.progressPercent ?? 0} />
+        )}
+        {visibleState.error && (
+          <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
+            {visibleState.error.message}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {downloadAllowed && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={disabled || controller.actionInFlight !== null}
+              onClick={() => {
+                void controller.download();
+              }}
+            >
+              <Download />
+              Download Update
+            </Button>
+          )}
+          {installAllowed && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={disabled || controller.actionInFlight !== null}
+              onClick={() => {
+                void controller.install();
+              }}
+            >
+              <RotateCw />
+              Restart to Install
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type SettingsAppUpdatesSectionProps = {
+  disabled: boolean;
+};
+
+const initialState: AppUpdateState = {
+  status: "idle",
+  currentVersion: "unknown",
+};
+
+export function SettingsAppUpdatesSection({
+  disabled,
+}: SettingsAppUpdatesSectionProps): ReactElement {
+  return <SettingsAppUpdatesContent disabled={disabled} state={initialState} />;
+}

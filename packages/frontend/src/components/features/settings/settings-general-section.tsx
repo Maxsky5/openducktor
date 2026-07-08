@@ -1,5 +1,6 @@
 import type { GeneralSettings } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { SettingsAppUpdatesSection } from "@/components/features/app-updates/settings-app-updates-section";
 import { Switch } from "@/components/ui/switch";
 
 type GeneralSettingsSectionProps = {
@@ -46,6 +47,8 @@ export function GeneralSettingsSection({
           />
         </div>
       </div>
+
+      <SettingsAppUpdatesSection disabled={disabled} />
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
         Settings are persisted in <code>~/.openducktor/config.json</code> and saved atomically.

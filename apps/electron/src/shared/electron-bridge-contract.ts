@@ -1,9 +1,19 @@
+import type {
+  AppUpdateCheckInitiator,
+  AppUpdateCommandResult,
+  AppUpdateState,
+} from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
+export const ELECTRON_APP_UPDATE_GET_STATE_CHANNEL = "openducktor:app-update:get-state";
+export const ELECTRON_APP_UPDATE_CHECK_CHANNEL = "openducktor:app-update:check";
+export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:download";
+export const ELECTRON_APP_UPDATE_INSTALL_CHANNEL = "openducktor:app-update:install";
+export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update:state-changed";
 
 export type ElectronHostInvokeRequest = {
   command: HostCommandName;
@@ -15,9 +25,22 @@ export type ElectronHostEventEnvelope = {
   payload: unknown;
 };
 
+export type ElectronAppUpdateCheckInput = {
+  initiator: Exclude<AppUpdateCheckInitiator, "background">;
+};
+
+export type OpenDucktorElectronAppUpdateApi = {
+  getState(): Promise<AppUpdateState>;
+  check(input: ElectronAppUpdateCheckInput): Promise<AppUpdateCommandResult>;
+  download(): Promise<AppUpdateCommandResult>;
+  install(): Promise<AppUpdateCommandResult>;
+  subscribe(listener: (state: AppUpdateState) => void): () => void;
+};
+
 export type OpenDucktorElectronApi = {
   invoke(command: HostCommandName, args?: Record<string, unknown>): Promise<unknown>;
   subscribe(channel: string, listener: (payload: unknown) => void): () => void;
+  appUpdates: OpenDucktorElectronAppUpdateApi;
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
 };

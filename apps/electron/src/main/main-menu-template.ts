@@ -3,9 +3,23 @@ import type { MenuItemConstructorOptions } from "electron";
 export type MainMenuInput = {
   isDevelopment: boolean;
   appName?: string;
+  onCheckForUpdates?: () => void;
 };
 
-const mainMenu = (appName: string): MenuItemConstructorOptions => ({
+const checkForUpdatesMenuItem = (
+  onCheckForUpdates: (() => void) | undefined,
+): MenuItemConstructorOptions => ({
+  label: "Check for Updates...",
+  enabled: Boolean(onCheckForUpdates),
+  click: () => {
+    onCheckForUpdates?.();
+  },
+});
+
+const mainMenu = (
+  appName: string,
+  onCheckForUpdates: (() => void) | undefined,
+): MenuItemConstructorOptions => ({
   label: appName,
   submenu: [
     { role: "reload" },
@@ -14,6 +28,7 @@ const mainMenu = (appName: string): MenuItemConstructorOptions => ({
     ...(process.platform === "darwin"
       ? ([
           { role: "about" },
+          checkForUpdatesMenuItem(onCheckForUpdates),
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -25,6 +40,13 @@ const mainMenu = (appName: string): MenuItemConstructorOptions => ({
     { type: "separator" },
     { role: "quit" },
   ],
+});
+
+const createHelpMenu = (
+  onCheckForUpdates: (() => void) | undefined,
+): MenuItemConstructorOptions => ({
+  role: "help",
+  submenu: [checkForUpdatesMenuItem(onCheckForUpdates)],
 });
 
 const editMenu: MenuItemConstructorOptions = {
@@ -61,6 +83,13 @@ export const createContextMenuTemplate = (isDevelopment: boolean): MenuItemConst
 export const createApplicationMenuTemplate = ({
   isDevelopment,
   appName = "OpenDucktor",
+  onCheckForUpdates,
 }: MainMenuInput): MenuItemConstructorOptions[] => {
-  return [mainMenu(appName), editMenu, createViewMenu(isDevelopment), { role: "windowMenu" }];
+  return [
+    mainMenu(appName, onCheckForUpdates),
+    editMenu,
+    createViewMenu(isDevelopment),
+    { role: "windowMenu" },
+    ...(process.platform === "darwin" ? [] : [createHelpMenu(onCheckForUpdates)]),
+  ];
 };
