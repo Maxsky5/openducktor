@@ -57,6 +57,7 @@ export const HOST_COMMAND_NAMES = [
   "spec_get",
   "spec_save_document",
   "system_check",
+  "system_get_platform",
   "system_list_open_in_tools",
   "system_open_directory_in_tool",
   "task_approval_context_get",

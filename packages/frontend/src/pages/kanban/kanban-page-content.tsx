@@ -55,7 +55,8 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
     <section className="relative min-h-0 min-w-0 flex-1" aria-busy={isBoardLoading}>
       <div
         className={cn(
-          "hide-scrollbar min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
+          "min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
+          !model.showHorizontalScrollbars && "hide-scrollbar",
           showBlockingLoader ? "opacity-0" : "opacity-100",
         )}
       >

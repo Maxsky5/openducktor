@@ -319,6 +319,9 @@ describe("settings save transforms", () => {
         chat: {
           showThinkingMessages: true,
         },
+        appearance: {
+          horizontalScrollbarVisibility: "hide",
+        },
         reusablePrompts: [
           {
             id: " prompt-1 ",
@@ -357,6 +360,9 @@ describe("settings save transforms", () => {
         content: "Review this.",
       },
     ]);
+    expect(snapshot.appearance).toEqual({
+      horizontalScrollbarVisibility: "hide",
+    });
     expect(snapshot.kanban.doneVisibleDays).toBe(1);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {

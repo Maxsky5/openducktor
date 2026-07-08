@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { Components } from "react-markdown";
@@ -7,9 +7,10 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
+const actualReactMarkdownModule = await import("react-markdown");
 const markdownRenderMock = mock((_props: Record<string, unknown>) => {});
 
-mock.module("react-markdown", () => {
+const createReactMarkdownMockModule = () => {
   const MockMarkdown = ({
     children,
     ...props
@@ -25,10 +26,34 @@ mock.module("react-markdown", () => {
     default: MockMarkdown,
     defaultUrlTransform: (url: string) => url,
   };
-});
+};
 
 type PremiumMarkdownRendererComponent = typeof import("./markdown-renderer-premium").default;
-let PremiumMarkdownRenderer: PremiumMarkdownRendererComponent;
+let premiumMarkdownRendererImportCounter = 0;
+
+const importFreshPremiumMarkdownRenderer = async (): Promise<PremiumMarkdownRendererComponent> => {
+  premiumMarkdownRendererImportCounter += 1;
+  const module = (await import(
+    `./markdown-renderer-premium?mock=${premiumMarkdownRendererImportCounter}`
+  )) as {
+    default: PremiumMarkdownRendererComponent;
+  };
+  return module.default;
+};
+
+const withMockedReactMarkdown = async (
+  runTest: (PremiumMarkdownRenderer: PremiumMarkdownRendererComponent) => void | Promise<void>,
+): Promise<void> => {
+  markdownRenderMock.mockClear();
+  mock.module("react-markdown", createReactMarkdownMockModule);
+
+  try {
+    const PremiumMarkdownRenderer = await importFreshPremiumMarkdownRenderer();
+    await runTest(PremiumMarkdownRenderer);
+  } finally {
+    await restoreMockedModules([["react-markdown", async () => actualReactMarkdownModule]]);
+  }
+};
 
 const getLatestComponentsProp = (): Components => {
   const latest = markdownRenderMock.mock.calls.at(-1)?.[0] as
@@ -41,60 +66,54 @@ const getLatestComponentsProp = (): Components => {
   return components;
 };
 
-beforeAll(async () => {
-  ({ default: PremiumMarkdownRenderer } = await import("./markdown-renderer-premium"));
-});
-
-afterAll(async () => {
-  await restoreMockedModules([["react-markdown", () => import("react-markdown")]]);
-});
-
-beforeEach(() => {
-  markdownRenderMock.mockClear();
-});
-
 describe("PremiumMarkdownRenderer memoization", () => {
   test("keeps enhanced components reference stable when markdown or fallback changes", async () => {
-    const components: Components = {};
-    const rendered = render(
-      <PremiumMarkdownRenderer
-        markdown="alpha"
-        components={components}
-        fallback={<span>Loading alpha</span>}
-      />,
-    );
+    await withMockedReactMarkdown((PremiumMarkdownRenderer) => {
+      const components: Components = {};
+      const rendered = render(
+        <PremiumMarkdownRenderer
+          markdown="alpha"
+          components={components}
+          fallback={<span>Loading alpha</span>}
+        />,
+      );
 
-    const firstReference = getLatestComponentsProp();
+      const firstReference = getLatestComponentsProp();
 
-    rendered.rerender(
-      <PremiumMarkdownRenderer
-        markdown="beta"
-        components={components}
-        fallback={<span>Loading beta</span>}
-      />,
-    );
+      rendered.rerender(
+        <PremiumMarkdownRenderer
+          markdown="beta"
+          components={components}
+          fallback={<span>Loading beta</span>}
+        />,
+      );
 
-    const secondReference = getLatestComponentsProp();
-    expect(secondReference).toBe(firstReference);
+      const secondReference = getLatestComponentsProp();
+      expect(secondReference).toBe(firstReference);
 
-    rendered.unmount();
+      rendered.unmount();
+    });
   });
 
   test("rebuilds enhanced components when base components prop changes", async () => {
-    const componentsA: Components = {};
-    const componentsB: Components = {
-      strong: ({ node: _node, ...props }) => <strong {...props} />,
-    };
+    await withMockedReactMarkdown((PremiumMarkdownRenderer) => {
+      const componentsA: Components = {};
+      const componentsB: Components = {
+        strong: ({ node: _node, ...props }) => <strong {...props} />,
+      };
 
-    const rendered = render(<PremiumMarkdownRenderer markdown="alpha" components={componentsA} />);
+      const rendered = render(
+        <PremiumMarkdownRenderer markdown="alpha" components={componentsA} />,
+      );
 
-    const firstReference = getLatestComponentsProp();
+      const firstReference = getLatestComponentsProp();
 
-    rendered.rerender(<PremiumMarkdownRenderer markdown="alpha" components={componentsB} />);
+      rendered.rerender(<PremiumMarkdownRenderer markdown="alpha" components={componentsB} />);
 
-    const secondReference = getLatestComponentsProp();
-    expect(secondReference).not.toBe(firstReference);
+      const secondReference = getLatestComponentsProp();
+      expect(secondReference).not.toBe(firstReference);
 
-    rendered.unmount();
+      rendered.unmount();
+    });
   });
 });

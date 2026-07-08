@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  type AppPlatform,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
@@ -33,6 +34,7 @@ import {
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { systemQueryKeys } from "@/state/queries/system";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -132,6 +134,8 @@ type PendingMergedPullRequestFixture = {
 
 type LatestKanbanPageModels = {
   columnProps: Record<string, unknown> | null;
+  isLoadingTasks: boolean | null;
+  showHorizontalScrollbars: boolean | null;
   humanReviewFeedbackModalModel: Record<string, unknown> | null;
   sessionStartModalModel: Record<string, unknown> | null;
   resetImplementationModalModel: Record<string, unknown> | null;
@@ -150,6 +154,8 @@ type KanbanPageRenderState = {
 
 type KanbanPageHarness = RenderResult & {
   getKanbanColumnProps: () => Record<string, unknown>;
+  getIsLoadingTasks: () => boolean | null;
+  getShowHorizontalScrollbars: () => boolean | null;
   getHumanReviewFeedbackModalModel: () => Record<string, unknown> | null;
   getSessionStartModalModel: () => Record<string, unknown> | null;
   getResetImplementationModalModel: () => Record<string, unknown> | null;
@@ -409,6 +415,8 @@ const publishKanbanPageModels = (
         onResetImplementation: models.content.onResetImplementation,
       }
     : null;
+  latest.isLoadingTasks = models.content.isLoadingTasks;
+  latest.showHorizontalScrollbars = models.content.showHorizontalScrollbars;
   latest.humanReviewFeedbackModalModel = models.humanReviewFeedbackModal;
   latest.sessionStartModalModel = models.sessionStartModal;
   latest.resetImplementationModalModel = models.resetImplementationModal;
@@ -423,7 +431,7 @@ const getKanbanColumnProps = (latest: LatestKanbanPageModels): Record<string, un
 };
 
 const renderPage = async (
-  options: { seedSettingsSnapshot?: boolean } = {},
+  options: { seedSettingsSnapshot?: boolean; platform?: AppPlatform | null } = {},
 ): Promise<KanbanPageHarness> => {
   const renderState: KanbanPageRenderState = {
     task: currentTaskFixture,
@@ -435,6 +443,8 @@ const renderPage = async (
   };
   const latest: LatestKanbanPageModels = {
     columnProps: null,
+    isLoadingTasks: null,
+    showHorizontalScrollbars: null,
     humanReviewFeedbackModalModel: null,
     sessionStartModalModel: null,
     resetImplementationModalModel: null,
@@ -449,6 +459,9 @@ const renderPage = async (
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
+  }
+  if (options.platform !== null) {
+    queryClient.setQueryData(systemQueryKeys.platform(), options.platform ?? "darwin");
   }
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", renderState.task.id), []);
   const LocationProbe = (): ReactElement | null => {
@@ -539,6 +552,8 @@ const renderPage = async (
 
   return Object.assign(renderer, {
     getKanbanColumnProps: () => getKanbanColumnProps(latest),
+    getIsLoadingTasks: () => latest.isLoadingTasks,
+    getShowHorizontalScrollbars: () => latest.showHorizontalScrollbars,
     getHumanReviewFeedbackModalModel: () => latest.humanReviewFeedbackModalModel,
     getSessionStartModalModel: () => latest.sessionStartModalModel,
     getResetImplementationModalModel: () => latest.resetImplementationModalModel,
@@ -800,6 +815,81 @@ describe("KanbanPage session start modal flow", () => {
       }
     },
   );
+
+  kanbanTest("uses platform defaults for System horizontal scrollbar visibility", async () => {
+    currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
+      appearance: { horizontalScrollbarVisibility: "system" },
+    });
+
+    const linuxRenderer = await renderPage({ platform: "linux" });
+    expect(linuxRenderer.getKanbanColumnProps()).toBeTruthy();
+    expect(linuxRenderer.getShowHorizontalScrollbars()).toBe(true);
+    await act(async () => {
+      linuxRenderer.unmount();
+    });
+
+    currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
+      appearance: { horizontalScrollbarVisibility: "system" },
+    });
+    const macRenderer = await renderPage({ platform: "darwin" });
+    expect(macRenderer.getKanbanColumnProps()).toBeTruthy();
+    expect(macRenderer.getShowHorizontalScrollbars()).toBe(false);
+    await act(async () => {
+      macRenderer.unmount();
+    });
+  });
+
+  kanbanTest("does not request platform for explicit horizontal scrollbar modes", async () => {
+    const originalSystemGetPlatform = hostClient.systemGetPlatform;
+    const systemGetPlatform = mock(async () => {
+      throw new Error("platform should not be requested for explicit Appearance modes");
+    });
+    hostClient.systemGetPlatform = systemGetPlatform;
+    currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
+      appearance: { horizontalScrollbarVisibility: "show" },
+    });
+
+    const renderer = await renderPage();
+
+    try {
+      expect(renderer.getKanbanColumnProps()).toBeTruthy();
+      expect(systemGetPlatform).toHaveBeenCalledTimes(0);
+    } finally {
+      hostClient.systemGetPlatform = originalSystemGetPlatform;
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
+  });
+
+  kanbanTest("reports System platform resolution failures once", async () => {
+    const originalSystemGetPlatform = hostClient.systemGetPlatform;
+    hostClient.systemGetPlatform = async () => {
+      throw new Error("unsupported platform");
+    };
+    currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
+      appearance: { horizontalScrollbarVisibility: "system" },
+    });
+
+    const renderer = await renderPage({ platform: null });
+
+    try {
+      await waitForMockCall(toastErrorMock);
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Failed to resolve horizontal scrollbar default",
+        {
+          description: "unsupported platform",
+        },
+      );
+      expect(renderer.getIsLoadingTasks()).toBe(true);
+      expect(renderer.getShowHorizontalScrollbars()).toBe(false);
+    } finally {
+      hostClient.systemGetPlatform = originalSystemGetPlatform;
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
+  });
 
   kanbanTest(
     "background confirm keeps user on Kanban and shows background success toast",

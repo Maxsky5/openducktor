@@ -139,6 +139,28 @@ describe("useSettingsModalDraftActions", () => {
     await harness.unmount();
   });
 
+  test("updates global appearance settings without touching unrelated sections", async () => {
+    const harness = createHookHarness({
+      selectedWorkspaceId: "repo-a",
+      initialSnapshot: createInitialSnapshot(),
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateGlobalAppearanceSettings((appearance) => ({
+        ...appearance,
+        horizontalScrollbarVisibility: "show",
+      }));
+    });
+
+    const snapshot = harness.getLatest().snapshotDraft;
+    expect(snapshot?.appearance.horizontalScrollbarVisibility).toBe("show");
+    expect(snapshot?.chat.showThinkingMessages).toBe(false);
+    expect(snapshot?.workspaces["repo-a"]?.branchPrefix).toBe("obp");
+
+    await harness.unmount();
+  });
+
   test("updates global kanban settings without touching unrelated sections", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: "repo-a",

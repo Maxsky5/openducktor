@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -39,6 +40,17 @@ describe("AgentChatMarkdownRenderer", () => {
     } finally {
       rendered.unmount();
     }
+  });
+
+  test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", () => {
+    const markdownRendererSource = readFileSync(
+      new URL("../../../ui/markdown-renderer.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(markdownRendererSource).toContain("overflow-x-auto bg-transparent p-0");
+    expect(markdownRendererSource).toContain("overflow-x-auto");
+    expect(markdownRendererSource).not.toContain("hide-scrollbar");
   });
 
   test("uses the plain text path when no markdown syntax is present", () => {

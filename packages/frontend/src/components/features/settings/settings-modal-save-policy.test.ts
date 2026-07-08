@@ -33,6 +33,12 @@ describe("settings-modal-save-policy", () => {
         chat: true,
       }),
     ).toBe(false);
+    expect(
+      isGlobalGitOnlySave({
+        ...globalGitOnly,
+        appearance: true,
+      }),
+    ).toBe(false);
   });
 
   test("compares save-ready global git configs by persisted fields", () => {

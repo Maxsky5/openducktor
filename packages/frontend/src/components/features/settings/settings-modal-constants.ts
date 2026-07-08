@@ -9,6 +9,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   MessageSquareText,
+  Palette,
   SlidersHorizontal,
   Workflow,
 } from "lucide-react";
@@ -20,6 +21,7 @@ export type SettingsSectionId =
   | "repositories"
   | "prompts"
   | "reusable-prompts"
+  | "appearance"
   | "chat"
   | "kanban"
   | "autopilot";
@@ -39,6 +41,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "System Prompts", icon: MessageSquareText },
   { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
+  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },

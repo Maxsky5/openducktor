@@ -1,4 +1,9 @@
-import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
+import {
+  DEFAULT_APPEARANCE_SETTINGS,
+  DEFAULT_KANBAN_SETTINGS,
+  resolveHorizontalScrollbarVisibility,
+  type TaskCard,
+} from "@openducktor/contracts";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +20,7 @@ import {
   useWorkspaceState,
 } from "@/state";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
+import { platformQueryOptions } from "@/state/queries/system";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -35,11 +41,20 @@ export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;
   isForegroundLoadingTasks: boolean;
   isSettingsPending: boolean;
+  isScrollbarPlatformUnresolved: boolean;
   doneVisibleDays: number | undefined;
   isKanbanPending: boolean;
 }): boolean => {
-  if (args.isForegroundLoadingTasks || !args.hasActiveWorkspace || args.isSettingsPending) {
-    return args.isForegroundLoadingTasks || (args.hasActiveWorkspace && args.isSettingsPending);
+  if (
+    args.isForegroundLoadingTasks ||
+    !args.hasActiveWorkspace ||
+    args.isSettingsPending ||
+    args.isScrollbarPlatformUnresolved
+  ) {
+    return (
+      args.isForegroundLoadingTasks ||
+      (args.hasActiveWorkspace && (args.isSettingsPending || args.isScrollbarPlatformUnresolved))
+    );
   }
 
   return args.doneVisibleDays !== undefined && args.isKanbanPending;
@@ -76,8 +91,12 @@ export function useKanbanPageModels({
     tasks,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
+  const reportedPlatformErrorRef = useRef<string | null>(null);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
+  const horizontalScrollbarVisibility =
+    settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility ??
+    DEFAULT_APPEARANCE_SETTINGS.horizontalScrollbarVisibility;
   const openAgentStudioTabOnBackgroundSessionStart =
     settingsSnapshotQuery.data?.general.openAgentStudioTabOnBackgroundSessionStart ?? null;
   const emptyColumnDisplay =
@@ -99,6 +118,48 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+  const shouldResolveScrollbarPlatform =
+    workspaceRepoPath !== null &&
+    !settingsSnapshotQuery.isPending &&
+    !settingsSnapshotQuery.isError &&
+    horizontalScrollbarVisibility === "system";
+  const platformQuery = useQuery({
+    ...platformQueryOptions(),
+    enabled: shouldResolveScrollbarPlatform,
+  });
+  const isScrollbarPlatformUnresolved =
+    shouldResolveScrollbarPlatform && (platformQuery.isPending || !platformQuery.data);
+  useEffect(() => {
+    if (!shouldResolveScrollbarPlatform || !platformQuery.isError) {
+      reportedPlatformErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(platformQuery.error);
+    if (reportedPlatformErrorRef.current === description) {
+      return;
+    }
+
+    reportedPlatformErrorRef.current = description;
+    toast.error("Failed to resolve horizontal scrollbar default", {
+      description,
+    });
+  }, [platformQuery.error, platformQuery.isError, shouldResolveScrollbarPlatform]);
+
+  const showHorizontalScrollbars = useMemo(() => {
+    if (horizontalScrollbarVisibility !== "system") {
+      return horizontalScrollbarVisibility === "show";
+    }
+
+    if (!platformQuery.data) {
+      return false;
+    }
+
+    return (
+      resolveHorizontalScrollbarVisibility(horizontalScrollbarVisibility, platformQuery.data) ===
+      "show"
+    );
+  }, [horizontalScrollbarVisibility, platformQuery.data]);
 
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
@@ -139,6 +200,7 @@ export function useKanbanPageModels({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
+    isScrollbarPlatformUnresolved,
     doneVisibleDays,
     isKanbanPending: false,
   });
@@ -267,6 +329,7 @@ export function useKanbanPageModels({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
+    showHorizontalScrollbars,
     tasks: kanbanTasks,
     historicalSessionsByTaskId,
     sessions,

@@ -8,6 +8,7 @@ describe("isKanbanForegroundLoading", () => {
         hasActiveWorkspace: true,
         isForegroundLoadingTasks: false,
         isSettingsPending: false,
+        isScrollbarPlatformUnresolved: false,
         doneVisibleDays: 1,
         isKanbanPending: true,
       }),
@@ -20,6 +21,7 @@ describe("isKanbanForegroundLoading", () => {
         hasActiveWorkspace: true,
         isForegroundLoadingTasks: false,
         isSettingsPending: false,
+        isScrollbarPlatformUnresolved: false,
         doneVisibleDays: 1,
         isKanbanPending: false,
       }),
@@ -32,6 +34,20 @@ describe("isKanbanForegroundLoading", () => {
         hasActiveWorkspace: true,
         isForegroundLoadingTasks: true,
         isSettingsPending: false,
+        isScrollbarPlatformUnresolved: false,
+        doneVisibleDays: 1,
+        isKanbanPending: false,
+      }),
+    ).toBe(true);
+  });
+
+  test("keeps system platform resolution as foreground loading", () => {
+    expect(
+      isKanbanForegroundLoading({
+        hasActiveWorkspace: true,
+        isForegroundLoadingTasks: false,
+        isSettingsPending: false,
+        isScrollbarPlatformUnresolved: true,
         doneVisibleDays: 1,
         isKanbanPending: false,
       }),

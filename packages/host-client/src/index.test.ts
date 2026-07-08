@@ -227,6 +227,7 @@ describe("HostClient", () => {
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
       "workspaceSaveSettingsSnapshot",
+      "systemGetPlatform",
       "systemListOpenInTools",
       "systemOpenDirectoryInTool",
       "setTheme",
@@ -350,6 +351,35 @@ describe("HostClient", () => {
         args: { forceRefresh: true },
       },
     ]);
+  });
+
+  test("systemGetPlatform uses the dedicated platform IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "system_get_platform") {
+        return "linux";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.systemGetPlatform()).resolves.toBe("linux");
+
+    expect(calls).toEqual([
+      {
+        command: "system_get_platform",
+        args: undefined,
+      },
+    ]);
+  });
+
+  test("systemGetPlatform rejects unsupported platform payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "system_get_platform") {
+        return "freebsd";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.systemGetPlatform()).rejects.toThrow();
   });
 
   test("systemOpenDirectoryInTool uses the dedicated launch IPC route", async () => {

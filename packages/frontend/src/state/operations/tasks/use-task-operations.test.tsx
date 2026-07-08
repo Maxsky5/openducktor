@@ -346,6 +346,7 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
       hasActiveWorkspace: true,
       isForegroundLoadingTasks: latest.operations.isForegroundLoadingTasks,
       isSettingsPending: false,
+      isScrollbarPlatformUnresolved: false,
       doneVisibleDays: 1,
       isKanbanPending: latest.isPendingKanban,
     });

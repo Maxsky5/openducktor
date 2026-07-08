@@ -11,6 +11,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 0,
+      appearance: 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -30,6 +31,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Repositories");
     expect(html).toContain("System Prompts");
     expect(html).toContain("Reusable Prompts");
+    expect(html).toContain("Appearance");
     expect(html).toContain("Chat");
     expect(html).toContain("Kanban");
     expect(html).toContain("Autopilot");
@@ -42,6 +44,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 0,
+      appearance: 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -67,6 +70,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 0,
+      appearance: 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -92,6 +96,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 2,
+      appearance: 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,

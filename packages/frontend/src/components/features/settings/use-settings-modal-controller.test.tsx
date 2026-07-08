@@ -463,6 +463,10 @@ describe("useSettingsModalController", () => {
         ...chat,
         showThinkingMessages: true,
       }));
+      state.updateGlobalAppearanceSettings((appearance) => ({
+        ...appearance,
+        horizontalScrollbarVisibility: "hide",
+      }));
     });
 
     let didSave = false;
@@ -479,6 +483,9 @@ describe("useSettingsModalController", () => {
       chat: {
         ...expectedSnapshot.chat,
         showThinkingMessages: true,
+      },
+      appearance: {
+        horizontalScrollbarVisibility: "hide",
       },
       reusablePrompts: [],
       agentRuntimes: DEFAULT_AGENT_RUNTIMES,

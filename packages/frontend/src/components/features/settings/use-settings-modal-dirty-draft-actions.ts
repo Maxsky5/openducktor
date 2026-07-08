@@ -67,6 +67,17 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
+  const updateGlobalAppearanceSettings = useCallback(
+    (
+      updater: (current: SettingsSnapshot["appearance"]) => SettingsSnapshot["appearance"],
+    ): void => {
+      runDirtyAction("appearance", () => {
+        draftActions.updateGlobalAppearanceSettings(updater);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
   const updateAgentRuntimes = useCallback(
     (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
       runDirtyAction("agentRuntimes", () => {
@@ -148,6 +159,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateGlobalAppearanceSettings,
     updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,

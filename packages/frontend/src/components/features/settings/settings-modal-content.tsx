@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
+import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
@@ -85,6 +86,7 @@ export function SettingsModalContent({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalGeneralSettings,
+    updateGlobalAppearanceSettings,
     updateGlobalChatSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
@@ -176,6 +178,16 @@ export function SettingsModalContent({
         chat={snapshotDraft.chat}
         disabled={isInteractionDisabled}
         onUpdateChat={updateGlobalChatSettings}
+      />
+    );
+  }
+
+  if (section === "appearance") {
+    return (
+      <SettingsAppearanceSection
+        appearance={snapshotDraft.appearance}
+        disabled={isInteractionDisabled}
+        onUpdateAppearance={updateGlobalAppearanceSettings}
       />
     );
   }

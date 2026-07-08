@@ -17,6 +17,7 @@ export const prepareSettingsSnapshotForSave = (snapshot: SettingsSnapshot): Sett
     theme: snapshot.theme,
     git: prepareGlobalGitSettingsForSave(snapshot.git),
     general: snapshot.general,
+    appearance: snapshot.appearance,
     chat: snapshot.chat,
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,

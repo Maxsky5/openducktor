@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   ensureOpenInToolsFromQuery,
   loadOpenInToolsFromQuery,
+  platformQueryOptions,
   refreshOpenInToolsFromQuery,
   systemQueryKeys,
 } from "./system";
@@ -17,6 +18,18 @@ describe("system queries", () => {
 
   test("uses a global query key for Open In tool discovery", () => {
     expect(systemQueryKeys.openInTools()).toEqual(["system", "open-in-tools"]);
+    expect(systemQueryKeys.platform()).toEqual(["system", "platform"]);
+  });
+
+  test("loads the process platform with a process-lifetime cache", async () => {
+    const systemGetPlatform = mock(async () => "darwin" as const);
+    const hostClient = { systemGetPlatform };
+
+    await expect(queryClient.fetchQuery(platformQueryOptions(hostClient))).resolves.toBe("darwin");
+    await expect(queryClient.fetchQuery(platformQueryOptions(hostClient))).resolves.toBe("darwin");
+
+    expect(systemGetPlatform).toHaveBeenCalledTimes(1);
+    queryClient.clear();
   });
 
   test("ensureOpenInToolsFromQuery reuses cached discovery data without refetching", async () => {

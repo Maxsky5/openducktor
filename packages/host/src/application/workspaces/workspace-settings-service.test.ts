@@ -1,4 +1,5 @@
 import {
+  DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type GlobalConfig,
@@ -34,6 +35,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
+  appearance: DEFAULT_APPEARANCE_SETTINGS,
   chat: DEFAULT_CHAT_SETTINGS,
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
@@ -138,6 +140,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
+    expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
     expect(snapshot.workspaces).toEqual({});
   });
   test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
@@ -359,10 +362,14 @@ describe("createWorkspaceSettingsService", () => {
       lineOverflow: "scroll" as const,
       hunkSeparators: "simple" as const,
     };
+    const explicitAppearanceSettings = {
+      horizontalScrollbarVisibility: "show" as const,
+    };
     const records = await Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
         theme: "dark",
+        appearance: explicitAppearanceSettings,
         chat: explicitChatSettings,
         agentRuntimes: {
           ...snapshot.agentRuntimes,
@@ -435,6 +442,26 @@ describe("createWorkspaceSettingsService", () => {
       },
     });
     expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
+    expect(settingsConfig.writtenConfigs[0]?.appearance).toEqual(explicitAppearanceSettings);
+  });
+  test("rejects invalid appearance snapshot settings without writing config", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig(),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await expect(
+      Effect.runPromise(
+        service.saveSettingsSnapshot({
+          ...snapshot,
+          appearance: {
+            horizontalScrollbarVisibility: "auto",
+          },
+        } as unknown as typeof snapshot),
+      ),
+    ).rejects.toThrow("Invalid option");
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
   test("rejects invalid Codex snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({

@@ -213,6 +213,7 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     theme: config.theme,
     git: config.git,
     general: config.general,
+    appearance: config.appearance,
     chat: config.chat,
     reusablePrompts: config.reusablePrompts,
     kanban: config.kanban,

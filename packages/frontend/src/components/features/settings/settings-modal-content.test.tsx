@@ -74,6 +74,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     repositories: 0,
     prompts: 0,
     "reusable-prompts": 0,
+    appearance: 0,
     chat: 0,
     kanban: 0,
     autopilot: 0,
@@ -86,6 +87,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateGlobalGitConfig: () => {},
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
+  updateGlobalAppearanceSettings: () => {},
   updateAgentRuntimes: () => {},
   setCodexDangerAcknowledged: () => {},
   updateReusablePrompts: () => {},
@@ -148,6 +150,35 @@ describe("settings modal content", () => {
     expect(html).toContain("Chat Settings");
     expect(html).toContain("Show Thinking Messages");
     expect(html).not.toContain("Reusable prompts");
+  });
+
+  test("renders appearance section when section is appearance", () => {
+    const snapshot = createMockSnapshot({
+      appearance: { horizontalScrollbarVisibility: "hide" },
+    });
+    const controller = createMockController(snapshot);
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "appearance",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Appearance");
+    expect(html).toContain("Horizontal Scrollbars");
+    expect(html).toContain("System default");
+    expect(html).toContain("Show");
+    expect(html).toContain("Hide");
   });
 
   test("renders reusable prompts as a root section", () => {
