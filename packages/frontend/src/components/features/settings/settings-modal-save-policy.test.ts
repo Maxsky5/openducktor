@@ -27,18 +27,17 @@ describe("settings-modal-save-policy", () => {
     expect(hasAnyDirtySections(globalGitOnly)).toBe(true);
     expect(isGlobalGitOnlySave(globalGitOnly)).toBe(true);
 
-    expect(
-      isGlobalGitOnlySave({
-        ...globalGitOnly,
-        chat: true,
-      }),
-    ).toBe(false);
-    expect(
-      isGlobalGitOnlySave({
-        ...globalGitOnly,
-        appearance: true,
-      }),
-    ).toBe(false);
+    for (const section of Object.keys(EMPTY_DIRTY_SECTIONS)) {
+      if (section === "globalGit") {
+        continue;
+      }
+      expect(
+        isGlobalGitOnlySave({
+          ...globalGitOnly,
+          [section]: true,
+        }),
+      ).toBe(false);
+    }
   });
 
   test("compares save-ready global git configs by persisted fields", () => {

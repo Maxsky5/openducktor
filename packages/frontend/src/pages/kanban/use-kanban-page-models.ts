@@ -1,9 +1,4 @@
-import {
-  DEFAULT_APPEARANCE_SETTINGS,
-  DEFAULT_KANBAN_SETTINGS,
-  resolveHorizontalScrollbarVisibility,
-  type TaskCard,
-} from "@openducktor/contracts";
+import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -20,7 +15,7 @@ import {
   useWorkspaceState,
 } from "@/state";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
-import { platformQueryOptions } from "@/state/queries/system";
+import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -95,8 +90,7 @@ export function useKanbanPageModels({
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const horizontalScrollbarVisibility =
-    settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility ??
-    DEFAULT_APPEARANCE_SETTINGS.horizontalScrollbarVisibility;
+    settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility;
   const openAgentStudioTabOnBackgroundSessionStart =
     settingsSnapshotQuery.data?.general.openAgentStudioTabOnBackgroundSessionStart ?? null;
   const emptyColumnDisplay =
@@ -121,21 +115,19 @@ export function useKanbanPageModels({
   const shouldResolveScrollbarPlatform =
     workspaceRepoPath !== null &&
     !settingsSnapshotQuery.isPending &&
-    !settingsSnapshotQuery.isError &&
-    horizontalScrollbarVisibility === "system";
-  const platformQuery = useQuery({
-    ...platformQueryOptions(),
+    !settingsSnapshotQuery.isError;
+  const horizontalScrollbarState = useHorizontalScrollbarVisibility({
     enabled: shouldResolveScrollbarPlatform,
+    visibility: horizontalScrollbarVisibility,
   });
-  const isScrollbarPlatformUnresolved =
-    shouldResolveScrollbarPlatform && (platformQuery.isPending || !platformQuery.data);
   useEffect(() => {
-    if (!shouldResolveScrollbarPlatform || !platformQuery.isError) {
+    const platformError = horizontalScrollbarState.platformError;
+    if (!platformError) {
       reportedPlatformErrorRef.current = null;
       return;
     }
 
-    const description = errorMessage(platformQuery.error);
+    const description = errorMessage(platformError);
     if (reportedPlatformErrorRef.current === description) {
       return;
     }
@@ -144,22 +136,7 @@ export function useKanbanPageModels({
     toast.error("Failed to resolve horizontal scrollbar default", {
       description,
     });
-  }, [platformQuery.error, platformQuery.isError, shouldResolveScrollbarPlatform]);
-
-  const showHorizontalScrollbars = useMemo(() => {
-    if (horizontalScrollbarVisibility !== "system") {
-      return horizontalScrollbarVisibility === "show";
-    }
-
-    if (!platformQuery.data) {
-      return false;
-    }
-
-    return (
-      resolveHorizontalScrollbarVisibility(horizontalScrollbarVisibility, platformQuery.data) ===
-      "show"
-    );
-  }, [horizontalScrollbarVisibility, platformQuery.data]);
+  }, [horizontalScrollbarState.platformError]);
 
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
@@ -200,7 +177,7 @@ export function useKanbanPageModels({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
-    isScrollbarPlatformUnresolved,
+    isScrollbarPlatformUnresolved: horizontalScrollbarState.isResolvingPlatformDefault,
     doneVisibleDays,
     isKanbanPending: false,
   });
@@ -329,7 +306,7 @@ export function useKanbanPageModels({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
-    showHorizontalScrollbars,
+    showHorizontalScrollbars: horizontalScrollbarState.showHorizontalScrollbars,
     tasks: kanbanTasks,
     historicalSessionsByTaskId,
     sessions,

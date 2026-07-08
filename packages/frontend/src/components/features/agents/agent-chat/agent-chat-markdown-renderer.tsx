@@ -3,6 +3,7 @@ import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer"
 import { cn } from "@/lib/utils";
 import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 
 const LazyMarkdownRenderer = lazy(async () => {
   const module = await import("@/components/ui/markdown-renderer");
@@ -10,8 +11,8 @@ const LazyMarkdownRenderer = lazy(async () => {
 });
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground",
-  document: "whitespace-pre-wrap break-words leading-6 py-4 text-foreground",
+  compact: "text-[13px] leading-relaxed text-foreground",
+  document: "leading-6 py-4 text-foreground",
 };
 
 const MARKDOWN_PROSE_WRAPPING_CLASSES =
@@ -28,7 +29,11 @@ const PlainTextMarkdownFallback = ({
   variant,
   className,
 }: PlainTextMarkdownFallbackProps): ReactElement => {
-  return <p className={cn(PLAIN_TEXT_CLASSES[variant], className)}>{content}</p>;
+  return (
+    <AgentChatTranscriptProse className={cn(PLAIN_TEXT_CLASSES[variant], className)}>
+      {content}
+    </AgentChatTranscriptProse>
+  );
 };
 
 type AgentChatMarkdownRendererProps = {

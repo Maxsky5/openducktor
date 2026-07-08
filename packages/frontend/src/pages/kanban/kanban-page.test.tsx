@@ -881,7 +881,7 @@ describe("KanbanPage session start modal flow", () => {
           description: "unsupported platform",
         },
       );
-      expect(renderer.getIsLoadingTasks()).toBe(true);
+      expect(renderer.getIsLoadingTasks()).toBe(false);
       expect(renderer.getShowHorizontalScrollbars()).toBe(false);
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;

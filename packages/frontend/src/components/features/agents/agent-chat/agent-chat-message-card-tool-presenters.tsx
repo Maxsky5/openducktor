@@ -25,6 +25,7 @@ import {
   toolDisplayName,
 } from "./agent-chat-message-card-model";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
 
@@ -367,15 +368,16 @@ export const RegularToolMessage = ({
           <div className="space-y-2 border-t border-border p-2 text-xs text-foreground">
             {questionDetailRenderEntries.map(({ key, detail }) => (
               <div key={key} className="space-y-0.5">
-                <p className="break-words font-medium text-foreground">{detail.prompt}</p>
-                <p
-                  className={cn(
-                    "whitespace-pre-wrap break-words",
-                    detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground",
-                  )}
+                <AgentChatTranscriptProse className="font-medium text-foreground">
+                  {detail.prompt}
+                </AgentChatTranscriptProse>
+                <AgentChatTranscriptProse
+                  className={
+                    detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground"
+                  }
                 >
                   {detail.answers.length > 0 ? detail.answers.join(", ") : "No answer yet"}
-                </p>
+                </AgentChatTranscriptProse>
               </div>
             ))}
           </div>

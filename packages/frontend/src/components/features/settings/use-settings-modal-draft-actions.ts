@@ -53,6 +53,25 @@ export const useSettingsModalDraftActions = ({
   selectedWorkspaceId,
   setSnapshotDraft,
 }: UseSettingsModalDraftActionsArgs): SettingsModalDraftActions => {
+  const updateSnapshotSection = useCallback(
+    <Section extends keyof SettingsSnapshot>(
+      section: Section,
+      updater: (current: SettingsSnapshot[Section]) => SettingsSnapshot[Section],
+    ): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [section]: updater(current[section]),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateSelectedRepoConfig = useCallback(
     (updater: (current: RepoConfig) => RepoConfig): void => {
       setSnapshotDraft((current) => {
@@ -79,148 +98,67 @@ export const useSettingsModalDraftActions = ({
 
   const updateGlobalPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          globalPromptOverrides: updater(current.globalPromptOverrides),
-        };
-      });
+      updateSnapshotSection("globalPromptOverrides", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalGitConfig = useCallback(
     (updater: (current: GlobalGitConfig) => GlobalGitConfig): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          git: updater(current.git),
-        };
-      });
+      updateSnapshotSection("git", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalChatSettings = useCallback(
     (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          chat: updater(current.chat),
-        };
-      });
+      updateSnapshotSection("chat", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalGeneralSettings = useCallback(
     (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          general: updater(current.general),
-        };
-      });
+      updateSnapshotSection("general", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalAppearanceSettings = useCallback(
     (
       updater: (current: SettingsSnapshot["appearance"]) => SettingsSnapshot["appearance"],
     ): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          appearance: updater(current.appearance),
-        };
-      });
+      updateSnapshotSection("appearance", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateAgentRuntimes = useCallback(
     (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          agentRuntimes: updater(current.agentRuntimes),
-        };
-      });
+      updateSnapshotSection("agentRuntimes", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateReusablePrompts = useCallback(
     (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          reusablePrompts: updater(current.reusablePrompts),
-        };
-      });
+      updateSnapshotSection("reusablePrompts", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalKanbanSettings = useCallback(
     (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          kanban: updater(current.kanban),
-        };
-      });
+      updateSnapshotSection("kanban", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateGlobalAutopilotSettings = useCallback(
     (updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"]): void => {
-      setSnapshotDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          autopilot: updater(current.autopilot),
-        };
-      });
+      updateSnapshotSection("autopilot", updater);
     },
-    [setSnapshotDraft],
+    [updateSnapshotSection],
   );
 
   const updateRepoPromptOverrides = useCallback(

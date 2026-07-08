@@ -33,6 +33,7 @@ import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-chip";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
@@ -40,7 +41,6 @@ import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
-const TRANSCRIPT_PROSE_CLASS_NAME = "whitespace-pre-wrap break-words leading-6";
 
 const pacedStep = (size: number): number => {
   if (size <= 12) {
@@ -398,7 +398,7 @@ const renderUserMessagePartSequence = (
     return null;
   }
 
-  return <p className={TRANSCRIPT_PROSE_CLASS_NAME}>{nodes}</p>;
+  return <AgentChatTranscriptProse className="leading-6">{nodes}</AgentChatTranscriptProse>;
 };
 
 const readInlineUserReferenceRanges = (
@@ -540,7 +540,7 @@ const renderUserMessageInlineContent = (
     return null;
   }
 
-  return <p className={TRANSCRIPT_PROSE_CLASS_NAME}>{nodes}</p>;
+  return <AgentChatTranscriptProse className="leading-6">{nodes}</AgentChatTranscriptProse>;
 };
 
 type SessionNoticeMessageProps = {
@@ -657,14 +657,14 @@ const SubagentMessage = ({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               {summary ? (
-                <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                <AgentChatTranscriptProse className="text-sm text-muted-foreground">
                   {summary}
-                </p>
+                </AgentChatTranscriptProse>
               ) : null}
               {error ? (
-                <p className="whitespace-pre-wrap break-words text-sm font-medium text-destructive">
+                <AgentChatTranscriptProse className="text-sm font-medium text-destructive">
                   {error}
-                </p>
+                </AgentChatTranscriptProse>
               ) : null}
             </div>
             <SubagentTranscriptButton parentSession={parentSession} meta={meta} />
@@ -688,7 +688,9 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
           ) : null}
           {meta?.title ?? "Notice"}
         </p>
-        <p className={cn(TRANSCRIPT_PROSE_CLASS_NAME, "text-inherit")}>{message.content}</p>
+        <AgentChatTranscriptProse className="leading-6 text-inherit">
+          {message.content}
+        </AgentChatTranscriptProse>
       </div>
       {timeLabel ? <span className="shrink-0 text-[11px] opacity-70">{timeLabel}</span> : null}
     </div>
@@ -827,7 +829,11 @@ export const MessageBody = ({
   }
 
   if (message.role === "thinking" || message.role === "system") {
-    return <p className={cn(TRANSCRIPT_PROSE_CLASS_NAME, "text-foreground")}>{message.content}</p>;
+    return (
+      <AgentChatTranscriptProse className="leading-6 text-foreground">
+        {message.content}
+      </AgentChatTranscriptProse>
+    );
   }
 
   if (message.role === "assistant") {
