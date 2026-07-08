@@ -56,7 +56,7 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
       <div
         className={cn(
           "min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
-          !model.showHorizontalScrollbars && "hide-scrollbar",
+          model.showHorizontalScrollbars === false && "hide-scrollbar",
           showBlockingLoader ? "opacity-0" : "opacity-100",
         )}
       >

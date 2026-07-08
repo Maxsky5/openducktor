@@ -7,10 +7,18 @@ type PlatformSource = () => string;
 
 const supportedPlatformsText = APP_PLATFORM_VALUES.join(", ").replace(", darwin", ", and darwin");
 
-const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
+const noArgsValidationError = (
+  command: string,
+  args: Record<string, unknown> | undefined,
+): HostValidationError | null => {
   if (args && Object.keys(args).length > 0) {
-    throw new HostValidationError({ message: `${command} does not accept arguments.` });
+    return new HostValidationError({
+      message: `${command} does not accept arguments.`,
+      field: "args",
+      details: { command },
+    });
   }
+  return null;
 };
 
 export const createSystemPlatformCommandHandlers = (
@@ -18,7 +26,11 @@ export const createSystemPlatformCommandHandlers = (
 ): HostCommandHandlers => ({
   system_get_platform: (args) =>
     Effect.gen(function* () {
-      requireNoArgs("system_get_platform", args);
+      const argsError = noArgsValidationError("system_get_platform", args);
+      if (argsError) {
+        return yield* Effect.fail(argsError);
+      }
+
       const platform = platformSource();
       const parsed = appPlatformSchema.safeParse(platform);
 

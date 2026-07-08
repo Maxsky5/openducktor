@@ -139,7 +139,7 @@ type UseKanbanBoardModelArgs = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
-  showHorizontalScrollbars: boolean;
+  showHorizontalScrollbars: boolean | null;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   sessions: AgentSessionSummary[];

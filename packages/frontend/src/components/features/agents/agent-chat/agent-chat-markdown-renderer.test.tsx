@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
+import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
@@ -43,14 +43,22 @@ describe("AgentChatMarkdownRenderer", () => {
   });
 
   test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", () => {
-    const markdownRendererSource = readFileSync(
-      new URL("../../../ui/markdown-renderer.tsx", import.meta.url),
-      "utf8",
-    );
+    const Pre = MARKDOWN_COMPONENTS.document.pre;
+    if (typeof Pre !== "function") {
+      throw new Error("Expected document markdown code blocks to use a pre component");
+    }
 
-    expect(markdownRendererSource).toContain("overflow-x-auto bg-transparent p-0");
-    expect(markdownRendererSource).toContain("overflow-x-auto");
-    expect(markdownRendererSource).not.toContain("hide-scrollbar");
+    const rendered = render(createElement(Pre, {}, createElement("code", {}, "const value = 1;")));
+
+    try {
+      const codeBlock = rendered.container.querySelector("pre");
+      expect(codeBlock).not.toBeNull();
+      expect(codeBlock?.className).toContain("overflow-x-auto");
+      expect(codeBlock?.className).not.toContain("hide-scrollbar");
+      expect(rendered.container.innerHTML).not.toContain("hide-scrollbar");
+    } finally {
+      rendered.unmount();
+    }
   });
 
   test("uses the plain text path when no markdown syntax is present", () => {

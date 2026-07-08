@@ -43,7 +43,7 @@ export function SettingsAppearanceSection({
 
       <SettingsSegmentedOptionRow<HorizontalScrollbarVisibility>
         title="Horizontal Scrollbars"
-        description="Choose whether horizontal scroll areas use the operating system default, stay visible, or stay hidden."
+        description="Choose how supported horizontal scroll areas, starting with Kanban, handle app-level scrollbar hiding."
         value={appearance.horizontalScrollbarVisibility}
         options={horizontalScrollbarVisibilityOptions}
         disabled={disabled}

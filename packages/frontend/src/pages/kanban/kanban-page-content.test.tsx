@@ -67,6 +67,20 @@ describe("KanbanPageContent", () => {
     expect(html).not.toContain("hide-scrollbar");
   });
 
+  test("omits scrollbar hiding while horizontal scrollbar visibility is unresolved", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          showHorizontalScrollbars: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("overflow-x-auto");
+    expect(html).not.toContain("hide-scrollbar");
+  });
+
   test("renders a blocking board loader while the initial task load is in progress", () => {
     const html = renderToStaticMarkup(
       createElement(KanbanPageContent, {

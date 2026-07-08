@@ -882,7 +882,7 @@ describe("KanbanPage session start modal flow", () => {
         },
       );
       expect(renderer.getIsLoadingTasks()).toBe(false);
-      expect(renderer.getShowHorizontalScrollbars()).toBe(false);
+      expect(renderer.getShowHorizontalScrollbars()).toBeNull();
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;
       await act(async () => {

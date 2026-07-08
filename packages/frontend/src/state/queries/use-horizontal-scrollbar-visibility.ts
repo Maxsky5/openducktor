@@ -12,7 +12,7 @@ type UseHorizontalScrollbarVisibilityArgs = {
 };
 
 type HorizontalScrollbarVisibilityState = {
-  showHorizontalScrollbars: boolean;
+  showHorizontalScrollbars: boolean | null;
   isResolvingPlatformDefault: boolean;
   platformError: Error | null;
 };
@@ -29,7 +29,7 @@ export const useHorizontalScrollbarVisibility = ({
     enabled: shouldResolvePlatform,
   });
 
-  let showHorizontalScrollbars = false;
+  let showHorizontalScrollbars: boolean | null = null;
   if (horizontalScrollbarVisibility !== "system") {
     showHorizontalScrollbars = horizontalScrollbarVisibility === "show";
   } else if (platformQuery.data) {

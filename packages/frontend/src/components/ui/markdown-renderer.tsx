@@ -2,10 +2,11 @@ import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 
-export type MarkdownRendererVariant = "compact" | "document";
+export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
 export type MarkdownPremiumRendererProps = {
   markdown: string;
@@ -23,42 +24,6 @@ type MarkdownRendererProps = {
 
 const REMARK_PLUGINS = [remarkGfm];
 const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
-
-const SHARED_COMPONENTS: Components = {
-  a: ({ node: _node, children, className, href, ...props }) => (
-    <a
-      {...props}
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className={cn(
-        "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
-        className,
-      )}
-    >
-      {children}
-    </a>
-  ),
-};
-
-const COMPACT_COMPONENTS: Components = {
-  ...SHARED_COMPONENTS,
-  pre: ({ node: _node, className, ...props }) => (
-    <pre {...props} className={cn("overflow-x-auto bg-transparent p-0", className)} />
-  ),
-};
-
-const DOCUMENT_COMPONENTS: Components = {
-  ...SHARED_COMPONENTS,
-  pre: ({ node: _node, className, ...props }) => (
-    <pre {...props} className={cn("overflow-x-auto", className)} />
-  ),
-};
-
-const MARKDOWN_COMPONENTS: Record<MarkdownRendererVariant, Components> = {
-  compact: COMPACT_COMPONENTS,
-  document: DOCUMENT_COMPONENTS,
-};
 
 const MARKDOWN_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: cn(
