@@ -15,6 +15,8 @@ import type {
   AgentToolName,
   AgentWorkflowState,
   AgentWorkflows,
+  AppearanceSettings,
+  AppPlatform,
   AutopilotActionId,
   AutopilotEventId,
   AutopilotRule,
@@ -63,6 +65,7 @@ import type {
   GitWorktreeStatusSummary,
   GitWorktreeSummary,
   GlobalConfig,
+  HorizontalScrollbarVisibility,
   IssueType,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
@@ -513,6 +516,8 @@ type ExportedTypeContract = {
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
+  AppearanceSettings: AppearanceSettings;
+  AppPlatform: AppPlatform;
   TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;
@@ -552,6 +557,7 @@ type ExportedTypeContract = {
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   GeneralSettings: GeneralSettings;
+  HorizontalScrollbarVisibility: HorizontalScrollbarVisibility;
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;

@@ -24,9 +24,12 @@ describe("system queries", () => {
   test("loads the process platform with a process-lifetime cache", async () => {
     const systemGetPlatform = mock(async () => "darwin" as const);
     const hostClient = { systemGetPlatform };
+    const queryOptions = platformQueryOptions(hostClient);
 
-    await expect(queryClient.fetchQuery(platformQueryOptions(hostClient))).resolves.toBe("darwin");
-    await expect(queryClient.fetchQuery(platformQueryOptions(hostClient))).resolves.toBe("darwin");
+    expect(queryOptions.gcTime).toBe(Number.POSITIVE_INFINITY);
+    expect(queryOptions.staleTime).toBe(Number.POSITIVE_INFINITY);
+    await expect(queryClient.fetchQuery(queryOptions)).resolves.toBe("darwin");
+    await expect(queryClient.fetchQuery(queryOptions)).resolves.toBe("darwin");
 
     expect(systemGetPlatform).toHaveBeenCalledTimes(1);
     queryClient.clear();

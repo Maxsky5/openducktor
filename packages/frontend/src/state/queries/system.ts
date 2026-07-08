@@ -19,6 +19,7 @@ export const platformQueryOptions = (hostClient: SystemPlatformQueryHost = host)
     queryKey: systemQueryKeys.platform(),
     queryFn: (): Promise<AppPlatform> => hostClient.systemGetPlatform(),
     staleTime: PLATFORM_STALE_TIME_MS,
+    gcTime: PLATFORM_STALE_TIME_MS,
   });
 
 export const openInToolsQueryOptions = (hostClient: SystemOpenInToolsQueryHost = host) =>

@@ -11,11 +11,18 @@ const createAppearanceSettings = (
 });
 
 const renderAppearanceSection = (appearance: AppearanceSettings, disabled = false): void => {
+  let latestAppearance = appearance;
+  const onUpdateAppearance = mock(
+    (updater: (current: AppearanceSettings) => AppearanceSettings): void => {
+      latestAppearance = updater(latestAppearance);
+    },
+  );
+
   render(
     <SettingsAppearanceSection
-      appearance={appearance}
+      appearance={latestAppearance}
       disabled={disabled}
-      onUpdateAppearance={() => appearance}
+      onUpdateAppearance={onUpdateAppearance}
     />,
   );
 };

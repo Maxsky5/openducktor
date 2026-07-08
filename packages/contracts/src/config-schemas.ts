@@ -435,6 +435,7 @@ export const resolveHorizontalScrollbarVisibility = (
     );
   }
 
+  // Keep runtime validation for JavaScript callers and unsafe casts crossing the package boundary.
   const parsedPlatform = appPlatformSchema.safeParse(platform);
   if (!parsedPlatform.success) {
     throw new Error(`Unsupported app platform for horizontal scrollbar visibility: ${platform}`);
