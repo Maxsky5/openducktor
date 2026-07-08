@@ -1,0 +1,97 @@
+import { describe, expect, test } from "bun:test";
+import type { PullRequestReviewContext } from "@openducktor/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createQueryClient } from "@/lib/query-client";
+import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
+
+const queryInput = {
+  repoPath: "/repo",
+  taskId: "task-12",
+  workingDirectory: "/repo/worktree",
+};
+
+const loadedContext = {
+  status: "loaded",
+  providerId: "github",
+  pullRequest: {
+    providerId: "github",
+    number: 42,
+    title: "Rework task execution panel",
+    url: "https://github.com/openai/openducktor/pull/42",
+    state: "draft",
+  },
+  aggregateStatus: "failure",
+  checks: [
+    {
+      name: "Unit tests",
+      workflow: "CI",
+      status: "completed",
+      conclusion: "failure",
+      url: "https://github.com/openai/openducktor/actions/runs/1",
+      details: "1 suite failed",
+      startedAt: "2026-07-08T10:00:00Z",
+      completedAt: "2026-07-08T10:05:00Z",
+    },
+  ],
+  comments: [
+    {
+      id: "thread-comment-1",
+      author: "reviewer",
+      body: "This thread still needs work.",
+      url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
+      createdAt: "2026-07-08T10:06:00Z",
+      updatedAt: "2026-07-08T10:07:00Z",
+      path: "packages/frontend/src/panel.tsx",
+      line: 12,
+      threadId: "thread-1",
+      isResolved: false,
+      source: "review_thread",
+    },
+  ],
+  refreshedAt: "2026-07-08T10:08:00Z",
+} satisfies PullRequestReviewContext;
+
+const renderLoadedPanel = (): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), loadedContext);
+
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(TaskExecutionCiChecksPanel, {
+        model: {
+          isActive: true,
+          queryInput,
+        },
+      }),
+    ),
+  );
+};
+
+describe("TaskExecutionCiChecksPanel", () => {
+  test("renders provider-neutral PR, check, and review-thread metadata", () => {
+    const html = renderLoadedPanel();
+
+    expect(html).toContain("#42 Rework task execution panel");
+    expect(html).toContain("GitHub");
+    expect(html).toContain("draft");
+    expect(html).toContain("Unit tests");
+    expect(html).toContain("CI");
+    expect(html).toContain("1 suite failed");
+    expect(html).toContain("Started");
+    expect(html).toContain("2026-07-08T10:00:00Z");
+    expect(html).toContain("Completed");
+    expect(html).toContain("2026-07-08T10:05:00Z");
+    expect(html).toContain("Review thread");
+    expect(html).toContain("Thread thread-1");
+    expect(html).toContain("Unresolved");
+    expect(html).toContain("Created");
+    expect(html).toContain("2026-07-08T10:06:00Z");
+    expect(html).toContain("Updated");
+    expect(html).toContain("2026-07-08T10:07:00Z");
+  });
+});
