@@ -40,6 +40,7 @@ import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
+const TRANSCRIPT_PROSE_CLASS_NAME = "whitespace-pre-wrap break-words leading-6";
 
 const pacedStep = (size: number): number => {
   if (size <= 12) {
@@ -397,7 +398,7 @@ const renderUserMessagePartSequence = (
     return null;
   }
 
-  return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
+  return <p className={TRANSCRIPT_PROSE_CLASS_NAME}>{nodes}</p>;
 };
 
 const readInlineUserReferenceRanges = (
@@ -539,7 +540,7 @@ const renderUserMessageInlineContent = (
     return null;
   }
 
-  return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
+  return <p className={TRANSCRIPT_PROSE_CLASS_NAME}>{nodes}</p>;
 };
 
 type SessionNoticeMessageProps = {
@@ -683,7 +684,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
           ) : null}
           {meta?.title ?? "Notice"}
         </p>
-        <p className="whitespace-pre-wrap leading-6 text-inherit">{message.content}</p>
+        <p className={cn(TRANSCRIPT_PROSE_CLASS_NAME, "text-inherit")}>{message.content}</p>
       </div>
       {timeLabel ? <span className="shrink-0 text-[11px] opacity-70">{timeLabel}</span> : null}
     </div>
@@ -822,7 +823,7 @@ export const MessageBody = ({
   }
 
   if (message.role === "thinking" || message.role === "system") {
-    return <p className="whitespace-pre-wrap leading-6 text-foreground">{message.content}</p>;
+    return <p className={cn(TRANSCRIPT_PROSE_CLASS_NAME, "text-foreground")}>{message.content}</p>;
   }
 
   if (message.role === "assistant") {

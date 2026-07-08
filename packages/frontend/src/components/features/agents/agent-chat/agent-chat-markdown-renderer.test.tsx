@@ -61,8 +61,31 @@ describe("AgentChatMarkdownRenderer", () => {
     );
 
     try {
-      expect(rendered.container.querySelector("p")?.textContent).toBe("Plain transcript line");
+      const paragraph = rendered.container.querySelector("p");
+      expect(paragraph?.textContent).toBe("Plain transcript line");
+      expect(paragraph?.className).toContain("break-words");
       expect(rendered.container.querySelector(".markdown-body")).toBeNull();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("wraps markdown prose without changing code block scroll behavior", async () => {
+    const rendered = render(
+      createElement(AgentChatMarkdownRenderer, {
+        markdown: "**supercalifragilisticexpialidocioussupercalifragilisticexpialidocious**",
+      }),
+    );
+
+    try {
+      await waitFor(() => {
+        expect(rendered.container.querySelector(".markdown-body")).not.toBeNull();
+      });
+
+      const markdownBody = rendered.container.querySelector(".markdown-body");
+      expect(markdownBody?.className).toContain("prose-p:break-words");
+      expect(markdownBody?.className).toContain("prose-li:break-words");
+      expect(markdownBody?.className).toContain("prose-blockquote:break-words");
     } finally {
       rendered.unmount();
     }
