@@ -41,6 +41,7 @@ type ComboboxProps = {
   className?: string;
   triggerClassName?: string;
   triggerAriaLabelledBy?: string;
+  triggerAriaDescribedBy?: string;
   wrapLabels?: boolean;
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;
@@ -212,6 +213,7 @@ export function Combobox({
   className,
   triggerClassName,
   triggerAriaLabelledBy,
+  triggerAriaDescribedBy,
   wrapLabels = false,
   wrapTriggerLabel,
   wrapOptionLabels,
@@ -311,6 +313,7 @@ export function Combobox({
           variant="outline"
           disabled={disabled}
           aria-labelledby={triggerAriaLabelledBy}
+          aria-describedby={triggerAriaDescribedBy}
           className={cn(
             "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent",
             triggerClassName,

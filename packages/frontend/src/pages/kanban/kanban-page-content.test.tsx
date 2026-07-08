@@ -17,6 +17,7 @@ const model: KanbanPageContentModel = {
   isLoadingTasks: false,
   isSwitchingWorkspace: false,
   emptyColumnDisplay: "show",
+  showHorizontalScrollbars: false,
   columns: [
     {
       id: "open",
@@ -49,6 +50,35 @@ describe("KanbanPageContent", () => {
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("overflow-y-visible");
     expect(html).toContain("min-h-full");
+    expect(html).toContain("hide-scrollbar");
+  });
+
+  test("omits scrollbar hiding when horizontal scrollbars should be visible", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          showHorizontalScrollbars: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("overflow-x-auto");
+    expect(html).not.toContain("hide-scrollbar");
+  });
+
+  test("omits scrollbar hiding while horizontal scrollbar visibility is unresolved", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          showHorizontalScrollbars: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("overflow-x-auto");
+    expect(html).not.toContain("hide-scrollbar");
   });
 
   test("renders a blocking board loader while the initial task load is in progress", () => {

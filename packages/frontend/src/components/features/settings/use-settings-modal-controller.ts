@@ -99,6 +99,9 @@ export type SettingsModalController = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
+  updateGlobalAppearanceSettings: (
+    updater: (current: SettingsSnapshot["appearance"]) => SettingsSnapshot["appearance"],
+  ) => void;
   updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   setCodexDangerAcknowledged: (acknowledged: boolean) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
@@ -283,6 +286,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+    updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
     updateAgentRuntimes: applyAgentRuntimesUpdate,
     updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
@@ -352,6 +356,7 @@ export const useSettingsModalController = ({
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
       updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+      updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
       updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
@@ -366,6 +371,7 @@ export const useSettingsModalController = ({
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
       applyGlobalGeneralSettingsUpdate,
+      applyGlobalAppearanceSettingsUpdate,
       applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
@@ -381,6 +387,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateGlobalAppearanceSettings,
     updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
@@ -458,6 +465,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateGlobalAppearanceSettings,
     updateAgentRuntimes,
     setCodexDangerAcknowledged,
     updateReusablePrompts,

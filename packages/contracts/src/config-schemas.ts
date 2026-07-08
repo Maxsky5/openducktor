@@ -17,6 +17,8 @@ export const CHAT_HUNK_SEPARATOR_VALUES = [
   "metadata",
   "simple",
 ] as const;
+export const HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES = ["system", "show", "hide"] as const;
+export const APP_PLATFORM_VALUES = ["win32", "linux", "darwin"] as const;
 
 const DEFAULT_SOFT_GUARDRAILS = {
   cpuHighWatermarkPercent: 85,
@@ -35,6 +37,9 @@ export const DEFAULT_CHAT_SETTINGS = {
 } as const;
 export const DEFAULT_GENERAL_SETTINGS = {
   openAgentStudioTabOnBackgroundSessionStart: true,
+} as const;
+export const DEFAULT_APPEARANCE_SETTINGS = {
+  horizontalScrollbarVisibility: "system",
 } as const;
 export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
@@ -403,6 +408,42 @@ export const generalSettingsSchema = z.object({
 });
 export type GeneralSettings = z.infer<typeof generalSettingsSchema>;
 
+export const horizontalScrollbarVisibilitySchema = z.enum(HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES);
+export type HorizontalScrollbarVisibility = z.infer<typeof horizontalScrollbarVisibilitySchema>;
+
+export const appPlatformSchema = z.enum(APP_PLATFORM_VALUES);
+export type AppPlatform = z.infer<typeof appPlatformSchema>;
+
+export const appearanceSettingsSchema = z.object({
+  horizontalScrollbarVisibility: horizontalScrollbarVisibilitySchema.default(
+    DEFAULT_APPEARANCE_SETTINGS.horizontalScrollbarVisibility,
+  ),
+});
+export type AppearanceSettings = z.infer<typeof appearanceSettingsSchema>;
+
+export const resolveHorizontalScrollbarVisibility = (
+  visibility: HorizontalScrollbarVisibility,
+  platform?: AppPlatform | null,
+): Exclude<HorizontalScrollbarVisibility, "system"> => {
+  if (visibility === "show" || visibility === "hide") {
+    return visibility;
+  }
+
+  if (platform === null || platform === undefined) {
+    throw new Error(
+      "A supported app platform is required to resolve System default horizontal scrollbar visibility.",
+    );
+  }
+
+  // Keep runtime validation for JavaScript callers and unsafe casts crossing the package boundary.
+  const parsedPlatform = appPlatformSchema.safeParse(platform);
+  if (!parsedPlatform.success) {
+    throw new Error(`Unsupported app platform for horizontal scrollbar visibility: ${platform}`);
+  }
+
+  return parsedPlatform.data === "darwin" ? "hide" : "show";
+};
+
 export const kanbanSettingsSchema = z.object({
   doneVisibleDays: z.number().int().min(0).default(DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
   emptyColumnDisplay: z
@@ -467,6 +508,7 @@ export const globalConfigSchema = z.object({
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
+  appearance: appearanceSettingsSchema.default(DEFAULT_APPEARANCE_SETTINGS),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
@@ -484,6 +526,7 @@ export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
+  appearance: appearanceSettingsSchema.default(DEFAULT_APPEARANCE_SETTINGS),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),

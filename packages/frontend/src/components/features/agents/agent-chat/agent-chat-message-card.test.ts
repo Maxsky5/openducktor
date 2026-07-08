@@ -30,6 +30,8 @@ const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeContext = {
   runtimeKind: "opencode",
   workingDirectory: "/repo",
 };
+const LONG_TRANSCRIPT_TOKEN =
+  "supercalifragilisticexpialidocioussupercalifragilisticexpialidocious";
 
 type AgentChatMessageCardTestProps = Omit<
   ComponentProps<typeof AgentChatMessageCard>,
@@ -238,6 +240,62 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("Output");
     expect(html).toContain("cursor-pointer");
     expect(html).toContain("fairnest-97f");
+  });
+
+  test("wraps long unbroken question tool prompts", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-question-long-prompt",
+          role: "tool",
+          content: "Tool question completed",
+          timestamp: "2026-02-22T10:20:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-question-long-prompt",
+            callId: "call-question-long-prompt",
+            tool: "ask_question",
+            toolType: "question",
+            status: "completed",
+            input: { questions: [{ prompt: LONG_TRANSCRIPT_TOKEN }] },
+            output: '{"answers":[["yes"]]}',
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Questions and answers");
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("break-words font-medium text-foreground");
+  });
+
+  test("wraps long unbroken question tool answers", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-question-long-answer",
+          role: "tool",
+          content: "Tool question completed",
+          timestamp: "2026-02-22T10:20:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-question-long-answer",
+            callId: "call-question-long-answer",
+            tool: "ask_question",
+            toolType: "question",
+            status: "completed",
+            input: { questions: [{ prompt: "Confirm deployment?" }] },
+            output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_TOKEN]] }),
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Questions and answers");
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
   });
 
   test.each([
@@ -632,6 +690,29 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">System<");
   });
 
+  test("wraps long unbroken session notice prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "session-notice-long-token",
+          role: "system",
+          content: LONG_TRANSCRIPT_TOKEN,
+          timestamp: "2026-02-22T10:21:46.000Z",
+          meta: {
+            kind: "session_notice",
+            tone: "info",
+            reason: "session_compacted",
+            title: "Notice",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-inherit");
+  });
+
   test("renders session error notices as destructive cards", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -732,6 +813,23 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("Always validate tool inputs");
   });
 
+  test("wraps long unbroken system prose outside system-prompt cards", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "system-long-token",
+          role: "system",
+          content: LONG_TRANSCRIPT_TOKEN,
+          timestamp: "2026-02-22T10:22:01.000Z",
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-foreground");
+  });
+
   test("renders subagent cards without the shared System header", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -758,6 +856,32 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("RUNNING");
     expect(html).toContain("Completed");
     expect(html).toContain("review changes [commit|branch|pr], defaults to uncommitted");
+  });
+
+  test("wraps long unbroken subagent summary prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): long token", {
+          id: "subagent-long-summary",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-long-summary",
+            correlationKey: "part:assistant-task-tool-completed:subtask-long-summary",
+            status: "completed",
+            agent: "build",
+            description: LONG_TRANSCRIPT_TOKEN,
+            externalSessionId: "session-child-long-summary",
+            startedAtMs: 1_000,
+            endedAtMs: 120_000,
+          },
+        }),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
   });
 
   test("renders a loader instead of duration for running subagent cards", () => {
@@ -922,6 +1046,33 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("Failed");
     expect(html).toContain("Read the file at ~/maxsky5.omp.json");
     expect(html).toContain("Timed out after 5m while waiting for permission.");
+  });
+
+  test("wraps long unbroken subagent error prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (explorer): long error", {
+          id: "subagent-long-error",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-long-error",
+            correlationKey: "part:assistant-task-tool-error:subtask-long-error",
+            status: "error",
+            agent: "explorer",
+            description: "Read a file",
+            error: LONG_TRANSCRIPT_TOKEN,
+            externalSessionId: "session-child-long-error",
+            startedAtMs: 1_000,
+            endedAtMs: 301_000,
+          },
+        }),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-sm font-medium text-destructive");
   });
 
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
@@ -1222,6 +1373,44 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("w-full");
     expect(html).toContain("border-l-4");
     expect(html).toContain("border-left-color:#2f6fed");
+  });
+
+  test("wraps long unbroken user prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-long-token",
+          role: "user",
+          content: LONG_TRANSCRIPT_TOKEN,
+          timestamp: "2026-02-22T10:25:30.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words leading-6");
+  });
+
+  test("wraps long unbroken assistant plain prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-long-token",
+          role: "assistant",
+          content: LONG_TRANSCRIPT_TOKEN,
+          timestamp: "2026-02-22T10:25:45.000Z",
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words leading-6");
   });
 
   test("does not color legacy user messages without send-time metadata", () => {

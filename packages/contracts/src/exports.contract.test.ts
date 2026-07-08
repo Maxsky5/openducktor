@@ -15,6 +15,8 @@ import type {
   AgentToolName,
   AgentWorkflowState,
   AgentWorkflows,
+  AppearanceSettings,
+  AppPlatform,
   AutopilotActionId,
   AutopilotEventId,
   AutopilotRule,
@@ -63,6 +65,7 @@ import type {
   GitWorktreeStatusSummary,
   GitWorktreeSummary,
   GlobalConfig,
+  HorizontalScrollbarVisibility,
   IssueType,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
@@ -181,6 +184,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
+  "APP_PLATFORM_VALUES",
   "CODEX_APP_SERVER_COMMAND_REQUEST_METHODS",
   "CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS",
   "CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS",
@@ -216,6 +220,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "CHAT_DIFF_STYLE_VALUES",
   "CHAT_HUNK_SEPARATOR_VALUES",
   "CHAT_LINE_OVERFLOW_VALUES",
+  "HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES",
+  "appPlatformSchema",
+  "appearanceSettingsSchema",
   "chatSettingsSchema",
   "CODEX_APPROVAL_POLICY_VALUES",
   "CODEX_APPROVALS_REVIEWER_VALUES",
@@ -226,6 +233,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "codexRuntimeConfigSchema",
   "codexSandboxModeSchema",
   "DEFAULT_CODEX_RUNTIME_POLICY",
+  "DEFAULT_APPEARANCE_SETTINGS",
   "DEFAULT_CHAT_SETTINGS",
   "DEFAULT_GENERAL_SETTINGS",
   "DEFAULT_AGENT_RUNTIMES",
@@ -294,6 +302,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitWorktreeSummarySchema",
   "kanbanSettingsSchema",
   "kanbanEmptyColumnDisplaySchema",
+  "horizontalScrollbarVisibilitySchema",
+  "resolveHorizontalScrollbarVisibility",
   "generalSettingsSchema",
   "globalConfigSchema",
   "globalGitConfigSchema",
@@ -506,6 +516,8 @@ type ExportedTypeContract = {
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
+  AppearanceSettings: AppearanceSettings;
+  AppPlatform: AppPlatform;
   TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;
@@ -545,6 +557,7 @@ type ExportedTypeContract = {
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   GeneralSettings: GeneralSettings;
+  HorizontalScrollbarVisibility: HorizontalScrollbarVisibility;
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;

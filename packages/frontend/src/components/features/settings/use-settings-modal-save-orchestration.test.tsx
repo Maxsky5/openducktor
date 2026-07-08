@@ -374,6 +374,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     const saveSettingsSnapshot = mock(async () => {});
     const snapshotDraft = createSnapshot();
     snapshotDraft.chat.showThinkingMessages = true;
+    snapshotDraft.appearance.horizontalScrollbarVisibility = "show";
     const harness = createHookHarness(
       createArgs(
         {
@@ -403,6 +404,9 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         chat: expectedChatSettings,
+        appearance: {
+          horizontalScrollbarVisibility: "show",
+        },
         general: {
           openAgentStudioTabOnBackgroundSessionStart: true,
         },

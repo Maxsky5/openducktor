@@ -29,10 +29,12 @@ describe("useSettingsModalDirtyState", () => {
       state.markDirty("repoSettings");
       state.markDirty("repoSettings");
       state.markDirty("chat");
+      state.markDirty("appearance");
     });
 
     expect(harness.getLatest().dirtySections).toEqual({
       general: false,
+      appearance: true,
       chat: true,
       reusablePrompts: false,
       globalGit: false,
@@ -50,6 +52,7 @@ describe("useSettingsModalDirtyState", () => {
 
     expect(harness.getLatest().dirtySections).toEqual({
       general: false,
+      appearance: false,
       chat: false,
       reusablePrompts: false,
       globalGit: false,

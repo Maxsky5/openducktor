@@ -3,6 +3,7 @@ import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer"
 import { cn } from "@/lib/utils";
 import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 
 const LazyMarkdownRenderer = lazy(async () => {
   const module = await import("@/components/ui/markdown-renderer");
@@ -10,9 +11,12 @@ const LazyMarkdownRenderer = lazy(async () => {
 });
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-foreground",
-  document: "whitespace-pre-wrap leading-6 py-4 text-foreground",
+  compact: "text-[13px] leading-relaxed text-foreground",
+  document: "leading-6 py-4 text-foreground",
 };
+
+const MARKDOWN_PROSE_WRAPPING_CLASSES =
+  "prose-p:break-words prose-li:break-words prose-blockquote:break-words";
 
 type PlainTextMarkdownFallbackProps = {
   content: string;
@@ -25,7 +29,11 @@ const PlainTextMarkdownFallback = ({
   variant,
   className,
 }: PlainTextMarkdownFallbackProps): ReactElement => {
-  return <p className={cn(PLAIN_TEXT_CLASSES[variant], className)}>{content}</p>;
+  return (
+    <AgentChatTranscriptProse className={cn(PLAIN_TEXT_CLASSES[variant], className)}>
+      {content}
+    </AgentChatTranscriptProse>
+  );
 };
 
 type AgentChatMarkdownRendererProps = {
@@ -43,23 +51,34 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
 }: AgentChatMarkdownRendererProps): ReactElement | null {
   const content = markdown;
   const trimmedContent = content.trim();
-  const classNameProps = className ? { className } : {};
+  const plainTextClassNameProps = className ? { className } : {};
   if (!trimmedContent) {
     return null;
   }
 
   if (!hasMarkdownSyntaxHint(trimmedContent)) {
-    return <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />;
+    return (
+      <PlainTextMarkdownFallback content={content} variant={variant} {...plainTextClassNameProps} />
+    );
   }
 
   const preparedMarkdown = closeOpenStreamingCodeFence(content, streaming);
+  const markdownClassName = cn(MARKDOWN_PROSE_WRAPPING_CLASSES, className);
   return (
     <Suspense
       fallback={
-        <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />
+        <PlainTextMarkdownFallback
+          content={content}
+          variant={variant}
+          {...plainTextClassNameProps}
+        />
       }
     >
-      <LazyMarkdownRenderer markdown={preparedMarkdown} variant={variant} {...classNameProps} />
+      <LazyMarkdownRenderer
+        markdown={preparedMarkdown}
+        variant={variant}
+        className={markdownClassName}
+      />
     </Suspense>
   );
 });

@@ -42,6 +42,7 @@ import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
 import { createRuntimeOrchestratorCommandHandlers } from "../../interface/commands/runtime-orchestrator-command-handlers";
 import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
+import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
@@ -313,6 +314,7 @@ export const createNodeEffectHostCommandRouter = (
       ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
+      ...createSystemPlatformCommandHandlers(),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),

@@ -139,6 +139,7 @@ type UseKanbanBoardModelArgs = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
+  showHorizontalScrollbars: boolean | null;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   sessions: AgentSessionSummary[];
@@ -158,6 +159,7 @@ export function useKanbanBoardModel({
   isLoadingTasks,
   isSwitchingWorkspace,
   emptyColumnDisplay,
+  showHorizontalScrollbars,
   tasks,
   historicalSessionsByTaskId,
   sessions,
@@ -199,6 +201,7 @@ export function useKanbanBoardModel({
     isLoadingTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
+    showHorizontalScrollbars,
     columns: columnsWithSortedTasks,
     taskSessionsByTaskId,
     historicalSessionsByTaskId,

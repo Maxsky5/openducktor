@@ -82,18 +82,30 @@ describe("useSettingsModalDirtyDraftActions", () => {
         ...general,
         openAgentStudioTabOnBackgroundSessionStart: false,
       }));
+      state.updateGlobalAppearanceSettings((appearance) => ({
+        ...appearance,
+        horizontalScrollbarVisibility: "hide",
+      }));
       state.updateSelectedRepoConfig((repoConfig) => ({
         ...repoConfig,
         branchPrefix: "feature/",
       }));
     });
 
-    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(3);
-    expect(harness.getLatest().dirtyCalls).toEqual(["chat", "general", "repoSettings"]);
+    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(4);
+    expect(harness.getLatest().dirtyCalls).toEqual([
+      "chat",
+      "general",
+      "appearance",
+      "repoSettings",
+    ]);
     expect(harness.getLatest().snapshotDraft?.chat.showThinkingMessages).toBe(true);
     expect(
       harness.getLatest().snapshotDraft?.general.openAgentStudioTabOnBackgroundSessionStart,
     ).toBe(false);
+    expect(harness.getLatest().snapshotDraft?.appearance.horizontalScrollbarVisibility).toBe(
+      "hide",
+    );
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.branchPrefix).toBe("feature/");
 
     await harness.unmount();

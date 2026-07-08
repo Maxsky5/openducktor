@@ -1,4 +1,6 @@
 import {
+  type AppPlatform,
+  appPlatformSchema,
   type SystemOpenDirectoryInToolRequest,
   type SystemOpenInToolId,
   type SystemOpenInToolInfo,
@@ -31,8 +33,17 @@ const systemOpenDirectoryInTool = async (
   parseOkResult(payload, "system_open_directory_in_tool");
 };
 
+const systemGetPlatform = async (invokeFn: InvokeFn): Promise<AppPlatform> => {
+  const payload = await invokeFn("system_get_platform");
+  return appPlatformSchema.parse(payload);
+};
+
 export class HostSystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  async systemGetPlatform(): Promise<AppPlatform> {
+    return systemGetPlatform(this.invokeFn);
+  }
 
   async systemListOpenInTools(forceRefresh = false): Promise<SystemOpenInToolInfo[]> {
     return systemListOpenInTools(this.invokeFn, forceRefresh);

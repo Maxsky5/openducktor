@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
+  appearanceSettingsSchema,
+  appPlatformSchema,
   CHAT_DIFF_HEIGHT_VALUES,
   CHAT_DIFF_INDICATOR_VALUES,
   CHAT_DIFF_STYLE_VALUES,
@@ -9,13 +12,16 @@ import {
   chatSettingsSchema,
   codexRuntimeConfigSchema,
   DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
   globalConfigSchema,
+  HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   repoConfigSchema,
   resolveCodexEffectivePolicy,
+  resolveHorizontalScrollbarVisibility,
   reusablePromptSchema,
   reusablePromptsSchema,
   settingsSnapshotSchema,
@@ -136,6 +142,59 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
+  });
+
+  test("defaults appearance settings for existing configs and snapshots", () => {
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const globalConfig = globalConfigSchema.parse({
+      version: 2,
+      theme: "light",
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
+    expect(globalConfig.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
+  });
+
+  test("accepts and rejects horizontal scrollbar appearance modes", () => {
+    for (const horizontalScrollbarVisibility of HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES) {
+      expect(
+        appearanceSettingsSchema.parse({
+          horizontalScrollbarVisibility,
+        }).horizontalScrollbarVisibility,
+      ).toBe(horizontalScrollbarVisibility);
+    }
+
+    expect(() =>
+      appearanceSettingsSchema.parse({
+        horizontalScrollbarVisibility: "auto",
+      }),
+    ).toThrow();
+  });
+
+  test("resolves horizontal scrollbar visibility from explicit modes and supported platforms", () => {
+    expect(resolveHorizontalScrollbarVisibility("show")).toBe("show");
+    expect(resolveHorizontalScrollbarVisibility("hide")).toBe("hide");
+    expect(resolveHorizontalScrollbarVisibility("system", "win32")).toBe("show");
+    expect(resolveHorizontalScrollbarVisibility("system", "linux")).toBe("show");
+    expect(resolveHorizontalScrollbarVisibility("system", "darwin")).toBe("hide");
+  });
+
+  test("requires a supported platform for system horizontal scrollbar visibility", () => {
+    expect(APP_PLATFORM_VALUES).toEqual(["win32", "linux", "darwin"]);
+    expect(appPlatformSchema.parse("linux")).toBe("linux");
+    expect(() => resolveHorizontalScrollbarVisibility("system")).toThrow(
+      "A supported app platform is required to resolve System default horizontal scrollbar visibility.",
+    );
+    expect(() => resolveHorizontalScrollbarVisibility("system", "freebsd" as never)).toThrow(
+      "Unsupported app platform for horizontal scrollbar visibility: freebsd",
+    );
   });
 
   test("defaults agent runtime enablement for global config and snapshots", () => {

@@ -91,6 +91,7 @@ export type KanbanPageContentModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
+  showHorizontalScrollbars: boolean | null;
   columns: KanbanColumnData[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;

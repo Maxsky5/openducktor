@@ -301,6 +301,7 @@ export const createWorkspaceSettingsService = (
             theme: snapshot.theme,
             git: snapshot.git,
             general: snapshot.general,
+            appearance: snapshot.appearance,
             chat: snapshot.chat,
             reusablePrompts: snapshot.reusablePrompts,
             kanban: snapshot.kanban,

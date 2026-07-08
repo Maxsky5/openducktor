@@ -37,6 +37,7 @@ const FILESYSTEM_METHODS = [
 ] as const satisfies readonly MethodName<HostFilesystemClient>[];
 
 const SYSTEM_METHODS = [
+  "systemGetPlatform",
   "systemListOpenInTools",
   "systemOpenDirectoryInTool",
 ] as const satisfies readonly MethodName<HostSystemClient>[];

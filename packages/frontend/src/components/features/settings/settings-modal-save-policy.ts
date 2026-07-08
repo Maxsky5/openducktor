@@ -1,28 +1,15 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
-import type { DirtySections } from "./use-settings-modal-dirty-state";
+import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
+
+const DIRTY_SECTION_KEYS = Object.keys(EMPTY_DIRTY_SECTIONS) as (keyof DirtySections)[];
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
-  dirtySections.chat ||
-  dirtySections.general ||
-  dirtySections.reusablePrompts ||
-  dirtySections.globalGit ||
-  dirtySections.agentRuntimes ||
-  dirtySections.kanban ||
-  dirtySections.autopilot ||
-  dirtySections.globalPromptOverrides ||
-  dirtySections.repoSettings;
+  DIRTY_SECTION_KEYS.some((section) => Boolean(dirtySections[section]));
 
 export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   dirtySections.globalGit &&
-  !dirtySections.general &&
-  !dirtySections.chat &&
-  !dirtySections.agentRuntimes &&
-  !dirtySections.reusablePrompts &&
-  !dirtySections.kanban &&
-  !dirtySections.autopilot &&
-  !dirtySections.globalPromptOverrides &&
-  !dirtySections.repoSettings;
+  DIRTY_SECTION_KEYS.every((section) => section === "globalGit" || !dirtySections[section]);
 
 export const hasSameSaveReadyGlobalGitConfig = (
   loadedSnapshot: SettingsSnapshot | null,

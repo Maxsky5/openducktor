@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
+import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
@@ -41,6 +42,25 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
+  test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", () => {
+    const Pre = MARKDOWN_COMPONENTS.document.pre;
+    if (typeof Pre !== "function") {
+      throw new Error("Expected document markdown code blocks to use a pre component");
+    }
+
+    const rendered = render(createElement(Pre, {}, createElement("code", {}, "const value = 1;")));
+
+    try {
+      const codeBlock = rendered.container.querySelector("pre");
+      expect(codeBlock).not.toBeNull();
+      expect(codeBlock?.className).toContain("overflow-x-auto");
+      expect(codeBlock?.className).not.toContain("hide-scrollbar");
+      expect(rendered.container.innerHTML).not.toContain("hide-scrollbar");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("uses the plain text path when no markdown syntax is present", () => {
     const rendered = render(
       createElement(AgentChatMarkdownRenderer, {
@@ -49,8 +69,31 @@ describe("AgentChatMarkdownRenderer", () => {
     );
 
     try {
-      expect(rendered.container.querySelector("p")?.textContent).toBe("Plain transcript line");
+      const paragraph = rendered.container.querySelector("p");
+      expect(paragraph?.textContent).toBe("Plain transcript line");
+      expect(paragraph?.className).toContain("break-words");
       expect(rendered.container.querySelector(".markdown-body")).toBeNull();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("wraps markdown prose without changing code block scroll behavior", async () => {
+    const rendered = render(
+      createElement(AgentChatMarkdownRenderer, {
+        markdown: "**supercalifragilisticexpialidocioussupercalifragilisticexpialidocious**",
+      }),
+    );
+
+    try {
+      await waitFor(() => {
+        expect(rendered.container.querySelector(".markdown-body")).not.toBeNull();
+      });
+
+      const markdownBody = rendered.container.querySelector(".markdown-body");
+      expect(markdownBody?.className).toContain("prose-p:break-words");
+      expect(markdownBody?.className).toContain("prose-li:break-words");
+      expect(markdownBody?.className).toContain("prose-blockquote:break-words");
     } finally {
       rendered.unmount();
     }

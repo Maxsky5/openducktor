@@ -1,6 +1,7 @@
 import {
   type ChatSettings,
   DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_KANBAN_SETTINGS,
@@ -50,8 +51,9 @@ export type ChatSettingsFixtureOverrides = Partial<ChatSettings>;
 
 export type SettingsSnapshotFixtureOverrides = Omit<
   Partial<SettingsSnapshot>,
-  "chat" | "general" | "git" | "kanban"
+  "appearance" | "chat" | "general" | "git" | "kanban"
 > & {
+  appearance?: Partial<SettingsSnapshot["appearance"]>;
   chat?: ChatSettingsFixtureOverrides;
   general?: Partial<SettingsSnapshot["general"]>;
   git?: Partial<SettingsSnapshot["git"]>;
@@ -144,7 +146,7 @@ export const createChatSettingsFixture = (
 export const createSettingsSnapshotFixture = (
   overrides: SettingsSnapshotFixtureOverrides = {},
 ): SettingsSnapshot => {
-  const { chat, general, git, kanban, ...snapshotOverrides } = overrides;
+  const { appearance, chat, general, git, kanban, ...snapshotOverrides } = overrides;
   const merged = {
     theme: "light",
     git: {
@@ -154,6 +156,10 @@ export const createSettingsSnapshotFixture = (
     general: {
       ...DEFAULT_GENERAL_SETTINGS,
       ...general,
+    },
+    appearance: {
+      ...DEFAULT_APPEARANCE_SETTINGS,
+      ...appearance,
     },
     chat: createChatSettingsFixture(chat),
     reusablePrompts: [],
