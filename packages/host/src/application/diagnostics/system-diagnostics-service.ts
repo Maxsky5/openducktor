@@ -23,6 +23,7 @@ import type {
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "../../ports/tool-discovery-port";
+import { readGithubCliVersion, runGithubCliCommand } from "../git/github-cli";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
 type CachedRuntimeCheck = {
@@ -41,7 +42,6 @@ export type SystemDiagnosticsError =
   | TaskStoreError
   | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
-const GH_NON_INTERACTIVE_ENV = { GH_PROMPT_DISABLED: "1" };
 const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
@@ -58,13 +58,12 @@ const parseGithubAuthLogin = (output: string): string | null => {
 };
 const probeGithubAuthStatus = (systemCommands: SystemCommandPort, ghCommand: string) =>
   Effect.gen(function* () {
-    const result: SystemCommandRunResult = yield* systemCommands.runCommandAllowFailure(
-      ghCommand,
-      ["auth", "status", "--hostname", "github.com"],
-      {
-        env: GH_NON_INTERACTIVE_ENV,
-      },
-    );
+    const result: SystemCommandRunResult = yield* runGithubCliCommand(systemCommands, ghCommand, [
+      "auth",
+      "status",
+      "--hostname",
+      "github.com",
+    ]);
     const stdout = result.stdout.trim();
     const stderr = result.stderr.trim();
     const combined =
@@ -131,14 +130,13 @@ const resolveToolAvailability = (
     ),
   );
 const versionForResolvedTool = (
-  systemCommands: SystemCommandPort,
   toolName: string,
   toolPath: string | null,
-  args: string[],
+  readVersion: (toolPath: string) => ReturnType<SystemCommandPort["versionCommand"]>,
 ) =>
   toolPath === null
     ? Effect.succeed({ error: null, version: null } satisfies ToolVersionAvailability)
-    : Effect.either(systemCommands.versionCommand(toolPath, args)).pipe(
+    : Effect.either(readVersion(toolPath)).pipe(
         Effect.map((result) => {
           if (result._tag === "Left") {
             return {
@@ -175,12 +173,12 @@ export const createSystemDiagnosticsService = ({
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
       const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
-      const gitVersion = yield* versionForResolvedTool(systemCommands, "git", gitTool.path, [
-        "--version",
-      ]);
-      const ghVersion = yield* versionForResolvedTool(systemCommands, "gh", ghTool.path, [
-        "--version",
-      ]);
+      const gitVersion = yield* versionForResolvedTool("git", gitTool.path, (path) =>
+        systemCommands.versionCommand(path, ["--version"]),
+      );
+      const ghVersion = yield* versionForResolvedTool("gh", ghTool.path, (path) =>
+        readGithubCliVersion(systemCommands, path),
+      );
       const gitError = gitTool.error ?? gitVersion.error;
       const ghError = ghTool.error ?? ghVersion.error;
       const gitOk = gitError === null;

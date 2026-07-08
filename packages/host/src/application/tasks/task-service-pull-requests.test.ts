@@ -242,6 +242,22 @@ describe("createTaskService pull requests", () => {
         pullRequest: expect.objectContaining({ number: 42, state: "open" }),
       },
     });
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        type: "command",
+        command: "gh",
+        args: expect.arrayContaining(["api", "state=open"]),
+        options: expect.objectContaining({
+          env: expect.objectContaining({
+            GH_PROMPT_DISABLED: "1",
+            NO_COLOR: "1",
+            CLICOLOR: "0",
+            CLICOLOR_FORCE: "0",
+            FORCE_COLOR: "0",
+          }),
+        }),
+      }),
+    );
   });
   test("detectPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];

@@ -32,6 +32,38 @@ describe("createSystemCommandRunner", () => {
     expect(result.stdout.trim()).toBe("from-host-env");
   });
 
+  test("per-command environment overrides inherited values", async () => {
+    const port = createSystemCommandRunner({
+      env: {
+        PATH: process.env.PATH,
+        FORCE_COLOR: "1",
+        CLICOLOR_FORCE: "1",
+        NO_COLOR: "0",
+      },
+      platform: process.platform,
+    });
+
+    const result = await Effect.runPromise(
+      port.runCommandAllowFailure(
+        "bun",
+        [
+          "-e",
+          "console.log([process.env.FORCE_COLOR, process.env.CLICOLOR_FORCE, process.env.NO_COLOR].join('|'))",
+        ],
+        {
+          env: {
+            FORCE_COLOR: "0",
+            CLICOLOR_FORCE: "0",
+            NO_COLOR: "1",
+          },
+        },
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.stdout.trim()).toBe("0|0|1");
+  });
+
   test("fails before spawn when command discovery cannot resolve the executable", async () => {
     const port = createSystemCommandRunner({
       env: { PATH: "" },

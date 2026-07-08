@@ -3,7 +3,6 @@ import { pullRequestSchema } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 
 export const GITHUB_PROVIDER_ID = "github";
-export const GH_NON_INTERACTIVE_ENV = { GH_PROMPT_DISABLED: "1" };
 
 export const repositoryKey = (repository: { host: string; owner: string; name: string }): string =>
   `${repository.host}/${repository.owner}/${repository.name}`.toLowerCase();
