@@ -657,10 +657,14 @@ const SubagentMessage = ({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               {summary ? (
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{summary}</p>
+                <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                  {summary}
+                </p>
               ) : null}
               {error ? (
-                <p className="whitespace-pre-wrap text-sm font-medium text-destructive">{error}</p>
+                <p className="whitespace-pre-wrap break-words text-sm font-medium text-destructive">
+                  {error}
+                </p>
               ) : null}
             </div>
             <SubagentTranscriptButton parentSession={parentSession} meta={meta} />

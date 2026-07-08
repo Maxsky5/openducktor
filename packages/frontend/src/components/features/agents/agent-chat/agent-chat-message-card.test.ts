@@ -802,6 +802,32 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("review changes [commit|branch|pr], defaults to uncommitted");
   });
 
+  test("wraps long unbroken subagent summary prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): long token", {
+          id: "subagent-long-summary",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-long-summary",
+            correlationKey: "part:assistant-task-tool-completed:subtask-long-summary",
+            status: "completed",
+            agent: "build",
+            description: LONG_TRANSCRIPT_TOKEN,
+            externalSessionId: "session-child-long-summary",
+            startedAtMs: 1_000,
+            endedAtMs: 120_000,
+          },
+        }),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
+  });
+
   test("renders a loader instead of duration for running subagent cards", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -964,6 +990,33 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("Failed");
     expect(html).toContain("Read the file at ~/maxsky5.omp.json");
     expect(html).toContain("Timed out after 5m while waiting for permission.");
+  });
+
+  test("wraps long unbroken subagent error prose", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (explorer): long error", {
+          id: "subagent-long-error",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-long-error",
+            correlationKey: "part:assistant-task-tool-error:subtask-long-error",
+            status: "error",
+            agent: "explorer",
+            description: "Read a file",
+            error: LONG_TRANSCRIPT_TOKEN,
+            externalSessionId: "session-child-long-error",
+            startedAtMs: 1_000,
+            endedAtMs: 301_000,
+          },
+        }),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-sm font-medium text-destructive");
   });
 
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
