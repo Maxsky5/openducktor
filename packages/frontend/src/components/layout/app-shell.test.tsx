@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
@@ -27,6 +27,8 @@ import type {
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
 
+const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
+
 const activeWorkspace = {
   workspaceId: "workspace-1",
   workspaceName: "OpenDucktor",
@@ -38,6 +40,43 @@ const activeWorkspace = {
   defaultWorktreeBasePath: null,
   effectiveWorktreeBasePath: null,
 } satisfies WorkspaceRecord;
+
+class MemoryStorage implements Storage {
+  readonly #items = new Map<string, string>();
+
+  get length(): number {
+    return this.#items.size;
+  }
+
+  clear(): void {
+    this.#items.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.#items.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.#items.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.#items.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.#items.set(key, value);
+  }
+}
+
+const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
+const installLocalStorage = (storage: Storage): void => {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+};
 
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
@@ -180,6 +219,28 @@ const renderAppShellForTest = (): ReturnType<typeof render> => {
 };
 
 describe("AppShell", () => {
+  beforeEach(() => {
+    installLocalStorage(new MemoryStorage());
+  });
+
+  afterEach(() => {
+    cleanup();
+    if (originalLocalStorageDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", originalLocalStorageDescriptor);
+      return;
+    }
+
+    Reflect.deleteProperty(globalThis, "localStorage");
+  });
+
+  test("opens the sidebar by default when no preference is stored", () => {
+    renderAppShellForTest();
+
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
+    expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
+  });
+
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
     renderAppShellForTest();
 
@@ -193,5 +254,93 @@ describe("AppShell", () => {
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
     expect(collapsedSettingsButton.className).toContain("size-8");
     expect(collapsedSettingsButton.className).not.toContain("px-3");
+  });
+
+  test("stores collapsed and restores the collapsed sidebar after remount", () => {
+    const view = renderAppShellForTest();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+    expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe("collapsed");
+
+    view.unmount();
+    renderAppShellForTest();
+
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Hide sidebar" })).toBeNull();
+  });
+
+  test("stores opened and restores the opened sidebar after remount", () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+    const view = renderAppShellForTest();
+
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe("opened");
+
+    view.unmount();
+    renderAppShellForTest();
+
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
+  });
+
+  test("defaults opened when the stored sidebar preference is invalid", () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "{bad-json");
+
+    renderAppShellForTest();
+
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
+  });
+
+  test("defaults opened when storage cannot be read", () => {
+    const storage = new MemoryStorage();
+    const getItem = mock(() => {
+      throw new Error("read failed");
+    });
+    storage.getItem = getItem;
+    installLocalStorage(storage);
+    const originalConsoleError = console.error;
+    const consoleError = mock(() => undefined);
+    console.error = consoleError;
+
+    try {
+      renderAppShellForTest();
+
+      expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+      expect(getItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY);
+      expect(consoleError).toHaveBeenCalled();
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  test("keeps sidebar toggling in memory when storage cannot be written", () => {
+    const storage = new MemoryStorage();
+    const setItem = mock(() => {
+      throw new Error("write failed");
+    });
+    storage.setItem = setItem;
+    installLocalStorage(storage);
+    const originalConsoleError = console.error;
+    const consoleError = mock(() => undefined);
+    console.error = consoleError;
+
+    try {
+      renderAppShellForTest();
+
+      fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+      expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+      expect(setItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+      expect(consoleError).toHaveBeenCalled();
+    } finally {
+      console.error = originalConsoleError;
+    }
   });
 });

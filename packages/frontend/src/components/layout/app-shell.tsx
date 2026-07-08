@@ -17,11 +17,53 @@ import { cn } from "@/lib/utils";
 import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
+type AppShellSidebarPreference = "opened" | "collapsed";
+
+const APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
+const DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE: AppShellSidebarPreference = "opened";
+
+const isAppShellSidebarPreference = (value: string | null): value is AppShellSidebarPreference =>
+  value === "opened" || value === "collapsed";
+
+const readPersistedLeftSidebarPreference = (): AppShellSidebarPreference => {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) {
+      return DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE;
+    }
+
+    const preference = storage.getItem(APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY);
+    if (isAppShellSidebarPreference(preference)) {
+      return preference;
+    }
+
+    return DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE;
+  } catch (error) {
+    console.error("[app-shell] Failed to read persisted sidebar state.", { error });
+    return DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE;
+  }
+};
+
+const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): void => {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY, preference);
+  } catch (error) {
+    console.error("[app-shell] Failed to persist sidebar state.", { preference, error });
+  }
+};
+
 export const AppShell = memo(function AppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
   const { hasWorkspaces } = useWorkspacePresence();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(
+    () => readPersistedLeftSidebarPreference() === "opened",
+  );
   const hasActiveWorkspace = activeWorkspace !== null;
   const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
   const agentActivity = useShellAgentActivity(activeWorkspace?.repoPath ?? null);
@@ -48,6 +90,16 @@ export const AppShell = memo(function AppShell(): ReactElement {
     setRepositoryModalOpen(true);
   }, []);
 
+  const handleHideSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    persistLeftSidebarPreference("collapsed");
+  }, []);
+
+  const handleShowSidebar = useCallback(() => {
+    setSidebarOpen(true);
+    persistLeftSidebarPreference("opened");
+  }, []);
+
   return (
     <>
       <div className="h-screen min-h-screen w-full overflow-hidden">
@@ -70,7 +122,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                       size="icon"
                       variant="ghost"
                       className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                      onClick={() => setSidebarOpen(false)}
+                      onClick={handleHideSidebar}
                       aria-label="Hide sidebar"
                       title="Hide sidebar"
                     >
@@ -120,7 +172,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                   size="icon"
                   variant="ghost"
                   className="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={handleShowSidebar}
                   aria-label="Show sidebar"
                   title="Show sidebar"
                 >
