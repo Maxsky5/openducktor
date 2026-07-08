@@ -2,11 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { errorMessage } from "@/lib/errors";
 import { pullRequestReviewContextQueryOptions } from "@/state/queries/pull-request-review";
-import {
-  TaskExecutionCiLoaded,
-  TaskExecutionCiPanelState,
-  TaskExecutionCiUnavailable,
-} from "./task-execution-ci-checks-content";
+import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
+import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 
 export type TaskExecutionCiChecksPanelModel = {
   isActive: boolean;
@@ -45,13 +42,13 @@ export function TaskExecutionCiChecksPanel({
   }
 
   if (reviewQuery.data.status !== "loaded") {
-    return <TaskExecutionCiUnavailable context={reviewQuery.data} />;
+    return <TaskExecutionCiPanelState message={reviewQuery.data.reason} />;
   }
 
   return (
     <TaskExecutionCiLoaded
       context={reviewQuery.data}
-      isRefreshing={reviewQuery.isFetching}
+      refreshState={reviewQuery.isFetching ? "refreshing" : "idle"}
       onRefresh={() => {
         void reviewQuery.refetch();
       }}
