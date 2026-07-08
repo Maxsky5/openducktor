@@ -31,14 +31,14 @@ export const createSystemPlatformCommandHandlers = (
     Effect.gen(function* () {
       const argsError = noArgsValidationError("system_get_platform", args);
       if (argsError) {
-        yield* Effect.fail(argsError);
+        return yield* Effect.fail(argsError);
       }
 
       const platform = platformSource();
       const parsed = appPlatformSchema.safeParse(platform);
 
       if (!parsed.success) {
-        yield* Effect.fail(
+        return yield* Effect.fail(
           new HostValidationError({
             message: `Unsupported OpenDucktor app platform: ${platform}. Supported platforms are ${supportedPlatformsText}.`,
             field: "platform",
