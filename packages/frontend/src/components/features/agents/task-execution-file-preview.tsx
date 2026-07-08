@@ -1,8 +1,9 @@
+import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { CodeViewFileItem, FileContents } from "@pierre/diffs";
 import { CodeView } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
-import { type CSSProperties, memo, type ReactElement, useMemo } from "react";
+import { type CSSProperties, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
@@ -21,6 +22,11 @@ const CODE_VIEW_WRAPPER_STYLE = {
   "--diffs-tab-size": 2,
 } as CSSProperties;
 
+type FilePreviewSnapshot = {
+  selectedFile: TaskExecutionSelectedFile;
+  result: WorkspaceTextFileReadResult;
+};
+
 const contentHash = (value: string): string => {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
@@ -32,11 +38,23 @@ const contentHash = (value: string): string => {
 
 function FilePreviewState({ message }: { message: string }): ReactElement {
   return (
-    <div className="flex min-h-24 items-center justify-center px-4 py-6 text-center text-sm text-muted-foreground">
+    <div className="flex h-full min-h-0 items-center justify-center px-4 py-6 text-center text-sm text-muted-foreground">
       {message}
     </div>
   );
 }
+
+const resultBelongsToSelectedFile = (
+  result: WorkspaceTextFileReadResult | undefined,
+  selectedFile: TaskExecutionSelectedFile | null,
+): result is WorkspaceTextFileReadResult => {
+  if (!result || !selectedFile) {
+    return false;
+  }
+  return (
+    result.rootPath === selectedFile.rootPath && result.relativePath === selectedFile.relativePath
+  );
+};
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
   model,
@@ -44,6 +62,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   model: TaskExecutionSelectedFilePreviewModel;
 }): ReactElement | null {
   const selectedFile = model.selectedFile;
+  const committedSnapshotRef = useRef<FilePreviewSnapshot | null>(null);
   const fileQuery = useQuery({
     ...workspaceTextFileQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
@@ -52,6 +71,27 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     enabled: selectedFile !== null,
   });
   const { theme } = useTheme();
+  const currentSnapshot = useMemo<FilePreviewSnapshot | null>(() => {
+    if (!selectedFile || !resultBelongsToSelectedFile(fileQuery.data, selectedFile)) {
+      return null;
+    }
+    return {
+      selectedFile,
+      result: fileQuery.data,
+    };
+  }, [fileQuery.data, selectedFile]);
+  if (!selectedFile) {
+    committedSnapshotRef.current = null;
+  } else if (currentSnapshot) {
+    committedSnapshotRef.current = currentSnapshot;
+  }
+  const visibleSnapshot = currentSnapshot ?? committedSnapshotRef.current;
+  const isSwitchingFiles =
+    selectedFile !== null &&
+    visibleSnapshot !== null &&
+    (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
+      visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
+    fileQuery.isFetching;
   const codeViewOptions = useMemo(
     () => ({
       theme: CODE_VIEW_THEME,
@@ -62,39 +102,56 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     [theme],
   );
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
-    if (!selectedFile || fileQuery.data?.kind !== "text") {
+    if (visibleSnapshot?.result.kind !== "text") {
       return [];
     }
 
     const file: FileContents = {
-      name: selectedFile.relativePath,
-      contents: fileQuery.data.contents,
-      cacheKey: `${selectedFile.rootPath}:${selectedFile.relativePath}:${fileQuery.data.size}:${contentHash(fileQuery.data.contents)}`,
+      name: visibleSnapshot.selectedFile.relativePath,
+      contents: visibleSnapshot.result.contents,
+      cacheKey: `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}:${visibleSnapshot.result.size}:${contentHash(visibleSnapshot.result.contents)}`,
     };
 
     return [
       {
-        id: `${selectedFile.rootPath}:${selectedFile.relativePath}`,
+        id: `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`,
         type: "file",
         file,
       },
     ];
-  }, [fileQuery.data, selectedFile]);
+  }, [visibleSnapshot]);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      return undefined;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+      event.preventDefault();
+      model.onClose();
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [model.onClose, selectedFile]);
 
   if (!selectedFile) {
     return null;
   }
 
   let body: ReactElement;
-  if (fileQuery.isLoading) {
+  if (fileQuery.isLoading && !visibleSnapshot) {
     body = <FilePreviewState message="Loading file..." />;
   } else if (fileQuery.isError) {
     body = <FilePreviewState message={errorMessage(fileQuery.error)} />;
-  } else if (fileQuery.data?.kind === "unsupported") {
-    body = <FilePreviewState message={fileQuery.data.message} />;
+  } else if (visibleSnapshot?.result.kind === "unsupported") {
+    body = <FilePreviewState message={visibleSnapshot.result.message} />;
   } else if (codeViewItems.length > 0) {
     body = (
-      <div className="max-h-[min(45vh,28rem)] overflow-auto" style={CODE_VIEW_WRAPPER_STYLE}>
+      <div className="h-full min-h-0 overflow-auto" style={CODE_VIEW_WRAPPER_STYLE}>
         <CodeView items={codeViewItems} options={codeViewOptions} />
       </div>
     );
@@ -103,12 +160,15 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   }
 
   return (
-    <section className="min-h-0 border-b border-border bg-card" aria-label="Selected file preview">
-      <div className="flex h-10 items-center gap-2 border-b border-border px-3">
+    <section className="flex h-full min-h-0 flex-col bg-card" aria-label="Selected file preview">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1 truncate text-sm font-medium">
-          {selectedFile.relativePath}
+          {visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
         </div>
+        {isSwitchingFiles ? (
+          <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
+        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -120,7 +180,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
           <X className="size-3.5" />
         </Button>
       </div>
-      {body}
+      <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
     </section>
   );
 });

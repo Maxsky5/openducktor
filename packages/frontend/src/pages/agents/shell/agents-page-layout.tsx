@@ -21,19 +21,68 @@ const PANEL_CONTAINMENT_STYLE = {
 type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
   chatContent: ReactElement;
+  hasSelectedFilePreview: boolean;
   selectedFilePreviewContent: ReactNode;
   isRightPanelVisible: boolean;
   rightPanelContent: ReactNode;
 };
+
+export type AgentsPageWorkspacePanesProps = Omit<AgentsPageWorkspaceProps, "hasSelectedTask">;
 
 type AgentChatPaneProps = {
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
   chatModel: ComponentProps<typeof AgentChatSurface>["model"];
 };
 
+export function AgentsPageWorkspacePanes({
+  chatContent,
+  hasSelectedFilePreview,
+  selectedFilePreviewContent,
+  isRightPanelVisible,
+  rightPanelContent,
+}: AgentsPageWorkspacePanesProps): ReactElement {
+  return (
+    <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+      <ResizablePanel defaultSize={63} minSize={35}>
+        <div
+          className="flex h-full min-h-0 flex-col overflow-hidden"
+          style={PANEL_CONTAINMENT_STYLE}
+        >
+          {hasSelectedFilePreview ? (
+            <div
+              className="h-full min-h-0 overflow-hidden"
+              data-testid="task-execution-selected-file-preview-pane"
+            >
+              {selectedFilePreviewContent}
+            </div>
+          ) : null}
+          <div
+            className="min-h-0 flex-1 overflow-hidden"
+            hidden={hasSelectedFilePreview}
+            data-testid="agent-studio-chat-pane"
+          >
+            {chatContent}
+          </div>
+        </div>
+      </ResizablePanel>
+      {isRightPanelVisible ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={37} minSize={30}>
+            <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
+              {rightPanelContent}
+            </div>
+          </ResizablePanel>
+        </>
+      ) : null}
+    </ResizablePanelGroup>
+  );
+}
+
 function AgentsPageWorkspace({
   hasSelectedTask,
   chatContent,
+  hasSelectedFilePreview,
   selectedFilePreviewContent,
   isRightPanelVisible,
   rightPanelContent,
@@ -48,27 +97,13 @@ function AgentsPageWorkspace({
 
   return (
     <DiffWorkerProvider>
-      <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-        <ResizablePanel defaultSize={63} minSize={35}>
-          <div
-            className="flex h-full min-h-0 flex-col overflow-hidden"
-            style={PANEL_CONTAINMENT_STYLE}
-          >
-            {selectedFilePreviewContent}
-            <div className="min-h-0 flex-1 overflow-hidden">{chatContent}</div>
-          </div>
-        </ResizablePanel>
-        {isRightPanelVisible ? (
-          <>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={37} minSize={30}>
-              <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
-                {rightPanelContent}
-              </div>
-            </ResizablePanel>
-          </>
-        ) : null}
-      </ResizablePanelGroup>
+      <AgentsPageWorkspacePanes
+        chatContent={chatContent}
+        hasSelectedFilePreview={hasSelectedFilePreview}
+        selectedFilePreviewContent={selectedFilePreviewContent}
+        isRightPanelVisible={isRightPanelVisible}
+        rightPanelContent={rightPanelContent}
+      />
     </DiffWorkerProvider>
   );
 }
@@ -148,11 +183,13 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     () => <TaskExecutionSelectedFilePreview model={taskExecutionSelectedFilePreviewModel} />,
     [taskExecutionSelectedFilePreviewModel],
   );
+  const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
   const workspaceContent = useMemo(
     () => (
       <AgentsPageWorkspace
         hasSelectedTask={hasSelectedTask}
         chatContent={chatContent}
+        hasSelectedFilePreview={hasSelectedFilePreview}
         selectedFilePreviewContent={selectedFilePreviewContent}
         isRightPanelVisible={isRightPanelVisible}
         rightPanelContent={rightPanelContent}
@@ -160,6 +197,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     ),
     [
       chatContent,
+      hasSelectedFilePreview,
       hasSelectedTask,
       isRightPanelVisible,
       rightPanelContent,
