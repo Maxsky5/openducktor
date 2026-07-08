@@ -151,6 +151,69 @@ export const describeTaskStorePortContract = (
       );
     });
 
+    test("orders open tasks by priority then creation date and non-open tasks by update date", async () => {
+      const { repoPath, store } = await createTrackedHarness();
+
+      const olderHighPriorityOpen = await createTask(store, repoPath, {
+        title: "Older high priority open",
+        issueType: "task",
+        priority: 1,
+        aiReviewEnabled: true,
+      });
+      const newerHighPriorityOpen = await createTask(store, repoPath, {
+        title: "Newer high priority open",
+        issueType: "task",
+        priority: 1,
+        aiReviewEnabled: true,
+      });
+      const newestLowPriorityOpen = await createTask(store, repoPath, {
+        title: "Newest low priority open",
+        issueType: "task",
+        priority: 4,
+        aiReviewEnabled: true,
+      });
+      const olderSpecReady = await createTask(store, repoPath, {
+        title: "Older spec ready",
+        issueType: "task",
+        priority: 2,
+        aiReviewEnabled: true,
+      });
+      const newerSpecReady = await createTask(store, repoPath, {
+        title: "Newer spec ready",
+        issueType: "task",
+        priority: 2,
+        aiReviewEnabled: true,
+      });
+
+      await run(
+        store.transitionTask({ repoPath, taskId: olderSpecReady.id, status: "spec_ready" }),
+      );
+      await run(
+        store.transitionTask({ repoPath, taskId: newerSpecReady.id, status: "spec_ready" }),
+      );
+
+      const tasks = await run(store.listTasks({ repoPath }));
+
+      expect(tasks.filter((task) => task.status === "open").map((task) => task.id)).toEqual([
+        newerHighPriorityOpen.id,
+        olderHighPriorityOpen.id,
+        newestLowPriorityOpen.id,
+      ]);
+      expect(tasks.filter((task) => task.status === "spec_ready").map((task) => task.id)).toEqual([
+        olderSpecReady.id,
+        newerSpecReady.id,
+      ]);
+
+      const filteredTasks = await run(store.listTasks({ repoPath, doneVisibleDays: 0 }));
+
+      expect(filteredTasks.filter((task) => task.status === "open").map((task) => task.id)).toEqual(
+        [newerHighPriorityOpen.id, olderHighPriorityOpen.id, newestLowPriorityOpen.id],
+      );
+      expect(
+        filteredTasks.filter((task) => task.status === "spec_ready").map((task) => task.id),
+      ).toEqual([olderSpecReady.id, newerSpecReady.id]);
+    });
+
     test("stores workflow documents and exposes the current metadata/read-model state", async () => {
       const { repoPath, store } = await createTrackedHarness();
       const task = await createTask(store, repoPath, {
