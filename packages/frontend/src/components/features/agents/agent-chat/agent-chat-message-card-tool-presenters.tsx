@@ -367,10 +367,10 @@ export const RegularToolMessage = ({
           <div className="space-y-2 border-t border-border p-2 text-xs text-foreground">
             {questionDetailRenderEntries.map(({ key, detail }) => (
               <div key={key} className="space-y-0.5">
-                <p className="font-medium text-foreground">{detail.prompt}</p>
+                <p className="break-words font-medium text-foreground">{detail.prompt}</p>
                 <p
                   className={cn(
-                    "whitespace-pre-wrap",
+                    "whitespace-pre-wrap break-words",
                     detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground",
                   )}
                 >

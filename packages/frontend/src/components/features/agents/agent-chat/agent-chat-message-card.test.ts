@@ -242,6 +242,62 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("fairnest-97f");
   });
 
+  test("wraps long unbroken question tool prompts", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-question-long-prompt",
+          role: "tool",
+          content: "Tool question completed",
+          timestamp: "2026-02-22T10:20:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-question-long-prompt",
+            callId: "call-question-long-prompt",
+            tool: "ask_question",
+            toolType: "question",
+            status: "completed",
+            input: { questions: [{ prompt: LONG_TRANSCRIPT_TOKEN }] },
+            output: '{"answers":[["yes"]]}',
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Questions and answers");
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("break-words font-medium text-foreground");
+  });
+
+  test("wraps long unbroken question tool answers", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-question-long-answer",
+          role: "tool",
+          content: "Tool question completed",
+          timestamp: "2026-02-22T10:20:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-question-long-answer",
+            callId: "call-question-long-answer",
+            tool: "ask_question",
+            toolType: "question",
+            status: "completed",
+            input: { questions: [{ prompt: "Confirm deployment?" }] },
+            output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_TOKEN]] }),
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Questions and answers");
+    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
+  });
+
   test.each([
     {
       id: "tool-todowrite",
