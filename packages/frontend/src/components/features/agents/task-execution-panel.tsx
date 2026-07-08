@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
@@ -70,9 +71,11 @@ const taskExecutionPanelTabIcons = {
 } satisfies Record<TaskExecutionPanelTabId, LucideIcon>;
 
 function TaskExecutionPanelTabTrigger({
+  isActive,
   tab,
   showSeparator,
 }: {
+  isActive: boolean;
   tab: TaskExecutionPanelTab;
   showSeparator: boolean;
 }): ReactElement {
@@ -92,10 +95,18 @@ function TaskExecutionPanelTabTrigger({
           <TabsTrigger
             value={tab.id}
             aria-label={tab.label}
-            className="relative size-9 flex-none cursor-pointer rounded-md border border-transparent bg-transparent p-0 text-muted-foreground shadow-none after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-5 after:-translate-x-1/2 after:rounded-full after:bg-transparent hover:bg-muted hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-selected-accent data-[state=active]:shadow-none data-[state=active]:after:bg-selected-accent"
+            className="group size-9 flex-none cursor-pointer rounded-sm border border-transparent bg-transparent p-0 shadow-none hover:bg-transparent data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             data-testid={`task-execution-tab-${tab.id}`}
           >
-            <Icon className="size-5" aria-hidden="true" />
+            <span
+              className={cn(
+                "inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground/70 group-hover:bg-muted group-hover:text-foreground/80",
+                isActive ? "text-primary group-hover:text-primary" : "",
+              )}
+              data-testid={isActive ? "task-execution-tab-active-icon" : undefined}
+            >
+              <Icon className="size-5" aria-hidden="true" />
+            </span>
             <span className="sr-only">{tab.label}</span>
           </TabsTrigger>
         </TooltipTrigger>
@@ -136,7 +147,12 @@ function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): 
             className="h-9 w-fit shrink-0 gap-0 rounded-none bg-transparent p-0"
           >
             {model.tabs.map((tab, index) => (
-              <TaskExecutionPanelTabTrigger key={tab.id} tab={tab} showSeparator={index > 0} />
+              <TaskExecutionPanelTabTrigger
+                key={tab.id}
+                isActive={tab.id === model.activeTabId}
+                tab={tab}
+                showSeparator={index > 0}
+              />
             ))}
           </TabsList>
           <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end">
