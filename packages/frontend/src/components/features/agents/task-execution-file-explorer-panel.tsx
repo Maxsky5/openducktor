@@ -245,7 +245,7 @@ export function TaskExecutionFileExplorerPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <FileExplorerRootPathHeader rootPath={rootPath} />
-      <div className="min-h-0 flex-1 overflow-hidden p-3">
+      <div className="min-h-0 flex-1 overflow-hidden py-2.5">
         {treeQuery.isLoading ? (
           <FileExplorerUnavailableState message="Loading files..." />
         ) : fileTreeInputPaths.length === 0 ? (

@@ -14,6 +14,44 @@ export type TaskExecutionFileExplorerPanelModel = {
   onSelectFile: (file: TaskExecutionSelectedFile) => void;
 };
 
+const comparePathSegments = (left: string, right: string): number => {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+};
+
+const compareFileTreeInputPaths = (left: string, right: string): number => {
+  const leftSegments = left.split("/");
+  const rightSegments = right.split("/");
+  const maxLength = Math.max(leftSegments.length, rightSegments.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftSegment = leftSegments[index];
+    const rightSegment = rightSegments[index];
+
+    if (leftSegment === undefined) {
+      return -1;
+    }
+    if (rightSegment === undefined) {
+      return 1;
+    }
+
+    const leftIsDirectoryAtLevel = index < leftSegments.length - 1;
+    const rightIsDirectoryAtLevel = index < rightSegments.length - 1;
+    if (leftIsDirectoryAtLevel !== rightIsDirectoryAtLevel) {
+      return leftIsDirectoryAtLevel ? -1 : 1;
+    }
+
+    const segmentComparison = comparePathSegments(leftSegment, rightSegment);
+    if (segmentComparison !== 0) {
+      return segmentComparison;
+    }
+  }
+
+  return 0;
+};
+
 export const buildTaskExecutionFileTreeInputPaths = (
   entries: readonly WorkspaceFileTreeEntry[] | undefined,
 ): string[] => {
@@ -23,7 +61,7 @@ export const buildTaskExecutionFileTreeInputPaths = (
       paths.push(entry.path);
     }
   }
-  return paths;
+  return paths.toSorted(compareFileTreeInputPaths);
 };
 
 export const buildTaskExecutionFileTreeGitStatusEntries = (
