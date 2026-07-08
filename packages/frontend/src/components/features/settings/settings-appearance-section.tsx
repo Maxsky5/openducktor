@@ -36,6 +36,7 @@ export function SettingsAppearanceSection({
   onUpdateAppearance,
 }: SettingsAppearanceSectionProps): ReactElement {
   const selectId = "appearance-horizontal-scrollbars";
+  const labelId = "appearance-horizontal-scrollbars-label";
   const descriptionId = "appearance-horizontal-scrollbars-description";
   const selectedVisibility = appearance.horizontalScrollbarVisibility;
   const handleHorizontalScrollbarVisibilityChange = (
@@ -66,7 +67,9 @@ export function SettingsAppearanceSection({
 
       <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
         <div className="grid gap-2">
-          <Label htmlFor={selectId}>Horizontal Scrollbars</Label>
+          <Label id={labelId} htmlFor={selectId}>
+            Horizontal Scrollbars
+          </Label>
           <p id={descriptionId} className="text-xs text-muted-foreground">
             System default shows horizontal scrollbars on Windows and Linux, and hides them on
             macOS. Choose Show or Hide to override it on every platform.
@@ -78,6 +81,7 @@ export function SettingsAppearanceSection({
             id={selectId}
             value={selectedVisibility}
             disabled={disabled}
+            aria-labelledby={labelId}
             aria-describedby={descriptionId}
             className="h-9 w-full appearance-none rounded-md border border-input bg-card px-3 py-1 pr-9 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
             onChange={handleHorizontalScrollbarVisibilityChange}
