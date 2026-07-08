@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { PropsWithChildren, ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
@@ -118,69 +117,76 @@ const createTasksState = (): TasksStateContextValue => ({
   humanRequestChangesTask: async () => undefined,
 });
 
-function AppShellTestProviders({ children }: PropsWithChildren): ReactElement {
+const renderAppShellForTest = async (): Promise<ReturnType<typeof render>> => {
+  const AppShell = await importAppShell();
   const queryClient = createQueryClient();
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ActiveWorkspaceContext.Provider
-          value={{ activeWorkspace, setActiveWorkspace: () => undefined }}
-        >
-          <WorkspacePresenceContext.Provider value={{ hasWorkspaces: true }}>
-            <WorkspaceStateContext.Provider value={createWorkspaceState()}>
-              <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchState()}>
-                <RuntimeDefinitionsContext.Provider
-                  value={{
-                    runtimeDefinitions: [],
-                    availableRuntimeDefinitions: [],
-                    agentRuntimes: settingsSnapshot.agentRuntimes,
-                    isLoadingRuntimeDefinitions: false,
-                    runtimeDefinitionsError: null,
-                    refreshRuntimeDefinitions: async () => [],
-                    loadRepoRuntimeCatalog: async () => {
-                      throw new Error("loadRepoRuntimeCatalog is not used in this test");
-                    },
-                    loadRepoRuntimeSlashCommands: async () => {
-                      throw new Error("loadRepoRuntimeSlashCommands is not used in this test");
-                    },
-                    loadRepoRuntimeSkills: async () => {
-                      throw new Error("loadRepoRuntimeSkills is not used in this test");
-                    },
-                    loadRepoRuntimeSubagents: async () => {
-                      throw new Error("loadRepoRuntimeSubagents is not used in this test");
-                    },
-                    loadRepoRuntimeFileSearch: async () => {
-                      throw new Error("loadRepoRuntimeFileSearch is not used in this test");
-                    },
-                  }}
-                >
-                  <RepoRuntimeHealthContext.Provider
+  return render(
+    <MemoryRouter initialEntries={["/kanban"]} useTransitions>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ActiveWorkspaceContext.Provider
+            value={{ activeWorkspace, setActiveWorkspace: () => undefined }}
+          >
+            <WorkspacePresenceContext.Provider value={{ hasWorkspaces: true }}>
+              <WorkspaceStateContext.Provider value={createWorkspaceState()}>
+                <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchState()}>
+                  <RuntimeDefinitionsContext.Provider
                     value={{
-                      runtimeHealthByRuntime: {},
-                      isLoadingRepoRuntimeHealth: false,
-                      refreshRepoRuntimeHealth: async () => ({}),
+                      runtimeDefinitions: [],
+                      availableRuntimeDefinitions: [],
+                      agentRuntimes: settingsSnapshot.agentRuntimes,
+                      isLoadingRuntimeDefinitions: false,
+                      runtimeDefinitionsError: null,
+                      refreshRuntimeDefinitions: async () => [],
+                      loadRepoRuntimeCatalog: async () => {
+                        throw new Error("loadRepoRuntimeCatalog is not used in this test");
+                      },
+                      loadRepoRuntimeSlashCommands: async () => {
+                        throw new Error("loadRepoRuntimeSlashCommands is not used in this test");
+                      },
+                      loadRepoRuntimeSkills: async () => {
+                        throw new Error("loadRepoRuntimeSkills is not used in this test");
+                      },
+                      loadRepoRuntimeSubagents: async () => {
+                        throw new Error("loadRepoRuntimeSubagents is not used in this test");
+                      },
+                      loadRepoRuntimeFileSearch: async () => {
+                        throw new Error("loadRepoRuntimeFileSearch is not used in this test");
+                      },
                     }}
                   >
-                    <ChecksStateContext.Provider value={createChecksState()}>
-                      <TasksStateContext.Provider value={createTasksState()}>
-                        <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
-                          {children}
-                        </AgentSessionsContext.Provider>
-                      </TasksStateContext.Provider>
-                    </ChecksStateContext.Provider>
-                  </RepoRuntimeHealthContext.Provider>
-                </RuntimeDefinitionsContext.Provider>
-              </WorkspaceBranchStateContext.Provider>
-            </WorkspaceStateContext.Provider>
-          </WorkspacePresenceContext.Provider>
-        </ActiveWorkspaceContext.Provider>
-      </ThemeProvider>
-    </QueryClientProvider>
+                    <RepoRuntimeHealthContext.Provider
+                      value={{
+                        runtimeHealthByRuntime: {},
+                        isLoadingRepoRuntimeHealth: false,
+                        refreshRepoRuntimeHealth: async () => ({}),
+                      }}
+                    >
+                      <ChecksStateContext.Provider value={createChecksState()}>
+                        <TasksStateContext.Provider value={createTasksState()}>
+                          <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
+                            <Routes>
+                              <Route element={<AppShell />}>
+                                <Route path="/kanban" element={<main>Kanban</main>} />
+                              </Route>
+                            </Routes>
+                          </AgentSessionsContext.Provider>
+                        </TasksStateContext.Provider>
+                      </ChecksStateContext.Provider>
+                    </RepoRuntimeHealthContext.Provider>
+                  </RuntimeDefinitionsContext.Provider>
+                </WorkspaceBranchStateContext.Provider>
+              </WorkspaceStateContext.Provider>
+            </WorkspacePresenceContext.Provider>
+          </ActiveWorkspaceContext.Provider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
-}
+};
 
 const restoreSettingsModalMock = async (): Promise<void> => {
   await restoreMockedModules([
@@ -221,19 +227,7 @@ describe("AppShell", () => {
   });
 
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
-    const AppShell = await importAppShell();
-
-    render(
-      <MemoryRouter initialEntries={["/kanban"]} useTransitions>
-        <AppShellTestProviders>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route path="/kanban" element={<main>Kanban</main>} />
-            </Route>
-          </Routes>
-        </AppShellTestProviders>
-      </MemoryRouter>,
-    );
+    await renderAppShellForTest();
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Settings" }).dataset.settingsModalTrigger).toBe(
