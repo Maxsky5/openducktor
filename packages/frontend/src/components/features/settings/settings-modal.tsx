@@ -48,7 +48,7 @@ const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
 export function SettingsModal({
   triggerClassName,
   triggerIconOnly = false,
-  triggerSize = "sm",
+  triggerSize = triggerIconOnly ? "icon" : "sm",
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [navigation, setNavigation] =

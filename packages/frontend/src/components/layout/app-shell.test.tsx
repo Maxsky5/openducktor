@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -18,7 +18,6 @@ import {
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   ChecksStateContextValue,
@@ -26,14 +25,7 @@ import type {
   WorkspaceBranchStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-
-const actualSettingsModalModule = await import("@/components/features/settings/settings-modal");
-
-type SettingsModalTriggerProps = {
-  triggerClassName?: string;
-  triggerSize?: "default" | "sm" | "lg" | "icon";
-  triggerIconOnly?: boolean;
-};
+import { AppShell } from "./app-shell";
 
 const activeWorkspace = {
   workspaceId: "workspace-1",
@@ -117,8 +109,7 @@ const createTasksState = (): TasksStateContextValue => ({
   humanRequestChangesTask: async () => undefined,
 });
 
-const renderAppShellForTest = async (): Promise<ReturnType<typeof render>> => {
-  const AppShell = await importAppShell();
+const renderAppShellForTest = (): ReturnType<typeof render> => {
   const queryClient = createQueryClient();
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
@@ -188,58 +179,19 @@ const renderAppShellForTest = async (): Promise<ReturnType<typeof render>> => {
   );
 };
 
-const restoreSettingsModalMock = async (): Promise<void> => {
-  await restoreMockedModules([
-    ["@/components/features/settings/settings-modal", async () => actualSettingsModalModule],
-  ]);
-};
-
-const importAppShell = async (): Promise<typeof import("./app-shell").AppShell> => {
-  const { AppShell } = await import("./app-shell");
-  return AppShell;
-};
-
 describe("AppShell", () => {
-  beforeEach(() => {
-    mock.module("@/components/features/settings/settings-modal", () => ({
-      SettingsModal: ({
-        triggerClassName,
-        triggerIconOnly = false,
-        triggerSize,
-      }: SettingsModalTriggerProps) => (
-        <button
-          type="button"
-          aria-label={triggerIconOnly ? "Settings" : undefined}
-          className={triggerClassName}
-          data-settings-modal-trigger="true"
-          data-trigger-icon-only={triggerIconOnly ? "true" : "false"}
-          data-trigger-size={triggerSize ?? ""}
-          title={triggerIconOnly ? "Settings" : undefined}
-        >
-          {triggerIconOnly ? null : "Settings"}
-        </button>
-      ),
-    }));
-  });
-
-  afterEach(async () => {
-    await restoreSettingsModalMock();
-  });
-
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
-    await renderAppShellForTest();
+    renderAppShellForTest();
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Settings" }).dataset.settingsModalTrigger).toBe(
-        "true",
-      ),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
 
     const collapsedSettingsButton = screen.getByRole("button", { name: "Settings" });
-    expect(collapsedSettingsButton.dataset.settingsModalTrigger).toBe("true");
-    expect(collapsedSettingsButton.dataset.triggerIconOnly).toBe("true");
-    expect(collapsedSettingsButton.dataset.triggerSize).toBe("icon");
+    expect(collapsedSettingsButton.getAttribute("aria-label")).toBe("Settings");
+    expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings");
+    expect(collapsedSettingsButton.textContent?.trim()).toBe("");
+    expect(collapsedSettingsButton.className).toContain("size-8");
+    expect(collapsedSettingsButton.className).not.toContain("px-3");
   });
 });

@@ -13,7 +13,7 @@ type Theme = "dark" | "light";
 const LIGHT_THEME = { themeName: "light" };
 const DARK_THEME = { themeName: "dark" };
 
-const actualThemeProviderModule = await import("@/components/layout/theme-provider");
+const actualThemeProviderModule = { ...(await import("@/components/layout/theme-provider")) };
 
 let currentTheme: Theme = "light";
 let yamlLanguageShouldFail = false;

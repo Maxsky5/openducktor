@@ -1,8 +1,9 @@
-import { PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
-import { lazy, memo, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { memo, type ReactElement, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
+import { SettingsModal } from "@/components/features/settings/settings-modal";
 import {
   AgentActivityCard,
   AppBrand,
@@ -15,11 +16,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
-
-const SettingsModal = lazy(async () => {
-  const module = await import("@/components/features/settings/settings-modal");
-  return { default: module.SettingsModal };
-});
 
 export const AppShell = memo(function AppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
@@ -114,21 +110,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                 </div>
 
                 <div className="border-t border-sidebar-border p-3">
-                  <Suspense
-                    fallback={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-start"
-                        disabled
-                      >
-                        <Settings2 className="size-4" />
-                        Settings
-                      </Button>
-                    }
-                  >
-                    <SettingsModal triggerClassName="w-full justify-start" triggerSize="default" />
-                  </Suspense>
+                  <SettingsModal triggerClassName="w-full justify-start" triggerSize="default" />
                 </div>
               </>
             ) : (
@@ -148,27 +130,10 @@ export const AppShell = memo(function AppShell(): ReactElement {
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
                 </div>
                 <div className="mt-auto flex w-full justify-center border-t border-sidebar-border pt-2">
-                  <Suspense
-                    fallback={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                        disabled
-                        aria-label="Settings"
-                        title="Settings"
-                      >
-                        <Settings2 className="size-4" />
-                      </Button>
-                    }
-                  >
-                    <SettingsModal
-                      triggerClassName="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                      triggerIconOnly
-                      triggerSize="icon"
-                    />
-                  </Suspense>
+                  <SettingsModal
+                    triggerClassName="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                    triggerIconOnly
+                  />
                 </div>
               </div>
             )}
