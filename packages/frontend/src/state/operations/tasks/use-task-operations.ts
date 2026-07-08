@@ -10,10 +10,12 @@ export function useTaskOperations({
   activeWorkspace,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const taskReadFlow = useTaskReadFlow({ activeRepoPath });
   const mutationRunner = useTaskMutationRunner({ activeRepoPath });
   const mutationCommands = useTaskMutationCommands({
     activeRepoPath,
+    activeWorkspaceId,
     tasks: taskReadFlow.tasks,
     runTaskMutation: mutationRunner.runTaskMutation,
   });
@@ -23,6 +25,7 @@ export function useTaskOperations({
   });
   const pullRequestOperations = useTaskPullRequestOperations({
     activeRepoPath,
+    activeWorkspaceId,
     refreshTaskData: taskReadFlow.refreshTaskData,
     runTaskMutation: mutationRunner.runTaskMutation,
   });

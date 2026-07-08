@@ -1,14 +1,20 @@
 import type { PullRequest } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "../shared/host";
+import {
+  prepareTaskChatDraftCleanupTargets,
+  runTaskChatDraftCleanupAfterSuccess,
+} from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
 
 type UseTaskPullRequestOperationsArgs = {
   activeRepoPath: string | null;
+  activeWorkspaceId: string | null;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
 };
@@ -38,9 +44,11 @@ export type TaskPullRequestOperations = {
 
 export function useTaskPullRequestOperations({
   activeRepoPath,
+  activeWorkspaceId,
   refreshTaskData,
   runTaskMutation,
 }: UseTaskPullRequestOperationsArgs): TaskPullRequestOperations {
+  const queryClient = useQueryClient();
   const [detectingPullRequestState, setDetectingPullRequestState] = useState<TaskRepoState | null>(
     null,
   );
@@ -138,11 +146,18 @@ export function useTaskPullRequestOperations({
     const { repoPath, taskId, pullRequest } = pendingMergedPullRequestState;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
+      const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
+        queryClient,
+        repoPath,
+        workspaceId: activeWorkspaceId,
+        taskIds: [taskId],
+      });
       await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
       setPendingMergedPullRequestState((current) =>
         current?.repoPath === repoPath && current.taskId === taskId ? null : current,
       );
       await refreshTaskData(repoPath, taskId);
+      runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
       });
@@ -153,7 +168,7 @@ export function useTaskPullRequestOperations({
         currentTaskId === taskId ? null : currentTaskId,
       );
     }
-  }, [pendingMergedPullRequestState, refreshTaskData]);
+  }, [activeWorkspaceId, pendingMergedPullRequestState, queryClient, refreshTaskData]);
 
   const unlinkPullRequest = useCallback(
     async (taskId: string): Promise<void> => {

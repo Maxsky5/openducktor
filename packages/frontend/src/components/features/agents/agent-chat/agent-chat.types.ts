@@ -25,6 +25,7 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import type { AgentChatDraftSessionIdentity } from "./agent-chat-draft-storage";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -107,6 +108,7 @@ export type AgentChatComposerModel = {
   busySendBlockedReason: string | null;
   pendingInlineCommentCount: number;
   draftStateKey: string;
+  draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
   onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;

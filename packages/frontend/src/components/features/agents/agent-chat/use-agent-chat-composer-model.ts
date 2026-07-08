@@ -22,6 +22,7 @@ import {
   type AgentChatDraftScope,
   didAgentChatDraftScopeSwitchSessionOnly,
 } from "./agent-chat-draft-scope";
+import type { AgentChatDraftSessionIdentity } from "./agent-chat-draft-storage";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 type AgentChatComposerSelectedSession = AgentSessionIdentity & {
@@ -53,6 +54,7 @@ export type AgentChatComposerConfig = {
   readOnlyReason: string | null;
   draftStateKey: string;
   draftScope: AgentChatDraftScope;
+  draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;
@@ -210,6 +212,7 @@ export function useAgentChatComposerModel({
       busySendBlockedReason: composer.busySendBlockedReason,
       pendingInlineCommentCount,
       draftStateKey: composer.draftStateKey,
+      draftPersistenceIdentity: composer.draftPersistenceIdentity,
       onSend: (draft) => submitComposerDraft(draft, composer.onSend),
       isSending: composer.isSending,
       isStarting: composer.isStarting,

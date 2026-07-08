@@ -66,14 +66,20 @@ export function useAgentsPageOrchestrationShellModel({
   const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
 
   const composer = useMemo(
-    (): { draftScope: AgentChatDraftScope } => ({
+    (): { draftScope: AgentChatDraftScope; workspaceId: string | null } => ({
+      workspaceId: activeWorkspaceId,
       draftScope: {
         taskId: selection.view.taskId,
         role: selection.view.role,
         session: selection.view.selectedSession.identity,
       },
     }),
-    [selection.view.role, selection.view.selectedSession.identity, selection.view.taskId],
+    [
+      activeWorkspaceId,
+      selection.view.role,
+      selection.view.selectedSession.identity,
+      selection.view.taskId,
+    ],
   );
 
   const orchestrationSelection = useMemo<

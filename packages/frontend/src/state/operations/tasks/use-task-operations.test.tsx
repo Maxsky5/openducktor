@@ -1,8 +1,23 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TaskCard, TaskCreateInput, TaskStoreCheck } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  TaskCard,
+  TaskCreateInput,
+  TaskStoreCheck,
+} from "@openducktor/contracts";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
+import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import {
+  type AgentChatDraftSessionIdentity,
+  toAgentChatDraftStorageKey,
+  writeAgentChatDraftToStorage,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+import {
+  resetAgentChatDraftStoreForTests,
+  setAgentChatDraftStorageForTests,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -53,6 +68,7 @@ const legacyHost = host as typeof host & {
 };
 
 type RunSummary = LegacyRunSummary;
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -79,6 +95,37 @@ const createDeferred = <T,>() => {
     resolve: (value: T) => resolve?.(value),
     reject: (reason?: unknown) => reject?.(reason),
   };
+};
+
+const createMemoryStorage = (): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
+
+const writeTestDraft = (
+  storage: TestStorage,
+  identity: AgentChatDraftSessionIdentity,
+  text: string,
+): void => {
+  writeAgentChatDraftToStorage({
+    storage,
+    identity,
+    taskId: "task-1",
+    draft: { segments: [createTextSegment(text, "text-1")], attachments: [] },
+    updatedAt: "2026-07-08T10:00:00.000Z",
+  });
 };
 
 const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
@@ -122,6 +169,18 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   selectedModel: null,
   ...overrides,
   historyLoadState: overrides.historyLoadState ?? "not_requested",
+});
+
+const buildAgentSessionRecord = (
+  overrides: Partial<AgentSessionRecord> = {},
+): AgentSessionRecord => ({
+  runtimeKind: "opencode",
+  externalSessionId: "external-1",
+  role: "build",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  workingDirectory: "/repo",
+  selectedModel: null,
+  ...overrides,
 });
 
 const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>
@@ -394,6 +453,7 @@ describe("use-task-operations", () => {
     console.warn = originalConsoleWarn;
     toast.success = originalToastSuccess;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    resetAgentChatDraftStoreForTests();
   });
 
   test("refreshTaskData keeps host task results intact", async () => {
@@ -1745,6 +1805,15 @@ describe("use-task-operations", () => {
       isDeleted = true;
       return { ok: true };
     });
+    const agentSessionsList = mock(async (_repoPath: string, taskId: string) => {
+      if (taskId === "A") {
+        return [buildAgentSessionRecord({ externalSessionId: "session-a" })];
+      }
+      if (taskId === "B") {
+        return [buildAgentSessionRecord({ externalSessionId: "session-b" })];
+      }
+      return [];
+    });
     const tasksList = mock(async () =>
       isDeleted ? [] : [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
     );
@@ -1752,10 +1821,12 @@ describe("use-task-operations", () => {
 
     const original = {
       taskDelete: host.taskDelete,
+      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskDelete = taskDelete;
+    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -1783,6 +1854,15 @@ describe("use-task-operations", () => {
     );
 
     try {
+      const storage = createMemoryStorage();
+      setAgentChatDraftStorageForTests(storage);
+      const parentDraftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+      const childDraftIdentity = { workspaceId: "repo", externalSessionId: "session-b" };
+      const unrelatedDraftIdentity = { workspaceId: "repo", externalSessionId: "session-c" };
+      writeTestDraft(storage, parentDraftIdentity, "parent draft");
+      writeTestDraft(storage, childDraftIdentity, "child draft");
+      writeTestDraft(storage, unrelatedDraftIdentity, "unrelated draft");
+
       queryClient.setQueryData(taskQueryKeys.repoData("/repo", 1), {
         tasks: [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
         runs: [] satisfies RunSummary[],
@@ -1815,13 +1895,75 @@ describe("use-task-operations", () => {
       );
 
       expect(taskDelete).toHaveBeenCalledWith("/repo", "A", true);
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "B");
+      expect(storage.getItem(toAgentChatDraftStorageKey(parentDraftIdentity))).toBeNull();
+      expect(storage.getItem(toAgentChatDraftStorageKey(childDraftIdentity))).toBeNull();
+      expect(storage.getItem(toAgentChatDraftStorageKey(unrelatedDraftIdentity))).not.toBeNull();
       expect(queryClient.getQueryData(documentQueryKeys.spec("/repo", "A"))).toBeUndefined();
       expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "B"))).toBeUndefined();
     } finally {
       await harness.unmount();
       host.taskDelete = original.taskDelete;
+      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
+    }
+  });
+
+  test("deleteTask leaves chat drafts intact when the host deletion fails", async () => {
+    const taskDelete = mock(async () => {
+      throw new Error("delete failed");
+    });
+    const agentSessionsList = mock(async () => [
+      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    ]);
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+
+    const original = {
+      taskDelete: host.taskDelete,
+      agentSessionsList: host.agentSessionsList,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+      toastError: toast.error,
+    };
+    host.taskDelete = taskDelete;
+    host.agentSessionsList = agentSessionsList;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+    writeTestDraft(storage, draftIdentity, "parent draft");
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+
+      await expect(
+        harness.run(async (value) => {
+          await value.deleteTask("A");
+        }),
+      ).rejects.toThrow("delete failed");
+
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).not.toBeNull();
+    } finally {
+      await harness.unmount();
+      host.taskDelete = original.taskDelete;
+      host.agentSessionsList = original.agentSessionsList;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+      toast.error = original.toastError;
     }
   });
 
@@ -1831,15 +1973,20 @@ describe("use-task-operations", () => {
       isClosed = true;
       return makeTask("A", "closed");
     });
+    const agentSessionsList = mock(async () => [
+      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    ]);
     const tasksList = mock(async () => [makeTask("A", isClosed ? "closed" : "in_progress")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskClose: host.taskClose,
+      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskClose = taskClose;
+    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -1867,6 +2014,11 @@ describe("use-task-operations", () => {
     );
 
     try {
+      const storage = createMemoryStorage();
+      setAgentChatDraftStorageForTests(storage);
+      const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+      writeTestDraft(storage, draftIdentity, "close draft");
+
       await harness.mount();
       await harness.waitFor(() => latest?.tasks[0]?.status === "in_progress");
       await harness.run(async () => {
@@ -1886,9 +2038,12 @@ describe("use-task-operations", () => {
       );
 
       expect(taskClose).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     } finally {
       await harness.unmount();
       host.taskClose = original.taskClose;
+      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }
@@ -2341,17 +2496,22 @@ describe("use-task-operations", () => {
       },
     }));
     const taskPullRequestLinkMerged = mock(async () => makeTask("A", "closed"));
+    const agentSessionsList = mock(async () => [
+      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    ]);
     const tasksList = mock(async () => [makeTask("A", "closed")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
+      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
+    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -2366,6 +2526,11 @@ describe("use-task-operations", () => {
     });
 
     try {
+      const storage = createMemoryStorage();
+      setAgentChatDraftStorageForTests(storage);
+      const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+      writeTestDraft(storage, draftIdentity, "merged draft");
+
       await harness.mount();
       await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
@@ -2389,6 +2554,8 @@ describe("use-task-operations", () => {
         closedAt: "2026-02-20T10:00:00Z",
       });
       expect(tasksList).toHaveBeenCalledWith("/repo", 1);
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
       expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
       expect(toastSuccess).toHaveBeenCalledWith("Merged pull request linked", {
@@ -2398,6 +2565,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
+      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
@@ -2425,17 +2593,20 @@ describe("use-task-operations", () => {
       currentStatus = "closed";
       return makeTask("A", currentStatus);
     });
+    const agentSessionsList = mock(async () => []);
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
+      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
+    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -2494,6 +2665,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
+      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }

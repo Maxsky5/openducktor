@@ -1,8 +1,20 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { AgentChatComposer } from "./agent-chat-composer";
+import {
+  type AgentChatDraftSessionIdentity,
+  toAgentChatDraftStorageKey,
+  writeAgentChatDraftToStorage,
+} from "./agent-chat-draft-storage";
+import {
+  flushAgentChatDraft,
+  resetAgentChatDraftStoreForTests,
+  setAgentChatDraftStorageForTests,
+} from "./agent-chat-draft-store";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
 const SHARED_CALLBACKS = {
   onSend: async () => true,
@@ -22,6 +34,7 @@ const buildModel = () => ({
   busySendBlockedReason: null,
   pendingInlineCommentCount: 0,
   draftStateKey: "draft-1",
+  draftPersistenceIdentity: null,
   onSend: SHARED_CALLBACKS.onSend,
   isSending: false,
   isStarting: false,
@@ -70,6 +83,31 @@ const buildModel = () => ({
   onComposerEditorInput: SHARED_CALLBACKS.onComposerEditorInput,
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
+});
+
+const createMemoryStorage = (spies?: { getItem?: (key: string) => void }): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => {
+      spies?.getItem?.(key);
+      return store.get(key) ?? null;
+    },
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
+
+const sessionIdentity = (externalSessionId: string): AgentChatDraftSessionIdentity => ({
+  workspaceId: "workspace-repo",
+  externalSessionId,
 });
 
 const getEditorRoot = (container: HTMLElement): HTMLElement => {
@@ -123,6 +161,198 @@ const createClipboardData = ({ itemFile, files }: { itemFile?: File; files?: Fil
 });
 
 describe("AgentChatComposer attachments", () => {
+  afterEach(() => {
+    resetAgentChatDraftStoreForTests();
+  });
+
+  test("restores independent in-memory drafts when switching sessions", async () => {
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const sessionA = sessionIdentity("session-a");
+    const sessionB = sessionIdentity("session-b");
+    const { container, rerender } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: sessionA,
+        }}
+      />,
+    );
+
+    typeIntoComposer(container, "hello A");
+    rerender(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-b",
+          draftStateKey: "draft-b",
+          draftPersistenceIdentity: sessionB,
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("hello A");
+    });
+
+    typeIntoComposer(container, "hello B");
+    rerender(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: sessionA,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("hello A");
+    });
+    expect(container.textContent).not.toContain("hello B");
+  });
+
+  test("does not reread localStorage after a session has hydrated into memory", async () => {
+    const getItem = mock((_key: string) => {});
+    const storage = createMemoryStorage({ getItem });
+    setAgentChatDraftStorageForTests(storage);
+    const sessionA = sessionIdentity("session-a");
+    const sessionB = sessionIdentity("session-b");
+
+    const { rerender } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: sessionA,
+        }}
+      />,
+    );
+    rerender(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-b",
+          draftStateKey: "draft-b",
+          draftPersistenceIdentity: sessionB,
+        }}
+      />,
+    );
+    rerender(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: sessionA,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const sessionAReads = getItem.mock.calls.filter(
+        ([key]) => key === toAgentChatDraftStorageKey(sessionA),
+      );
+      expect(sessionAReads).toHaveLength(1);
+    });
+  });
+
+  test("restores a persisted draft when the selected session loads", async () => {
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    setAgentChatDraftStorageForTests(storage);
+    writeAgentChatDraftToStorage({
+      storage,
+      identity,
+      taskId: "task-1",
+      draft: { segments: [{ id: "text-1", kind: "text", text: "restored" }], attachments: [] },
+      updatedAt: new Date().toISOString(),
+    });
+
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: identity,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("restored");
+    });
+  });
+
+  test("clears the submitted session draft after a successful send", async () => {
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    const onSend = mock(async () => true);
+    setAgentChatDraftStorageForTests(storage);
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          onSend,
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: identity,
+        }}
+      />,
+    );
+
+    typeIntoComposer(container, "send me");
+    await flushAgentChatDraft(identity);
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+    });
+  });
+
+  test("restores the submitted draft when send returns false", async () => {
+    let resolveSend: (didSend: boolean) => void = () => {};
+    const onSend = mock(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    setAgentChatDraftStorageForTests(storage);
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          onSend,
+          displayedSessionKey: "session-a",
+          draftStateKey: "draft-a",
+          draftPersistenceIdentity: identity,
+        }}
+      />,
+    );
+
+    typeIntoComposer(container, "keep me");
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("keep me");
+    });
+
+    resolveSend(false);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("keep me");
+    });
+  });
+
   test("stages attachments, revalidates on model changes, and removes them", async () => {
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
     const { container, rerender } = render(<AgentChatComposer model={buildModel()} />);

@@ -157,6 +157,7 @@ const baseArgs: BuildArgs = {
   },
   chatSettings: baseChatSettings,
   composer: {
+    workspaceId: "workspace-repo",
     draftScope: {
       taskId: "task-1",
       role: "planner",
