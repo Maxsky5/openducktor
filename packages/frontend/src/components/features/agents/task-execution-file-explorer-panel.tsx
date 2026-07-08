@@ -1,13 +1,20 @@
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import type { TreeThemeInput } from "@pierre/trees";
 import { preparePresortedFileTreeInput, themeToTreeStyles } from "@pierre/trees";
-import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
+import { FileTree, useFileTree } from "@pierre/trees/react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
-import { type CSSProperties, type ReactElement, useEffect, useMemo, useRef } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { useTheme } from "@/components/layout/theme-provider";
-import { Input } from "@/components/ui/input";
+import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { errorMessage } from "@/lib/errors";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
 import {
   buildTaskExecutionFileTreeGitStatusEntries,
@@ -108,6 +115,40 @@ function FileExplorerUnavailableState({ message }: { message: string }): ReactEl
   );
 }
 
+function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactElement {
+  const { copied, copyToClipboard } = useCopyToClipboard({
+    successMessage: "Working directory copied",
+    errorLogContext: "TaskExecutionFileExplorerPanel.copyWorkingDirectory",
+  });
+
+  const copyWorkingDirectory = useCallback(() => {
+    void copyToClipboard(rootPath);
+  }, [copyToClipboard, rootPath]);
+
+  return (
+    <div className="border-b border-border px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">Working dir</span>
+        <code
+          className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
+          title={rootPath}
+          data-testid="task-execution-file-explorer-root-path"
+        >
+          {rootPath}
+        </code>
+        <CopyIconButton
+          copied={copied}
+          ariaLabel="Copy working directory"
+          tooltipLabel={copied ? "Copied" : "Copy working directory"}
+          dataTestId="task-execution-file-explorer-copy-root-path"
+          className="size-6 shrink-0 border-transparent bg-transparent hover:bg-muted"
+          onClick={copyWorkingDirectory}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function TaskExecutionFileExplorerPanel({
   model,
 }: {
@@ -153,7 +194,6 @@ export function TaskExecutionFileExplorerPanel({
     icons: "complete",
     gitStatus: [],
   });
-  const search = useFileTreeSearch(fileTree);
   const preparedInput = useMemo(
     () => (treeQuery.data ? preparePresortedFileTreeInput(fileTreeInputPaths) : null),
     [fileTreeInputPaths, treeQuery.data],
@@ -200,32 +240,9 @@ export function TaskExecutionFileExplorerPanel({
     return <FileExplorerUnavailableState message={errorMessage(treeQuery.error)} />;
   }
 
-  const searchValue = search.value;
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <div className="space-y-2 border-b border-border p-3">
-        <div className="truncate text-xs text-muted-foreground" title={rootPath}>
-          {rootPath}
-        </div>
-        <div className="relative">
-          <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-3.5 text-muted-foreground" />
-          <Input
-            value={searchValue}
-            aria-label="Search files"
-            placeholder="Search files"
-            className="h-8 pl-8 text-xs"
-            onFocus={() => search.open(searchValue)}
-            onChange={(event) => {
-              const nextValue = event.currentTarget.value;
-              if (!search.isOpen) {
-                search.open(nextValue);
-              }
-              search.setValue(nextValue.length > 0 ? nextValue : null);
-            }}
-          />
-        </div>
-      </div>
+      <FileExplorerRootPathHeader rootPath={rootPath} />
       <div className="min-h-0 flex-1 overflow-hidden">
         {treeQuery.isLoading ? (
           <FileExplorerUnavailableState message="Loading files..." />

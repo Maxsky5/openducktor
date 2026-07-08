@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { QueryProvider } from "@/lib/query-provider";
@@ -39,12 +40,6 @@ beforeEach(async () => {
         setIcons: () => {},
         setSearch: () => {},
       },
-    }),
-    useFileTreeSearch: () => ({
-      value: "",
-      isOpen: false,
-      open: () => {},
-      setValue: () => {},
     }),
   }));
 
@@ -222,7 +217,7 @@ const renderPanel = (model: TaskExecutionPanelModel): string =>
     createElement(
       QueryProvider,
       { useIsolatedClient: true },
-      createElement(TaskExecutionPanel, { model }),
+      createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
     ),
   );
 
@@ -311,6 +306,32 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("Target");
     expect(html).toContain("origin/main");
     expect(html).not.toContain("agent-studio-dev-server-terminal");
+  });
+
+  test("renders a copyable file explorer working directory without a duplicate search input", () => {
+    const html = renderPanel({
+      ...basePanelModel,
+      tabs: [
+        { id: "git", label: "Git" },
+        { id: "file_explorer", label: "File explorer" },
+      ],
+      activeTabId: "file_explorer",
+      documentModel: null,
+      fileExplorerModel: {
+        rootPath: "/repo/.worktrees/task-12",
+        unavailableReason: null,
+        isActive: true,
+        selectedFile: null,
+        onSelectFile: () => {},
+      },
+      ciChecksModel: null,
+    });
+
+    expect(html).toContain("task-execution-file-explorer-root-path");
+    expect(html).toContain("/repo/.worktrees/task-12");
+    expect(html).toContain("task-execution-file-explorer-copy-root-path");
+    expect(html).toContain("Copy working directory");
+    expect(html).not.toContain("Search files");
   });
 
   test("renders Dev Servers below the task execution panel", () => {
