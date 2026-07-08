@@ -87,7 +87,55 @@ const buildEntriesByPath = (
 type SelectionContextRef = {
   entriesByPath: Map<string, WorkspaceFileTreeEntry>;
   rootPath: string | null;
+  selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => void;
+};
+
+type FileTreeModel = ReturnType<typeof useFileTree>["model"];
+
+const selectedFilesEqual = (
+  first: TaskExecutionSelectedFile | null,
+  second: TaskExecutionSelectedFile | null,
+): boolean => first?.rootPath === second?.rootPath && first?.relativePath === second?.relativePath;
+
+const clearFileTreeSelection = (
+  fileTree: FileTreeModel,
+  entriesByPath: ReadonlyMap<string, WorkspaceFileTreeEntry>,
+): void => {
+  for (const selectedPath of fileTree.getSelectedPaths()) {
+    const selectedEntry = resolveTaskExecutionFileTreeSelectionEntry(selectedPath, entriesByPath);
+    fileTree.getItem(selectedEntry?.path ?? selectedPath)?.deselect();
+  }
+};
+
+const syncFileTreeSelection = (
+  fileTree: FileTreeModel,
+  selectedFile: TaskExecutionSelectedFile | null,
+  rootPath: string | null,
+  entriesByPath: ReadonlyMap<string, WorkspaceFileTreeEntry>,
+): void => {
+  if (!selectedFile || selectedFile.rootPath !== rootPath) {
+    clearFileTreeSelection(fileTree, entriesByPath);
+    return;
+  }
+
+  const selectedEntry = entriesByPath.get(selectedFile.relativePath);
+  if (selectedEntry?.kind !== "file") {
+    clearFileTreeSelection(fileTree, entriesByPath);
+    return;
+  }
+
+  const selectedPaths = fileTree.getSelectedPaths();
+  const currentEntry =
+    selectedPaths.length === 1
+      ? resolveTaskExecutionFileTreeSelectionEntry(selectedPaths[0] ?? "", entriesByPath)
+      : null;
+  if (currentEntry?.path === selectedEntry.path) {
+    return;
+  }
+
+  clearFileTreeSelection(fileTree, entriesByPath);
+  fileTree.getItem(selectedEntry.path)?.select();
 };
 
 const selectTaskExecutionFileTreePath = (
@@ -101,10 +149,14 @@ const selectTaskExecutionFileTreePath = (
   if (!context.rootPath || entry?.kind !== "file") {
     return;
   }
-  context.onSelectFile({
+  const selectedFile = {
     rootPath: context.rootPath,
     relativePath: entry.path,
-  });
+  };
+  if (selectedFilesEqual(selectedFile, context.selectedFile)) {
+    return;
+  }
+  context.onSelectFile(selectedFile);
 };
 
 function FileExplorerUnavailableState({ message }: { message: string }): ReactElement {
@@ -178,6 +230,7 @@ export function TaskExecutionFileExplorerPanel({
   const selectionRef = useRef<SelectionContextRef>({
     entriesByPath,
     rootPath,
+    selectedFile: model.selectedFile,
     onSelectFile: model.onSelectFile,
   });
   const previousRootPathRef = useRef(rootPath);
@@ -185,6 +238,7 @@ export function TaskExecutionFileExplorerPanel({
   selectionRef.current = {
     entriesByPath,
     rootPath,
+    selectedFile: model.selectedFile,
     onSelectFile: model.onSelectFile,
   };
 
@@ -221,6 +275,10 @@ export function TaskExecutionFileExplorerPanel({
     fileTree.setIcons("complete");
     fileTree.setGitStatus(gitStatusEntries);
   }, [fileTree, gitStatusEntries, preparedInput]);
+
+  useEffect(() => {
+    syncFileTreeSelection(fileTree, model.selectedFile, rootPath, entriesByPath);
+  }, [entriesByPath, fileTree, model.selectedFile, rootPath]);
 
   useEffect(() => {
     if (previousRootPathRef.current === rootPath) {

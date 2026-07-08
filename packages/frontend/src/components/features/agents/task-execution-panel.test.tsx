@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState, WorkspaceFileTree } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -26,6 +27,9 @@ let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
 let lastFileTreeOptions: Record<string, unknown> | null = null;
 let prepareFileTreeInputCalls: string[][] = [];
 let preparePresortedFileTreeInputCalls: string[][] = [];
+let fileTreeSelectedPaths: string[] = [];
+let deselectedFileTreePaths: string[] = [];
+let selectedOnlyFileTreePaths: string[] = [];
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
@@ -35,6 +39,9 @@ beforeEach(async () => {
   lastFileTreeOptions = null;
   prepareFileTreeInputCalls = [];
   preparePresortedFileTreeInputCalls = [];
+  fileTreeSelectedPaths = [];
+  deselectedFileTreePaths = [];
+  selectedOnlyFileTreePaths = [];
 
   mock.module("@pierre/trees", () => ({
     prepareFileTreeInput: (paths: string[]) => {
@@ -54,7 +61,21 @@ beforeEach(async () => {
       lastFileTreeOptions = options;
       return {
         model: {
+          getItem: (path: string) => ({
+            deselect: () => {
+              deselectedFileTreePaths.push(path);
+              fileTreeSelectedPaths = fileTreeSelectedPaths.filter(
+                (selectedPath) => selectedPath !== path,
+              );
+            },
+            select: () => {
+              selectedOnlyFileTreePaths.push(path);
+              fileTreeSelectedPaths = [path];
+            },
+          }),
+          getSelectedPaths: () => fileTreeSelectedPaths,
           resetPaths: () => {},
+          subscribe: () => () => {},
           setGitStatus: () => {},
           setIcons: () => {},
           setSearch: () => {},
@@ -72,6 +93,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cleanup();
   await restoreMockedModules([
     ["@pierre/trees", async () => actualPierreTrees],
     ["@pierre/trees/react", async () => actualPierreTreesReact],
@@ -426,6 +448,60 @@ describe("TaskExecutionPanel", () => {
 
     expect(prepareFileTreeInputCalls).toContainEqual(["package.json", "apps/web.ts", "README.md"]);
     expect(preparePresortedFileTreeInputCalls).toEqual([]);
+  });
+
+  test("clears the PierreTrees selection when the file preview is closed", async () => {
+    fileTreeSelectedPaths = ["src/old.ts"];
+    const fileTree: WorkspaceFileTree = {
+      rootPath: "/repo/.worktrees/task-12",
+      paths: ["src/old.ts"],
+      entries: [
+        {
+          kind: "file",
+          path: "src/old.ts",
+          size: 24,
+          mtimeMs: 1_760_000_000_000,
+          gitStatus: null,
+        },
+      ],
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(filesystemQueryKeys.tree(fileTree.rootPath, "origin/main"), fileTree);
+
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          ThemeProvider,
+          null,
+          createElement(TaskExecutionPanel, {
+            model: {
+              ...basePanelModel,
+              tabs: [
+                { id: "git", label: "Git" },
+                { id: "file_explorer", label: "File explorer" },
+              ],
+              activeTabId: "file_explorer",
+              documentModel: null,
+              fileExplorerModel: {
+                rootPath: fileTree.rootPath,
+                targetBranch: "origin/main",
+                unavailableReason: null,
+                isActive: true,
+                selectedFile: null,
+                onSelectFile: () => {},
+              },
+              ciChecksModel: null,
+            },
+          }),
+        ),
+      ),
+    );
+
+    await waitFor(() => expect(deselectedFileTreePaths).toEqual(["src/old.ts"]));
+    expect(fileTreeSelectedPaths).toEqual([]);
+    expect(selectedOnlyFileTreePaths).toEqual([]);
   });
 
   test("renders Dev Servers below the task execution panel", () => {

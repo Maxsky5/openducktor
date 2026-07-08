@@ -82,11 +82,13 @@ type UseAgentStudioOrchestrationControllerResult = {
 export type TaskExecutionFilePreviewState = {
   selectedFile: TaskExecutionSelectedFile | null;
   previewSessionKey: number;
+  preservePreviousSnapshot: boolean;
 };
 
 export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewState => ({
   selectedFile: null,
   previewSessionKey: 0,
+  preservePreviousSnapshot: false,
 });
 
 export const selectTaskExecutionFilePreviewState = (
@@ -96,6 +98,7 @@ export const selectTaskExecutionFilePreviewState = (
   selectedFile,
   previewSessionKey:
     state.selectedFile === null ? state.previewSessionKey + 1 : state.previewSessionKey,
+  preservePreviousSnapshot: state.selectedFile !== null,
 });
 
 export const clearTaskExecutionFilePreviewState = (
@@ -108,6 +111,7 @@ export const clearTaskExecutionFilePreviewState = (
   return {
     selectedFile: null,
     previewSessionKey: state.previewSessionKey + 1,
+    preservePreviousSnapshot: false,
   };
 };
 
@@ -528,10 +532,12 @@ export function useAgentStudioOrchestrationController({
     () => ({
       selectedFile: taskExecutionSelectedFile,
       previewSessionKey: taskExecutionFilePreviewSessionKey,
+      preservePreviousSnapshot: taskExecutionFilePreviewState.preservePreviousSnapshot,
       onClose: closeTaskExecutionSelectedFilePreview,
     }),
     [
       closeTaskExecutionSelectedFilePreview,
+      taskExecutionFilePreviewState.preservePreviousSnapshot,
       taskExecutionFilePreviewSessionKey,
       taskExecutionSelectedFile,
     ],

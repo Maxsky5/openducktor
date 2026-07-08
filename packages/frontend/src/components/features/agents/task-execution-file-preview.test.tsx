@@ -52,13 +52,18 @@ const textFileResult = (
 });
 
 const renderPreview = (
-  model: Omit<TaskExecutionSelectedFilePreviewModel, "previewSessionKey"> & {
+  model: Omit<
+    TaskExecutionSelectedFilePreviewModel,
+    "previewSessionKey" | "preservePreviousSnapshot"
+  > & {
     previewSessionKey?: number;
+    preservePreviousSnapshot?: boolean;
   },
   theme: "light" | "dark" = "light",
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     previewSessionKey: 0,
+    preservePreviousSnapshot: false,
     ...model,
   };
 
@@ -141,14 +146,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const codeViewProps = codeViewPropsHistory.at(-1);
     expect(codeViewProps?.className).toContain("h-full");
     expect(codeViewProps?.className).toContain("overflow-auto");
+    expect(codeViewProps?.className).toContain("[&>div]:min-h-full");
+    expect(codeViewProps?.className).toContain("[&>div>div:last-child]:min-h-full");
     expect(codeViewProps?.style?.["--diffs-font-size" as keyof CSSProperties]).toBe("12px");
-    expect(codeViewProps?.style?.backgroundColor).toBe(
-      "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))",
-    );
+    expect(codeViewProps?.style?.backgroundColor).toBeUndefined();
     expect(codeViewProps?.style?.colorScheme).toBe("light");
   });
 
-  test("uses the active theme color scheme for the CodeView scroll background", async () => {
+  test("uses the active theme color scheme without a copied background color", async () => {
     const onClose = mock(() => {});
 
     render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
@@ -156,9 +161,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     const codeViewProps = codeViewPropsHistory.at(-1);
     expect(codeViewProps?.style?.colorScheme).toBe("dark");
-    expect(codeViewProps?.style?.backgroundColor).toBe(
-      "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))",
-    );
+    expect(codeViewProps?.style?.backgroundColor).toBeUndefined();
+    expect(codeViewProps?.options?.unsafeCSS).toContain("background-color: var(--diffs-bg)");
   });
 
   test("aligns CodeView layout metrics with preview CSS", async () => {
@@ -182,6 +186,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       paddingBottom: 0,
       gap: 0,
     });
+    expect(codeViewProps?.options?.unsafeCSS).toContain(":host");
+    expect(codeViewProps?.options?.unsafeCSS).toContain("[data-file]");
     expect(codeViewProps?.options?.unsafeCSS).toContain("[data-column-number]");
   });
 
@@ -191,7 +197,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByText("const first = true;");
 
-    view.rerender(renderPreview({ selectedFile: secondFile, onClose }));
+    view.rerender(
+      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
+    );
 
     await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText("src/first.ts")).toBeTruthy();
@@ -207,6 +215,22 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
 
     view.rerender(renderPreview({ selectedFile: secondFile, onClose, previewSessionKey: 1 }));
+
+    await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("src/first.ts")).toBeNull();
+    expect(screen.queryByText("const first = true;")).toBeNull();
+    expect(screen.getByText("src/second.ts")).toBeTruthy();
+    expect(screen.getByText("Loading file...")).toBeTruthy();
+    expect(screen.queryByText("Loading...")).toBeNull();
+  });
+
+  test("does not reuse a previous snapshot when a fresh open keeps the same render key", async () => {
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose, previewSessionKey: 0 }));
+
+    await screen.findByText("const first = true;");
+
+    view.rerender(renderPreview({ selectedFile: secondFile, onClose, previewSessionKey: 0 }));
 
     await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
     expect(screen.queryByText("src/first.ts")).toBeNull();

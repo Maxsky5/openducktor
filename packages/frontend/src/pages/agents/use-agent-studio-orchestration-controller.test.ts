@@ -191,14 +191,17 @@ describe("task execution file preview state", () => {
     expect(openedState).toEqual({
       selectedFile: firstPreviewFile,
       previewSessionKey: 1,
+      preservePreviousSnapshot: false,
     });
     expect(closedState).toEqual({
       selectedFile: null,
       previewSessionKey: 2,
+      preservePreviousSnapshot: false,
     });
     expect(reopenedState).toEqual({
       selectedFile: secondPreviewFile,
       previewSessionKey: 3,
+      preservePreviousSnapshot: false,
     });
   });
 
@@ -211,6 +214,7 @@ describe("task execution file preview state", () => {
 
     expect(switchedState.selectedFile).toBe(secondPreviewFile);
     expect(switchedState.previewSessionKey).toBe(openedState.previewSessionKey);
+    expect(switchedState.preservePreviousSnapshot).toBe(true);
   });
 
   test("does not churn preview sessions when already closed", () => {

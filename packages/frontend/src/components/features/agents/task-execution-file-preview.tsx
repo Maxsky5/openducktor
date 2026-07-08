@@ -13,14 +13,15 @@ import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-m
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;
   previewSessionKey: number;
+  preservePreviousSnapshot: boolean;
   onClose: () => void;
 };
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
-const CODE_VIEW_BACKGROUND_COLOR =
-  "light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))";
+const CODE_VIEW_CLASS_NAME =
+  "h-full min-h-0 overflow-auto [&>div]:min-h-full [&>div>div:last-child]:min-h-full";
 const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": `${CODE_VIEW_LINE_HEIGHT}px`,
@@ -29,6 +30,12 @@ const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-tab-size": 2,
 } as CSSProperties;
 const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
+:host,
+[data-file] {
+  min-height: 100%;
+  background-color: var(--diffs-bg);
+}
+
 [data-column-number],
 [data-gutter-buffer] {
   padding-left: 0.5ch;
@@ -108,7 +115,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   } else if (currentSnapshot) {
     committedSnapshotRef.current = currentSnapshot;
   }
-  const visibleSnapshot = currentSnapshot ?? committedSnapshotRef.current;
+  const visibleSnapshot =
+    currentSnapshot ?? (model.preservePreviousSnapshot ? committedSnapshotRef.current : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
@@ -139,7 +147,6 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewRootStyle = useMemo<CSSProperties>(
     () => ({
       ...CODE_VIEW_ROOT_BASE_STYLE,
-      backgroundColor: CODE_VIEW_BACKGROUND_COLOR,
       colorScheme: theme,
     }),
     [theme],
@@ -202,7 +209,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = (
       <CodeView
         key={codeViewRenderKey}
-        className="h-full min-h-0 overflow-auto"
+        className={CODE_VIEW_CLASS_NAME}
         style={codeViewRootStyle}
         items={codeViewItems}
         options={codeViewOptions}
