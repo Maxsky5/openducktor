@@ -112,12 +112,12 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
-  const shouldResolveScrollbarPlatform =
+  const canResolveHorizontalScrollbarVisibility =
     workspaceRepoPath !== null &&
     !settingsSnapshotQuery.isPending &&
     !settingsSnapshotQuery.isError;
   const horizontalScrollbarState = useHorizontalScrollbarVisibility({
-    enabled: shouldResolveScrollbarPlatform,
+    enabled: canResolveHorizontalScrollbarVisibility,
     visibility: horizontalScrollbarVisibility,
   });
   useEffect(() => {

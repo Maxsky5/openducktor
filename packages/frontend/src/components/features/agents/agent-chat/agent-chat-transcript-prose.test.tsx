@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AgentChatTranscriptProse, transcriptProseClassName } from "./agent-chat-transcript-prose";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 
 const LONG_TRANSCRIPT_TOKEN =
   "supercalifragilisticexpialidocioussupercalifragilisticexpialidocious";
@@ -16,8 +16,12 @@ describe("AgentChatTranscriptProse", () => {
   });
 
   test("merges caller classes after the transcript wrapping contract", () => {
-    expect(transcriptProseClassName("text-sm text-muted-foreground")).toBe(
-      "whitespace-pre-wrap break-words text-sm text-muted-foreground",
+    const html = renderToStaticMarkup(
+      <AgentChatTranscriptProse className="text-sm text-muted-foreground">
+        Status
+      </AgentChatTranscriptProse>,
     );
+
+    expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
   });
 });

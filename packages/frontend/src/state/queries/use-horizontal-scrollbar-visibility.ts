@@ -4,7 +4,6 @@ import {
   resolveHorizontalScrollbarVisibility,
 } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { platformQueryOptions } from "./system";
 
 type UseHorizontalScrollbarVisibilityArgs = {
@@ -30,20 +29,14 @@ export const useHorizontalScrollbarVisibility = ({
     enabled: shouldResolvePlatform,
   });
 
-  const showHorizontalScrollbars = useMemo(() => {
-    if (horizontalScrollbarVisibility !== "system") {
-      return horizontalScrollbarVisibility === "show";
-    }
-
-    if (!platformQuery.data) {
-      return false;
-    }
-
-    return (
+  let showHorizontalScrollbars = false;
+  if (horizontalScrollbarVisibility !== "system") {
+    showHorizontalScrollbars = horizontalScrollbarVisibility === "show";
+  } else if (platformQuery.data) {
+    showHorizontalScrollbars =
       resolveHorizontalScrollbarVisibility(horizontalScrollbarVisibility, platformQuery.data) ===
-      "show"
-    );
-  }, [horizontalScrollbarVisibility, platformQuery.data]);
+      "show";
+  }
 
   return {
     showHorizontalScrollbars,

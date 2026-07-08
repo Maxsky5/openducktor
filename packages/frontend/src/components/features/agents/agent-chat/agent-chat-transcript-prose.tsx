@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const TRANSCRIPT_PROSE_CLASS_NAME = "whitespace-pre-wrap break-words";
 
-export const transcriptProseClassName = (className?: string): string =>
+const transcriptProseClassName = (className?: string): string =>
   cn(TRANSCRIPT_PROSE_CLASS_NAME, className);
 
 type AgentChatTranscriptProseProps = {
