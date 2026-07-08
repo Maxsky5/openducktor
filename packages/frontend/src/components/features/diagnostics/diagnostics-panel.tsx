@@ -85,13 +85,30 @@ export function DiagnosticsPanel({
     workspaceRepoPath !== null &&
     model.criticalReasons.length > 0 &&
     !autoOpenedByRepo.has(workspaceRepoPath);
+  const sheetOpen = isOpen || shouldAutoOpen;
 
-  if (shouldAutoOpen) {
+  const markAutoOpenedForWorkspace = (): boolean => {
+    if (!shouldAutoOpen || workspaceRepoPath === null) {
+      return false;
+    }
+
     autoOpenedByRepo.add(workspaceRepoPath);
-    if (!isOpen) {
+    return true;
+  };
+
+  const handleSheetOpenAutoFocus = (): void => {
+    if (markAutoOpenedForWorkspace() && !isOpen) {
       setOpen(true);
     }
-  }
+  };
+
+  const handleSheetOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) {
+      markAutoOpenedForWorkspace();
+    }
+
+    setOpen(nextOpen);
+  };
 
   const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
 
@@ -154,8 +171,12 @@ export function DiagnosticsPanel({
   return (
     <>
       {trigger}
-      <Sheet open={isOpen} onOpenChange={setOpen}>
-        <SheetContent side="right" className="overflow-y-auto">
+      <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
+        <SheetContent
+          side="right"
+          className="overflow-y-auto"
+          onOpenAutoFocus={handleSheetOpenAutoFocus}
+        >
           <SheetHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
