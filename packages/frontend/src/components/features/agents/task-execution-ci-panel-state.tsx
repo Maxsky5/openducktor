@@ -11,6 +11,8 @@ export type TaskExecutionCiPanelStateProps = {
   kind?: TaskExecutionCiPanelStateKind;
   detail?: string;
   actionLabel?: string;
+  actionPendingLabel?: string;
+  isActionPending?: boolean;
   onAction?: () => void;
 };
 
@@ -49,7 +51,9 @@ function LoadingPreview(): ReactElement {
 
 export function TaskExecutionCiPanelState({
   actionLabel,
+  actionPendingLabel,
   detail,
+  isActionPending = false,
   kind = "empty",
   message,
   onAction,
@@ -58,6 +62,8 @@ export function TaskExecutionCiPanelState({
   const visual = STATE_VISUALS[kind];
   const Icon = visual.icon;
   const canAct = actionLabel !== undefined && onAction !== undefined;
+  const visibleActionLabel =
+    isActionPending && actionPendingLabel !== undefined ? actionPendingLabel : actionLabel;
 
   return (
     <div className="flex h-full min-h-0 flex-col px-5 py-6">
@@ -79,9 +85,16 @@ export function TaskExecutionCiPanelState({
         ) : null}
         {kind === "loading" ? <LoadingPreview /> : null}
         {canAct ? (
-          <Button type="button" variant="outline" size="sm" className="mt-4" onClick={onAction}>
-            <RefreshCw className="size-3.5" />
-            {actionLabel}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            disabled={isActionPending}
+            onClick={onAction}
+          >
+            <RefreshCw className={cn("size-3.5", isActionPending ? "animate-spin" : undefined)} />
+            {visibleActionLabel}
           </Button>
         ) : null}
       </div>

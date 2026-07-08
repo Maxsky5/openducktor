@@ -237,13 +237,14 @@ const aggregateChecks = (
 const toComment = (
   payload: GithubCommentPayload,
   source: PullRequestReviewComment["source"],
+  fallbackId: string,
 ): PullRequestReviewComment | null => {
   const body = typeof payload.body === "string" ? payload.body : "";
   if (!body.trim()) {
     return null;
   }
   return {
-    id: requireString(payload.id, "id"),
+    id: toNullableString(payload.id) ?? fallbackId,
     author: toNullableString(payload.author?.login),
     body,
     url: toNullableString(payload.url),
@@ -272,8 +273,13 @@ const parsePullView = (
   }
   const view = parsed as GithubPullViewPayload;
   const comments: PullRequestReviewComment[] = [];
-  for (const comment of Array.isArray(view.comments) ? view.comments : []) {
-    const normalized = toComment(comment as GithubCommentPayload, "comment");
+  const issueComments = Array.isArray(view.comments) ? view.comments : [];
+  for (const [commentIndex, comment] of issueComments.entries()) {
+    const normalized = toComment(
+      comment as GithubCommentPayload,
+      "comment",
+      `github-comment:${commentIndex}`,
+    );
     if (normalized) {
       comments.push(normalized);
     }
@@ -283,14 +289,23 @@ const parsePullView = (
     : Array.isArray(view.reviews)
       ? view.reviews
       : [];
-  for (const review of reviews) {
-    const normalized = toComment(review as GithubReviewPayload, "review");
+  for (const [reviewIndex, review] of reviews.entries()) {
+    const normalized = toComment(
+      review as GithubReviewPayload,
+      "review",
+      `github-review:${reviewIndex}`,
+    );
     if (normalized) {
       comments.push(normalized);
     }
     const reviewComments = (review as GithubReviewPayload).comments;
-    for (const reviewComment of Array.isArray(reviewComments) ? reviewComments : []) {
-      const normalizedReviewComment = toComment(reviewComment as GithubCommentPayload, "review");
+    const reviewCommentList = Array.isArray(reviewComments) ? reviewComments : [];
+    for (const [reviewCommentIndex, reviewComment] of reviewCommentList.entries()) {
+      const normalizedReviewComment = toComment(
+        reviewComment as GithubCommentPayload,
+        "review",
+        `github-review:${reviewIndex}:comment:${reviewCommentIndex}`,
+      );
       if (normalizedReviewComment) {
         comments.push(normalizedReviewComment);
       }

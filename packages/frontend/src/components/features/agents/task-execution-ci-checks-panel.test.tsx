@@ -121,6 +121,24 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("Retry");
   });
 
+  test("renders visible feedback while a state action is pending", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionCiPanelState, {
+        kind: "error",
+        title: "Could not load CI checks",
+        message: "OpenDucktor could not read pull request review data from GitHub.",
+        detail: "Failed to fetch",
+        actionLabel: "Refresh",
+        actionPendingLabel: "Refreshing",
+        isActionPending: true,
+        onAction: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Refreshing");
+    expect(html).toContain("disabled");
+  });
+
   test("renders provider-neutral PR, check, and review-thread metadata", () => {
     const html = renderLoadedPanel();
 

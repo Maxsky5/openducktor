@@ -88,6 +88,8 @@ export function TaskExecutionCiChecksPanel({
         detail={errorMessage(reviewQuery.error)}
         kind="error"
         actionLabel="Retry"
+        actionPendingLabel="Retrying"
+        isActionPending={reviewQuery.isFetching}
         onAction={() => {
           void reviewQuery.refetch();
         }}
@@ -101,6 +103,8 @@ export function TaskExecutionCiChecksPanel({
         title="No CI data loaded"
         message="OpenDucktor has not received a pull request review snapshot yet."
         actionLabel="Retry"
+        actionPendingLabel="Retrying"
+        isActionPending={reviewQuery.isFetching}
         onAction={() => {
           void reviewQuery.refetch();
         }}
@@ -113,6 +117,8 @@ export function TaskExecutionCiChecksPanel({
       <TaskExecutionCiPanelState
         {...pullRequestStateProps(reviewQuery.data)}
         actionLabel="Refresh"
+        actionPendingLabel="Refreshing"
+        isActionPending={reviewQuery.isFetching}
         onAction={() => {
           void reviewQuery.refetch();
         }}

@@ -5,7 +5,13 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
 import { createGithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
-const createDependencies = (commands: string[][] = []): GithubCommandDependencies => {
+const createDependencies = ({
+  commands = [],
+  includeReviewId = true,
+}: {
+  commands?: string[][];
+  includeReviewId?: boolean;
+} = {}): GithubCommandDependencies => {
   const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
     runCommandAllowFailure: (_command, args) => {
       commands.push(args);
@@ -31,7 +37,7 @@ const createDependencies = (commands: string[][] = []): GithubCommandDependencie
             ],
             reviews: [
               {
-                id: "review-1",
+                ...(includeReviewId ? { id: "review-1" } : {}),
                 author: { login: "reviewer" },
                 body: "Changes requested.",
                 state: "CHANGES_REQUESTED",
@@ -195,7 +201,7 @@ describe("createGithubPullRequestReviewProvider", () => {
 
     await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies(commands),
+        dependencies: createDependencies({ commands }),
         repoPath: "/repo",
         context: {
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
@@ -227,5 +233,30 @@ describe("createGithubPullRequestReviewProvider", () => {
       ],
     ]);
     expect(pullRequestCommands.flat()).not.toContain("--hostname");
+  });
+
+  test("loads review rows when gh omits review ids", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({ includeReviewId: false }),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.comments.map((comment) => [comment.id, comment.source])).toContainEqual([
+      "github-review:0",
+      "review",
+    ]);
   });
 });
