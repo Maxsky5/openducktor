@@ -43,28 +43,6 @@ describe("buildTaskExecutionFileTreeInputPaths", () => {
       ]),
     ).toEqual([".agent/.shared/charts.csv"]);
   });
-
-  test("orders directory descendants before sibling files", () => {
-    expect(
-      buildTaskExecutionFileTreeInputPaths([
-        fileEntry("package.json"),
-        fileEntry("src/App.tsx"),
-        fileEntry("src/index.ts"),
-        fileEntry("src/components/Button.tsx"),
-        fileEntry("README.md"),
-        fileEntry("docs/intro.md"),
-        fileEntry("src/components/forms/Input.tsx"),
-      ]),
-    ).toEqual([
-      "docs/intro.md",
-      "src/components/forms/Input.tsx",
-      "src/components/Button.tsx",
-      "src/App.tsx",
-      "src/index.ts",
-      "README.md",
-      "package.json",
-    ]);
-  });
 });
 
 describe("resolveTaskExecutionFileTreeSelectionEntry", () => {

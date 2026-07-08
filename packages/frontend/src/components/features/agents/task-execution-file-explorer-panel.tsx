@@ -1,6 +1,6 @@
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import type { TreeThemeInput } from "@pierre/trees";
-import { preparePresortedFileTreeInput, themeToTreeStyles } from "@pierre/trees";
+import { prepareFileTreeInput, themeToTreeStyles } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,7 +24,7 @@ import {
   type TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 
-const EMPTY_TREE_INPUT = preparePresortedFileTreeInput([]);
+const EMPTY_TREE_INPUT = prepareFileTreeInput([]);
 
 const TREE_THEME_BY_MODE = {
   light: {
@@ -197,7 +197,7 @@ export function TaskExecutionFileExplorerPanel({
     gitStatus: [],
   });
   const preparedInput = useMemo(
-    () => (treeQuery.data ? preparePresortedFileTreeInput(fileTreeInputPaths) : null),
+    () => (treeQuery.data ? prepareFileTreeInput(fileTreeInputPaths) : null),
     [fileTreeInputPaths, treeQuery.data],
   );
 

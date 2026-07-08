@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DevServerScriptState } from "@openducktor/contracts";
+import type { DevServerScriptState, WorkspaceFileTree } from "@openducktor/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
@@ -21,6 +24,8 @@ type TaskExecutionPanelToggleButtonComponent =
 let TaskExecutionPanel: TaskExecutionPanelComponent;
 let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
 let lastFileTreeOptions: Record<string, unknown> | null = null;
+let prepareFileTreeInputCalls: string[][] = [];
+let preparePresortedFileTreeInputCalls: string[][] = [];
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
@@ -28,9 +33,18 @@ const actualDevServerSettingsAction = await import("./agent-studio-dev-server-se
 
 beforeEach(async () => {
   lastFileTreeOptions = null;
+  prepareFileTreeInputCalls = [];
+  preparePresortedFileTreeInputCalls = [];
 
   mock.module("@pierre/trees", () => ({
-    preparePresortedFileTreeInput: (paths: string[]) => ({ paths }),
+    prepareFileTreeInput: (paths: string[]) => {
+      prepareFileTreeInputCalls.push([...paths]);
+      return { paths };
+    },
+    preparePresortedFileTreeInput: (paths: string[]) => {
+      preparePresortedFileTreeInputCalls.push([...paths]);
+      return { paths };
+    },
     themeToTreeStyles: () => ({}),
   }));
 
@@ -227,6 +241,21 @@ const renderPanel = (model: TaskExecutionPanelModel): string =>
     ),
   );
 
+const renderPanelWithFileTreeData = (
+  model: TaskExecutionPanelModel,
+  fileTree: WorkspaceFileTree,
+): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(filesystemQueryKeys.tree(fileTree.rootPath), fileTree);
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
+    ),
+  );
+};
+
 describe("TaskExecutionPanelToggleButton", () => {
   test("renders hide label when task execution panel is open", () => {
     const model: TaskExecutionPanelToggleModel = {
@@ -339,6 +368,58 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("Copy working directory");
     expect(html).not.toContain("Search files");
     expect(lastFileTreeOptions?.initialExpansion).toBe("closed");
+  });
+
+  test("prepares file explorer paths through PierreTrees sorting instead of the presorted fast path", () => {
+    renderPanelWithFileTreeData(
+      {
+        ...basePanelModel,
+        tabs: [
+          { id: "git", label: "Git" },
+          { id: "file_explorer", label: "File explorer" },
+        ],
+        activeTabId: "file_explorer",
+        documentModel: null,
+        fileExplorerModel: {
+          rootPath: "/repo/.worktrees/task-12",
+          unavailableReason: null,
+          isActive: true,
+          selectedFile: null,
+          onSelectFile: () => {},
+        },
+        ciChecksModel: null,
+      },
+      {
+        rootPath: "/repo/.worktrees/task-12",
+        paths: ["package.json", "apps/web.ts", "README.md"],
+        entries: [
+          {
+            kind: "file",
+            path: "package.json",
+            size: 24,
+            mtimeMs: 1_760_000_000_000,
+            gitStatus: "modified",
+          },
+          {
+            kind: "file",
+            path: "apps/web.ts",
+            size: 24,
+            mtimeMs: 1_760_000_000_000,
+            gitStatus: "modified",
+          },
+          {
+            kind: "file",
+            path: "README.md",
+            size: 24,
+            mtimeMs: 1_760_000_000_000,
+            gitStatus: null,
+          },
+        ],
+      },
+    );
+
+    expect(prepareFileTreeInputCalls).toContainEqual(["package.json", "apps/web.ts", "README.md"]);
+    expect(preparePresortedFileTreeInputCalls).toEqual([]);
   });
 
   test("renders Dev Servers below the task execution panel", () => {
