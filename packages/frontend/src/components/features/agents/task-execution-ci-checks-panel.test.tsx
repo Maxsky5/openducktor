@@ -143,9 +143,7 @@ describe("TaskExecutionCiChecksPanel", () => {
   test("renders provider-neutral PR, check, and review-thread metadata", () => {
     const html = renderLoadedPanel();
 
-    expect(html).toContain("PR #42");
     expect(html).toContain("Rework task execution panel");
-    expect(html).toContain("GitHub");
     expect(html).toContain("1 failing");
     expect(html).toContain("Unit tests");
     expect(html).toContain("CI");
@@ -169,6 +167,8 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("2026-07-08T10:06:00Z");
     expect(html).toContain("Updated");
     expect(html).toContain("2026-07-08T10:07:00Z");
+    expect(html).not.toContain("PR #42");
+    expect(html).not.toContain(">GitHub<");
     expect(html).not.toContain("Open pull request #42");
   });
 

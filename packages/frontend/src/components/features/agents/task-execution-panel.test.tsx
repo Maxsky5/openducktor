@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DevServerScriptState, WorkspaceFileTree } from "@openducktor/contracts";
+import type { DevServerScriptState, PullRequest, WorkspaceFileTree } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
@@ -164,6 +164,18 @@ const diffModel: AgentStudioGitPanelModel = {
   rebaseOntoTarget: async () => {},
 };
 
+const linkedPullRequest = {
+  providerId: "github",
+  number: 110,
+  url: "https://github.com/openai/openducktor/pull/110",
+  state: "open",
+  createdAt: "2026-03-12T12:24:09Z",
+  updatedAt: "2026-03-12T12:24:09Z",
+  lastSyncedAt: undefined,
+  mergedAt: undefined,
+  closedAt: undefined,
+} satisfies PullRequest;
+
 const selectedScript: DevServerScriptState = {
   scriptId: "frontend",
   name: "Frontend",
@@ -326,7 +338,7 @@ describe("TaskExecutionPanel", () => {
     expect(html.match(/task-execution-tab-active-icon/g)?.length).toBe(1);
     expect(html).toContain("cursor-pointer");
     expect(html).toContain("bg-transparent");
-    expect(html).toContain("text-primary");
+    expect(html).toContain("text-foreground");
     expect(html).toContain("Document");
     expect(html).toContain("Git");
     expect(html).toContain("File explorer");
@@ -349,6 +361,22 @@ describe("TaskExecutionPanel", () => {
 
     expect(html).toContain("agent-studio-git-open-in-actions");
     expect(html).toContain("agent-studio-git-open-in-default-button");
+  });
+
+  test("renders the pull request link once in the shared panel header", () => {
+    const html = renderPanel({
+      ...basePanelModel,
+      gitModel: {
+        ...diffModel,
+        pullRequest: linkedPullRequest,
+        openInTargetPath: "/tmp/worktree/task-12",
+        openInDisabledReason: null,
+        openDirectoryInTool: async () => {},
+      },
+    });
+
+    expect(html.match(/PR #110/g)?.length).toBe(1);
+    expect(html).toContain("agent-studio-git-open-in-actions");
   });
 
   test("renders Git content as a tab without Dev Server content", () => {

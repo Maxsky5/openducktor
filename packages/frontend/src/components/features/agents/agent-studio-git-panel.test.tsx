@@ -519,7 +519,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("renders a pull request link badge when the selected task has a linked PR", async () => {
+  test("does not render a pull request link badge inside the Git tab", async () => {
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -547,7 +547,7 @@ describe("AgentStudioGitPanel", () => {
     const prLinks = root.findAll(
       (node) => node.type === "button" && getNodeText(node).includes("PR #110"),
     );
-    expect(prLinks.length).toBe(1);
+    expect(prLinks.length).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

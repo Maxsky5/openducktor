@@ -2,7 +2,6 @@ import type {
   PullRequestReviewAggregateStatus,
   PullRequestReviewCheck,
   PullRequestReviewComment,
-  PullRequestReviewContext,
 } from "@openducktor/contracts";
 
 export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string => {
@@ -86,13 +85,6 @@ export const checksSummaryLabel = (checks: readonly PullRequestReviewCheck[]): s
   }
 
   return pluralize(checks.length, "check");
-};
-
-export const providerLabel = (providerId: PullRequestReviewContext["providerId"]): string => {
-  if (providerId === "github") {
-    return "GitHub";
-  }
-  return providerId;
 };
 
 export const sourceLabel = (source: PullRequestReviewComment["source"]): string => {

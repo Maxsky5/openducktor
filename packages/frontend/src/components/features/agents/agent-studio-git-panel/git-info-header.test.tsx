@@ -75,7 +75,7 @@ describe("GitInfoHeader", () => {
     }
   });
 
-  test("keeps the PR badge without reintroducing duplicate changed-file copy", () => {
+  test("keeps git context controls without rendering a duplicate PR badge", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({
         pullRequest,
@@ -83,7 +83,7 @@ describe("GitInfoHeader", () => {
       }),
     );
 
-    expect(screen.getByText("PR #42")).toBeTruthy();
+    expect(screen.queryByText("PR #42")).toBeNull();
     expect(screen.queryByText("3 files changed")).toBeNull();
     expect(screen.queryByTestId("agent-studio-git-open-in-actions")).toBeNull();
     expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();

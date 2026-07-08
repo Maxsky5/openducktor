@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Button } from "@/components/ui/button";
 import {
   segmentedControlRootClassName,
@@ -136,19 +135,14 @@ function GitActionIconButton({
 
 type GitInfoHeaderSummaryRowProps = {
   isRepositoryMode: boolean;
-  pullRequest: GitInfoHeaderProps["pullRequest"];
 };
 
-function GitInfoHeaderSummaryRow({
-  isRepositoryMode,
-  pullRequest,
-}: GitInfoHeaderSummaryRowProps): ReactElement {
+function GitInfoHeaderSummaryRow({ isRepositoryMode }: GitInfoHeaderSummaryRowProps): ReactElement {
   return (
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
+    <div className="mb-2 flex flex-wrap items-center gap-2 px-3 pt-3">
       <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
         {isRepositoryMode ? "Repository context" : "Branch context"}
       </span>
-      {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
     </div>
   );
 }
@@ -725,7 +719,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
 
   return (
     <div className="flex flex-col border-b border-border">
-      <GitInfoHeaderSummaryRow isRepositoryMode={isRepositoryMode} pullRequest={pullRequest} />
+      <GitInfoHeaderSummaryRow isRepositoryMode={isRepositoryMode} />
 
       <GitBranchContextRow
         currentBranchLabel={currentBranchLabel}

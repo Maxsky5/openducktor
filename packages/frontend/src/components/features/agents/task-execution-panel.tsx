@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useState } from "react";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -129,6 +130,21 @@ function TaskExecutionPanelOpenIn({ model }: { model: AgentStudioGitPanelModel }
   );
 }
 
+function TaskExecutionPanelHeaderActions({
+  model,
+}: {
+  model: TaskExecutionPanelModel;
+}): ReactElement {
+  return (
+    <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-2">
+      {model.gitModel.pullRequest ? (
+        <TaskPullRequestLink pullRequest={model.gitModel.pullRequest} className="shrink-0" />
+      ) : null}
+      <TaskExecutionPanelOpenIn model={model.gitModel} />
+    </div>
+  );
+}
+
 function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): ReactElement {
   return (
     <TooltipProvider>
@@ -155,9 +171,7 @@ function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): 
               />
             ))}
           </TabsList>
-          <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end">
-            <TaskExecutionPanelOpenIn model={model.gitModel} />
-          </div>
+          <TaskExecutionPanelHeaderActions model={model} />
         </div>
         {model.documentModel ? (
           <TabsContent value="document" className="min-h-0 overflow-hidden">
