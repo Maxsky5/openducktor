@@ -292,14 +292,14 @@ export const getDevServerTerminalBufferReplacement = (
     currentWindow.lastSequence === currentContext.snapshot.lastSequence;
 
   if (nextWindow.lastSequence === null) {
-    if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
-      if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
-        return {
-          snapshotWindow: nextWindow,
-          terminalChunks: nextChunks,
-        };
-      }
+    if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
+      return {
+        snapshotWindow: nextWindow,
+        terminalChunks: nextChunks,
+      };
+    }
 
+    if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
       return null;
     }
 

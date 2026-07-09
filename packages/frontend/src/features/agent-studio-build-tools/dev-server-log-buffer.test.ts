@@ -347,6 +347,41 @@ describe("dev-server-log-buffer", () => {
     expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([]);
   });
 
+  test("clears old snapshot and live output when a newer run has no replay yet", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 3_999,
+        data: "old-snapshot\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 4_000,
+      data: "old-live-only\r\n",
+      timestamp: "2026-03-25T10:00:01.000Z",
+    });
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 5252,
+            startedAt: "2026-03-25T10:31:00.000Z",
+            bufferedTerminalChunks: [],
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([]);
+  });
+
   test("drops a stale snapshot prefix while preserving a newer live-only suffix", () => {
     const store = createDevServerTerminalBufferStore();
     replaceDevServerTerminalBuffer(store, "frontend", [
