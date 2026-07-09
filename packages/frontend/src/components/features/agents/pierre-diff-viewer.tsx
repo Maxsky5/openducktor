@@ -18,6 +18,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -356,10 +357,39 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer(
   props: PierreDiffViewerProps,
 ): ReactElement {
-  return (
-    <>
-      <PierreDiffPreloader patch={props.patch} filePath={props.filePath} />
-      <PierreDiffViewer {...props} />
-    </>
+  const workerPool = useWorkerPool();
+  const { fileDiff } = useMemo(
+    () => getRenderableFileDiff(props.patch, props.filePath),
+    [props.filePath, props.patch],
   );
+  const fileDiffCacheKey = fileDiff?.cacheKey ?? null;
+  const subscribeToHighlightCache = useCallback(
+    (onStoreChange: () => void) => {
+      if (workerPool == null || fileDiff == null) {
+        return () => undefined;
+      }
+      return workerPool.subscribeToStatChanges(onStoreChange);
+    },
+    [fileDiff, workerPool],
+  );
+  const getHighlightCacheSnapshot = useCallback(
+    () => workerPool != null && fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null,
+    [fileDiff, workerPool],
+  );
+  const isHighlightCached = useSyncExternalStore(
+    subscribeToHighlightCache,
+    getHighlightCacheSnapshot,
+    () => false,
+  );
+
+  useEffect(() => {
+    if (workerPool == null || fileDiff == null || isHighlightCached) {
+      return;
+    }
+    workerPool.primeDiffHighlightCache(fileDiff);
+  }, [fileDiff, isHighlightCached, workerPool]);
+
+  const renderPhase = isHighlightCached ? "highlighted" : "pending";
+
+  return <PierreDiffViewer key={`${fileDiffCacheKey}:${renderPhase}`} {...props} />;
 });

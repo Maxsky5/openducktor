@@ -5,7 +5,7 @@ import type {
   SelectedLineRange,
   SelectionSide,
 } from "@pierre/diffs";
-import { getSingularPatch } from "@pierre/diffs";
+import { getFiletypeFromFileName, getSingularPatch } from "@pierre/diffs";
 import type {
   InlineCommentContextLine,
   InlineCommentSide,
@@ -139,6 +139,7 @@ const withWorkerCacheKey = (
 
   return {
     ...fileDiff,
+    lang: getFiletypeFromFileName(filePath),
     cacheKey: fileDiff.cacheKey ?? workerCacheKeyForRenderableDiff(filePath, normalizedPatch),
   };
 };
