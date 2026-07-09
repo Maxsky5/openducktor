@@ -20,13 +20,17 @@ type DevServerTerminalSequenceWindow = {
   lastSequence: number | null;
 };
 
+type DevServerTerminalRunIdentity = string | null;
+
 export type DevServerTerminalBufferReplacementContext = {
   current: DevServerTerminalSequenceWindow;
   currentEntries: readonly AgentStudioDevServerTerminalChunkEntry[];
+  runIdentity: DevServerTerminalRunIdentity;
   snapshot: DevServerTerminalSequenceWindow;
 };
 
 export type DevServerTerminalBufferReplacement = {
+  runIdentity: DevServerTerminalRunIdentity;
   snapshotWindow: DevServerTerminalSequenceWindow;
   terminalChunks: readonly DevServerTerminalChunk[];
 };
@@ -39,6 +43,7 @@ type DevServerTerminalBufferState = {
   size: number;
   lastSequence: number | null;
   resetToken: number;
+  runIdentity: DevServerTerminalRunIdentity;
   snapshotEntryCount: number;
 };
 
@@ -96,6 +101,16 @@ const EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW: DevServerTerminalSequenceWindow
   lastSequence: null,
 };
 
+const readDevServerScriptRunIdentity = (
+  script: DevServerScriptState,
+): DevServerTerminalRunIdentity => {
+  if (script.startedAt === null || script.pid === null) {
+    return null;
+  }
+
+  return JSON.stringify([script.startedAt, script.pid]);
+};
+
 const readSnapshotBufferWindow = (
   buffer: DevServerTerminalBufferState,
 ): DevServerTerminalSequenceWindow => {
@@ -106,6 +121,34 @@ const readSnapshotBufferWindow = (
   };
 };
 
+const areSequenceWindowsEqual = (
+  left: DevServerTerminalSequenceWindow,
+  right: DevServerTerminalSequenceWindow,
+): boolean =>
+  left.count === right.count &&
+  left.firstSequence === right.firstSequence &&
+  left.lastSequence === right.lastSequence;
+
+const areTerminalChunksEqual = (
+  left: readonly DevServerTerminalChunk[],
+  right: readonly AgentStudioDevServerTerminalChunkEntry[],
+): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((chunk, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      chunk.scriptId === other.scriptId &&
+      chunk.sequence === other.sequence &&
+      chunk.data === other.data &&
+      chunk.timestamp === other.timestamp
+    );
+  });
+};
+
 const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => ({
   entries: [],
   firstSnapshotSequence: null,
@@ -114,6 +157,7 @@ const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => (
   size: 0,
   lastSequence: null,
   resetToken: 0,
+  runIdentity: null,
   snapshotEntryCount: 0,
 });
 
@@ -158,6 +202,7 @@ export const replaceDevServerTerminalBuffer = (
   store: DevServerTerminalBufferStore,
   scriptId: string,
   terminalChunks: DevServerTerminalChunk[],
+  runIdentity: DevServerTerminalRunIdentity = null,
 ): void => {
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
@@ -169,6 +214,7 @@ export const replaceDevServerTerminalBuffer = (
   buffer.lastSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
+  buffer.runIdentity = runIdentity;
   if (shouldResetTerminal) {
     buffer.resetToken += 1;
   }
@@ -189,11 +235,17 @@ export const applyDevServerTerminalBufferReplacement = (
   scriptId: string,
   replacement: DevServerTerminalBufferReplacement,
 ): void => {
-  replaceDevServerTerminalBuffer(store, scriptId, [...replacement.terminalChunks]);
+  replaceDevServerTerminalBuffer(
+    store,
+    scriptId,
+    [...replacement.terminalChunks],
+    replacement.runIdentity,
+  );
 
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   buffer.firstSnapshotSequence = replacement.snapshotWindow.firstSequence;
   buffer.lastSnapshotSequence = replacement.snapshotWindow.lastSequence;
+  buffer.runIdentity = replacement.runIdentity;
   buffer.snapshotEntryCount = replacement.snapshotWindow.count;
 };
 
@@ -214,7 +266,12 @@ export const syncDevServerTerminalBufferStore = (
   }
 
   for (const script of state.scripts) {
-    replaceDevServerTerminalBuffer(store, script.scriptId, script.bufferedTerminalChunks);
+    replaceDevServerTerminalBuffer(
+      store,
+      script.scriptId,
+      script.bufferedTerminalChunks,
+      readDevServerScriptRunIdentity(script),
+    );
   }
 };
 
@@ -230,6 +287,7 @@ export const getDevServerTerminalBufferReplacementContext = (
   return {
     current: readCurrentBufferWindow(buffer),
     currentEntries: readCurrentBufferEntries(buffer),
+    runIdentity: buffer.runIdentity,
     snapshot: readSnapshotBufferWindow(buffer),
   };
 };
@@ -273,10 +331,14 @@ const isNewerRunSnapshot = (
 
 const shouldMergeSameRunReplayPrefix = (
   currentContext: DevServerTerminalBufferReplacementContext,
-  script: DevServerScriptState,
+  nextRunIdentity: DevServerTerminalRunIdentity,
   nextWindow: DevServerTerminalSequenceWindow,
 ): boolean => {
-  if (script.startedAt === null) {
+  if (
+    currentContext.runIdentity === null ||
+    nextRunIdentity === null ||
+    currentContext.runIdentity !== nextRunIdentity
+  ) {
     return false;
   }
 
@@ -308,18 +370,43 @@ const mergeReplayPrefixWithCurrentEntries = (
   );
 };
 
+const createDevServerTerminalBufferReplacement = (
+  currentContext: DevServerTerminalBufferReplacementContext | null,
+  snapshotWindow: DevServerTerminalSequenceWindow,
+  terminalChunks: readonly DevServerTerminalChunk[],
+  runIdentity: DevServerTerminalRunIdentity,
+): DevServerTerminalBufferReplacement | null => {
+  if (
+    currentContext &&
+    currentContext.runIdentity === runIdentity &&
+    areSequenceWindowsEqual(currentContext.snapshot, snapshotWindow) &&
+    areTerminalChunksEqual(terminalChunks, currentContext.currentEntries)
+  ) {
+    return null;
+  }
+
+  return {
+    runIdentity,
+    snapshotWindow,
+    terminalChunks,
+  };
+};
+
 export const getDevServerTerminalBufferReplacement = (
   currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
 ): DevServerTerminalBufferReplacement | null => {
   const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
   const nextWindow = readBufferedSequenceWindow(nextChunks);
+  const nextRunIdentity = readDevServerScriptRunIdentity(script);
 
   if (currentContext === null) {
-    return {
-      snapshotWindow: nextWindow,
-      terminalChunks: nextChunks,
-    };
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
   }
 
   const currentWindow = currentContext.current;
@@ -330,10 +417,12 @@ export const getDevServerTerminalBufferReplacement = (
 
   if (nextWindow.lastSequence === null) {
     if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
-      return {
-        snapshotWindow: nextWindow,
-        terminalChunks: nextChunks,
-      };
+      return createDevServerTerminalBufferReplacement(
+        currentContext,
+        nextWindow,
+        nextChunks,
+        nextRunIdentity,
+      );
     }
 
     if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
@@ -345,55 +434,74 @@ export const getDevServerTerminalBufferReplacement = (
       (chunk) => chunk.sequence > snapshotLastSequence,
     );
     if (liveOnlyChunks.length > 0) {
-      return {
-        snapshotWindow: EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
-        terminalChunks: trimDevServerTerminalChunks([...liveOnlyChunks]),
-      };
+      return createDevServerTerminalBufferReplacement(
+        currentContext,
+        EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
+        trimDevServerTerminalChunks([...liveOnlyChunks]),
+        currentContext.runIdentity,
+      );
     }
 
     if (!currentBufferMirrorsSnapshot) {
-      return {
-        snapshotWindow: EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
-        terminalChunks: [],
-      };
+      return createDevServerTerminalBufferReplacement(
+        currentContext,
+        EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
+        [],
+        currentContext.runIdentity,
+      );
     }
 
-    return {
-      snapshotWindow: nextWindow,
-      terminalChunks: nextChunks,
-    };
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
   }
 
   if (currentWindow.lastSequence === null) {
-    return {
-      snapshotWindow: nextWindow,
-      terminalChunks: nextChunks,
-    };
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
   }
 
   if (nextWindow.lastSequence > currentWindow.lastSequence) {
-    return {
-      snapshotWindow: nextWindow,
-      terminalChunks: nextChunks,
-    };
+    if (
+      currentContext.runIdentity !== null &&
+      currentContext.runIdentity !== nextRunIdentity &&
+      !isNewerRunSnapshot(currentContext, script, nextChunks)
+    ) {
+      return null;
+    }
+
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
   }
 
   if (nextWindow.lastSequence < currentWindow.lastSequence) {
     if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
-      return {
-        snapshotWindow: nextWindow,
-        terminalChunks: nextChunks,
-      };
+      return createDevServerTerminalBufferReplacement(
+        currentContext,
+        nextWindow,
+        nextChunks,
+        nextRunIdentity,
+      );
     }
 
-    if (shouldMergeSameRunReplayPrefix(currentContext, script, nextWindow)) {
-      return {
-        snapshotWindow: nextWindow,
-        terminalChunks: mergeReplayPrefixWithCurrentEntries(
-          nextChunks,
-          currentContext.currentEntries,
-        ),
-      };
+    if (shouldMergeSameRunReplayPrefix(currentContext, nextRunIdentity, nextWindow)) {
+      return createDevServerTerminalBufferReplacement(
+        currentContext,
+        nextWindow,
+        mergeReplayPrefixWithCurrentEntries(nextChunks, currentContext.currentEntries),
+        nextRunIdentity,
+      );
     }
 
     return null;
@@ -401,12 +509,23 @@ export const getDevServerTerminalBufferReplacement = (
 
   if (
     nextWindow.count !== currentWindow.count ||
-    nextWindow.firstSequence !== currentWindow.firstSequence
+    nextWindow.firstSequence !== currentWindow.firstSequence ||
+    nextRunIdentity !== currentContext.runIdentity
   ) {
-    return {
-      snapshotWindow: nextWindow,
-      terminalChunks: nextChunks,
-    };
+    if (
+      currentContext.runIdentity !== null &&
+      currentContext.runIdentity !== nextRunIdentity &&
+      !isNewerRunSnapshot(currentContext, script, nextChunks)
+    ) {
+      return null;
+    }
+
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
   }
 
   return null;

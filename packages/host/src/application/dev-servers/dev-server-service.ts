@@ -59,7 +59,6 @@ export type {
 } from "./dev-server-service-types";
 
 const nowIso = (): string => new Date().toISOString();
-const groupKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
 type FailedDevServerScriptStart = {
   command: string;
   message: string;
@@ -72,7 +71,7 @@ export const createDevServerService = ({
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateDevServerServiceInput): DisposableDevServerService => {
-  const groups = new Map<string, DevServerGroupRuntime>();
+  const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
   const publish = (event: DevServerEvent): void => {
     eventBus?.publish(DEV_SERVER_EVENT_CHANNEL, devServerEventSchema.parse(event));
   };
@@ -88,8 +87,9 @@ export const createDevServerService = ({
     });
   const getRuntime = (taskId: string, repoConfig: RepoConfig, worktreePath: string | null) =>
     Effect.sync(() => {
-      const key = groupKey(repoConfig.repoPath, taskId);
-      const existing = groups.get(key);
+      const repoGroups =
+        groups.get(repoConfig.repoPath) ?? new Map<string, DevServerGroupRuntime>();
+      const existing = repoGroups.get(taskId);
       if (existing) {
         syncGroupState(existing.state, repoConfig, taskId, worktreePath);
         syncRuntimeTerminalBufferByteCounts(existing);
@@ -101,7 +101,8 @@ export const createDevServerService = ({
         terminalBufferedBytesByScriptId: new Map<string, number>(),
         terminalNextSequenceByScriptId: new Map<string, number>(),
       };
-      groups.set(key, runtime);
+      repoGroups.set(taskId, runtime);
+      groups.set(repoConfig.repoPath, repoGroups);
       return runtime;
     });
   const resolveRuntime = (repoPath: string, taskId: string) =>
@@ -475,10 +476,12 @@ export const createDevServerService = ({
       return Effect.gen(function* () {
         const errors: string[] = [];
         const stoppedScripts: StoppedDevServerScript[] = [];
-        for (const runtime of groups.values()) {
-          stoppedScripts.push(...listRunningScripts(runtime));
-          errors.push(...(yield* stopRuntime(runtime)));
-          emitSnapshot(runtime);
+        for (const repoGroups of groups.values()) {
+          for (const runtime of repoGroups.values()) {
+            stoppedScripts.push(...listRunningScripts(runtime));
+            errors.push(...(yield* stopRuntime(runtime)));
+            emitSnapshot(runtime);
+          }
         }
         if (errors.length > 0) {
           return yield* Effect.fail(

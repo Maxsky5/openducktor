@@ -6,9 +6,10 @@ import type {
 } from "@openducktor/contracts";
 import {
   applyDevServerEventToState,
+  buildTaskMemoryKey,
   isDevServerPanelExpanded,
   selectDefaultDevServerTab,
-} from "./use-agent-studio-dev-server-panel";
+} from "./use-agent-studio-dev-server-panel-helpers";
 
 const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => ({
   scriptId: "frontend",
@@ -33,6 +34,12 @@ const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGrou
 });
 
 describe("useAgentStudioDevServerPanel helpers", () => {
+  test("builds task memory keys without delimiter collisions", () => {
+    expect(buildTaskMemoryKey("/repo::task-b", "task-c")).not.toBe(
+      buildTaskMemoryKey("/repo", "task-b::task-c"),
+    );
+  });
+
   test("applies terminal chunk events without cloning buffered replay into query state", () => {
     const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",

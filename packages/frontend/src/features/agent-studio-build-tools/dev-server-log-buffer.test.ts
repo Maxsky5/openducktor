@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
+import type {
+  DevServerGroupState,
+  DevServerScriptState,
+  DevServerTerminalChunk,
+} from "@openducktor/contracts";
 import {
   appendDevServerTerminalChunk,
   createDevServerTerminalBufferStore,
@@ -32,6 +36,17 @@ const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGrou
   worktreePath: "/tmp/worktree/task-7",
   scripts: [buildScript()],
   updatedAt: "2026-03-25T10:00:00.000Z",
+  ...overrides,
+});
+
+const buildChunk = (
+  sequence: number,
+  overrides: Partial<DevServerTerminalChunk> = {},
+): DevServerTerminalChunk => ({
+  scriptId: "frontend",
+  sequence,
+  data: `line-${sequence}\r\n`,
+  timestamp: `2026-03-25T10:00:${String(sequence % 60).padStart(2, "0")}.000Z`,
   ...overrides,
 });
 
@@ -259,12 +274,24 @@ describe("dev-server-log-buffer", () => {
 
   test("merges a delayed same-run replay prefix with an already observed live suffix", () => {
     const store = createDevServerTerminalBufferStore();
-    appendDevServerTerminalChunk(store, {
-      scriptId: "frontend",
-      sequence: 10,
-      data: "live-10\r\n",
-      timestamp: "2026-03-25T10:00:10.000Z",
-    });
+    syncDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: [
+              buildChunk(10, {
+                data: "live-10\r\n",
+                timestamp: "2026-03-25T10:00:10.000Z",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
 
     const didChange = reconcileDevServerTerminalBufferStore(
       store,
@@ -274,12 +301,9 @@ describe("dev-server-log-buffer", () => {
             status: "running",
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
-            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) => ({
-              scriptId: "frontend",
-              sequence,
-              data: `replay-${sequence}\r\n`,
-              timestamp: `2026-03-25T10:00:${String(sequence).padStart(2, "0")}.000Z`,
-            })),
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
+              buildChunk(sequence, { data: `replay-${sequence}\r\n` }),
+            ),
           }),
         ],
       }),
@@ -301,6 +325,193 @@ describe("dev-server-log-buffer", () => {
       "replay-9\r\n",
       "live-10\r\n",
     ]);
+  });
+
+  test("keeps current-run live output when a delayed previous-run replay arrives", () => {
+    const store = createDevServerTerminalBufferStore();
+    syncDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 5252,
+            startedAt: "2026-03-25T10:10:00.000Z",
+            bufferedTerminalChunks: [
+              buildChunk(10, {
+                data: "new-run-10\r\n",
+                timestamp: "2026-03-25T10:10:10.000Z",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
+              buildChunk(sequence, { data: `old-run-${sequence}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(false);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual(["new-run-10\r\n"]);
+  });
+
+  test("does not merge equal-startedAt replay from a different process run", () => {
+    const store = createDevServerTerminalBufferStore();
+    syncDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 5252,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: [
+              buildChunk(10, {
+                data: "current-run-10\r\n",
+                timestamp: "2026-03-25T10:00:10.000Z",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
+              buildChunk(sequence, { data: `same-time-old-run-${sequence}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(false);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual(["current-run-10\r\n"]);
+  });
+
+  test("deduplicates overlapping same-run replay while preserving the live suffix", () => {
+    const store = createDevServerTerminalBufferStore();
+    syncDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 6 }, (_, offset) =>
+              buildChunk(5 + offset, { data: `live-${5 + offset}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
+              buildChunk(sequence, { data: `replay-${sequence}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => [
+        entry.sequence,
+        entry.data,
+      ]),
+    ).toEqual([
+      [0, "replay-0\r\n"],
+      [1, "replay-1\r\n"],
+      [2, "replay-2\r\n"],
+      [3, "replay-3\r\n"],
+      [4, "replay-4\r\n"],
+      [5, "live-5\r\n"],
+      [6, "live-6\r\n"],
+      [7, "live-7\r\n"],
+      [8, "live-8\r\n"],
+      [9, "live-9\r\n"],
+      [10, "live-10\r\n"],
+    ]);
+  });
+
+  test("does not reset again when a capped replay merge is already reflected locally", () => {
+    const store = createDevServerTerminalBufferStore();
+    syncDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: [
+              buildChunk(MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS, {
+                data: "live-2000\r\n",
+                timestamp: "2026-03-25T10:40:00.000Z",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const cappedReplay = Array.from(
+      { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS },
+      (_, sequence) => buildChunk(sequence, { data: `replay-${sequence}\r\n` }),
+    );
+    const replayState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-25T10:00:00.000Z",
+          bufferedTerminalChunks: cappedReplay,
+        }),
+      ],
+    });
+
+    expect(reconcileDevServerTerminalBufferStore(store, replayState)).toBe(true);
+    const resetTokenAfterMerge = getDevServerTerminalBuffer(store, "frontend")?.resetToken;
+
+    expect(reconcileDevServerTerminalBufferStore(store, replayState)).toBe(false);
+    const buffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(buffer?.resetToken).toBe(resetTokenAfterMerge);
+    expect(buffer?.entries).toHaveLength(MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
+    expect(buffer?.entries[0]?.sequence).toBe(1);
+    expect(buffer?.entries.at(-1)?.sequence).toBe(MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
   });
 
   test("replaces a populated buffer when an authoritative snapshot clears replay", () => {

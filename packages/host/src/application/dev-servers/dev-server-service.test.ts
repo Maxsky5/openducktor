@@ -51,6 +51,24 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
       });
     },
   }) as unknown as WorkspaceSettingsService;
+const createWorkspaceSettingsServiceByRepoPath = (
+  configs: Record<string, RepoConfig>,
+): WorkspaceSettingsService =>
+  ({
+    getRepoConfigByRepoPath(repoPath: unknown) {
+      return Effect.try({
+        try: () => {
+          const config = configs[String(repoPath)];
+          if (!config) {
+            throw new Error(`Workspace is not configured for repository: ${String(repoPath)}`);
+          }
+          return config;
+        },
+        catch: (cause) =>
+          toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
+      });
+    },
+  }) as unknown as WorkspaceSettingsService;
 const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWorktreeService => ({
   getTaskWorktree() {
     return Effect.succeed(worktree);
@@ -594,6 +612,53 @@ describe("createDevServerService", () => {
       "closing dev server\r\n",
     ]);
     expect(state.scripts[0]).toMatchObject({ status: "stopped", pid: null });
+  });
+  test("keeps runtime ownership isolated for delimiter-colliding repo and task strings", async () => {
+    const { processPort, starts } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
+      workspaceSettingsService: createWorkspaceSettingsServiceByRepoPath({
+        "/repo": repoConfig({
+          repoPath: "/repo",
+          devServers: [{ id: "web", name: "Web", command: "right-command" }],
+        }),
+        "/repo::task-b": repoConfig({
+          repoPath: "/repo::task-b",
+          devServers: [{ id: "web", name: "Web", command: "left-command" }],
+        }),
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo::task-b", taskId: "task-c" })),
+    ).resolves.toMatchObject({
+      repoPath: "/repo::task-b",
+      taskId: "task-c",
+      scripts: [{ scriptId: "web", pid: 400, command: "left-command" }],
+    });
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-b::task-c" })),
+    ).resolves.toMatchObject({
+      repoPath: "/repo",
+      taskId: "task-b::task-c",
+      scripts: [{ scriptId: "web", pid: 401, command: "right-command" }],
+    });
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo::task-b", taskId: "task-c" })),
+    ).resolves.toMatchObject({
+      repoPath: "/repo::task-b",
+      taskId: "task-c",
+      scripts: [{ scriptId: "web", pid: 400, command: "left-command" }],
+    });
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-b::task-c" })),
+    ).resolves.toMatchObject({
+      repoPath: "/repo",
+      taskId: "task-b::task-c",
+      scripts: [{ scriptId: "web", pid: 401, command: "right-command" }],
+    });
+    expect(starts.map((start) => start.command)).toEqual(["left-command", "right-command"]);
   });
   test("stops all running task dev server groups during host shutdown", async () => {
     const { processPort, stoppedPids } = createProcessPort();
