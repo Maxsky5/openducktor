@@ -425,14 +425,36 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("applies a starting state immediately when start is clicked", async () => {
+  test("starts from a stopped owned run without clearing replay before host ownership arrives", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
+    const stoppedState = buildState({
+      scripts: [
+        buildScript({
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+              sequence: 3,
+              data: "stopped replay\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
     const startDeferred = createDeferred<DevServerGroupState>();
-    devServerGetState = async () => buildState();
-    devServerStart = async () => startDeferred.promise;
+    let startCalls = 0;
+    devServerGetState = async () => stoppedState;
+    devServerStart = async () => {
+      startCalls += 1;
+      return startDeferred.promise;
+    };
 
     let latest: HookResult | null = null;
     const getLatest = (): HookResult => {
@@ -469,10 +491,33 @@ describe("useAgentStudioDevServerPanel", () => {
         getLatest().onStart();
       });
 
-      expect(getLatest().mode).toBe("active");
-      expect(getLatest().isExpanded).toBe(true);
-      expect(getLatest().scripts[0]?.status).toBe("starting");
+      expect(getLatest().scripts[0]?.status).toBe("stopped");
       expect(getLatest().selectedScript?.scriptId).toBe("frontend");
+      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
+        "stopped replay\r\n",
+      ]);
+      await waitFor(() => {
+        expect(startCalls).toBe(1);
+        expect(getLatest().mode).toBe("active");
+        expect(getLatest().isExpanded).toBe(true);
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:31:00.000Z",
+          script: buildScript({
+            status: "starting",
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-1", generation: 2 },
+          }),
+        });
+      });
+
+      expect(getLatest().scripts[0]?.status).toBe("starting");
+      expect(getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
     } finally {
       startDeferred.resolve(buildState());
       view.unmount();

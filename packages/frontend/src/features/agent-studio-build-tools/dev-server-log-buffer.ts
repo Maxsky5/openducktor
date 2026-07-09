@@ -29,7 +29,6 @@ type DevServerTerminalRunIdentity = {
 export type DevServerTerminalBufferReplacementContext = {
   current: DevServerTerminalSequenceWindow;
   currentEntries: readonly AgentStudioDevServerTerminalChunkEntry[];
-  retiredHostInstanceIds: ReadonlySet<string>;
   runIdentity: DevServerTerminalRunIdentity;
   snapshot: DevServerTerminalSequenceWindow;
 };
@@ -48,7 +47,6 @@ type DevServerTerminalBufferState = {
   size: number;
   lastSequence: number | null;
   resetToken: number;
-  retiredHostInstanceIds: Set<string>;
   runIdentity: DevServerTerminalRunIdentity;
   snapshotEntryCount: number;
 };
@@ -194,7 +192,6 @@ const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => (
   size: 0,
   lastSequence: null,
   resetToken: 0,
-  retiredHostInstanceIds: new Set(),
   runIdentity: null,
   snapshotEntryCount: 0,
 });
@@ -218,13 +215,17 @@ export const createDevServerTerminalBufferStore = (): DevServerTerminalBufferSto
 export const appendDevServerTerminalChunk = (
   store: DevServerTerminalBufferStore,
   terminalChunk: DevServerTerminalChunk,
-): void => {
-  let buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
+): boolean => {
   const nextRunIdentity = readDevServerTerminalChunkRunIdentity(terminalChunk);
+  if (!canApplyDevServerHostInstanceId(store, nextRunIdentity.runOrder.hostInstanceId)) {
+    return false;
+  }
+
+  let buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
   if (!areRunIdentitiesEqual(buffer.runIdentity, nextRunIdentity)) {
     const runOrder = compareDevServerRunIdentity(buffer, nextRunIdentity);
     if (runOrder !== "newer") {
-      return;
+      return false;
     }
     replaceDevServerTerminalBuffer(store, terminalChunk.scriptId, [], nextRunIdentity);
     buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
@@ -233,7 +234,7 @@ export const appendDevServerTerminalChunk = (
   }
 
   if (buffer.lastSequence !== null && terminalChunk.sequence <= buffer.lastSequence) {
-    return;
+    return false;
   }
 
   if (buffer.size < MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS) {
@@ -246,6 +247,7 @@ export const appendDevServerTerminalChunk = (
   }
 
   buffer.lastSequence = terminalChunk.sequence;
+  return true;
 };
 
 export const replaceDevServerTerminalBuffer = (
@@ -266,13 +268,6 @@ export const replaceDevServerTerminalBuffer = (
   buffer.lastSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
-  if (
-    buffer.runIdentity !== null &&
-    runIdentity !== null &&
-    buffer.runIdentity.runOrder.hostInstanceId !== runIdentity.runOrder.hostInstanceId
-  ) {
-    buffer.retiredHostInstanceIds.add(buffer.runIdentity.runOrder.hostInstanceId);
-  }
   buffer.runIdentity = runIdentity;
   if (shouldResetTerminal) {
     buffer.resetToken += 1;
@@ -346,7 +341,6 @@ export const getDevServerTerminalBufferReplacementContext = (
   return {
     current: readCurrentBufferWindow(buffer),
     currentEntries: readCurrentBufferEntries(buffer),
-    retiredHostInstanceIds: new Set(buffer.retiredHostInstanceIds),
     runIdentity: buffer.runIdentity,
     snapshot: readSnapshotBufferWindow(buffer),
   };
@@ -372,13 +366,10 @@ export const getDevServerTerminalBuffer = (
   };
 };
 
-type DevServerRunOrderRelation = "newer" | "older" | "same";
+type DevServerRunOrderRelation = "foreign" | "newer" | "older" | "same";
 
 const compareDevServerRunIdentity = (
-  context: {
-    retiredHostInstanceIds: ReadonlySet<string>;
-    runIdentity: DevServerTerminalRunIdentity;
-  },
+  context: { runIdentity: DevServerTerminalRunIdentity },
   candidate: DevServerTerminalRunIdentity,
 ): DevServerRunOrderRelation => {
   const current = context.runIdentity;
@@ -391,11 +382,8 @@ const compareDevServerRunIdentity = (
   if (current === null) {
     return "newer";
   }
-  if (context.retiredHostInstanceIds.has(candidate.runOrder.hostInstanceId)) {
-    return "older";
-  }
   if (candidate.runOrder.hostInstanceId !== current.runOrder.hostInstanceId) {
-    return "newer";
+    return "foreign";
   }
   if (candidate.runOrder.generation === current.runOrder.generation) {
     throw new Error(
@@ -403,6 +391,87 @@ const compareDevServerRunIdentity = (
     );
   }
   return candidate.runOrder.generation > current.runOrder.generation ? "newer" : "older";
+};
+
+export const canApplyDevServerScriptState = (
+  currentContext: DevServerTerminalBufferReplacementContext | null,
+  script: DevServerScriptState,
+): boolean => {
+  if (currentContext === null) {
+    return true;
+  }
+
+  const relation = compareDevServerRunIdentity(
+    currentContext,
+    readDevServerScriptRunIdentity(script),
+  );
+  return relation === "same" || relation === "newer";
+};
+
+const readDevServerStoreHostInstanceId = (store: DevServerTerminalBufferStore): string | null => {
+  const hostInstanceIds = new Set<string>();
+  for (const buffer of store.values()) {
+    if (buffer.runIdentity !== null) {
+      hostInstanceIds.add(buffer.runIdentity.runOrder.hostInstanceId);
+    }
+  }
+
+  if (hostInstanceIds.size > 1) {
+    throw new Error("Dev server terminal buffers contain conflicting host ownership.");
+  }
+
+  return hostInstanceIds.values().next().value ?? null;
+};
+
+const canApplyDevServerHostInstanceId = (
+  store: DevServerTerminalBufferStore,
+  candidateHostInstanceId: string,
+): boolean => {
+  const currentHostInstanceId = readDevServerStoreHostInstanceId(store);
+  return currentHostInstanceId === null || currentHostInstanceId === candidateHostInstanceId;
+};
+
+export const canApplyDevServerScriptStateToStore = (
+  store: DevServerTerminalBufferStore,
+  script: DevServerScriptState,
+): boolean => {
+  if (
+    script.runOrder !== null &&
+    !canApplyDevServerHostInstanceId(store, script.runOrder.hostInstanceId)
+  ) {
+    return false;
+  }
+
+  return canApplyDevServerScriptState(
+    getDevServerTerminalBufferReplacementContext(store, script.scriptId),
+    script,
+  );
+};
+
+export const canApplyDevServerGroupState = (
+  store: DevServerTerminalBufferStore,
+  state: DevServerGroupState,
+): boolean => {
+  const candidateHostInstanceIds = new Set<string>();
+  for (const script of state.scripts) {
+    if (script.runOrder !== null) {
+      candidateHostInstanceIds.add(script.runOrder.hostInstanceId);
+    }
+  }
+
+  if (candidateHostInstanceIds.size > 1) {
+    throw new Error("Dev server group state contains conflicting host ownership.");
+  }
+
+  const candidateHostInstanceId = candidateHostInstanceIds.values().next().value ?? null;
+  if (
+    candidateHostInstanceId !== null &&
+    !canApplyDevServerHostInstanceId(store, candidateHostInstanceId)
+  ) {
+    return false;
+  }
+
+  return state.scripts.every((script) => canApplyDevServerScriptStateToStore(store, script));
 };
 
 const shouldMergeSameRunReplayPrefix = (
@@ -486,7 +555,7 @@ export const getDevServerTerminalBufferReplacement = (
   }
 
   const runOrder = compareDevServerRunIdentity(currentContext, nextRunIdentity);
-  if (runOrder === "older") {
+  if (runOrder === "older" || runOrder === "foreign") {
     return null;
   }
   if (runOrder === "newer") {
@@ -597,6 +666,10 @@ export const reconcileDevServerTerminalBufferStore = (
   store: DevServerTerminalBufferStore,
   state: DevServerGroupState,
 ): boolean => {
+  if (!canApplyDevServerGroupState(store, state)) {
+    return false;
+  }
+
   let didChange = false;
   const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
 

@@ -28,21 +28,6 @@ const trimBufferedTerminalReplay = (script: DevServerScriptState): DevServerScri
   bufferedTerminalChunks: trimDevServerTerminalChunks(script.bufferedTerminalChunks),
 });
 
-export const buildOptimisticStartingState = (state: DevServerGroupState): DevServerGroupState => ({
-  ...state,
-  updatedAt: new Date().toISOString(),
-  scripts: state.scripts.map((script) => ({
-    ...script,
-    status: "starting",
-    runId: null,
-    pid: null,
-    startedAt: null,
-    exitCode: null,
-    lastError: null,
-    bufferedTerminalChunks: [],
-  })),
-});
-
 export const isDevServerSubscriptionControlEvent = isBrowserLiveControlEvent;
 
 export const applyDevServerEventToState = (

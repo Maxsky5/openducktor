@@ -568,7 +568,7 @@ describe("dev-server-log-buffer", () => {
     ).toEqual(["new-run\r\n"]);
   });
 
-  test("accepts a replacement host epoch once and rejects delayed state from the retired host", () => {
+  test("rejects foreign host state until transport ownership is explicitly reset", () => {
     const store = createDevServerTerminalBufferStore();
     syncDevServerTerminalBufferStore(
       store,
@@ -604,7 +604,13 @@ describe("dev-server-log-buffer", () => {
         }),
       ],
     });
-    expect(reconcileDevServerTerminalBufferStore(store, replacementState)).toBe(true);
+    expect(reconcileDevServerTerminalBufferStore(store, replacementState)).toBe(false);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual(["old-host\r\n"]);
+
+    store.clear();
+    syncDevServerTerminalBufferStore(store, replacementState);
 
     const delayedOldState = buildState({
       scripts: [

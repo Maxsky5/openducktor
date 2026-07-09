@@ -4,6 +4,8 @@ import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
   applyDevServerTerminalBufferReplacement,
+  canApplyDevServerGroupState,
+  canApplyDevServerScriptStateToStore,
   createDevServerTerminalBufferStore,
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
@@ -36,25 +38,28 @@ type DevServerTerminalBufferOwner = {
 };
 
 type UseAgentStudioDevServerTerminalBuffersResult = {
-  applyTerminalBuffersFromEvent: (event: DevServerEvent, selectedScriptId: string | null) => void;
+  applyTerminalBuffersFromEvent: (
+    event: DevServerEvent,
+    selectedScriptId: string | null,
+  ) => boolean;
   beginMutationReplaySync: (state: DevServerGroupState | null) => void;
   cancelMutationReplaySync: () => void;
   clearTerminalBuffers: () => void;
   hydrateTerminalBuffersFromState: (
     state: DevServerGroupState | null,
     selectedScriptId: string | null,
-  ) => void;
+  ) => boolean;
   markMutationReplayObserved: (event: DevServerEvent) => void;
   replaceTerminalBuffersFromState: (
     state: DevServerGroupState | null,
     selectedScriptId: string | null,
-  ) => void;
+  ) => boolean;
   selectedScriptTerminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   syncSelectedScriptTerminalBuffer: (scriptId: string | null) => void;
   syncTerminalBuffersFromMutationState: (
     state: DevServerGroupState,
     selectedScriptId: string | null,
-  ) => void;
+  ) => boolean;
 };
 
 const isDevServerStateInScope = (
@@ -111,35 +116,42 @@ export const useAgentStudioDevServerTerminalBuffers = (
   );
 
   const replaceTerminalBuffersFromState = useCallback(
-    (state: DevServerGroupState | null, selectedScriptId: string | null): void => {
+    (state: DevServerGroupState | null, selectedScriptId: string | null): boolean => {
       if (state !== null && !isDevServerStateInScope(state, scope)) {
-        return;
+        return false;
+      }
+      if (state !== null && !canApplyDevServerGroupState(terminalBuffers, state)) {
+        return false;
       }
 
       syncDevServerTerminalBufferStore(terminalBuffers, state);
       syncSelectedScriptTerminalBuffer(selectedScriptId);
+      return true;
     },
     [scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
 
   const hydrateTerminalBuffersFromState = useCallback(
-    (state: DevServerGroupState | null, selectedScriptId: string | null): void => {
+    (state: DevServerGroupState | null, selectedScriptId: string | null): boolean => {
       if (state === null) {
-        return;
+        return false;
       }
 
       if (!isDevServerStateInScope(state, scope)) {
-        return;
+        return false;
+      }
+      if (!canApplyDevServerGroupState(terminalBuffers, state)) {
+        return false;
       }
 
       if (terminalBuffers.size === 0) {
-        replaceTerminalBuffersFromState(state, selectedScriptId);
-        return;
+        return replaceTerminalBuffersFromState(state, selectedScriptId);
       }
 
       if (reconcileDevServerTerminalBufferStore(terminalBuffers, state)) {
         syncSelectedScriptTerminalBuffer(selectedScriptId);
       }
+      return true;
     },
     [replaceTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
@@ -169,21 +181,22 @@ export const useAgentStudioDevServerTerminalBuffers = (
   );
 
   const syncTerminalBuffersFromMutationState = useCallback(
-    (state: DevServerGroupState, selectedScriptId: string | null): void => {
+    (state: DevServerGroupState, selectedScriptId: string | null): boolean => {
       if (!isDevServerStateInScope(state, scope)) {
-        return;
+        return false;
+      }
+      if (!canApplyDevServerGroupState(terminalBuffers, state)) {
+        return false;
       }
 
       const pendingReplaySync = terminalBufferOwner.pendingMutationReplaySync;
       if (!pendingReplaySync) {
-        hydrateTerminalBuffersFromState(state, selectedScriptId);
-        return;
+        return hydrateTerminalBuffersFromState(state, selectedScriptId);
       }
 
       if (pendingReplaySync.scopeKey !== activeScopeKey) {
         terminalBufferOwner.pendingMutationReplaySync = null;
-        hydrateTerminalBuffersFromState(state, selectedScriptId);
-        return;
+        return hydrateTerminalBuffersFromState(state, selectedScriptId);
       }
 
       const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
@@ -226,6 +239,7 @@ export const useAgentStudioDevServerTerminalBuffers = (
 
       terminalBufferOwner.pendingMutationReplaySync = null;
       syncSelectedScriptTerminalBuffer(selectedScriptId);
+      return true;
     },
     [
       activeScopeKey,
@@ -271,33 +285,33 @@ export const useAgentStudioDevServerTerminalBuffers = (
   );
 
   const applyTerminalBuffersFromEvent = useCallback(
-    (event: DevServerEvent, selectedScriptId: string | null): void => {
+    (event: DevServerEvent, selectedScriptId: string | null): boolean => {
       if (!isDevServerEventInScope(event, scope)) {
-        return;
+        return false;
       }
 
       if (event.type === "snapshot") {
-        hydrateTerminalBuffersFromState(event.state, selectedScriptId);
-        return;
+        return hydrateTerminalBuffersFromState(event.state, selectedScriptId);
       }
 
       if (event.type === "script_status_changed") {
-        const replacementContext =
-          event.script.status === "starting"
-            ? null
-            : getDevServerTerminalBufferReplacementContext(terminalBuffers, event.script.scriptId);
-        const replacement = getDevServerTerminalBufferReplacement(replacementContext, event.script);
-        if (replacement === null) {
-          return;
-        }
-
-        applyDevServerTerminalBufferReplacement(
+        const replacementContext = getDevServerTerminalBufferReplacementContext(
           terminalBuffers,
           event.script.scriptId,
-          replacement,
         );
-      } else {
-        appendDevServerTerminalChunk(terminalBuffers, event.terminalChunk);
+        if (!canApplyDevServerScriptStateToStore(terminalBuffers, event.script)) {
+          return false;
+        }
+        const replacement = getDevServerTerminalBufferReplacement(replacementContext, event.script);
+        if (replacement !== null) {
+          applyDevServerTerminalBufferReplacement(
+            terminalBuffers,
+            event.script.scriptId,
+            replacement,
+          );
+        }
+      } else if (!appendDevServerTerminalChunk(terminalBuffers, event.terminalChunk)) {
+        return false;
       }
 
       const touchedScriptId =
@@ -307,6 +321,7 @@ export const useAgentStudioDevServerTerminalBuffers = (
       if (selectedScriptId && touchedScriptId === selectedScriptId) {
         syncSelectedScriptTerminalBuffer(selectedScriptId);
       }
+      return true;
     },
     [hydrateTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
