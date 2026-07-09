@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/shared/host";
+import { runTaskMutationWithChatDraftCleanup } from "@/state/operations/tasks/task-chat-draft-cleanup";
 import {
   invalidateTaskApprovalContextQuery,
   loadTaskApprovalContextFromQuery,
@@ -16,12 +17,15 @@ type SubmitDirectMergeApprovalArgs = {
   queryClient: QueryClient;
   repoPath: string;
   refreshTasks: () => Promise<void>;
+  workspaceId: string | null;
 };
 
 type CompleteDirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
+  queryClient: QueryClient;
   repoPath: string;
   refreshTasks: () => Promise<void>;
+  workspaceId: string | null;
 };
 
 export type SubmitDirectMergeApprovalResult =
@@ -57,14 +61,23 @@ export async function submitDirectMergeApproval({
   queryClient,
   repoPath,
   refreshTasks,
+  workspaceId,
 }: SubmitDirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
   const approvalContext = approval.approvalContext;
-  const directMergeResult = await host.taskDirectMerge(repoPath, approval.taskId, {
-    mergeMethod: approval.mergeMethod,
-    squashCommitMessage:
-      approval.mergeMethod === "squash"
-        ? approval.squashCommitMessage.trim() || undefined
-        : undefined,
+  const directMergeResult = await runTaskMutationWithChatDraftCleanup({
+    queryClient,
+    repoPath,
+    workspaceId,
+    taskIds: [approval.taskId],
+    mutation: async () =>
+      host.taskDirectMerge(repoPath, approval.taskId, {
+        mergeMethod: approval.mergeMethod,
+        squashCommitMessage:
+          approval.mergeMethod === "squash"
+            ? approval.squashCommitMessage.trim() || undefined
+            : undefined,
+      }),
+    shouldCleanup: (result) => result.outcome !== "conflicts" && result.task.status === "closed",
   });
 
   if (directMergeResult.outcome === "conflicts") {
@@ -112,25 +125,35 @@ export async function submitDirectMergeApproval({
 
 export async function completeDirectMergeApproval({
   approval,
+  queryClient,
   repoPath,
   refreshTasks,
+  workspaceId,
 }: CompleteDirectMergeApprovalArgs): Promise<{ successDescription: string }> {
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
 
-  if (publishTarget) {
-    if (!publishTarget.remote) {
-      throw new Error("The configured target branch does not have a publish remote.");
-    }
-    const pushResult = await host.gitPushBranch(repoPath, checkoutTargetBranch(publishTarget), {
-      remote: publishTarget.remote,
-    });
-    if (pushResult.outcome !== "pushed") {
-      throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
-    }
-  }
+  await runTaskMutationWithChatDraftCleanup({
+    queryClient,
+    repoPath,
+    workspaceId,
+    taskIds: [approval.taskId],
+    mutation: async () => {
+      if (publishTarget) {
+        if (!publishTarget.remote) {
+          throw new Error("The configured target branch does not have a publish remote.");
+        }
+        const pushResult = await host.gitPushBranch(repoPath, checkoutTargetBranch(publishTarget), {
+          remote: publishTarget.remote,
+        });
+        if (pushResult.outcome !== "pushed") {
+          throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
+        }
+      }
 
-  await host.taskDirectMergeComplete(repoPath, approval.taskId);
+      await host.taskDirectMergeComplete(repoPath, approval.taskId);
+    },
+  });
   await refreshTasks();
 
   return {

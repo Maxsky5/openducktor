@@ -65,6 +65,7 @@ export function useTaskApprovalFlow({
 }: UseTaskApprovalFlowArgs): UseTaskApprovalFlowResult {
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const [state, dispatch] = useReducer(taskApprovalFlowReducer, CLOSED_TASK_APPROVAL_STATE);
   const approvalRequestVersionRef = useRef(0);
 
@@ -199,6 +200,7 @@ export function useTaskApprovalFlow({
             queryClient,
             repoPath,
             refreshTasks,
+            workspaceId: activeWorkspaceId,
           });
           if (directMergeResult.outcome === "conflicts") {
             reset();
@@ -260,6 +262,7 @@ export function useTaskApprovalFlow({
     })();
   }, [
     workspaceRepoPath,
+    activeWorkspaceId,
     humanApproveTask,
     queryClient,
     openGitConflictDialog,
@@ -291,8 +294,10 @@ export function useTaskApprovalFlow({
       try {
         const result = await completeDirectMergeApproval({
           approval: approvalState,
+          queryClient,
           repoPath: workspaceRepoPath,
           refreshTasks,
+          workspaceId: activeWorkspaceId,
         });
         reset();
         toast.success("Task moved to Done", {
@@ -306,7 +311,7 @@ export function useTaskApprovalFlow({
         });
       }
     })();
-  }, [workspaceRepoPath, refreshTasks, reset, state]);
+  }, [workspaceRepoPath, activeWorkspaceId, queryClient, refreshTasks, reset, state]);
 
   if (!isTaskApprovalOpen(state)) {
     return {

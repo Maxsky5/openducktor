@@ -5,6 +5,16 @@ import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
+import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import {
+  type AgentChatDraftSessionIdentity,
+  toAgentChatDraftStorageKey,
+  writeAgentChatDraftToStorage,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+import {
+  resetAgentChatDraftStoreForTests,
+  setAgentChatDraftStorageForTests,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -51,6 +61,26 @@ const defaultGitPushBranch = async () => ({
 const defaultGitAbortConflict = async () => {};
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
+const defaultAgentSessionsList = async () => [
+  {
+    ...createAgentSessionFixture({
+      externalSessionId: "builder-session-old",
+      taskId: "TASK-1",
+      role: "build",
+      workingDirectory: "/repo",
+      startedAt: "2026-03-12T11:59:00Z",
+    }),
+  },
+  {
+    ...createAgentSessionFixture({
+      externalSessionId: "builder-session",
+      taskId: "TASK-1",
+      role: "build",
+      workingDirectory: "/repo",
+      startedAt: "2026-03-12T12:00:00Z",
+    }),
+  },
+];
 
 const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
 const taskDirectMergeMock = mock(defaultTaskDirectMerge);
@@ -60,12 +90,53 @@ const gitPushBranchMock = mock(defaultGitPushBranch);
 const gitAbortConflictMock = mock(defaultGitAbortConflict);
 const humanApproveTaskMock = mock(defaultHumanApproveTask);
 const openResetImplementationMock = mock(defaultOpenResetImplementation);
+const agentSessionsListMock = mock(defaultAgentSessionsList);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 const originalToastLoading = toast.loading;
 const originalToastSuccess = toast.success;
 const originalToastError = toast.error;
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+
+const createMemoryStorage = (): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
+
+const writeTestDraft = (
+  storage: TestStorage,
+  identity: AgentChatDraftSessionIdentity,
+  text: string,
+): void => {
+  writeAgentChatDraftToStorage({
+    storage,
+    identity,
+    taskId: "TASK-1",
+    draft: { segments: [createTextSegment(text, "text-1")], attachments: [] },
+    updatedAt: "2026-07-08T10:00:00.000Z",
+  });
+};
+
+const createDraftIdentity = (externalSessionId: string): AgentChatDraftSessionIdentity => ({
+  workspaceId: "workspace-repo",
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+});
 
 const createUnavailableHostClient = () =>
   createHostClient(async () => {
@@ -80,24 +151,7 @@ const buildMockedHost = () => ({
   taskPullRequestUpsert: taskPullRequestUpsertMock,
   gitPushBranch: gitPushBranchMock,
   gitAbortConflict: gitAbortConflictMock,
-  agentSessionsList: async () => [
-    {
-      ...createAgentSessionFixture({
-        externalSessionId: "builder-session-old",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-03-12T11:59:00Z",
-      }),
-    },
-    {
-      ...createAgentSessionFixture({
-        externalSessionId: "builder-session",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-03-12T12:00:00Z",
-      }),
-    },
-  ],
+  agentSessionsList: agentSessionsListMock,
   specGet: async () => ({ markdown: "", updatedAt: null }),
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
@@ -289,6 +343,7 @@ const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktree
 
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
+    resetAgentChatDraftStoreForTests();
     await applyHostMocks();
     latestHarnessValue = null;
     (toast as { loading: typeof toast.loading }).loading =
@@ -316,6 +371,8 @@ describe("useTaskApprovalFlow", () => {
     humanApproveTaskMock.mockImplementation(defaultHumanApproveTask);
     openResetImplementationMock.mockClear();
     openResetImplementationMock.mockImplementation(defaultOpenResetImplementation);
+    agentSessionsListMock.mockClear();
+    agentSessionsListMock.mockImplementation(defaultAgentSessionsList);
   });
 
   afterAll(async () => {
@@ -980,6 +1037,11 @@ describe("useTaskApprovalFlow", () => {
       }) as unknown as never,
     );
 
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = createDraftIdentity("builder-session");
+    writeTestDraft(storage, draftIdentity, "pending direct merge draft");
+
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
@@ -1018,6 +1080,7 @@ describe("useTaskApprovalFlow", () => {
     await waitFor(() => {
       expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
     });
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).not.toBeNull();
 
     await act(async () => {
       expectCompletionModal().onCompleteDirectMerge();
@@ -1032,6 +1095,7 @@ describe("useTaskApprovalFlow", () => {
       remote: "upstream",
     });
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
 
     await act(async () => {
       await harness.unmount();
@@ -1040,6 +1104,10 @@ describe("useTaskApprovalFlow", () => {
 
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
     const refreshTasksMock = mock(async () => {});
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = createDraftIdentity("builder-session");
+    writeTestDraft(storage, draftIdentity, "direct merge draft");
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         targetBranch: { branch: "release/2026.03" },
@@ -1083,8 +1151,122 @@ describe("useTaskApprovalFlow", () => {
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("reports cleanup target lookup failure after direct merge succeeds", async () => {
+    agentSessionsListMock.mockImplementationOnce(async () => {
+      throw new Error("session lookup failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      expectApprovalModal().onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      mergeMethod: "merge_commit",
+      squashCommitMessage: undefined,
+    });
+    await waitForTaskApprovalModalClosed();
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+      description: "session lookup failed",
+    });
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("reports cleanup target lookup failure after direct merge completion succeeds", async () => {
+    agentSessionsListMock.mockImplementationOnce(async () => {
+      throw new Error("session lookup failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createReadyTaskApprovalContextResult({
+        publishTarget: { remote: "origin", branch: "main" },
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-03-12T12:00:00Z",
+        },
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+
+    await act(async () => {
+      expectCompletionModal().onCompleteDirectMerge();
+      await Promise.resolve();
+    });
+
+    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
+      remote: "origin",
+    });
+    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    await waitForTaskApprovalModalClosed();
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+      description: "session lookup failed",
+    });
 
     await act(async () => {
       await harness.unmount();

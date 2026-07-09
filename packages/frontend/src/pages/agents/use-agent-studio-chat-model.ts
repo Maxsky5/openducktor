@@ -11,6 +11,7 @@ import {
   type AgentChatDraftScope,
   agentChatDraftScopeKey,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import type { AgentChatDraftSessionIdentity } from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
@@ -71,6 +72,7 @@ export type AgentStudioChatModelSelectionContext = {
 
 export type AgentStudioChatComposerContext = {
   draftScope: AgentChatDraftScope;
+  workspaceId: string | null;
 };
 
 type UseAgentStudioChatModelArgs = {
@@ -172,6 +174,18 @@ export function useAgentStudioChatModel({
   const selectedSessionKey = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
+  const draftPersistenceIdentity = useMemo<AgentChatDraftSessionIdentity | null>(() => {
+    if (!composer.workspaceId || !selectedSessionIdentity) {
+      return null;
+    }
+
+    return {
+      workspaceId: composer.workspaceId,
+      externalSessionId: selectedSessionIdentity.externalSessionId,
+      runtimeKind: selectedSessionIdentity.runtimeKind,
+      workingDirectory: selectedSessionIdentity.workingDirectory,
+    };
+  }, [composer.workspaceId, selectedSessionIdentity]);
   const surfaceState = useMemo(
     () =>
       deriveAgentStudioChatSurfaceState({
@@ -240,6 +254,7 @@ export function useAgentStudioChatModel({
       readOnlyReason: surfaceState.composerReadOnlyReason,
       draftStateKey: agentChatDraftScopeKey(composer.draftScope),
       draftScope: composer.draftScope,
+      draftPersistenceIdentity,
       onSend: sessionActions.onSend,
       isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
@@ -276,6 +291,7 @@ export function useAgentStudioChatModel({
     [
       chatContextUsage,
       composer.draftScope,
+      draftPersistenceIdentity,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,

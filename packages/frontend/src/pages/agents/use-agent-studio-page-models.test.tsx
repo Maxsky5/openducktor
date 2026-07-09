@@ -290,6 +290,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
   const chatSettings = createChatSettingsFixture(overrides.chatSettings);
   const composer = {
+    workspaceId: "workspace-repo",
     draftScope: {
       taskId: selectedSessionCore.taskId,
       role: selectedSessionCore.role,
@@ -408,6 +409,12 @@ describe("useAgentStudioPageModels", () => {
     expect(state.agentChatModel.composer.contextUsage).toEqual({
       totalTokens: 12,
       contextWindow: 100,
+    });
+    expect(state.agentChatModel.composer.draftPersistenceIdentity).toEqual({
+      workspaceId: "workspace-repo",
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
     expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
