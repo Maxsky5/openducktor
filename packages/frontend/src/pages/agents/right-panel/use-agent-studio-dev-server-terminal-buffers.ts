@@ -25,6 +25,11 @@ type SelectedScriptTerminalBufferState = {
   scopeKey: string;
 };
 
+type DevServerTerminalBufferScope = {
+  repoPath: string;
+  taskId: string;
+};
+
 type UseAgentStudioDevServerTerminalBuffersResult = {
   applyTerminalBuffersFromEvent: (event: DevServerEvent, selectedScriptId: string | null) => void;
   beginMutationReplaySync: (state: DevServerGroupState | null) => void;
@@ -47,9 +52,36 @@ type UseAgentStudioDevServerTerminalBuffersResult = {
   ) => void;
 };
 
+const isDevServerStateInScope = (
+  state: DevServerGroupState,
+  scope: DevServerTerminalBufferScope | null,
+): boolean => {
+  if (!scope) {
+    return false;
+  }
+
+  return state.repoPath === scope.repoPath && state.taskId === scope.taskId;
+};
+
+const isDevServerEventInScope = (
+  event: DevServerEvent,
+  scope: DevServerTerminalBufferScope | null,
+): boolean => {
+  if (!scope) {
+    return false;
+  }
+
+  if (event.type === "snapshot") {
+    return isDevServerStateInScope(event.state, scope);
+  }
+
+  return event.repoPath === scope.repoPath && event.taskId === scope.taskId;
+};
+
 export const useAgentStudioDevServerTerminalBuffers = (
-  scopeKey: string | null,
+  scope: DevServerTerminalBufferScope | null,
 ): UseAgentStudioDevServerTerminalBuffersResult => {
+  const scopeKey = scope ? `${scope.repoPath}::${scope.taskId}` : null;
   const activeScopeKey = scopeKey ?? "__no-dev-server-task__";
   const terminalBuffersRef = useRef<DevServerTerminalBufferStore | null>(null);
   const terminalBuffersScopeRef = useRef<string | null>(null);
@@ -76,15 +108,23 @@ export const useAgentStudioDevServerTerminalBuffers = (
 
   const replaceTerminalBuffersFromState = useCallback(
     (state: DevServerGroupState | null, selectedScriptId: string | null): void => {
+      if (state !== null && !isDevServerStateInScope(state, scope)) {
+        return;
+      }
+
       syncDevServerTerminalBufferStore(terminalBuffers, state);
       syncSelectedScriptTerminalBuffer(selectedScriptId);
     },
-    [syncSelectedScriptTerminalBuffer, terminalBuffers],
+    [scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
 
   const hydrateTerminalBuffersFromState = useCallback(
     (state: DevServerGroupState | null, selectedScriptId: string | null): void => {
       if (state === null) {
+        return;
+      }
+
+      if (!isDevServerStateInScope(state, scope)) {
         return;
       }
 
@@ -97,11 +137,15 @@ export const useAgentStudioDevServerTerminalBuffers = (
         syncSelectedScriptTerminalBuffer(selectedScriptId);
       }
     },
-    [replaceTerminalBuffersFromState, syncSelectedScriptTerminalBuffer, terminalBuffers],
+    [replaceTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
 
   const beginMutationReplaySync = useCallback(
     (state: DevServerGroupState | null): void => {
+      if (state !== null && !isDevServerStateInScope(state, scope)) {
+        return;
+      }
+
       const baselineByScriptId = new Map<string, number | null>();
 
       for (const script of state?.scripts ?? []) {
@@ -117,11 +161,15 @@ export const useAgentStudioDevServerTerminalBuffers = (
         scopeKey: activeScopeKey,
       };
     },
-    [activeScopeKey, terminalBuffers],
+    [activeScopeKey, scope, terminalBuffers],
   );
 
   const syncTerminalBuffersFromMutationState = useCallback(
     (state: DevServerGroupState, selectedScriptId: string | null): void => {
+      if (!isDevServerStateInScope(state, scope)) {
+        return;
+      }
+
       const pendingReplaySync = pendingMutationReplaySyncRef.current;
       if (!pendingReplaySync) {
         hydrateTerminalBuffersFromState(state, selectedScriptId);
@@ -178,6 +226,7 @@ export const useAgentStudioDevServerTerminalBuffers = (
     [
       activeScopeKey,
       hydrateTerminalBuffersFromState,
+      scope,
       syncSelectedScriptTerminalBuffer,
       terminalBuffers,
     ],
@@ -185,6 +234,10 @@ export const useAgentStudioDevServerTerminalBuffers = (
 
   const markMutationReplayObserved = useCallback(
     (event: DevServerEvent): void => {
+      if (!isDevServerEventInScope(event, scope)) {
+        return;
+      }
+
       const pendingReplaySync = pendingMutationReplaySyncRef.current;
       if (!pendingReplaySync) {
         return;
@@ -209,11 +262,15 @@ export const useAgentStudioDevServerTerminalBuffers = (
 
       pendingReplaySync.observedScriptIds.add(event.terminalChunk.scriptId);
     },
-    [activeScopeKey],
+    [activeScopeKey, scope],
   );
 
   const applyTerminalBuffersFromEvent = useCallback(
     (event: DevServerEvent, selectedScriptId: string | null): void => {
+      if (!isDevServerEventInScope(event, scope)) {
+        return;
+      }
+
       if (event.type === "snapshot") {
         hydrateTerminalBuffersFromState(event.state, selectedScriptId);
         return;
@@ -246,7 +303,7 @@ export const useAgentStudioDevServerTerminalBuffers = (
         syncSelectedScriptTerminalBuffer(selectedScriptId);
       }
     },
-    [hydrateTerminalBuffersFromState, syncSelectedScriptTerminalBuffer, terminalBuffers],
+    [hydrateTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
   );
 
   const cancelMutationReplaySync = useCallback((): void => {

@@ -41,6 +41,12 @@ type DevServerMutationVariables = {
   taskId: string;
 };
 
+type DevServerMutationCommand = (scope: DevServerMutationVariables) => Promise<DevServerGroupState>;
+
+type DevServerMutationOptions = {
+  restoreCachedStateOnError?: boolean;
+};
+
 type DevServerPanelLocalState = {
   liveState: DevServerGroupState | null;
   actionError: string | null;
@@ -103,6 +109,10 @@ export function useAgentStudioDevServerPanel({
   const hasConfiguredScripts = configuredScripts.length > 0;
   const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
+  const terminalBufferScope = useMemo(
+    () => (repoPath && taskId ? { repoPath, taskId } : null),
+    [repoPath, taskId],
+  );
 
   const {
     applyTerminalBuffersFromEvent,
@@ -115,7 +125,7 @@ export function useAgentStudioDevServerPanel({
     selectedScriptTerminalBuffer,
     syncSelectedScriptTerminalBuffer,
     syncTerminalBuffersFromMutationState,
-  } = useAgentStudioDevServerTerminalBuffers(taskMemoryKey);
+  } = useAgentStudioDevServerTerminalBuffers(terminalBufferScope);
 
   const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
     useAgentStudioDevServerStateQuery({
@@ -264,84 +274,69 @@ export function useAgentStudioDevServerPanel({
     [queryClient],
   );
 
-  const startMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
-    mutationFn: async (scope): Promise<DevServerGroupState> => {
-      return hostClient.devServerStart(scope.repoPath, scope.taskId);
-    },
-    onMutate: (scope) => {
-      if (isActiveMutationScope(scope)) {
-        dispatchLocalState({ type: "actionStarted" });
-        beginMutationReplaySync(effectiveState);
-      }
-    },
-    onSuccess: (data) => {
-      syncMutationSuccessState(data);
-    },
-    onError: (error: unknown, scope) => {
-      if (isActiveMutationScope(scope)) {
-        cancelMutationReplaySync();
-        restoreCachedState();
-        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-      }
-    },
-    onSettled: (_data, error, scope) => {
-      if (error) {
-        invalidateState(scope);
-      }
-    },
-  });
+  const createScopedMutationOptions = useCallback(
+    (mutationFn: DevServerMutationCommand, options: DevServerMutationOptions = {}) => ({
+      mutationFn,
+      onMutate: (scope: DevServerMutationVariables) => {
+        if (isActiveMutationScope(scope)) {
+          dispatchLocalState({ type: "actionStarted" });
+          beginMutationReplaySync(effectiveState);
+        }
+      },
+      onSuccess: (data: DevServerGroupState) => {
+        syncMutationSuccessState(data);
+      },
+      onError: (error: unknown, scope: DevServerMutationVariables) => {
+        if (isActiveMutationScope(scope)) {
+          cancelMutationReplaySync();
+          if (options.restoreCachedStateOnError) {
+            restoreCachedState();
+          }
+          dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
+        }
+      },
+      onSettled: (
+        _data: DevServerGroupState | undefined,
+        error: unknown,
+        scope: DevServerMutationVariables,
+      ) => {
+        if (error) {
+          invalidateState(scope);
+        }
+      },
+    }),
+    [
+      beginMutationReplaySync,
+      cancelMutationReplaySync,
+      effectiveState,
+      invalidateState,
+      isActiveMutationScope,
+      restoreCachedState,
+      syncMutationSuccessState,
+    ],
+  );
 
-  const stopMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
-    mutationFn: async (scope): Promise<DevServerGroupState> => {
-      return hostClient.devServerStop(scope.repoPath, scope.taskId);
-    },
-    onMutate: (scope) => {
-      if (isActiveMutationScope(scope)) {
-        dispatchLocalState({ type: "actionStarted" });
-        beginMutationReplaySync(effectiveState);
-      }
-    },
-    onSuccess: (data) => {
-      syncMutationSuccessState(data);
-    },
-    onError: (error: unknown, scope) => {
-      if (isActiveMutationScope(scope)) {
-        cancelMutationReplaySync();
-        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-      }
-    },
-    onSettled: (_data, error, scope) => {
-      if (error) {
-        invalidateState(scope);
-      }
-    },
-  });
+  const startMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerStart(scope.repoPath, scope.taskId),
+      { restoreCachedStateOnError: true },
+    ),
+  );
 
-  const restartMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>({
-    mutationFn: async (scope): Promise<DevServerGroupState> => {
-      return hostClient.devServerRestart(scope.repoPath, scope.taskId);
-    },
-    onMutate: (scope) => {
-      if (isActiveMutationScope(scope)) {
-        dispatchLocalState({ type: "actionStarted" });
-        beginMutationReplaySync(effectiveState);
-      }
-    },
-    onSuccess: (data) => {
-      syncMutationSuccessState(data);
-    },
-    onError: (error: unknown, scope) => {
-      if (isActiveMutationScope(scope)) {
-        cancelMutationReplaySync();
-        dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-      }
-    },
-    onSettled: (_data, error, scope) => {
-      if (error) {
-        invalidateState(scope);
-      }
-    },
-  });
+  const stopMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerStop(scope.repoPath, scope.taskId),
+    ),
+  );
+
+  const restartMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerRestart(scope.repoPath, scope.taskId),
+    ),
+  );
 
   useEffect(() => {
     if (!queryEnabled || repoPath === null || taskId === null) {

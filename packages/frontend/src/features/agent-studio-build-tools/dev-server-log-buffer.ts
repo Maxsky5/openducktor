@@ -258,21 +258,11 @@ const isLaterTimestamp = (candidate: string | null, baseline: string | null): bo
   return candidate !== null && baseline !== null && candidate > baseline;
 };
 
-const isLaterSequenceResetSnapshot = (
+const isNewerRunSnapshot = (
   currentContext: DevServerTerminalBufferReplacementContext,
   script: DevServerScriptState,
   nextChunks: readonly DevServerTerminalChunk[],
-  nextWindow: DevServerTerminalSequenceWindow,
 ): boolean => {
-  if (
-    nextWindow.firstSequence !== 0 ||
-    nextWindow.lastSequence === null ||
-    currentContext.current.lastSequence === null ||
-    nextWindow.lastSequence >= currentContext.current.lastSequence
-  ) {
-    return false;
-  }
-
   const currentLastTimestamp = currentContext.currentEntries.at(-1)?.timestamp ?? null;
   const nextFirstTimestamp = nextChunks[0]?.timestamp ?? null;
   return (
@@ -303,6 +293,13 @@ export const getDevServerTerminalBufferReplacement = (
 
   if (nextWindow.lastSequence === null) {
     if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
+      if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
+        return {
+          snapshotWindow: nextWindow,
+          terminalChunks: nextChunks,
+        };
+      }
+
       return null;
     }
 
@@ -345,7 +342,7 @@ export const getDevServerTerminalBufferReplacement = (
   }
 
   if (nextWindow.lastSequence < currentWindow.lastSequence) {
-    if (isLaterSequenceResetSnapshot(currentContext, script, nextChunks, nextWindow)) {
+    if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
       return {
         snapshotWindow: nextWindow,
         terminalChunks: nextChunks,

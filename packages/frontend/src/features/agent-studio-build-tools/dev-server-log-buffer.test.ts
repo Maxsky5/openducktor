@@ -278,6 +278,75 @@ describe("dev-server-log-buffer", () => {
     ).toBe(true);
   });
 
+  test("replaces a lower-sequence snapshot from a newer trimmed restart", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(
+      store,
+      "frontend",
+      Array.from({ length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS }, (_, offset) => ({
+        scriptId: "frontend",
+        sequence: 4_000 + offset,
+        data: `old-run-${offset}\r\n`,
+        timestamp: `2026-03-25T10:00:${String(offset % 60).padStart(2, "0")}.000Z`,
+      })),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 5252,
+            startedAt: "2026-03-25T10:31:00.000Z",
+            bufferedTerminalChunks: Array.from(
+              { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS },
+              (_, offset) => ({
+                scriptId: "frontend",
+                sequence: 150 + offset,
+                data: `new-run-${offset}\r\n`,
+                timestamp: `2026-03-25T10:31:${String(offset % 60).padStart(2, "0")}.000Z`,
+              }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    const buffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(buffer?.entries[0]?.sequence).toBe(150);
+    expect(buffer?.entries[0]?.data).toBe("new-run-0\r\n");
+    expect(buffer?.entries.at(-1)?.sequence).toBe(2_149);
+  });
+
+  test("clears live-only output when a newer run has no replay yet", () => {
+    const store = createDevServerTerminalBufferStore();
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 4_000,
+      data: "old-live-only\r\n",
+      timestamp: "2026-03-25T10:00:00.000Z",
+    });
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 5252,
+            startedAt: "2026-03-25T10:31:00.000Z",
+            bufferedTerminalChunks: [],
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([]);
+  });
+
   test("drops a stale snapshot prefix while preserving a newer live-only suffix", () => {
     const store = createDevServerTerminalBufferStore();
     replaceDevServerTerminalBuffer(store, "frontend", [
