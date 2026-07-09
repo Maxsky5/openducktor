@@ -137,16 +137,6 @@ type GitInfoHeaderSummaryRowProps = {
   isRepositoryMode: boolean;
 };
 
-function GitInfoHeaderSummaryRow({ isRepositoryMode }: GitInfoHeaderSummaryRowProps): ReactElement {
-  return (
-    <div className="mb-2 flex flex-wrap items-center gap-2 px-3 pt-3">
-      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-        {isRepositoryMode ? "Repository context" : "Branch context"}
-      </span>
-    </div>
-  );
-}
-
 type GitBranchContextRowProps = {
   currentBranchLabel: string;
   branchState: {
@@ -327,7 +317,7 @@ function GitBranchContextRow({
   return (
     <div
       className={cn(
-        "mb-2 grid gap-2 px-3",
+        "my-2 grid gap-2 px-3",
         isRepositoryMode
           ? "sm:grid-cols-[minmax(0,1fr)]"
           : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
@@ -719,8 +709,6 @@ export const GitInfoHeader = memo(function GitInfoHeader({
 
   return (
     <div className="flex flex-col border-b border-border">
-      <GitInfoHeaderSummaryRow isRepositoryMode={isRepositoryMode} />
-
       <GitBranchContextRow
         currentBranchLabel={currentBranchLabel}
         branchState={{

@@ -3,6 +3,7 @@ import { ExternalLink, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { commentLocationLabel, sourceLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiTimestampLine } from "./task-execution-ci-timestamp-line";
 
@@ -15,70 +16,85 @@ export function TaskExecutionCiCommentCard({
 }): ReactElement {
   const showThreadBadge = comment.isResolved !== null;
   const location = commentLocationLabel(comment);
+  const author = comment.author ?? "Unknown author";
+  const wasUpdated = Boolean(comment.updatedAt && comment.updatedAt !== comment.createdAt);
+  const activityTimestamp = wasUpdated
+    ? comment.updatedAt
+    : (comment.createdAt ?? comment.updatedAt);
 
   return (
-    <article className="overflow-hidden rounded-md border border-border bg-card">
-      <header className="flex items-start justify-between gap-3 px-3 py-2">
-        <div className="flex min-w-0 gap-2">
-          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <MessageSquare className="size-3.5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-foreground">
-                {comment.author ?? "Unknown author"}
-              </span>
-              {isBot ? (
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-                  Bot
-                </Badge>
-              ) : null}
-            </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>{sourceLabel(comment.source)}</span>
-              {location ? <span className="min-w-0 truncate">{location}</span> : null}
-              {comment.createdAt ? (
-                <TaskExecutionCiTimestampLine label="Created" timestamp={comment.createdAt} />
-              ) : null}
-            </div>
-          </div>
+    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2.5">
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <MessageSquare className="size-3.5" />
         </div>
-        {showThreadBadge ? (
-          <Badge variant={comment.isResolved === true ? "success" : "warning"} className="shrink-0">
-            {comment.isResolved === true ? "Resolved" : "Unresolved"}
-          </Badge>
-        ) : null}
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">{author}</span>
+            {isBot ? (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                Bot
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+            <span>{sourceLabel(comment.source)}</span>
+            {activityTimestamp ? (
+              <TaskExecutionCiTimestampLine
+                label={wasUpdated ? "Updated" : "Created"}
+                timestamp={activityTimestamp}
+              />
+            ) : null}
+            {showThreadBadge ? (
+              <Badge
+                variant={comment.isResolved === true ? "success" : "warning"}
+                className="px-2 py-0 text-[10px]"
+              >
+                {comment.isResolved === true ? "Resolved" : "Unresolved"}
+              </Badge>
+            ) : null}
+          </div>
+          {location ? (
+            <div
+              className="mt-1 truncate font-mono text-[11px] text-muted-foreground"
+              title={location}
+            >
+              {location}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center">
+          {comment.url ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={comment.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+                  aria-label={`Open comment from ${author}`}
+                >
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Open comment</TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
       </header>
       {comment.body.trim().length > 0 ? (
-        <div className="border-t border-border px-3 py-2.5">
-          <MarkdownRenderer markdown={comment.body} variant="compact" />
+        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-3">
+          <MarkdownRenderer
+            markdown={comment.body}
+            variant="compact"
+            className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
+          />
         </div>
       ) : (
-        <p className="border-t border-border px-3 py-2.5 text-sm text-muted-foreground">
+        <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
           No comment body.
         </p>
       )}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {comment.threadId ? (
-            <span title={`Thread ${comment.threadId}`}>Thread {comment.threadId}</span>
-          ) : null}
-          {comment.updatedAt ? (
-            <TaskExecutionCiTimestampLine label="Updated" timestamp={comment.updatedAt} />
-          ) : null}
-        </div>
-        {comment.url ? (
-          <a
-            href={comment.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
-          >
-            Open comment
-            <ExternalLink className="size-3" />
-          </a>
-        ) : null}
-      </footer>
     </article>
   );
 }

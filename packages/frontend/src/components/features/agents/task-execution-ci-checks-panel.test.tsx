@@ -3,6 +3,7 @@ import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
@@ -42,7 +43,7 @@ const loadedContext = {
     {
       id: "thread-comment-1",
       author: "codex",
-      body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
+      body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.\n\n```ts\nconst isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n```",
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
       updatedAt: "2026-07-08T10:07:00Z",
@@ -70,12 +71,16 @@ const renderPanel = (queryClient = createQueryClient()): string => {
     createElement(
       QueryClientProvider,
       { client: queryClient },
-      createElement(TaskExecutionCiChecksPanel, {
-        model: {
-          isActive: true,
-          queryInput,
-        },
-      }),
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(TaskExecutionCiChecksPanel, {
+          model: {
+            isActive: true,
+            queryInput,
+          },
+        }),
+      ),
     ),
   );
 };
@@ -163,14 +168,17 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("codex");
     expect(html).toContain("Bot");
     expect(html).toContain("Needs review");
-    expect(html).toContain("Thread thread-1");
     expect(html).toContain("Unresolved");
     expect(html).toContain("This thread still needs work.");
     expect(html).toContain("isAnyLoading");
-    expect(html).toContain("Created");
-    expect(html).toContain("2026-07-08T10:06:00Z");
     expect(html).toContain("Updated");
     expect(html).toContain("2026-07-08T10:07:00Z");
+    expect(html).not.toContain("Created 7/8/2026");
+    expect(html).toContain('aria-label="Open comment from codex"');
+    expect(html).toContain("prose-pre:whitespace-pre-wrap");
+    expect(html).toContain("prose-pre:break-words");
+    expect(html).not.toContain("<footer");
+    expect(html).not.toContain("Thread thread-1");
     expect(html).not.toContain("PR #42");
     expect(html).not.toContain(">GitHub<");
     expect(html).not.toContain("Open pull request #42");

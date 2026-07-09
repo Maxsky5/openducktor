@@ -530,6 +530,9 @@ describe("TaskExecutionPanel", () => {
     expect(htmlWithOpenThreads).toContain("task-execution-tab-ci-open-threads");
     expect(htmlWithOpenThreads).toContain("h-3.5");
     expect(htmlWithOpenThreads).toContain("text-[9px]");
+    expect(htmlWithOpenThreads).toContain("bg-warning-surface");
+    expect(htmlWithOpenThreads).toContain("text-warning-surface-foreground");
+    expect(htmlWithOpenThreads).not.toContain("bg-primary px-1");
     expect(htmlWithOpenThreads).toContain(">2</span>");
     expect(htmlWithOpenThreads).toContain(
       'aria-label="CI Checks, failing checks, 2 open review threads"',
