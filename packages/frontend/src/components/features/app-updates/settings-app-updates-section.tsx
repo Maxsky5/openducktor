@@ -7,6 +7,9 @@ import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
   canDownloadUpdate,
   canInstallUpdate,
+  getAppUpdateAvailableVersion,
+  getAppUpdateError,
+  getAppUpdateProgressPercent,
   getAppUpdateStatusDisplay,
 } from "./app-update-display";
 
@@ -44,7 +47,9 @@ function VersionRows({ state }: VersionRowsProps): ReactElement {
       </div>
       <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
         <p className="text-muted-foreground">Available version</p>
-        <p className="font-medium text-foreground">{state.availableVersion ?? "None"}</p>
+        <p className="font-medium text-foreground">
+          {getAppUpdateAvailableVersion(state) ?? "None"}
+        </p>
       </div>
     </div>
   );
@@ -65,6 +70,7 @@ function SettingsAppUpdatesContent({
   const isBusy = controller.actionInFlight !== null || visibleState.status === "checking";
   const downloadAllowed = canDownloadUpdate(visibleState);
   const installAllowed = canInstallUpdate(visibleState);
+  const error = getAppUpdateError(visibleState);
 
   return (
     <div className="rounded-md border border-border bg-card p-4">
@@ -93,11 +99,11 @@ function SettingsAppUpdatesContent({
       <div className="mt-4 space-y-3">
         <VersionRows state={visibleState} />
         {visibleState.status === "downloading" && (
-          <AppUpdateProgress percent={visibleState.progressPercent ?? 0} />
+          <AppUpdateProgress percent={getAppUpdateProgressPercent(visibleState) ?? 0} />
         )}
-        {visibleState.error && (
+        {error && (
           <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-            {visibleState.error.message}
+            {error.message}
           </p>
         )}
         <div className="flex flex-wrap gap-2">

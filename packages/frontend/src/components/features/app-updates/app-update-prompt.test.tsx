@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { AppUpdatePrompt } from "./app-update-prompt";
 import { createFakeAppUpdateBridge, createTestShellBridge } from "./app-update-test-utils";
@@ -101,5 +102,38 @@ describe("AppUpdatePrompt", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
 
     await waitFor(() => expect(appUpdates.install).toHaveBeenCalled());
+  });
+
+  test("resurfaces a dismissed downloaded prompt when install fails", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Ready to install")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
+    expect(screen.queryByText("Ready to install")).toBeNull();
+
+    act(() => {
+      appUpdates.emit({
+        status: "downloaded",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+        checkedAt: "2026-07-08T22:00:00.000Z",
+        error: {
+          code: "install_failed",
+          message: "shutdown failed",
+          operation: "install",
+        },
+      });
+    });
+
+    expect(await screen.findByText("shutdown failed")).toBeTruthy();
   });
 });

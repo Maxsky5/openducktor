@@ -150,6 +150,36 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(0);
   });
 
+  test("does not accept commented update provider config as configured", () => {
+    const { adapter, service } = createService({
+      readUpdateConfig: () => "# provider: github\n",
+    });
+
+    expect(service.getState()).toMatchObject({
+      status: "disabled",
+      disabledCode: "missing_update_config",
+    });
+    expect(adapter.configureOptions).toBeNull();
+  });
+
+  test("reports malformed update provider config as an initialization error", () => {
+    const { adapter, service } = createService({
+      readUpdateConfig: () => "provider: [\n",
+    });
+
+    expect(service.getState()).toMatchObject({
+      status: "error",
+      error: {
+        code: "updater_unavailable",
+        operation: "initialize",
+      },
+    });
+    expect(service.getState().error?.message).toContain(
+      "Electron update feed configuration is invalid",
+    );
+    expect(adapter.configureOptions).toBeNull();
+  });
+
   test("configures the updater for explicit download and install control", () => {
     const { adapter, service } = createService();
 
@@ -202,6 +232,45 @@ describe("electron app update service", () => {
           code: "updater_unavailable",
           operation: "check",
         },
+      },
+    });
+  });
+
+  test("preserves an available update when a follow-up manual check fails", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
+
+    adapter.nextCheckResult = null as unknown as FakeUpdaterAdapter["nextCheckResult"];
+    const result = await service.check({ initiator: "menu" });
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: {
+        status: "error",
+        availableVersion: "0.4.3",
+        checkInitiator: "menu",
+        checkedAt: fixedNow,
+        error: {
+          code: "updater_unavailable",
+          operation: "check",
+        },
+      },
+    });
+
+    adapter.nextDownloadResult = Promise.resolve(["/tmp/OpenDucktor.dmg"]);
+    const retryResult = await service.download();
+
+    expect(retryResult).toMatchObject({
+      accepted: true,
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
       },
     });
   });

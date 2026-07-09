@@ -1,4 +1,9 @@
-import type { AppUpdateState } from "@openducktor/contracts";
+import {
+  type AppUpdateError,
+  type AppUpdateState,
+  canDownloadAppUpdate,
+  canInstallAppUpdate,
+} from "@openducktor/contracts";
 
 export type AppUpdateBadgeVariant =
   | "default"
@@ -14,21 +19,37 @@ export type AppUpdateStatusDisplay = {
   label: string;
 };
 
+export const getAppUpdateAvailableVersion = (state: AppUpdateState): string | undefined =>
+  "availableVersion" in state ? state.availableVersion : undefined;
+
+export const getAppUpdateCheckedAt = (state: AppUpdateState): string | undefined =>
+  "checkedAt" in state ? state.checkedAt : undefined;
+
+export const getAppUpdateDisabledReason = (state: AppUpdateState): string | undefined =>
+  "disabledReason" in state ? state.disabledReason : undefined;
+
+export const getAppUpdateError = (state: AppUpdateState): AppUpdateError | undefined =>
+  "error" in state ? state.error : undefined;
+
+export const getAppUpdateProgressPercent = (state: AppUpdateState): number | undefined =>
+  "progressPercent" in state ? state.progressPercent : undefined;
+
 export const isManualUpdateCheckState = (state: AppUpdateState): boolean =>
-  state.checkInitiator === "settings" || state.checkInitiator === "menu";
+  "checkInitiator" in state &&
+  (state.checkInitiator === "settings" || state.checkInitiator === "menu");
 
-export const isActionableUpdateError = (state: AppUpdateState): boolean =>
-  state.status === "error" &&
-  Boolean(state.availableVersion) &&
-  (state.error?.operation === "download" || state.error?.operation === "install");
+export const isActionableUpdateError = (state: AppUpdateState): boolean => {
+  const error = getAppUpdateError(state);
+  return (
+    state.status === "error" &&
+    Boolean(getAppUpdateAvailableVersion(state)) &&
+    (error?.operation === "download" || error?.operation === "install")
+  );
+};
 
-export const canDownloadUpdate = (state: AppUpdateState): boolean =>
-  state.status === "available" ||
-  (state.status === "error" &&
-    state.error?.operation === "download" &&
-    Boolean(state.availableVersion));
+export const canDownloadUpdate = canDownloadAppUpdate;
 
-export const canInstallUpdate = (state: AppUpdateState): boolean => state.status === "downloaded";
+export const canInstallUpdate = canInstallAppUpdate;
 
 export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatusDisplay => {
   if (state.status === "disabled") {
@@ -88,7 +109,10 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
 };
 
 export const getAppUpdatePromptKey = (state: AppUpdateState): string => {
-  const version = state.availableVersion ?? state.currentVersion;
-  const marker = state.checkedAt ?? state.error?.message ?? state.disabledReason ?? "";
+  const version = getAppUpdateAvailableVersion(state) ?? state.currentVersion;
+  const error = getAppUpdateError(state);
+  const marker = error
+    ? `${error.operation}:${error.code}:${error.message}`
+    : (getAppUpdateCheckedAt(state) ?? getAppUpdateDisabledReason(state) ?? "");
   return `${state.status}:${version}:${marker}`;
 };

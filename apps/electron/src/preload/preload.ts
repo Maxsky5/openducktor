@@ -1,3 +1,4 @@
+import { appUpdateCommandResultSchema, appUpdateStateSchema } from "@openducktor/contracts";
 import electron from "electron";
 import {
   ELECTRON_APP_UPDATE_CHECK_CHANNEL,
@@ -18,21 +19,29 @@ import {
 const { contextBridge, ipcRenderer } = electron;
 
 const appUpdates: OpenDucktorElectronAppUpdateApi = {
-  getState() {
-    return ipcRenderer.invoke(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL);
+  async getState() {
+    return appUpdateStateSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL),
+    );
   },
-  check(input: ElectronAppUpdateCheckInput) {
-    return ipcRenderer.invoke(ELECTRON_APP_UPDATE_CHECK_CHANNEL, input);
+  async check(input: ElectronAppUpdateCheckInput) {
+    return appUpdateCommandResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_APP_UPDATE_CHECK_CHANNEL, input),
+    );
   },
-  download() {
-    return ipcRenderer.invoke(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL);
+  async download() {
+    return appUpdateCommandResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL),
+    );
   },
-  install() {
-    return ipcRenderer.invoke(ELECTRON_APP_UPDATE_INSTALL_CHANNEL);
+  async install() {
+    return appUpdateCommandResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_APP_UPDATE_INSTALL_CHANNEL),
+    );
   },
   subscribe(listener) {
     const handleEvent = (_event: Electron.IpcRendererEvent, state: unknown) => {
-      listener(state as Parameters<typeof listener>[0]);
+      listener(appUpdateStateSchema.parse(state));
     };
 
     ipcRenderer.on(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, handleEvent);

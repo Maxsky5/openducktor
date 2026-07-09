@@ -3,6 +3,8 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateChangedEventSchema,
   appUpdateStateSchema,
+  canDownloadAppUpdate,
+  canInstallAppUpdate,
 } from "./app-update-schemas";
 
 describe("app update schemas", () => {
@@ -31,6 +33,49 @@ describe("app update schemas", () => {
         currentVersion: "0.4.2",
       }),
     ).toThrow();
+  });
+
+  test("rejects status payloads with impossible fields", () => {
+    expect(() =>
+      appUpdateStateSchema.parse({
+        status: "available",
+        currentVersion: "0.4.2",
+        checkedAt: "2026-07-08T22:00:00.000Z",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      appUpdateStateSchema.parse({
+        status: "idle",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+      }),
+    ).toThrow();
+  });
+
+  test("keeps update command eligibility in the shared contract", () => {
+    expect(
+      canDownloadAppUpdate({
+        status: "error",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+        checkedAt: "2026-07-08T22:00:00.000Z",
+        error: {
+          code: "updater_unavailable",
+          message: "No updater result.",
+          operation: "check",
+        },
+      }),
+    ).toBe(true);
+    expect(canDownloadAppUpdate({ status: "idle", currentVersion: "0.4.2" })).toBe(false);
+    expect(
+      canInstallAppUpdate({
+        status: "downloaded",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+      }),
+    ).toBe(true);
   });
 
   test("parses accepted and rejected command results", () => {

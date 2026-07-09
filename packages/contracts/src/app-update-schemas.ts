@@ -17,6 +17,13 @@ export const appUpdateCheckInitiatorValues = ["background", "settings", "menu"] 
 export const appUpdateCheckInitiatorSchema = z.enum(appUpdateCheckInitiatorValues);
 export type AppUpdateCheckInitiator = z.infer<typeof appUpdateCheckInitiatorSchema>;
 
+export const appUpdateCheckInputSchema = z
+  .object({
+    initiator: z.enum(["settings", "menu"]),
+  })
+  .strict();
+export type AppUpdateCheckInput = z.infer<typeof appUpdateCheckInputSchema>;
+
 export const appUpdateOperationValues = ["initialize", "check", "download", "install"] as const;
 export const appUpdateOperationSchema = z.enum(appUpdateOperationValues);
 export type AppUpdateOperation = z.infer<typeof appUpdateOperationSchema>;
@@ -46,20 +53,106 @@ export const appUpdateErrorSchema = z
   .strict();
 export type AppUpdateError = z.infer<typeof appUpdateErrorSchema>;
 
-export const appUpdateStateSchema = z
-  .object({
-    status: appUpdateStatusSchema,
-    currentVersion: z.string().trim().min(1),
-    availableVersion: z.string().trim().min(1).optional(),
-    progressPercent: z.number().min(0).max(100).optional(),
-    checkInitiator: appUpdateCheckInitiatorSchema.optional(),
-    checkedAt: z.string().datetime({ offset: true }).optional(),
-    disabledCode: appUpdateErrorCodeSchema.optional(),
-    disabledReason: z.string().trim().min(1).optional(),
-    error: appUpdateErrorSchema.optional(),
-  })
-  .strict();
+const appUpdateVersionSchema = z.string().trim().min(1);
+const appUpdateCheckedAtSchema = z.string().datetime({ offset: true });
+const appUpdateProgressPercentSchema = z.number().min(0).max(100);
+
+export const appUpdateStateSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("disabled"),
+      currentVersion: appUpdateVersionSchema,
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema.optional(),
+      disabledCode: appUpdateErrorCodeSchema,
+      disabledReason: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("idle"),
+      currentVersion: appUpdateVersionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("checking"),
+      currentVersion: appUpdateVersionSchema,
+      availableVersion: appUpdateVersionSchema.optional(),
+      checkInitiator: appUpdateCheckInitiatorSchema,
+      checkedAt: appUpdateCheckedAtSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("upToDate"),
+      currentVersion: appUpdateVersionSchema,
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("available"),
+      currentVersion: appUpdateVersionSchema,
+      availableVersion: appUpdateVersionSchema,
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("downloading"),
+      currentVersion: appUpdateVersionSchema,
+      availableVersion: appUpdateVersionSchema,
+      progressPercent: appUpdateProgressPercentSchema,
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("downloaded"),
+      currentVersion: appUpdateVersionSchema,
+      availableVersion: appUpdateVersionSchema,
+      progressPercent: appUpdateProgressPercentSchema,
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema.optional(),
+      error: appUpdateErrorSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("error"),
+      currentVersion: appUpdateVersionSchema,
+      availableVersion: appUpdateVersionSchema.optional(),
+      checkInitiator: appUpdateCheckInitiatorSchema.optional(),
+      checkedAt: appUpdateCheckedAtSchema.optional(),
+      error: appUpdateErrorSchema,
+    })
+    .strict(),
+]);
 export type AppUpdateState = z.infer<typeof appUpdateStateSchema>;
+export type AppUpdateDownloadableState =
+  | Extract<AppUpdateState, { status: "available" }>
+  | (Extract<AppUpdateState, { status: "error" }> & { availableVersion: string });
+export type AppUpdateInstallableState = Extract<AppUpdateState, { status: "downloaded" }>;
+
+export const canDownloadAppUpdate = (
+  state: AppUpdateState,
+): state is AppUpdateDownloadableState => {
+  if (state.status === "available") {
+    return true;
+  }
+  return (
+    state.status === "error" &&
+    Boolean(state.availableVersion) &&
+    (state.error.operation === "check" || state.error.operation === "download")
+  );
+};
+
+export const canInstallAppUpdate = (state: AppUpdateState): state is AppUpdateInstallableState =>
+  state.status === "downloaded";
 
 export const appUpdateCommandRejectionSchema = z
   .object({

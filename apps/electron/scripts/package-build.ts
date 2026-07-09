@@ -1,6 +1,6 @@
 import type { Dirent } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
@@ -11,6 +11,15 @@ import {
   errorMessage,
 } from "../src/effect/electron-errors";
 import {
+  electronBuilderPlatformFlags,
+  isCompanionReleaseArtifact,
+  isInstallableReleaseArtifact,
+  isReleaseArtifact,
+  isUpdateMetadataArtifact,
+  localElectronPackageTargets,
+  requiredUpdateMetadataLabels,
+} from "./electron-release-artifacts";
+import {
   detectHostReleaseArch,
   detectHostReleasePlatform,
   type ElectronReleaseArch,
@@ -20,6 +29,8 @@ import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
 import { prepareElectronSidecarsEffect } from "./prepare-electron-sidecars";
 import { verifyPackagedElectronSidecarsEffect } from "./verify-electron-sidecar-package";
 
+export { isInstallableReleaseArtifact, isReleaseArtifact, isUpdateMetadataArtifact };
+
 export type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
   electronPackageDirectory: string;
@@ -28,44 +39,6 @@ export type ElectronPackageBuildOptions = {
   signed: boolean;
   stageReleaseArtifacts: boolean;
   workspaceRoot: string;
-};
-
-const platformFlags: Record<ElectronReleasePlatform, "--linux" | "--mac" | "--win"> = {
-  linux: "--linux",
-  macos: "--mac",
-  windows: "--win",
-};
-
-const localPackageTargets: Record<ElectronReleasePlatform, readonly string[]> = {
-  linux: ["AppImage"],
-  macos: ["dmg"],
-  windows: ["nsis"],
-};
-
-const installableArtifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> = {
-  linux: new Set([".AppImage", ".deb"]),
-  macos: new Set([".dmg", ".zip"]),
-  windows: new Set([".exe", ".zip"]),
-};
-
-const companionArtifactExtensions: ReadonlySet<string> = new Set([".blockmap"]);
-
-const artifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> = {
-  linux: new Set([".AppImage", ".deb", ".blockmap"]),
-  macos: new Set([".dmg", ".zip", ".blockmap"]),
-  windows: new Set([".exe", ".zip", ".blockmap"]),
-};
-
-const updateMetadataPatterns: Record<ElectronReleasePlatform, RegExp> = {
-  linux: /^latest-linux(?:-[a-z0-9]+)*\.yml$/i,
-  macos: /^latest-mac(?:-[a-z0-9]+)*\.yml$/i,
-  windows: /^latest(?:-[a-z0-9]+)*\.yml$/i,
-};
-
-const requiredUpdateMetadataLabels: Record<ElectronReleasePlatform, string> = {
-  linux: "latest-linux.yml",
-  macos: "latest-mac.yml",
-  windows: "latest.yml",
 };
 
 export const resolveElectronBuilderArgs = ({
@@ -80,8 +53,8 @@ export const resolveElectronBuilderArgs = ({
   const args = [
     "--config",
     "electron-builder.yml",
-    platformFlags[platform],
-    ...(stageReleaseArtifacts ? [] : localPackageTargets[platform]),
+    electronBuilderPlatformFlags[platform],
+    ...(stageReleaseArtifacts ? [] : localElectronPackageTargets[platform]),
     `--${arch}`,
     "--publish",
     "never",
@@ -122,23 +95,6 @@ export const resolveElectronBuilderEnv = (
 
   return builderEnv;
 };
-
-export const isReleaseArtifact = (platform: ElectronReleasePlatform, fileName: string): boolean =>
-  artifactExtensions[platform].has(extname(fileName)) ||
-  isUpdateMetadataArtifact(platform, fileName);
-
-export const isInstallableReleaseArtifact = (
-  platform: ElectronReleasePlatform,
-  fileName: string,
-): boolean => installableArtifactExtensions[platform].has(extname(fileName));
-
-export const isUpdateMetadataArtifact = (
-  platform: ElectronReleasePlatform,
-  fileName: string,
-): boolean => updateMetadataPatterns[platform].test(fileName);
-
-const isCompanionReleaseArtifact = (fileName: string): boolean =>
-  companionArtifactExtensions.has(extname(fileName));
 
 const nodeErrorCode = (cause: unknown): string | null =>
   typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"

@@ -29,7 +29,11 @@ const createElectronApi = (): {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
         check: mock(async () => ({
           accepted: true,
-          state: { status: "upToDate", currentVersion: "0.4.2" },
+          state: {
+            status: "upToDate",
+            currentVersion: "0.4.2",
+            checkedAt: "2026-07-08T22:00:00.000Z",
+          },
         })),
         download: mock(async () => ({
           accepted: true,
@@ -37,6 +41,7 @@ const createElectronApi = (): {
             status: "downloaded",
             currentVersion: "0.4.2",
             availableVersion: "0.4.3",
+            progressPercent: 100,
           },
         })),
         install: mock(async () => ({
@@ -45,6 +50,7 @@ const createElectronApi = (): {
             status: "downloaded",
             currentVersion: "0.4.2",
             availableVersion: "0.4.3",
+            progressPercent: 100,
           },
         })),
         subscribe: mock(() => unsubscribeAppUpdates),
@@ -129,9 +135,23 @@ describe("electron shell bridge", () => {
     await bridge.appUpdates.check({ initiator: "settings" });
     await bridge.appUpdates.download();
     await bridge.appUpdates.install();
+    const appUpdateListener = (electronApi.appUpdates.subscribe as ReturnType<typeof mock>).mock
+      .calls[0]?.[0];
+    appUpdateListener?.({
+      status: "available",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
     unsubscribe();
 
-    expect(electronApi.appUpdates.subscribe).toHaveBeenCalledWith(listener);
+    expect(electronApi.appUpdates.subscribe).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      status: "available",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
     expect(electronApi.appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" });
     expect(electronApi.appUpdates.download).toHaveBeenCalled();
     expect(electronApi.appUpdates.install).toHaveBeenCalled();

@@ -1,3 +1,9 @@
+import {
+  type AppUpdateCommandResult,
+  type AppUpdateState,
+  appUpdateCommandResultSchema,
+  appUpdateStateSchema,
+} from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
 import { createHostClient } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
@@ -31,6 +37,11 @@ const subscribeElectronEvent =
   async (listener) =>
     electronApi.subscribe(channel, listener);
 
+const readAppUpdateState = (value: unknown): AppUpdateState => appUpdateStateSchema.parse(value);
+
+const readAppUpdateCommandResult = (value: unknown): AppUpdateCommandResult =>
+  appUpdateCommandResultSchema.parse(value);
+
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
   const client = createHostClient((command, args) => electronApi.invoke(command, args));
@@ -54,11 +65,14 @@ export const createElectronShellBridge = (): ShellBridge => {
       CODEX_APP_SERVER_EVENT_CHANNEL,
     ),
     appUpdates: {
-      getState: () => electronApi.appUpdates.getState(),
-      check: (input) => electronApi.appUpdates.check(input),
-      download: () => electronApi.appUpdates.download(),
-      install: () => electronApi.appUpdates.install(),
-      subscribeState: async (listener) => electronApi.appUpdates.subscribe(listener),
+      getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
+      check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),
+      download: async () => readAppUpdateCommandResult(await electronApi.appUpdates.download()),
+      install: async () => readAppUpdateCommandResult(await electronApi.appUpdates.install()),
+      subscribeState: async (listener) =>
+        electronApi.appUpdates.subscribe((state) => {
+          listener(readAppUpdateState(state));
+        }),
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),

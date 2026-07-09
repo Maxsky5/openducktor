@@ -1,6 +1,11 @@
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse, stringify } from "yaml";
+import {
+  canonicalMacUpdateManifestName,
+  detectMacUpdateArtifactArchFromUrl,
+  macUpdateManifestPattern,
+} from "./electron-release-artifacts";
 
 type MacUpdateManifestFile = {
   url?: unknown;
@@ -15,9 +20,6 @@ type MacUpdateManifest = {
   version?: unknown;
   [key: string]: unknown;
 };
-
-const MAC_MANIFEST_PATTERN = /^latest-mac(?:-[a-z0-9]+)?\.yml$/i;
-const CANONICAL_MANIFEST_NAME = "latest-mac.yml";
 
 const assertManifest = (value: unknown, fileName: string): MacUpdateManifest => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -42,20 +44,10 @@ const readManifest = async (
 const fileUrl = (file: MacUpdateManifestFile): string | null =>
   typeof file.url === "string" && file.url.trim() ? file.url : null;
 
-const archFromFileUrl = (url: string): "arm64" | "x64" | null => {
-  if (url.includes("arm64")) {
-    return "arm64";
-  }
-  if (url.includes("x64")) {
-    return "x64";
-  }
-  return null;
-};
-
 export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<string | null> => {
   const entries = await readdir(assetsDirectory, { withFileTypes: true });
   const manifestNames = entries
-    .filter((entry) => entry.isFile() && MAC_MANIFEST_PATTERN.test(entry.name))
+    .filter((entry) => entry.isFile() && macUpdateManifestPattern.test(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
 
@@ -63,8 +55,8 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
     return null;
   }
 
-  const canonicalName = manifestNames.includes(CANONICAL_MANIFEST_NAME)
-    ? CANONICAL_MANIFEST_NAME
+  const canonicalName = manifestNames.includes(canonicalMacUpdateManifestName)
+    ? canonicalMacUpdateManifestName
     : manifestNames[0];
   if (!canonicalName) {
     return null;
@@ -92,7 +84,9 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
     String(left.url).localeCompare(String(right.url)),
   );
   const presentArchitectures = new Set(
-    mergedFiles.map((file) => fileUrl(file)).map((url) => (url ? archFromFileUrl(url) : null)),
+    mergedFiles
+      .map((file) => fileUrl(file))
+      .map((url) => (url ? detectMacUpdateArtifactArchFromUrl(url) : null)),
   );
   const hasArm64Artifact = entries.some(
     (entry) => entry.isFile() && entry.name.includes("mac-arm64"),
@@ -109,11 +103,11 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
     files: mergedFiles,
   };
 
-  const canonicalPath = join(assetsDirectory, CANONICAL_MANIFEST_NAME);
+  const canonicalPath = join(assetsDirectory, canonicalMacUpdateManifestName);
   await writeFile(canonicalPath, stringify(merged), "utf8");
 
   for (const manifestName of manifestNames) {
-    if (manifestName !== CANONICAL_MANIFEST_NAME) {
+    if (manifestName !== canonicalMacUpdateManifestName) {
       await rm(join(assetsDirectory, manifestName), { force: true });
     }
   }

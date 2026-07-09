@@ -1,5 +1,5 @@
 import type {
-  AppUpdateCheckInitiator,
+  AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
 } from "@openducktor/contracts";
@@ -25,9 +25,7 @@ export type ElectronHostEventEnvelope = {
   payload: unknown;
 };
 
-export type ElectronAppUpdateCheckInput = {
-  initiator: Exclude<AppUpdateCheckInitiator, "background">;
-};
+export type ElectronAppUpdateCheckInput = AppUpdateCheckInput;
 
 export type OpenDucktorElectronAppUpdateApi = {
   getState(): Promise<AppUpdateState>;

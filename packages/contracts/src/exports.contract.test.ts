@@ -18,10 +18,13 @@ import type {
   AppearanceSettings,
   AppPlatform,
   AppUpdateCheckInitiator,
+  AppUpdateCheckInput,
   AppUpdateCommandRejection,
   AppUpdateCommandResult,
+  AppUpdateDownloadableState,
   AppUpdateError,
   AppUpdateErrorCode,
+  AppUpdateInstallableState,
   AppUpdateOperation,
   AppUpdateState,
   AppUpdateStateChangedEvent,
@@ -194,6 +197,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
   "APP_PLATFORM_VALUES",
+  "appUpdateCheckInputSchema",
   "appUpdateCheckInitiatorSchema",
   "appUpdateCheckInitiatorValues",
   "appUpdateCommandRejectionSchema",
@@ -207,6 +211,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "appUpdateStateSchema",
   "appUpdateStatusSchema",
   "appUpdateStatusValues",
+  "canDownloadAppUpdate",
+  "canInstallAppUpdate",
   "CODEX_APP_SERVER_COMMAND_REQUEST_METHODS",
   "CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS",
   "CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS",
@@ -542,11 +548,14 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   AppearanceSettings: AppearanceSettings;
   AppPlatform: AppPlatform;
+  AppUpdateCheckInput: AppUpdateCheckInput;
   AppUpdateCheckInitiator: AppUpdateCheckInitiator;
   AppUpdateCommandRejection: AppUpdateCommandRejection;
   AppUpdateCommandResult: AppUpdateCommandResult;
+  AppUpdateDownloadableState: AppUpdateDownloadableState;
   AppUpdateError: AppUpdateError;
   AppUpdateErrorCode: AppUpdateErrorCode;
+  AppUpdateInstallableState: AppUpdateInstallableState;
   AppUpdateOperation: AppUpdateOperation;
   AppUpdateState: AppUpdateState;
   AppUpdateStateChangedEvent: AppUpdateStateChangedEvent;

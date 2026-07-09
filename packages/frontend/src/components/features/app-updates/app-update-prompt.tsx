@@ -8,6 +8,9 @@ import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
   canDownloadUpdate,
   canInstallUpdate,
+  getAppUpdateAvailableVersion,
+  getAppUpdateError,
+  getAppUpdateProgressPercent,
   getAppUpdatePromptKey,
   getAppUpdateStatusDisplay,
   isActionableUpdateError,
@@ -45,7 +48,9 @@ export function AppUpdatePrompt(): ReactElement | null {
   const display = getAppUpdateStatusDisplay(state);
   const isBusy = controller.actionInFlight !== null || state.status === "checking";
   const showProgress = state.status === "downloading";
-  const progressPercent = Math.round(state.progressPercent ?? 0);
+  const progressPercent = Math.round(getAppUpdateProgressPercent(state) ?? 0);
+  const availableVersion = getAppUpdateAvailableVersion(state);
+  const error = getAppUpdateError(state);
 
   return (
     <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(420px,calc(100vw-2rem))]">
@@ -60,7 +65,7 @@ export function AppUpdatePrompt(): ReactElement | null {
               <p className="text-sm font-medium text-foreground">{display.description}</p>
               <p className="text-xs text-muted-foreground">
                 Current {state.currentVersion}
-                {state.availableVersion ? ` · New ${state.availableVersion}` : ""}
+                {availableVersion ? ` · New ${availableVersion}` : ""}
               </p>
             </div>
             {showProgress && (
@@ -80,9 +85,9 @@ export function AppUpdatePrompt(): ReactElement | null {
                 <p className="text-xs text-muted-foreground">{progressPercent}% downloaded</p>
               </div>
             )}
-            {state.error && (
+            {error && (
               <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-                {state.error.message}
+                {error.message}
               </p>
             )}
             <div className="flex flex-wrap gap-2">

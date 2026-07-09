@@ -7,6 +7,8 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
+import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
+import { parse as parseYaml } from "yaml";
 import {
   createDisabledUpdateState,
   markAvailable,
@@ -108,14 +110,33 @@ const defaultNow = (): string => new Date().toISOString();
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const hasUpdateProviderConfig = (rawConfig: string | null): boolean =>
-  typeof rawConfig === "string" && /^\s*provider\s*:/m.test(rawConfig);
+const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
+  if (rawConfig === null) {
+    return false;
+  }
+
+  const parsedConfig = parseYaml(rawConfig) as unknown;
+  if (typeof parsedConfig !== "object" || parsedConfig === null || Array.isArray(parsedConfig)) {
+    return false;
+  }
+
+  const provider = (parsedConfig as { provider?: unknown }).provider;
+  return typeof provider === "string" && provider.trim().length > 0;
+};
 
 const readUpdateVersion = (info: ElectronUpdaterUpdateInfo | undefined): string | undefined =>
   typeof info?.version === "string" && info.version.trim() ? info.version.trim() : undefined;
 
 const readResultUpdateVersion = (result: ElectronUpdaterCheckResult): string | undefined =>
   readUpdateVersion(result.updateInfo) ?? readUpdateVersion(result.versionInfo);
+
+type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
+
+const availableVersionFromState = (state: AppUpdateState): string | undefined =>
+  "availableVersion" in state ? state.availableVersion : undefined;
+
+const checkedAtFromState = (state: AppUpdateState): string | undefined =>
+  "checkedAt" in state ? state.checkedAt : undefined;
 
 export const createElectronAppUpdateService = ({
   adapter,
@@ -164,10 +185,13 @@ export const createElectronAppUpdateService = ({
     state,
   });
 
-  const rejectDisabled = (operation: AppUpdateOperation): AppUpdateCommandResult =>
+  const rejectDisabled = (
+    operation: AppUpdateOperation,
+    disabledState: DisabledAppUpdateState,
+  ): AppUpdateCommandResult =>
     commandRejected({
-      code: state.disabledCode ?? "updater_unavailable",
-      message: state.disabledReason ?? "OpenDucktor updates are unavailable.",
+      code: disabledState.disabledCode,
+      message: disabledState.disabledReason,
       operation,
     });
 
@@ -239,6 +263,9 @@ export const createElectronAppUpdateService = ({
     if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {
       return;
     }
+    if (state.status !== "downloading") {
+      return;
+    }
     publishState(
       markDownloadProgress({
         currentVersion,
@@ -249,12 +276,20 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyDownloaded = (info: ElectronUpdaterUpdateInfo): void => {
-    const downloadedVersion = readUpdateVersion(info) ?? state.availableVersion;
+    const downloadedVersion = readUpdateVersion(info) ?? availableVersionFromState(state);
+    if (!downloadedVersion) {
+      setErrorState({
+        code: "download_failed",
+        message: "The update download completed without a version.",
+        operation: "download",
+      });
+      return;
+    }
     publishState(
       markDownloaded({
-        ...(downloadedVersion ? { availableVersion: downloadedVersion } : {}),
+        availableVersion: downloadedVersion,
         currentVersion,
-        previousState: state,
+        previousState: { ...state, availableVersion: downloadedVersion },
       }),
     );
   };
@@ -262,8 +297,8 @@ export const createElectronAppUpdateService = ({
   const applyAdapterError = (cause: unknown): void => {
     const operation = activeOperation ?? "check";
     const previousState = state;
-    const availableVersion = previousState.availableVersion;
-    const checkedAt = operation === "check" ? now() : previousState.checkedAt;
+    const availableVersion = availableVersionFromState(previousState);
+    const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
     const message = errorMessage(cause);
     if (operation === "install" && previousState.status === "downloaded") {
       publishState(
@@ -346,7 +381,22 @@ export const createElectronAppUpdateService = ({
       return;
     }
 
-    if (!hasUpdateProviderConfig(rawConfig)) {
+    let hasProviderConfig: boolean;
+    try {
+      hasProviderConfig = hasUpdateProviderConfig(rawConfig);
+    } catch (cause) {
+      setErrorState({
+        code: "updater_unavailable",
+        cause,
+        message: `Electron update feed configuration is invalid at ${resolvedAppUpdateConfigPath}: ${errorMessage(
+          cause,
+        )}`,
+        operation: "initialize",
+      });
+      return;
+    }
+
+    if (!hasProviderConfig) {
       publishState(
         createDisabledUpdateState({
           code: "missing_update_config",
@@ -382,7 +432,7 @@ export const createElectronAppUpdateService = ({
       const currentState = state;
       if (currentState.status === "disabled") {
         publishState(markDisabledManualCheck(currentState, initiator, now()));
-        return rejectDisabled("check");
+        return rejectDisabled("check", currentState);
       }
       if (
         activeOperation !== null ||
@@ -393,7 +443,7 @@ export const createElectronAppUpdateService = ({
       }
 
       activeOperation = "check";
-      publishState(markChecking({ currentVersion, initiator }));
+      publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
       try {
         const result = await adapter.checkForUpdates();
         if (result === null) {
@@ -448,19 +498,12 @@ export const createElectronAppUpdateService = ({
     },
     download: async () => {
       if (state.status === "disabled") {
-        return rejectDisabled("download");
+        return rejectDisabled("download", state);
       }
       if (activeOperation !== null) {
         return rejectBusy("download");
       }
-      if (
-        state.status !== "available" &&
-        !(
-          state.status === "error" &&
-          state.error?.operation === "download" &&
-          state.availableVersion
-        )
-      ) {
+      if (!canDownloadAppUpdate(state)) {
         return rejectInvalidState(
           "download",
           "Download is available only after OpenDucktor finds an update.",
@@ -471,9 +514,9 @@ export const createElectronAppUpdateService = ({
       const availableVersion = state.availableVersion;
       publishState(
         markDownloading({
+          availableVersion,
           currentVersion,
           previousState: state,
-          ...(availableVersion ? { availableVersion } : {}),
         }),
       );
       try {
@@ -485,9 +528,10 @@ export const createElectronAppUpdateService = ({
         return commandAccepted();
       } catch (cause) {
         logger.error("OpenDucktor update download failed", cause);
+        const checkedAt = checkedAtFromState(state);
         setErrorState({
           ...(availableVersion ? { availableVersion } : {}),
-          ...(state.checkedAt ? { checkedAt: state.checkedAt } : {}),
+          ...(checkedAt ? { checkedAt } : {}),
           code: "download_failed",
           cause,
           message: errorMessage(cause),
@@ -501,13 +545,13 @@ export const createElectronAppUpdateService = ({
     getState: () => state,
     install: async () => {
       if (state.status === "disabled") {
-        return rejectDisabled("install");
+        return rejectDisabled("install", state);
       }
       if (activeOperation !== null) {
         return rejectBusy("install");
       }
       const downloadedState = state;
-      if (downloadedState.status !== "downloaded") {
+      if (!canInstallAppUpdate(downloadedState)) {
         return rejectInvalidState(
           "install",
           "Restart and install is available only after the update download completes.",

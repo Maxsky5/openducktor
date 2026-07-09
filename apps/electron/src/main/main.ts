@@ -1,6 +1,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  type AppUpdateCommandResult,
+  type AppUpdateOperation,
+  type AppUpdateState,
+  appUpdateCheckInputSchema,
+  appUpdateCommandResultSchema,
+  appUpdateStateSchema,
+} from "@openducktor/contracts";
+import {
   createHostEventBus,
   type EffectHostCommandRouter,
   HOST_EVENT_CHANNELS,
@@ -387,8 +395,9 @@ const registerHostEventForwarding = (): void => {
 
 const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateService): void => {
   appUpdateService.subscribe((state) => {
+    const parsedState = readAppUpdateStateForIpc(state);
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, state);
+      window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
     }
   });
 };
@@ -456,20 +465,47 @@ const resolveLocalAttachmentPathForPreview = (
   runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
 const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheckInput => {
-  if (
-    typeof input === "object" &&
-    input !== null &&
-    "initiator" in input &&
-    (input.initiator === "settings" || input.initiator === "menu")
-  ) {
-    return { initiator: input.initiator };
+  const parsed = appUpdateCheckInputSchema.safeParse(input);
+  if (parsed.success) {
+    return parsed.data;
   }
 
   throw new ElectronValidationError({
     operation: "electron.ipc.app-update-check.validate",
     message: "Expected update check initiator to be settings or menu.",
     field: "initiator",
-    details: { input },
+    details: { issues: parsed.error.issues },
+  });
+};
+
+const readAppUpdateStateForIpc = (state: AppUpdateState): AppUpdateState => {
+  const parsed = appUpdateStateSchema.safeParse(state);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new ElectronValidationError({
+    operation: "electron.ipc.app-update-state.validate",
+    message: "Electron app update state failed contract validation.",
+    field: "state",
+    details: { issues: parsed.error.issues },
+  });
+};
+
+const readAppUpdateCommandResultForIpc = (
+  result: AppUpdateCommandResult,
+  operation: AppUpdateOperation,
+): AppUpdateCommandResult => {
+  const parsed = appUpdateCommandResultSchema.safeParse(result);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new ElectronValidationError({
+    operation: `electron.ipc.app-update-${operation}.validate-result`,
+    message: "Electron app update command result failed contract validation.",
+    field: "result",
+    details: { issues: parsed.error.issues },
   });
 };
 
@@ -493,16 +529,22 @@ const registerIpcHandlers = (
     return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
 
-  ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () => appUpdateService.getState());
+  ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
+    readAppUpdateStateForIpc(appUpdateService.getState()),
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
     const checkInput = readElectronAppUpdateCheckInput(input);
-    return appUpdateService.check(checkInput);
+    return readAppUpdateCommandResultForIpc(await appUpdateService.check(checkInput), "check");
   });
 
-  ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, () => appUpdateService.download());
+  ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, async () =>
+    readAppUpdateCommandResultForIpc(await appUpdateService.download(), "download"),
+  );
 
-  ipcMain.handle(ELECTRON_APP_UPDATE_INSTALL_CHANNEL, () => appUpdateService.install());
+  ipcMain.handle(ELECTRON_APP_UPDATE_INSTALL_CHANNEL, async () =>
+    readAppUpdateCommandResultForIpc(await appUpdateService.install(), "install"),
+  );
 };
 
 const disposeHostEffect = (hostCommandRouter: EffectHostCommandRouter, reason: string) =>
