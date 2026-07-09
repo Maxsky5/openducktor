@@ -1,5 +1,6 @@
 import type {
   AppUpdateCommandResult,
+  AppUpdateErrorCode,
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
@@ -22,6 +23,7 @@ const errorMessage = (cause: unknown): string =>
 export type AppUpdateAction = "check" | "download" | "install";
 
 export type AppUpdateCommandError = {
+  code?: AppUpdateErrorCode;
   message: string;
   operation: AppUpdateOperation;
 };
@@ -102,7 +104,15 @@ export function useAppUpdateState(): AppUpdateStateController {
       setCommandError(null);
       try {
         const result = await command();
-        setCommandError(null);
+        if (result.accepted) {
+          setCommandError(null);
+        } else {
+          setCommandError({
+            code: result.rejection.code,
+            message: result.rejection.message,
+            operation: result.rejection.operation,
+          });
+        }
         setState(result.state);
         return result;
       } catch (cause) {

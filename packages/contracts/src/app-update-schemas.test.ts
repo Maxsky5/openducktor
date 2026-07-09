@@ -78,6 +78,50 @@ describe("app update schemas", () => {
     ).toBe(true);
   });
 
+  test("distinguishes installable, requested, retryable, and terminal downloaded updates", () => {
+    const downloadedState = {
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+    } as const;
+
+    expect(canInstallAppUpdate(appUpdateStateSchema.parse(downloadedState))).toBe(true);
+    expect(
+      canInstallAppUpdate(
+        appUpdateStateSchema.parse({
+          ...downloadedState,
+          installRequested: true,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canInstallAppUpdate(
+        appUpdateStateSchema.parse({
+          ...downloadedState,
+          error: {
+            code: "install_failed",
+            message: "handoff failed",
+            operation: "install",
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      canInstallAppUpdate(
+        appUpdateStateSchema.parse({
+          ...downloadedState,
+          installRetryDisabled: true,
+          error: {
+            code: "install_failed",
+            message: "quit and reopen before trying again",
+            operation: "install",
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("parses accepted and rejected command results", () => {
     const state = {
       status: "disabled",

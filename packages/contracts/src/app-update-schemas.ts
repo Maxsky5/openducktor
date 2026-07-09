@@ -119,6 +119,7 @@ export const appUpdateStateSchema = z.discriminatedUnion("status", [
       checkInitiator: appUpdateCheckInitiatorSchema.optional(),
       checkedAt: appUpdateCheckedAtSchema.optional(),
       installRequested: z.literal(true).optional(),
+      installRetryDisabled: z.literal(true).optional(),
       error: appUpdateErrorSchema.optional(),
     })
     .strict(),
@@ -137,7 +138,11 @@ export type AppUpdateState = z.infer<typeof appUpdateStateSchema>;
 export type AppUpdateDownloadableState =
   | Extract<AppUpdateState, { status: "available" }>
   | (Extract<AppUpdateState, { status: "error" }> & { availableVersion: string });
-export type AppUpdateInstallableState = Extract<AppUpdateState, { status: "downloaded" }>;
+type AppUpdateDownloadedState = Extract<AppUpdateState, { status: "downloaded" }>;
+export type AppUpdateInstallableState = AppUpdateDownloadedState & {
+  installRequested?: undefined;
+  installRetryDisabled?: undefined;
+};
 
 export const canDownloadAppUpdate = (
   state: AppUpdateState,
@@ -153,7 +158,9 @@ export const canDownloadAppUpdate = (
 };
 
 export const canInstallAppUpdate = (state: AppUpdateState): state is AppUpdateInstallableState =>
-  state.status === "downloaded" && state.installRequested !== true;
+  state.status === "downloaded" &&
+  state.installRequested !== true &&
+  state.installRetryDisabled !== true;
 
 export const appUpdateCommandRejectionSchema = z
   .object({

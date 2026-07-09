@@ -204,7 +204,12 @@ export const markDownloaded = ({
 export const markDownloadedInstallRequested = (
   previousState: DownloadedAppUpdateState,
 ): AppUpdateState => {
-  const { error: _error, installRequested: _installRequested, ...installState } = previousState;
+  const {
+    error: _error,
+    installRequested: _installRequested,
+    installRetryDisabled: _installRetryDisabled,
+    ...installState
+  } = previousState;
   return {
     ...installState,
     installRequested: true,
@@ -263,9 +268,35 @@ export const markDownloadedInstallError = ({
   message: string;
   previousState: DownloadedAppUpdateState;
 }): AppUpdateState => {
-  const { installRequested: _installRequested, ...retryableState } = previousState;
+  const {
+    installRequested: _installRequested,
+    installRetryDisabled: _installRetryDisabled,
+    ...retryableState
+  } = previousState;
   return {
     ...retryableState,
+    error: createUpdateError({
+      cause,
+      code: "install_failed",
+      message,
+      operation: "install",
+    }),
+  };
+};
+
+export const markDownloadedInstallRetryDisabled = ({
+  cause,
+  message,
+  previousState,
+}: {
+  cause?: unknown;
+  message: string;
+  previousState: DownloadedAppUpdateState;
+}): AppUpdateState => {
+  const { installRequested: _installRequested, ...terminalState } = previousState;
+  return {
+    ...terminalState,
+    installRetryDisabled: true,
     error: createUpdateError({
       cause,
       code: "install_failed",

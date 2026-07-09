@@ -88,6 +88,13 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
     };
   }
   if (state.status === "downloaded") {
+    if (state.installRetryDisabled === true) {
+      return {
+        badgeVariant: "danger",
+        label: "Relaunch required",
+        description: "Quit and reopen OpenDucktor before trying to install this update again.",
+      };
+    }
     if (state.installRequested === true) {
       return {
         badgeVariant: "secondary",

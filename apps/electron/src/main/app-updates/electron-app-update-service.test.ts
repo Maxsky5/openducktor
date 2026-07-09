@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AppUpdateState } from "@openducktor/contracts";
+import { type AppUpdateState, canInstallAppUpdate } from "@openducktor/contracts";
+import { ElectronLifecycleError } from "../../effect/electron-errors";
 import {
   createElectronAppUpdateService,
   type ElectronAppUpdaterAdapter,
@@ -14,6 +15,8 @@ class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
   downloadCalls = 0;
   installCalls: Array<{ isForceRunAfter: boolean | undefined; isSilent: boolean | undefined }> = [];
+  nativeInstallListeners = 0;
+  nativeQuitAndInstallCalls = 0;
   onDownload: (() => void | Promise<void>) | null = null;
   nextCheckResult: ElectronUpdaterCheckResult | null | Promise<ElectronUpdaterCheckResult | null> =
     {
@@ -65,6 +68,11 @@ class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
 
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void {
     this.installCalls.push({ isSilent, isForceRunAfter });
+    this.nativeInstallListeners += 1;
+  }
+
+  emitNativeUpdateDownloaded(): void {
+    this.nativeQuitAndInstallCalls += this.nativeInstallListeners;
   }
 }
 
@@ -496,7 +504,60 @@ describe("electron app update service", () => {
     expect(adapter.installCalls).toEqual([{ isSilent: false, isForceRunAfter: true }]);
   });
 
-  test("keeps install handoff guarded until a delayed updater error restores retry", async () => {
+  test("publishes install requested before shutdown completes and rejects duplicate surfaces", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    let finishShutdown: () => void = () => {};
+    const { service } = createService({
+      adapter,
+      installDownloadedUpdate: async (runInstall) => {
+        await new Promise<void>((resolve) => {
+          finishShutdown = resolve;
+        });
+        runInstall();
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    const promptStates: AppUpdateState[] = [];
+    const settingsStates: AppUpdateState[] = [];
+    service.subscribe((state) => promptStates.push(state));
+    service.subscribe((state) => settingsStates.push(state));
+
+    const installResultPromise = service.install();
+    await Promise.resolve();
+    const duplicateResult = await service.install();
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      installRequested: true,
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(false);
+    expect(promptStates.at(-1)).toMatchObject({ installRequested: true });
+    expect(settingsStates.at(-1)).toMatchObject({ installRequested: true });
+    expect(duplicateResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "install",
+      },
+      state: {
+        status: "downloaded",
+        installRequested: true,
+      },
+    });
+
+    finishShutdown();
+    await installResultPromise;
+
+    expect(adapter.installCalls).toHaveLength(1);
+  });
+
+  test("treats delayed macOS updater handoff errors as terminal for the process", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
       isUpdateAvailable: true,
@@ -531,20 +592,33 @@ describe("electron app update service", () => {
     expect(service.getState()).toMatchObject({
       status: "downloaded",
       availableVersion: "0.4.3",
+      installRetryDisabled: true,
       error: {
         code: "install_failed",
-        message: "native install failed",
+        message: "native install failed Quit and reopen OpenDucktor before trying again.",
         operation: "install",
       },
     });
+    expect(canInstallAppUpdate(service.getState())).toBe(false);
 
     const retryResult = await service.install();
 
-    expect(retryResult.accepted).toBe(true);
-    expect(adapter.installCalls).toHaveLength(2);
+    expect(retryResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "invalid_state",
+        operation: "install",
+      },
+    });
+    expect(adapter.installCalls).toHaveLength(1);
+    expect(adapter.nativeInstallListeners).toBe(1);
+
+    adapter.emitNativeUpdateDownloaded();
+
+    expect(adapter.nativeQuitAndInstallCalls).toBe(1);
   });
 
-  test("install failures keep downloaded state retryable with an install error", async () => {
+  test("host shutdown failures disable same-process install retry", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
       isUpdateAvailable: true,
@@ -553,7 +627,11 @@ describe("electron app update service", () => {
     const { service } = createService({
       adapter,
       installDownloadedUpdate: async () => {
-        throw new Error("shutdown failed");
+        throw new ElectronLifecycleError({
+          operation: "electron.main.shutdown-host-before-run",
+          message: "OpenDucktor host shutdown failed before the requested shutdown action.",
+          reason: "app-update-install",
+        });
       },
     });
     await service.check({ initiator: "settings" });
@@ -566,13 +644,60 @@ describe("electron app update service", () => {
       state: {
         status: "downloaded",
         availableVersion: "0.4.3",
+        installRetryDisabled: true,
         error: {
           code: "install_failed",
-          message: "shutdown failed",
+          message:
+            "OpenDucktor host shutdown failed before the requested shutdown action. Quit and reopen OpenDucktor before trying again.",
           operation: "install",
         },
       },
     });
+    expect(canInstallAppUpdate(result.state)).toBe(false);
+
+    const retryResult = await service.install();
+
+    expect(retryResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "invalid_state",
+        operation: "install",
+      },
+      state: {
+        status: "downloaded",
+        installRetryDisabled: true,
+      },
+    });
     expect(adapter.installCalls).toEqual([]);
+  });
+
+  test("non-mac updater handoff errors keep downloaded state retryable", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter, platform: "win32" });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      error: {
+        code: "install_failed",
+        message: "native install failed",
+        operation: "install",
+      },
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(true);
+
+    const retryResult = await service.install();
+
+    expect(retryResult.accepted).toBe(true);
+    expect(adapter.installCalls).toHaveLength(2);
   });
 });

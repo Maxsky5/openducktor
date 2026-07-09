@@ -93,4 +93,25 @@ describe("SettingsAppUpdatesSection", () => {
       screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
     ).toBe(true);
   });
+
+  test("shows terminal install failures without offering restart again", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        message: "Quit and reopen OpenDucktor before trying again.",
+        operation: "install",
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<SettingsAppUpdatesSection disabled={false} />);
+
+    expect(await screen.findByText("Relaunch required")).toBeTruthy();
+    expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+  });
 });

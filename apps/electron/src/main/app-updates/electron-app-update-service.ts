@@ -17,6 +17,7 @@ import {
   markDownloaded,
   markDownloadedInstallError,
   markDownloadedInstallRequested,
+  markDownloadedInstallRetryDisabled,
   markDownloading,
   markDownloadProgress,
   markErrorManualCheck,
@@ -95,6 +96,8 @@ export type ElectronAppUpdateServiceOptions = {
 };
 
 const DEFAULT_APP_UPDATE_CONFIG_FILE = "app-update.yml";
+const HOST_SHUTDOWN_BEFORE_RUN_OPERATION = "electron.main.shutdown-host-before-run";
+const INSTALL_RELAUNCH_GUIDANCE = "Quit and reopen OpenDucktor before trying again.";
 
 const defaultReadUpdateConfig = (path: string): string | null => {
   try {
@@ -111,6 +114,19 @@ const defaultNow = (): string => new Date().toISOString();
 
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
+
+const isObjectWithOperation = (cause: unknown): cause is { operation: unknown } =>
+  typeof cause === "object" && cause !== null && "operation" in cause;
+
+const isHostShutdownInstallFailure = (cause: unknown): boolean =>
+  isObjectWithOperation(cause) && cause.operation === HOST_SHUTDOWN_BEFORE_RUN_OPERATION;
+
+const installTerminalFailureMessage = (cause: unknown): string => {
+  const message = errorMessage(cause);
+  return message.includes(INSTALL_RELAUNCH_GUIDANCE)
+    ? message
+    : `${message} ${INSTALL_RELAUNCH_GUIDANCE}`;
+};
 
 const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
   if (rawConfig === null) {
@@ -319,6 +335,16 @@ export const createElectronAppUpdateService = ({
     const message = errorMessage(cause);
     if (operation === "install" && previousState.status === "downloaded") {
       activeOperation = null;
+      if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
+        publishState(
+          markDownloadedInstallRetryDisabled({
+            cause,
+            message: installTerminalFailureMessage(cause),
+            previousState,
+          }),
+        );
+        return;
+      }
       publishState(
         markDownloadedInstallError({
           cause,
@@ -596,22 +622,31 @@ export const createElectronAppUpdateService = ({
       }
 
       activeOperation = "install";
+      publishState(markDownloadedInstallRequested(downloadedState));
       try {
         await installDownloadedUpdate(() => {
           adapter.quitAndInstall(false, true);
         });
-        if (activeOperation === "install" && state.status === "downloaded") {
-          publishState(markDownloadedInstallRequested(state));
-        }
         return commandAccepted();
       } catch (cause) {
         activeOperation = null;
         logger.error("OpenDucktor update install failed", cause);
+        const previousState = state.status === "downloaded" ? state : downloadedState;
+        if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
+          publishState(
+            markDownloadedInstallRetryDisabled({
+              cause,
+              message: installTerminalFailureMessage(cause),
+              previousState,
+            }),
+          );
+          return commandAccepted();
+        }
         publishState(
           markDownloadedInstallError({
             cause,
             message: errorMessage(cause),
-            previousState: downloadedState,
+            previousState,
           }),
         );
         return commandAccepted();

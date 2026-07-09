@@ -165,6 +165,62 @@ describe("AppUpdatePrompt", () => {
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
   });
 
+  test("surfaces rejected install commands with the returned shared state", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    appUpdates.install.mockResolvedValue({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        message: "Cannot install updates while another update action is active.",
+        operation: "install",
+      },
+      state: {
+        status: "downloaded",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+        installRequested: true,
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
+
+    expect(
+      await screen.findByText("Cannot install updates while another update action is active."),
+    ).toBeTruthy();
+    expect(screen.getByText("Installing update")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+  });
+
+  test("shows terminal install failures without offering another restart action", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        message: "Quit and reopen OpenDucktor before trying again.",
+        operation: "install",
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Relaunch required")).toBeTruthy();
+    expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+  });
+
   test("resurfaces a dismissed downloaded prompt when install fails", async () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "downloaded",
