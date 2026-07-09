@@ -75,6 +75,11 @@ export const pullRequestReviewCommentSchema = z.object({
 });
 export type PullRequestReviewComment = z.infer<typeof pullRequestReviewCommentSchema>;
 
+export const pullRequestReviewThreadsSummarySchema = z.object({
+  openCount: z.number().int().nonnegative(),
+});
+export type PullRequestReviewThreadsSummary = z.infer<typeof pullRequestReviewThreadsSummarySchema>;
+
 export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("unavailable"),
@@ -98,6 +103,7 @@ export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
     aggregateStatus: pullRequestReviewAggregateStatusSchema,
     checks: z.array(pullRequestReviewCheckSchema),
     comments: z.array(pullRequestReviewCommentSchema),
+    reviewThreads: pullRequestReviewThreadsSummarySchema,
     refreshedAt: z.string().min(1),
   }),
 ]);

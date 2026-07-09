@@ -53,6 +53,9 @@ const loadedContext = {
       source: "review_thread",
     },
   ],
+  reviewThreads: {
+    openCount: 1,
+  },
   refreshedAt: "2026-07-08T10:08:00Z",
 } satisfies PullRequestReviewContext;
 

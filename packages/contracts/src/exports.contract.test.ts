@@ -92,6 +92,7 @@ import type {
   PullRequestReviewProviderId,
   PullRequestReviewPullRequest,
   PullRequestReviewState,
+  PullRequestReviewThreadsSummary,
   QaReportVerdict,
   QaWorkflowVerdict,
   RepoAgentDefaults,
@@ -396,6 +397,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "pullRequestReviewProviderIdSchema",
   "pullRequestReviewPullRequestSchema",
   "pullRequestReviewStateSchema",
+  "pullRequestReviewThreadsSummarySchema",
   "QaApprovedInputSchema",
   "qaApprovedResultSchema",
   "QaRejectedInputSchema",
@@ -640,6 +642,7 @@ type ExportedTypeContract = {
   PullRequestReviewProviderId: PullRequestReviewProviderId;
   PullRequestReviewPullRequest: PullRequestReviewPullRequest;
   PullRequestReviewState: PullRequestReviewState;
+  PullRequestReviewThreadsSummary: PullRequestReviewThreadsSummary;
   QaReportVerdict: QaReportVerdict;
   QaWorkflowVerdict: QaWorkflowVerdict;
   RepoAgentDefaults: RepoAgentDefaults;

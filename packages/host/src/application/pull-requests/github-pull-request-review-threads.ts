@@ -1,4 +1,7 @@
-import type { PullRequestReviewComment } from "@openducktor/contracts";
+import type {
+  PullRequestReviewComment,
+  PullRequestReviewThreadsSummary,
+} from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 
 type GithubGraphqlReviewThreadCommentPayload = {
@@ -28,6 +31,11 @@ type GithubGraphqlReviewThreadsPayload = {
       } | null;
     } | null;
   } | null;
+};
+
+type ParsedReviewThreads = {
+  comments: PullRequestReviewComment[];
+  summary: PullRequestReviewThreadsSummary;
 };
 
 export const REVIEW_THREADS_QUERY = `
@@ -114,7 +122,7 @@ const toReviewThreadComment = (
   };
 };
 
-export const parseReviewThreads = (payload: string): PullRequestReviewComment[] => {
+export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
   const parsed = parseJson(payload);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new HostValidationError({
@@ -125,8 +133,13 @@ export const parseReviewThreads = (payload: string): PullRequestReviewComment[] 
   const reviewThreads = (parsed as GithubGraphqlReviewThreadsPayload).repository?.pullRequest
     ?.reviewThreads;
   const comments: PullRequestReviewComment[] = [];
+  let openCount = 0;
   for (const thread of Array.isArray(reviewThreads?.nodes) ? reviewThreads.nodes : []) {
     const reviewThread = thread as GithubGraphqlReviewThreadPayload;
+    if (toNullableBoolean(reviewThread.isResolved) === false) {
+      openCount += 1;
+    }
+
     for (const comment of Array.isArray(reviewThread.comments?.nodes)
       ? reviewThread.comments.nodes
       : []) {
@@ -139,5 +152,10 @@ export const parseReviewThreads = (payload: string): PullRequestReviewComment[] 
       }
     }
   }
-  return comments;
+  return {
+    comments,
+    summary: {
+      openCount,
+    },
+  };
 };

@@ -87,6 +87,23 @@ export const checksSummaryLabel = (checks: readonly PullRequestReviewCheck[]): s
   return pluralize(checks.length, "check");
 };
 
+export type CiChecksIndicatorStatus = "failure" | "pending" | "success";
+
+export const ciChecksIndicatorStatus = (
+  checks: readonly PullRequestReviewCheck[],
+): CiChecksIndicatorStatus | null => {
+  if (checks.some(isFailingCheck)) {
+    return "failure";
+  }
+  if (checks.some(isPendingCheck)) {
+    return "pending";
+  }
+  if (checks.length > 0 && checks.every(isPassingCheck)) {
+    return "success";
+  }
+  return null;
+};
+
 export const sourceLabel = (source: PullRequestReviewComment["source"]): string => {
   if (source === "review_thread") {
     return "Review thread";

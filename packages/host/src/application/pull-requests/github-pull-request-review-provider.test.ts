@@ -179,6 +179,9 @@ describe("createGithubPullRequestReviewProvider", () => {
       ["thread-comment-1", "review_thread"],
       ["thread-comment-2", "review_thread"],
     ]);
+    expect(context.reviewThreads).toEqual({
+      openCount: 1,
+    });
     expect(
       context.comments
         .filter((comment) => comment.source === "review_thread")

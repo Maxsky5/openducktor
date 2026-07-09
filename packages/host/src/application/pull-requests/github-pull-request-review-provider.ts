@@ -415,7 +415,7 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             cause,
           }),
       });
-      const reviewThreadComments = yield* Effect.try({
+      const reviewThreads = yield* Effect.try({
         try: () => parseReviewThreads(reviewThreadsPayload),
         catch: (cause) =>
           new HostValidationError({
@@ -430,7 +430,8 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
         pullRequest: view.pullRequest,
         aggregateStatus: aggregateChecks(checks),
         checks,
-        comments: [...view.comments, ...reviewThreadComments],
+        comments: [...view.comments, ...reviewThreads.comments],
+        reviewThreads: reviewThreads.summary,
         refreshedAt: new Date().toISOString(),
       });
     });

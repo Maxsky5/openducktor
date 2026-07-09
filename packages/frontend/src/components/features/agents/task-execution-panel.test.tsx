@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DevServerScriptState, PullRequest, WorkspaceFileTree } from "@openducktor/contracts";
+import type {
+  DevServerScriptState,
+  PullRequest,
+  PullRequestReviewContext,
+  WorkspaceFileTree,
+} from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
@@ -10,6 +15,7 @@ import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
@@ -176,6 +182,37 @@ const linkedPullRequest = {
   closedAt: undefined,
 } satisfies PullRequest;
 
+const ciQueryInput = {
+  repoPath: "/repo",
+  taskId: "task-12",
+  workingDirectory: "/tmp/worktree/task-12",
+};
+
+const createLoadedCiContext = ({
+  checks,
+  openThreadCount,
+}: {
+  checks: Extract<PullRequestReviewContext, { status: "loaded" }>["checks"];
+  openThreadCount: number;
+}): PullRequestReviewContext => ({
+  status: "loaded",
+  providerId: "github",
+  pullRequest: {
+    providerId: "github",
+    number: 110,
+    title: "Panel polish",
+    url: "https://github.com/openai/openducktor/pull/110",
+    state: "open",
+  },
+  aggregateStatus: "unknown",
+  checks,
+  comments: [],
+  reviewThreads: {
+    openCount: openThreadCount,
+  },
+  refreshedAt: "2026-07-08T10:08:00Z",
+});
+
 const selectedScript: DevServerScriptState = {
   scriptId: "frontend",
   name: "Frontend",
@@ -294,6 +331,30 @@ const renderPanelWithFileTreeData = (
   );
 };
 
+const renderPanelWithCiData = (context: PullRequestReviewContext): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(TaskExecutionPanel, {
+          model: {
+            ...basePanelModel,
+            ciChecksModel: {
+              isActive: false,
+              queryInput: ciQueryInput,
+            },
+          },
+        }),
+      ),
+    ),
+  );
+};
+
 describe("TaskExecutionPanelToggleButton", () => {
   test("renders hide label when task execution panel is open", () => {
     const model: TaskExecutionPanelToggleModel = {
@@ -377,6 +438,119 @@ describe("TaskExecutionPanel", () => {
 
     expect(html.match(/PR #110/g)?.length).toBe(1);
     expect(html).toContain("agent-studio-git-open-in-actions");
+  });
+
+  test("renders cached CI status dot colors in the tab header", () => {
+    const cases = [
+      {
+        expectedClassName: "bg-emerald-500",
+        context: createLoadedCiContext({
+          checks: [
+            {
+              name: "build",
+              workflow: "CI",
+              status: "completed",
+              conclusion: "success",
+              url: null,
+              details: null,
+              startedAt: null,
+              completedAt: null,
+            },
+          ],
+          openThreadCount: 0,
+        }),
+      },
+      {
+        expectedClassName: "bg-amber-500",
+        context: createLoadedCiContext({
+          checks: [
+            {
+              name: "test",
+              workflow: "CI",
+              status: "in_progress",
+              conclusion: null,
+              url: null,
+              details: null,
+              startedAt: null,
+              completedAt: null,
+            },
+          ],
+          openThreadCount: 0,
+        }),
+      },
+      {
+        expectedClassName: "bg-rose-500",
+        context: createLoadedCiContext({
+          checks: [
+            {
+              name: "lint",
+              workflow: "CI",
+              status: "completed",
+              conclusion: "failure",
+              url: null,
+              details: null,
+              startedAt: null,
+              completedAt: null,
+            },
+          ],
+          openThreadCount: 0,
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const html = renderPanelWithCiData(testCase.context);
+
+      expect(html).toContain("task-execution-tab-ci-check-status");
+      expect(html).toContain(testCase.expectedClassName);
+    }
+  });
+
+  test("renders the open review-thread counter only when threads are open", () => {
+    const htmlWithOpenThreads = renderPanelWithCiData(
+      createLoadedCiContext({
+        checks: [
+          {
+            name: "lint",
+            workflow: "CI",
+            status: "completed",
+            conclusion: "failure",
+            url: null,
+            details: null,
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        openThreadCount: 2,
+      }),
+    );
+
+    expect(htmlWithOpenThreads).toContain("task-execution-tab-ci-open-threads");
+    expect(htmlWithOpenThreads).toContain(">2</span>");
+    expect(htmlWithOpenThreads).toContain(
+      'aria-label="CI Checks, failing checks, 2 open review threads"',
+    );
+
+    const htmlWithoutOpenThreads = renderPanelWithCiData(
+      createLoadedCiContext({
+        checks: [
+          {
+            name: "build",
+            workflow: "CI",
+            status: "completed",
+            conclusion: "success",
+            url: null,
+            details: null,
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        openThreadCount: 0,
+      }),
+    );
+
+    expect(htmlWithoutOpenThreads).not.toContain("task-execution-tab-ci-open-threads");
+    expect(htmlWithoutOpenThreads).toContain('aria-label="CI Checks, passing checks"');
   });
 
   test("renders Git content as a tab without Dev Server content", () => {

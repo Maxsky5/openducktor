@@ -29,6 +29,12 @@ import {
   type TaskExecutionCiChecksPanelModel,
 } from "./task-execution-ci-checks-panel";
 import {
+  ciTabAriaLabel,
+  TaskExecutionCiTabIconOverlay,
+  type TaskExecutionCiTabIndicator,
+  useTaskExecutionCiTabIndicator,
+} from "./task-execution-ci-tab-indicator";
+import {
   TaskExecutionDocumentPanel,
   type TaskExecutionDocumentPanelModel,
 } from "./task-execution-document-panel";
@@ -72,10 +78,12 @@ const taskExecutionPanelTabIcons = {
 } satisfies Record<TaskExecutionPanelTabId, LucideIcon>;
 
 function TaskExecutionPanelTabTrigger({
+  indicator,
   isActive,
   tab,
   showSeparator,
 }: {
+  indicator: TaskExecutionCiTabIndicator | null;
   isActive: boolean;
   tab: TaskExecutionPanelTab;
   showSeparator: boolean;
@@ -95,18 +103,21 @@ function TaskExecutionPanelTabTrigger({
         <TooltipTrigger asChild>
           <TabsTrigger
             value={tab.id}
-            aria-label={tab.label}
+            aria-label={tab.id === "ci_checks" ? ciTabAriaLabel(tab.label, indicator) : tab.label}
             className="group size-9 flex-none cursor-pointer rounded-sm border border-transparent bg-transparent p-0 shadow-none hover:bg-transparent data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             data-testid={`task-execution-tab-${tab.id}`}
           >
             <span
               className={cn(
-                "inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground/60 group-hover:bg-muted group-hover:text-foreground/80",
+                "relative inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground/60 group-hover:bg-muted group-hover:text-foreground/80",
                 isActive ? "text-foreground group-hover:text-foreground" : "",
               )}
               data-testid={isActive ? "task-execution-tab-active-icon" : undefined}
             >
               <Icon className="size-5" aria-hidden="true" />
+              {tab.id === "ci_checks" ? (
+                <TaskExecutionCiTabIconOverlay indicator={indicator} />
+              ) : null}
             </span>
             <span className="sr-only">{tab.label}</span>
           </TabsTrigger>
@@ -146,6 +157,8 @@ function TaskExecutionPanelHeaderActions({
 }
 
 function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): ReactElement {
+  const ciTabIndicator = useTaskExecutionCiTabIndicator(model.ciChecksModel?.queryInput);
+
   return (
     <TooltipProvider>
       <Tabs
@@ -165,6 +178,7 @@ function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): 
             {model.tabs.map((tab, index) => (
               <TaskExecutionPanelTabTrigger
                 key={tab.id}
+                indicator={tab.id === "ci_checks" ? ciTabIndicator : null}
                 isActive={tab.id === model.activeTabId}
                 tab={tab}
                 showSeparator={index > 0}
