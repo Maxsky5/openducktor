@@ -61,6 +61,24 @@ const defaultGitPushBranch = async () => ({
 const defaultGitAbortConflict = async () => {};
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
+const defaultAgentSessionsList = async () => [
+  {
+    ...createAgentSessionFixture({
+      externalSessionId: "builder-session-old",
+      taskId: "TASK-1",
+      role: "build",
+      startedAt: "2026-03-12T11:59:00Z",
+    }),
+  },
+  {
+    ...createAgentSessionFixture({
+      externalSessionId: "builder-session",
+      taskId: "TASK-1",
+      role: "build",
+      startedAt: "2026-03-12T12:00:00Z",
+    }),
+  },
+];
 
 const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
 const taskDirectMergeMock = mock(defaultTaskDirectMerge);
@@ -70,6 +88,7 @@ const gitPushBranchMock = mock(defaultGitPushBranch);
 const gitAbortConflictMock = mock(defaultGitAbortConflict);
 const humanApproveTaskMock = mock(defaultHumanApproveTask);
 const openResetImplementationMock = mock(defaultOpenResetImplementation);
+const agentSessionsListMock = mock(defaultAgentSessionsList);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
@@ -123,24 +142,7 @@ const buildMockedHost = () => ({
   taskPullRequestUpsert: taskPullRequestUpsertMock,
   gitPushBranch: gitPushBranchMock,
   gitAbortConflict: gitAbortConflictMock,
-  agentSessionsList: async () => [
-    {
-      ...createAgentSessionFixture({
-        externalSessionId: "builder-session-old",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-03-12T11:59:00Z",
-      }),
-    },
-    {
-      ...createAgentSessionFixture({
-        externalSessionId: "builder-session",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-03-12T12:00:00Z",
-      }),
-    },
-  ],
+  agentSessionsList: agentSessionsListMock,
   specGet: async () => ({ markdown: "", updatedAt: null }),
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
@@ -360,6 +362,8 @@ describe("useTaskApprovalFlow", () => {
     humanApproveTaskMock.mockImplementation(defaultHumanApproveTask);
     openResetImplementationMock.mockClear();
     openResetImplementationMock.mockImplementation(defaultOpenResetImplementation);
+    agentSessionsListMock.mockClear();
+    agentSessionsListMock.mockImplementation(defaultAgentSessionsList);
   });
 
   afterAll(async () => {
@@ -1147,6 +1151,119 @@ describe("useTaskApprovalFlow", () => {
     expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("blocks direct merge when cleanup target lookup fails", async () => {
+    agentSessionsListMock.mockImplementationOnce(async () => {
+      throw new Error("session lookup failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      expectApprovalModal().onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(taskDirectMergeMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("session lookup failed");
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Approval failed",
+      expect.objectContaining({ description: "session lookup failed" }),
+    );
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("blocks direct merge completion when cleanup target lookup fails", async () => {
+    agentSessionsListMock.mockImplementationOnce(async () => {
+      throw new Error("session lookup failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createReadyTaskApprovalContextResult({
+        publishTarget: { remote: "origin", branch: "main" },
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-03-12T12:00:00Z",
+        },
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+
+    await act(async () => {
+      expectCompletionModal().onCompleteDirectMerge();
+      await Promise.resolve();
+    });
+
+    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(gitPushBranchMock).not.toHaveBeenCalled();
+    expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("session lookup failed");
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to finish direct merge",
+      expect.objectContaining({ description: "session lookup failed" }),
+    );
 
     await act(async () => {
       await harness.unmount();

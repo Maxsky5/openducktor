@@ -69,6 +69,9 @@ const legacyHost = host as typeof host & {
 
 type RunSummary = LegacyRunSummary;
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+type TestStorageSpies = {
+  removeItem?: (key: string) => void;
+};
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -97,7 +100,7 @@ const createDeferred = <T,>() => {
   };
 };
 
-const createMemoryStorage = (): TestStorage => {
+const createMemoryStorage = (spies?: TestStorageSpies): TestStorage => {
   const store = new Map<string, string>();
   return {
     get length() {
@@ -109,6 +112,7 @@ const createMemoryStorage = (): TestStorage => {
       store.set(key, value);
     },
     removeItem: (key) => {
+      spies?.removeItem?.(key);
       store.delete(key);
     },
   };
@@ -1967,16 +1971,77 @@ describe("use-task-operations", () => {
     }
   });
 
-  test("deleteTask does not block host deletion when chat draft cleanup target lookup fails", async () => {
+  test("deleteTask reports chat draft cleanup storage failures without blocking host deletion", async () => {
     let isDeleted = false;
     const taskDelete = mock(async () => {
       isDeleted = true;
       return { ok: true };
     });
+    const agentSessionsList = mock(async () => [
+      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    ]);
+    const tasksList = mock(async () => (isDeleted ? [] : [makeTask("A", "open")]));
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+
+    const original = {
+      taskDelete: host.taskDelete,
+      agentSessionsList: host.agentSessionsList,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+      toastError: toast.error,
+    };
+    host.taskDelete = taskDelete;
+    host.agentSessionsList = agentSessionsList;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const storage = createMemoryStorage({
+      removeItem: () => {
+        throw new Error("storage remove failed");
+      },
+    });
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+    writeTestDraft(storage, draftIdentity, "parent draft");
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+
+      await harness.run(async (value) => {
+        await value.deleteTask("A");
+      });
+
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(taskDelete).toHaveBeenCalledWith("/repo", "A", false);
+      expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+        description: "Failed to clean 1 chat draft storage key(s).",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskDelete = original.taskDelete;
+      host.agentSessionsList = original.agentSessionsList;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+      toast.error = original.toastError;
+    }
+  });
+
+  test("deleteTask blocks host deletion when chat draft cleanup target lookup fails", async () => {
+    const taskDelete = mock(async () => {
+      return { ok: true };
+    });
     const agentSessionsList = mock(async () => {
       throw new Error("session lookup failed");
     });
-    const tasksList = mock(async () => (isDeleted ? [] : [makeTask("A", "open")]));
+    const tasksList = mock(async () => [makeTask("A", "open")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
 
@@ -2002,13 +2067,15 @@ describe("use-task-operations", () => {
       await harness.mount();
       await harness.waitFor((value) => value.tasks[0]?.id === "A");
 
-      await harness.run(async (value) => {
-        await value.deleteTask("A");
-      });
+      await expect(
+        harness.run(async (value) => {
+          await value.deleteTask("A");
+        }),
+      ).rejects.toThrow("session lookup failed");
 
       expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
-      expect(taskDelete).toHaveBeenCalledWith("/repo", "A", false);
-      expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+      expect(taskDelete).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to delete task", {
         description: "session lookup failed",
       });
     } finally {
@@ -2018,6 +2085,71 @@ describe("use-task-operations", () => {
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
+    }
+  });
+
+  test("close and approval completion routes block host mutation when cleanup target lookup fails", async () => {
+    const taskClose = mock(async () => makeTask("A", "closed"));
+    const humanApprove = mock(async () => makeTask("A", "closed"));
+    const taskTransition = mock(async () => makeTask("A", "closed"));
+    const agentSessionsList = mock(async () => {
+      throw new Error("session lookup failed");
+    });
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskClose: host.taskClose,
+      humanApprove: host.humanApprove,
+      taskTransition: host.taskTransition,
+      agentSessionsList: host.agentSessionsList,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+    };
+    host.taskClose = taskClose;
+    host.humanApprove = humanApprove;
+    host.taskTransition = taskTransition;
+    host.agentSessionsList = agentSessionsList;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+
+      await expect(
+        harness.run(async (value) => {
+          await value.closeTask("A");
+        }),
+      ).rejects.toThrow("session lookup failed");
+      await expect(
+        harness.run(async (value) => {
+          await value.humanApproveTask("A");
+        }),
+      ).rejects.toThrow("session lookup failed");
+      await expect(
+        harness.run(async (value) => {
+          await value.transitionTask("A", "closed");
+        }),
+      ).rejects.toThrow("session lookup failed");
+
+      expect(agentSessionsList).toHaveBeenCalledTimes(3);
+      expect(taskClose).not.toHaveBeenCalled();
+      expect(humanApprove).not.toHaveBeenCalled();
+      expect(taskTransition).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      host.taskClose = original.taskClose;
+      host.humanApprove = original.humanApprove;
+      host.taskTransition = original.taskTransition;
+      host.agentSessionsList = original.agentSessionsList;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2623,6 +2755,80 @@ describe("use-task-operations", () => {
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
+    }
+  });
+
+  test("linkMergedPullRequest blocks merged-link mutation when cleanup target lookup fails", async () => {
+    const mergedPullRequest = {
+      providerId: "github" as const,
+      number: 17,
+      url: "https://github.com/openai/openducktor/pull/17",
+      state: "merged" as const,
+      createdAt: "2026-02-20T10:00:00Z",
+      updatedAt: "2026-02-20T10:00:00Z",
+      lastSyncedAt: "2026-02-20T10:00:00Z",
+      mergedAt: "2026-02-20T10:00:00Z",
+      closedAt: "2026-02-20T10:00:00Z",
+    };
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "merged" as const,
+      pullRequest: mergedPullRequest,
+    }));
+    const taskPullRequestLinkMerged = mock(async () => makeTask("A", "closed"));
+    const agentSessionsList = mock(async () => {
+      throw new Error("session lookup failed");
+    });
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
+      agentSessionsList: host.agentSessionsList,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+      toastError: toast.error,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
+    host.agentSessionsList = agentSessionsList;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+      await harness.run(async (value) => {
+        await value.linkMergedPullRequest();
+      });
+
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(taskPullRequestLinkMerged).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to link merged pull request", {
+        description: "session lookup failed",
+      });
+      expect(harness.getLatest().pendingMergedPullRequest).toEqual({
+        taskId: "A",
+        pullRequest: mergedPullRequest,
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
+      host.agentSessionsList = original.agentSessionsList;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+      toast.error = original.toastError;
     }
   });
 

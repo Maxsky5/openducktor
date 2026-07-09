@@ -204,6 +204,50 @@ describe("agent chat draft store", () => {
     expect(raw).not.toContain("base64");
   });
 
+  test("reuses a staged path for the same file attachment after later text edits", async () => {
+    const storage = createMemoryStorage();
+    const stagedFile = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    let stageCount = 0;
+    const stager = mock(async () => {
+      stageCount += 1;
+      return `/tmp/staged/brief-${stageCount}.pdf`;
+    });
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
+    setAgentChatDraftAttachmentStagerForTests(stager);
+
+    const buildDraftWithFile = (text: string, file: File): AgentChatComposerDraft => ({
+      segments: [createTextSegment(text, "text-1")],
+      attachments: [
+        createComposerAttachment(
+          {
+            name: "brief.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+            file,
+          },
+          "attachment-1",
+        ),
+      ],
+    });
+
+    setAgentChatDraft(identity, "task-1", buildDraftWithFile("with file", stagedFile));
+    await flushAgentChatDraft(identity);
+
+    setAgentChatDraft(identity, "task-1", buildDraftWithFile("edited text", stagedFile));
+    await flushAgentChatDraft(identity);
+
+    const replacementFile = new File(["updated"], "brief.pdf", { type: "application/pdf" });
+    setAgentChatDraft(identity, "task-1", buildDraftWithFile("replaced file", replacementFile));
+    await flushAgentChatDraft(identity);
+
+    const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
+    expect(stager).toHaveBeenCalledTimes(2);
+    expect(raw).toContain("replaced file");
+    expect(raw).toContain("/tmp/staged/brief-2.pdf");
+    expect(raw).not.toContain("/tmp/staged/brief-3.pdf");
+  });
+
   test("runs expired draft cleanup during first hydration only", () => {
     const storage = createMemoryStorage();
     const expiredIdentity = { workspaceId: "workspace", externalSessionId: "expired" };

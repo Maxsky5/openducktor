@@ -133,24 +133,24 @@ export async function completeDirectMergeApproval({
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
 
-  if (publishTarget) {
-    if (!publishTarget.remote) {
-      throw new Error("The configured target branch does not have a publish remote.");
-    }
-    const pushResult = await host.gitPushBranch(repoPath, checkoutTargetBranch(publishTarget), {
-      remote: publishTarget.remote,
-    });
-    if (pushResult.outcome !== "pushed") {
-      throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
-    }
-  }
-
   await runTaskMutationWithChatDraftCleanup({
     queryClient,
     repoPath,
     workspaceId,
     taskIds: [approval.taskId],
     mutation: async () => {
+      if (publishTarget) {
+        if (!publishTarget.remote) {
+          throw new Error("The configured target branch does not have a publish remote.");
+        }
+        const pushResult = await host.gitPushBranch(repoPath, checkoutTargetBranch(publishTarget), {
+          remote: publishTarget.remote,
+        });
+        if (pushResult.outcome !== "pushed") {
+          throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
+        }
+      }
+
       await host.taskDirectMergeComplete(repoPath, approval.taskId);
     },
   });

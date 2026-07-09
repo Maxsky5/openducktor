@@ -17,6 +17,10 @@ type DraftTimerId = ReturnType<typeof globalThis.setTimeout>;
 type DraftStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 type AttachmentStager = (file: File) => Promise<string>;
 type PersistenceErrorReporter = (error: Error) => void;
+type StagedAttachment = {
+  file: File;
+  path: string;
+};
 
 type DraftMemoryEntry = {
   identity: AgentChatDraftSessionIdentity;
@@ -31,6 +35,7 @@ type DraftMemoryEntry = {
   flushRequestedAfterCurrent: boolean;
   flushPromise: Promise<void> | null;
   stagingAttachmentIds: Set<string>;
+  stagedAttachmentsById: Map<string, StagedAttachment>;
 };
 
 export type AgentChatDraftCleanupTarget = AgentChatDraftSessionIdentity & {
@@ -80,6 +85,7 @@ const createEntry = (
   flushRequestedAfterCurrent: false,
   flushPromise: null,
   stagingAttachmentIds: new Set(),
+  stagedAttachmentsById: new Map(),
 });
 
 const clearEntryTimers = (entry: DraftMemoryEntry): void => {
@@ -105,7 +111,7 @@ const upsertEntry = (
   const existing = draftEntries.get(key);
   if (existing) {
     existing.taskId = taskId;
-    existing.draft = draft;
+    existing.draft = preserveStagedAttachmentPaths(existing, draft);
     return existing;
   }
 
@@ -140,6 +146,32 @@ const toPathBackedAttachment = (
 ): AgentChatComposerAttachment => {
   const { file: _file, previewUrl: _previewUrl, ...metadata } = attachment;
   return { ...metadata, path };
+};
+
+const preserveStagedAttachmentPaths = (
+  entry: DraftMemoryEntry,
+  draft: AgentChatComposerDraft,
+): AgentChatComposerDraft => {
+  if (!draft.attachments?.length || entry.stagedAttachmentsById.size === 0) {
+    return draft;
+  }
+
+  let didPreserveStagedPath = false;
+  const attachments = draft.attachments.map((attachment) => {
+    if (attachment.path || !attachment.file) {
+      return attachment;
+    }
+
+    const stagedAttachment = entry.stagedAttachmentsById.get(attachment.id);
+    if (!stagedAttachment || stagedAttachment.file !== attachment.file) {
+      return attachment;
+    }
+
+    didPreserveStagedPath = true;
+    return toPathBackedAttachment(attachment, stagedAttachment.path);
+  });
+
+  return didPreserveStagedPath ? { ...draft, attachments } : draft;
 };
 
 const findUnpersistableAttachment = (
@@ -187,6 +219,10 @@ const stageAttachmentForEntry = async (
       return false;
     }
 
+    currentEntry.stagedAttachmentsById.set(attachment.id, {
+      file: attachment.file,
+      path: stagedPath,
+    });
     currentEntry.draft = {
       ...currentEntry.draft,
       attachments: nextAttachments,
