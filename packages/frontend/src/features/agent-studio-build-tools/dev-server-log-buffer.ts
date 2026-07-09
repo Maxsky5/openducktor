@@ -1,5 +1,6 @@
 import type {
   DevServerGroupState,
+  DevServerRunOrder,
   DevServerScriptState,
   DevServerTerminalChunk,
 } from "@openducktor/contracts";
@@ -20,11 +21,15 @@ type DevServerTerminalSequenceWindow = {
   lastSequence: number | null;
 };
 
-type DevServerTerminalRunIdentity = string | null;
+type DevServerTerminalRunIdentity = {
+  runId: string;
+  runOrder: DevServerRunOrder;
+} | null;
 
 export type DevServerTerminalBufferReplacementContext = {
   current: DevServerTerminalSequenceWindow;
   currentEntries: readonly AgentStudioDevServerTerminalChunkEntry[];
+  retiredHostInstanceIds: ReadonlySet<string>;
   runIdentity: DevServerTerminalRunIdentity;
   snapshot: DevServerTerminalSequenceWindow;
 };
@@ -43,6 +48,7 @@ type DevServerTerminalBufferState = {
   size: number;
   lastSequence: number | null;
   resetToken: number;
+  retiredHostInstanceIds: Set<string>;
   runIdentity: DevServerTerminalRunIdentity;
   snapshotEntryCount: number;
 };
@@ -104,7 +110,39 @@ const EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW: DevServerTerminalSequenceWindow
 const readDevServerScriptRunIdentity = (
   script: DevServerScriptState,
 ): DevServerTerminalRunIdentity => {
-  return script.runId;
+  if (script.runId === null && script.runOrder === null) {
+    return null;
+  }
+  if (script.runId === null || script.runOrder === null) {
+    throw new Error(`Dev server script ${script.scriptId} has incomplete run ownership.`);
+  }
+  return { runId: script.runId, runOrder: script.runOrder };
+};
+
+const readDevServerTerminalChunkRunIdentity = (
+  chunk: DevServerTerminalChunk,
+): Exclude<DevServerTerminalRunIdentity, null> => ({
+  runId: chunk.runId,
+  runOrder: chunk.runOrder,
+});
+
+const areRunIdentitiesEqual = (
+  left: DevServerTerminalRunIdentity,
+  right: DevServerTerminalRunIdentity,
+): boolean => {
+  if (left === null || right === null) {
+    return left === right;
+  }
+  if (left.runId !== right.runId) {
+    return false;
+  }
+  if (
+    left.runOrder.hostInstanceId !== right.runOrder.hostInstanceId ||
+    left.runOrder.generation !== right.runOrder.generation
+  ) {
+    throw new Error(`Dev server run ${left.runId} has conflicting order metadata.`);
+  }
+  return true;
 };
 
 const readSnapshotBufferWindow = (
@@ -139,6 +177,8 @@ const areTerminalChunksEqual = (
       other !== undefined &&
       chunk.scriptId === other.scriptId &&
       chunk.runId === other.runId &&
+      chunk.runOrder.hostInstanceId === other.runOrder.hostInstanceId &&
+      chunk.runOrder.generation === other.runOrder.generation &&
       chunk.sequence === other.sequence &&
       chunk.data === other.data &&
       chunk.timestamp === other.timestamp
@@ -154,6 +194,7 @@ const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => (
   size: 0,
   lastSequence: null,
   resetToken: 0,
+  retiredHostInstanceIds: new Set(),
   runIdentity: null,
   snapshotEntryCount: 0,
 });
@@ -179,11 +220,16 @@ export const appendDevServerTerminalChunk = (
   terminalChunk: DevServerTerminalChunk,
 ): void => {
   let buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
-  if (buffer.runIdentity !== null && buffer.runIdentity !== terminalChunk.runId) {
-    replaceDevServerTerminalBuffer(store, terminalChunk.scriptId, [], terminalChunk.runId);
+  const nextRunIdentity = readDevServerTerminalChunkRunIdentity(terminalChunk);
+  if (!areRunIdentitiesEqual(buffer.runIdentity, nextRunIdentity)) {
+    const runOrder = compareDevServerRunIdentity(buffer, nextRunIdentity);
+    if (runOrder !== "newer") {
+      return;
+    }
+    replaceDevServerTerminalBuffer(store, terminalChunk.scriptId, [], nextRunIdentity);
     buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
   } else {
-    buffer.runIdentity = terminalChunk.runId;
+    buffer.runIdentity = nextRunIdentity;
   }
 
   if (buffer.lastSequence !== null && terminalChunk.sequence <= buffer.lastSequence) {
@@ -206,7 +252,9 @@ export const replaceDevServerTerminalBuffer = (
   store: DevServerTerminalBufferStore,
   scriptId: string,
   terminalChunks: DevServerTerminalChunk[],
-  runIdentity: DevServerTerminalRunIdentity = null,
+  runIdentity: DevServerTerminalRunIdentity = terminalChunks[0]
+    ? readDevServerTerminalChunkRunIdentity(terminalChunks[0])
+    : null,
 ): void => {
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
@@ -218,6 +266,13 @@ export const replaceDevServerTerminalBuffer = (
   buffer.lastSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
+  if (
+    buffer.runIdentity !== null &&
+    runIdentity !== null &&
+    buffer.runIdentity.runOrder.hostInstanceId !== runIdentity.runOrder.hostInstanceId
+  ) {
+    buffer.retiredHostInstanceIds.add(buffer.runIdentity.runOrder.hostInstanceId);
+  }
   buffer.runIdentity = runIdentity;
   if (shouldResetTerminal) {
     buffer.resetToken += 1;
@@ -291,6 +346,7 @@ export const getDevServerTerminalBufferReplacementContext = (
   return {
     current: readCurrentBufferWindow(buffer),
     currentEntries: readCurrentBufferEntries(buffer),
+    retiredHostInstanceIds: new Set(buffer.retiredHostInstanceIds),
     runIdentity: buffer.runIdentity,
     snapshot: readSnapshotBufferWindow(buffer),
   };
@@ -316,21 +372,37 @@ export const getDevServerTerminalBuffer = (
   };
 };
 
-const isLaterTimestamp = (candidate: string | null, baseline: string | null): boolean => {
-  return candidate !== null && baseline !== null && candidate > baseline;
-};
+type DevServerRunOrderRelation = "newer" | "older" | "same";
 
-const isNewerRunSnapshot = (
-  currentContext: DevServerTerminalBufferReplacementContext,
-  script: DevServerScriptState,
-  nextChunks: readonly DevServerTerminalChunk[],
-): boolean => {
-  const currentLastTimestamp = currentContext.currentEntries.at(-1)?.timestamp ?? null;
-  const nextFirstTimestamp = nextChunks[0]?.timestamp ?? null;
-  return (
-    isLaterTimestamp(nextFirstTimestamp, currentLastTimestamp) ||
-    isLaterTimestamp(script.startedAt, currentLastTimestamp)
-  );
+const compareDevServerRunIdentity = (
+  context: {
+    retiredHostInstanceIds: ReadonlySet<string>;
+    runIdentity: DevServerTerminalRunIdentity;
+  },
+  candidate: DevServerTerminalRunIdentity,
+): DevServerRunOrderRelation => {
+  const current = context.runIdentity;
+  if (areRunIdentitiesEqual(current, candidate)) {
+    return "same";
+  }
+  if (candidate === null) {
+    return "older";
+  }
+  if (current === null) {
+    return "newer";
+  }
+  if (context.retiredHostInstanceIds.has(candidate.runOrder.hostInstanceId)) {
+    return "older";
+  }
+  if (candidate.runOrder.hostInstanceId !== current.runOrder.hostInstanceId) {
+    return "newer";
+  }
+  if (candidate.runOrder.generation === current.runOrder.generation) {
+    throw new Error(
+      `Dev server runs ${current.runId} and ${candidate.runId} share generation ${candidate.runOrder.generation}.`,
+    );
+  }
+  return candidate.runOrder.generation > current.runOrder.generation ? "newer" : "older";
 };
 
 const shouldMergeSameRunReplayPrefix = (
@@ -341,7 +413,7 @@ const shouldMergeSameRunReplayPrefix = (
   if (
     currentContext.runIdentity === null ||
     nextRunIdentity === null ||
-    currentContext.runIdentity !== nextRunIdentity
+    !areRunIdentitiesEqual(currentContext.runIdentity, nextRunIdentity)
   ) {
     return false;
   }
@@ -382,7 +454,7 @@ const createDevServerTerminalBufferReplacement = (
 ): DevServerTerminalBufferReplacement | null => {
   if (
     currentContext &&
-    currentContext.runIdentity === runIdentity &&
+    areRunIdentitiesEqual(currentContext.runIdentity, runIdentity) &&
     areSequenceWindowsEqual(currentContext.snapshot, snapshotWindow) &&
     areTerminalChunksEqual(terminalChunks, currentContext.currentEntries)
   ) {
@@ -413,6 +485,19 @@ export const getDevServerTerminalBufferReplacement = (
     );
   }
 
+  const runOrder = compareDevServerRunIdentity(currentContext, nextRunIdentity);
+  if (runOrder === "older") {
+    return null;
+  }
+  if (runOrder === "newer") {
+    return createDevServerTerminalBufferReplacement(
+      currentContext,
+      nextWindow,
+      nextChunks,
+      nextRunIdentity,
+    );
+  }
+
   const currentWindow = currentContext.current;
   const currentBufferMirrorsSnapshot =
     currentWindow.count === currentContext.snapshot.count &&
@@ -420,15 +505,6 @@ export const getDevServerTerminalBufferReplacement = (
     currentWindow.lastSequence === currentContext.snapshot.lastSequence;
 
   if (nextWindow.lastSequence === null) {
-    if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
-      return createDevServerTerminalBufferReplacement(
-        currentContext,
-        nextWindow,
-        nextChunks,
-        nextRunIdentity,
-      );
-    }
-
     if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
       return null;
     }
@@ -473,14 +549,6 @@ export const getDevServerTerminalBufferReplacement = (
   }
 
   if (nextWindow.lastSequence > currentWindow.lastSequence) {
-    if (
-      currentContext.runIdentity !== null &&
-      currentContext.runIdentity !== nextRunIdentity &&
-      !isNewerRunSnapshot(currentContext, script, nextChunks)
-    ) {
-      return null;
-    }
-
     return createDevServerTerminalBufferReplacement(
       currentContext,
       nextWindow,
@@ -490,15 +558,6 @@ export const getDevServerTerminalBufferReplacement = (
   }
 
   if (nextWindow.lastSequence < currentWindow.lastSequence) {
-    if (isNewerRunSnapshot(currentContext, script, nextChunks)) {
-      return createDevServerTerminalBufferReplacement(
-        currentContext,
-        nextWindow,
-        nextChunks,
-        nextRunIdentity,
-      );
-    }
-
     if (shouldMergeSameRunReplayPrefix(currentContext, nextRunIdentity, nextWindow)) {
       return createDevServerTerminalBufferReplacement(
         currentContext,
@@ -514,16 +573,8 @@ export const getDevServerTerminalBufferReplacement = (
   if (
     nextWindow.count !== currentWindow.count ||
     nextWindow.firstSequence !== currentWindow.firstSequence ||
-    nextRunIdentity !== currentContext.runIdentity
+    !areRunIdentitiesEqual(nextRunIdentity, currentContext.runIdentity)
   ) {
-    if (
-      currentContext.runIdentity !== null &&
-      currentContext.runIdentity !== nextRunIdentity &&
-      !isNewerRunSnapshot(currentContext, script, nextChunks)
-    ) {
-      return null;
-    }
-
     return createDevServerTerminalBufferReplacement(
       currentContext,
       nextWindow,

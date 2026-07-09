@@ -31,7 +31,6 @@ import type {
   FailedDevServerScriptStart,
 } from "./dev-server-service-types";
 import {
-  appendTerminalChunk,
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
@@ -39,14 +38,12 @@ import {
   DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
-  formatTerminalProcessOutput,
-  formatTerminalSystemMessage,
-  nextTerminalSequence,
   scriptHasLiveProcess,
   startTerminalRun,
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
+import { createDevServerTerminalWriter } from "./dev-server-terminal-writer";
 
 export type {
   CreateDevServerServiceInput,
@@ -65,9 +62,11 @@ export const createDevServerService = ({
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateDevServerServiceInput): DisposableDevServerService => {
+  const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
   const publish = (event: DevServerEvent): void =>
     eventBus?.publish(DEV_SERVER_EVENT_CHANNEL, devServerEventSchema.parse(event));
+  const terminalWriter = createDevServerTerminalWriter(publish);
   const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
     publish({ type: "snapshot", state: runtime.state });
   const getWorktreePath = (repoPath: string, taskId: string) =>
@@ -92,7 +91,7 @@ export const createDevServerService = ({
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
         terminalBufferedBytesByScriptId: new Map<string, number>(),
         terminalNextSequenceByScriptId: new Map<string, number>(),
-        terminalRunGenerationByScriptId: new Map<string, number>(),
+        terminalRunGeneration: 0,
       };
       repoGroups.set(taskId, runtime);
       groups.set(repoConfig.repoPath, repoGroups);
@@ -128,48 +127,6 @@ export const createDevServerService = ({
       updatedAt: runtime.state.updatedAt,
     });
   };
-  const pushTerminalChunk = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    data: string,
-  ): void => {
-    if (data.length === 0) {
-      return;
-    }
-    const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-    if (!script) {
-      return;
-    }
-    if (!script.runId) {
-      throw new HostInvariantError({
-        invariant: "dev_server_script_run_known",
-        message: `Dev server script has no active run id: ${scriptId}`,
-      });
-    }
-    const timestamp = nowIso();
-    const terminalChunk = {
-      scriptId,
-      runId: script.runId,
-      sequence: nextTerminalSequence(runtime, script),
-      data,
-      timestamp,
-    };
-    appendTerminalChunk(runtime, script, terminalChunk);
-    runtime.state.updatedAt = timestamp;
-    publish({
-      type: "terminal_chunk",
-      repoPath: runtime.state.repoPath,
-      taskId: runtime.state.taskId,
-      terminalChunk,
-    });
-  };
-  const appendTerminalSystemMessage = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    message: string,
-  ): void => {
-    pushTerminalChunk(runtime, scriptId, formatTerminalSystemMessage(message));
-  };
   const markStartFailed = (
     runtime: DevServerGroupRuntime,
     scriptId: string,
@@ -183,11 +140,12 @@ export const createDevServerService = ({
       script.exitCode = exitCode;
       script.lastError = message;
     });
-    appendTerminalSystemMessage(runtime, scriptId, message);
+    terminalWriter.appendSystemMessage(runtime, scriptId, message);
   };
   const handleProcessExit = (
     runtime: DevServerGroupRuntime,
     scriptId: string,
+    expectedRunId: string,
     pid: number,
     exitCode: number | null,
     signal: string | null,
@@ -195,14 +153,18 @@ export const createDevServerService = ({
   ): void => {
     const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
     const isStartingWithoutRecordedPid = script?.pid === null && script.status === "starting";
-    if (!script || (script.pid !== pid && !isStartingWithoutRecordedPid)) {
+    if (
+      !script ||
+      script.runId !== expectedRunId ||
+      (script.pid !== pid && !isStartingWithoutRecordedPid)
+    ) {
       return;
     }
     runtime.processes.delete(scriptId);
     const expectedStop = script.status === "stopping";
     const message = error ?? devServerExitMessage(exitCode, signal);
     if (!expectedStop) {
-      appendTerminalSystemMessage(runtime, scriptId, message);
+      terminalWriter.appendSystemMessage(runtime, scriptId, message);
     }
     updateScriptState(runtime, scriptId, (state) => {
       state.pid = null;
@@ -234,13 +196,28 @@ export const createDevServerService = ({
       }
       updateScriptState(runtime, scriptConfig.id, (script) => {
         script.status = "starting";
-        startTerminalRun(runtime, script);
+        startTerminalRun(runtime, script, hostInstanceId);
         script.pid = null;
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
       });
-      appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
+      const expectedRunId = runtime.state.scripts.find(
+        (candidate) => candidate.scriptId === scriptConfig.id,
+      )?.runId;
+      if (!expectedRunId) {
+        return yield* Effect.fail(
+          new HostInvariantError({
+            invariant: "dev_server_script_run_known",
+            message: `Dev server script has no active run id: ${scriptConfig.id}`,
+          }),
+        );
+      }
+      terminalWriter.appendSystemMessage(
+        runtime,
+        scriptConfig.id,
+        `Starting \`${scriptConfig.command}\``,
+      );
       const handle = yield* processPort
         .start({
           command: scriptConfig.command,
@@ -252,9 +229,17 @@ export const createDevServerService = ({
             TERM: DEV_SERVER_TERM,
           },
           onExit: ({ pid, exitCode, signal, error }) =>
-            handleProcessExit(runtime, scriptConfig.id, pid, exitCode, signal, error),
+            handleProcessExit(
+              runtime,
+              scriptConfig.id,
+              expectedRunId,
+              pid,
+              exitCode,
+              signal,
+              error,
+            ),
           onOutput: ({ data }) =>
-            pushTerminalChunk(runtime, scriptConfig.id, formatTerminalProcessOutput(data)),
+            terminalWriter.pushProcessOutput(runtime, scriptConfig.id, expectedRunId, data),
         })
         .pipe(
           Effect.catchAll((error) =>

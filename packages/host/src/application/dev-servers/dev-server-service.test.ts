@@ -613,6 +613,69 @@ describe("createDevServerService", () => {
     ]);
     expect(state.scripts[0]).toMatchObject({ status: "stopped", pid: null });
   });
+  test("discards output from a stopped process after its replacement run starts", async () => {
+    const starts: DevServerProcessStartInput[] = [];
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        starts.push(input);
+        const pid = 700;
+        return Effect.succeed({
+          pid,
+          stop: () =>
+            Effect.sync(() => {
+              input.onExit({ pid, exitCode: 0, signal: null, error: null });
+            }),
+        });
+      },
+    };
+    const { eventBus, events } = createEventBus();
+    const service = createDevServerService({
+      eventBus,
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    starts[0]?.onOutput({ data: "LATE-OLD\n" });
+    starts[0]?.onExit({ pid: 700, exitCode: 9, signal: null, error: null });
+
+    const state = await Effect.runPromise(
+      service.getState({ repoPath: "/repo", taskId: "task-1" }),
+    );
+    expect(
+      state.scripts[0]?.bufferedTerminalChunks.some((chunk) => chunk.data.includes("LATE-OLD")),
+    ).toBe(false);
+    expect(
+      events.some((event) =>
+        JSON.stringify((event as { payload?: unknown }).payload).includes("LATE-OLD"),
+      ),
+    ).toBe(false);
+    expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700 });
+  });
+  test("uses a distinct run epoch after the host service is replaced", async () => {
+    const createStartedService = async () => {
+      const { processPort } = createProcessPort();
+      const service = createDevServerService({
+        processPort,
+        taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+        workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+      });
+      return Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    };
+
+    const firstState = await createStartedService();
+    const replacementState = await createStartedService();
+    const firstRun = firstState.scripts[0];
+    const replacementRun = replacementState.scripts[0];
+
+    expect(firstRun?.runOrder?.generation).toBe(1);
+    expect(replacementRun?.runOrder?.generation).toBe(1);
+    expect(replacementRun?.runOrder?.hostInstanceId).not.toBe(firstRun?.runOrder?.hostInstanceId);
+    expect(replacementRun?.runId).not.toBe(firstRun?.runId);
+  });
   test("keeps runtime ownership isolated for delimiter-colliding repo and task strings", async () => {
     const { processPort, starts } = createProcessPort();
     const service = createDevServerService({

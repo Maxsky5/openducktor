@@ -18,19 +18,29 @@ export const createDeferred = <T>() => {
 
 export const buildScript = (
   overrides: Partial<DevServerScriptState> = {},
-): DevServerScriptState => ({
-  scriptId: "frontend",
-  name: "Frontend",
-  command: "bun run dev",
-  status: "stopped",
-  runId: overrides.pid === null || overrides.pid === undefined ? null : "frontend:1",
-  pid: null,
-  startedAt: null,
-  exitCode: null,
-  lastError: null,
-  bufferedTerminalChunks: [],
-  ...overrides,
-});
+): DevServerScriptState => {
+  const bufferedRun = overrides.bufferedTerminalChunks?.[0];
+  const runId =
+    overrides.runId ??
+    bufferedRun?.runId ??
+    (overrides.pid === null || overrides.pid === undefined ? null : "frontend:1");
+  return {
+    scriptId: "frontend",
+    name: "Frontend",
+    command: "bun run dev",
+    status: "stopped",
+    runId,
+    runOrder:
+      bufferedRun?.runOrder ??
+      (runId === null ? null : { hostInstanceId: "host-1", generation: 1 }),
+    pid: null,
+    startedAt: null,
+    exitCode: null,
+    lastError: null,
+    bufferedTerminalChunks: [],
+    ...overrides,
+  };
+};
 
 export const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
   repoPath: "/repo",
