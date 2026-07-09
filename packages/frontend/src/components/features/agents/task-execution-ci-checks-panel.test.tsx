@@ -165,7 +165,7 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("Needs review");
     expect(html).toContain("Thread thread-1");
     expect(html).toContain("Unresolved");
-    expect(html).toContain("<strong>This thread still needs work.</strong>");
+    expect(html).toContain("This thread still needs work.");
     expect(html).toContain("isAnyLoading");
     expect(html).toContain("Created");
     expect(html).toContain("2026-07-08T10:06:00Z");

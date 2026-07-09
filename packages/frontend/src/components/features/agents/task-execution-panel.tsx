@@ -29,11 +29,13 @@ import {
   type TaskExecutionCiChecksPanelModel,
 } from "./task-execution-ci-checks-panel";
 import {
-  ciTabAriaLabel,
   TaskExecutionCiTabIconOverlay,
-  type TaskExecutionCiTabIndicator,
   useTaskExecutionCiTabIndicator,
 } from "./task-execution-ci-tab-indicator";
+import {
+  ciTabAriaLabel,
+  type TaskExecutionCiTabIndicator,
+} from "./task-execution-ci-tab-indicator-model";
 import {
   TaskExecutionDocumentPanel,
   type TaskExecutionDocumentPanelModel,

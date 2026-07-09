@@ -74,47 +74,59 @@ const createDependencies = ({
         return Effect.succeed({
           ok: true,
           stdout: JSON.stringify({
-            repository: {
-              pullRequest: {
-                reviewThreads: {
-                  nodes: [
-                    {
-                      id: "thread-1",
-                      isResolved: true,
-                      comments: {
-                        nodes: [
-                          {
-                            id: "thread-comment-1",
-                            author: { login: "reviewer" },
-                            body: "Resolved thread.",
-                            url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
-                            createdAt: "2026-07-08T10:03:00Z",
-                            updatedAt: "2026-07-08T10:04:00Z",
-                            path: "packages/frontend/src/panel.tsx",
-                            line: 12,
-                          },
-                        ],
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: [
+                      {
+                        id: "thread-1",
+                        isResolved: true,
+                        comments: {
+                          nodes: [
+                            {
+                              id: "thread-comment-1",
+                              author: { login: "reviewer" },
+                              body: "Resolved thread.",
+                              url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
+                              createdAt: "2026-07-08T10:03:00Z",
+                              updatedAt: "2026-07-08T10:04:00Z",
+                              path: "packages/frontend/src/panel.tsx",
+                              line: 12,
+                            },
+                          ],
+                        },
                       },
-                    },
-                    {
-                      id: "thread-2",
-                      isResolved: false,
-                      comments: {
-                        nodes: [
-                          {
-                            id: "thread-comment-2",
-                            author: { login: "reviewer" },
-                            body: "Still open.",
-                            url: "https://github.com/openai/openducktor/pull/42#discussion_r2",
-                            createdAt: "2026-07-08T10:05:00Z",
-                            updatedAt: "2026-07-08T10:06:00Z",
-                            path: "packages/host/src/provider.ts",
-                            line: 33,
-                          },
-                        ],
+                      {
+                        id: "thread-2",
+                        isResolved: false,
+                        comments: {
+                          nodes: [
+                            {
+                              id: "thread-comment-2",
+                              author: { login: "reviewer" },
+                              body: "Still open.",
+                              url: "https://github.com/openai/openducktor/pull/42#discussion_r2",
+                              createdAt: "2026-07-08T10:05:00Z",
+                              updatedAt: "2026-07-08T10:06:00Z",
+                              path: "packages/host/src/provider.ts",
+                              line: 33,
+                            },
+                            {
+                              id: "thread-comment-3",
+                              author: { login: "reviewer" },
+                              body: "Still open follow-up.",
+                              url: "https://github.com/openai/openducktor/pull/42#discussion_r3",
+                              createdAt: "2026-07-08T10:07:00Z",
+                              updatedAt: "2026-07-08T10:08:00Z",
+                              path: "packages/host/src/provider.ts",
+                              line: 34,
+                            },
+                          ],
+                        },
                       },
-                    },
-                  ],
+                    ],
+                  },
                 },
               },
             },
@@ -178,6 +190,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       ["review-1", "review"],
       ["thread-comment-1", "review_thread"],
       ["thread-comment-2", "review_thread"],
+      ["thread-comment-3", "review_thread"],
     ]);
     expect(context.reviewThreads).toEqual({
       openCount: 1,
@@ -195,6 +208,7 @@ describe("createGithubPullRequestReviewProvider", () => {
     ).toEqual([
       ["thread-comment-1", "thread-1", true, "packages/frontend/src/panel.tsx", 12],
       ["thread-comment-2", "thread-2", false, "packages/host/src/provider.ts", 33],
+      ["thread-comment-3", "thread-2", false, "packages/host/src/provider.ts", 34],
     ]);
   });
 

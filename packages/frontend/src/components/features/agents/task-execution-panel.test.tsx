@@ -502,6 +502,8 @@ describe("TaskExecutionPanel", () => {
       const html = renderPanelWithCiData(testCase.context);
 
       expect(html).toContain("task-execution-tab-ci-check-status");
+      expect(html).toContain("size-1.5");
+      expect(html).toContain("ring-1");
       expect(html).toContain(testCase.expectedClassName);
     }
   });
@@ -526,6 +528,8 @@ describe("TaskExecutionPanel", () => {
     );
 
     expect(htmlWithOpenThreads).toContain("task-execution-tab-ci-open-threads");
+    expect(htmlWithOpenThreads).toContain("h-3.5");
+    expect(htmlWithOpenThreads).toContain("text-[9px]");
     expect(htmlWithOpenThreads).toContain(">2</span>");
     expect(htmlWithOpenThreads).toContain(
       'aria-label="CI Checks, failing checks, 2 open review threads"',

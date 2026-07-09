@@ -24,10 +24,12 @@ type GithubGraphqlReviewThreadPayload = {
 };
 
 type GithubGraphqlReviewThreadsPayload = {
-  repository?: {
-    pullRequest?: {
-      reviewThreads?: {
-        nodes?: unknown;
+  data?: {
+    repository?: {
+      pullRequest?: {
+        reviewThreads?: {
+          nodes?: unknown;
+        } | null;
       } | null;
     } | null;
   } | null;
@@ -130,19 +132,38 @@ export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
       message: "Failed to parse GitHub pull request review threads response: expected an object.",
     });
   }
-  const reviewThreads = (parsed as GithubGraphqlReviewThreadsPayload).repository?.pullRequest
+  const reviewThreads = (parsed as GithubGraphqlReviewThreadsPayload).data?.repository?.pullRequest
     ?.reviewThreads;
+  if (!Array.isArray(reviewThreads?.nodes)) {
+    throw new HostValidationError({
+      field: "reviewThreads.nodes",
+      message:
+        "Failed to parse GitHub pull request review threads response: expected data.repository.pullRequest.reviewThreads.nodes.",
+    });
+  }
   const comments: PullRequestReviewComment[] = [];
-  let openCount = 0;
-  for (const thread of Array.isArray(reviewThreads?.nodes) ? reviewThreads.nodes : []) {
+  const openThreadIds = new Set<string>();
+  for (const thread of reviewThreads.nodes) {
     const reviewThread = thread as GithubGraphqlReviewThreadPayload;
-    if (toNullableBoolean(reviewThread.isResolved) === false) {
-      openCount += 1;
+    const reviewThreadId = requireString(reviewThread.id, "thread.id");
+    const isResolved = toNullableBoolean(reviewThread.isResolved);
+    if (isResolved === null) {
+      throw new HostValidationError({
+        field: "thread.isResolved",
+        message: "GitHub pull request review field 'thread.isResolved' is missing or invalid.",
+      });
+    }
+    if (isResolved === false) {
+      openThreadIds.add(reviewThreadId);
+    }
+    if (!Array.isArray(reviewThread.comments?.nodes)) {
+      throw new HostValidationError({
+        field: "thread.comments.nodes",
+        message: "GitHub pull request review field 'thread.comments.nodes' is missing or invalid.",
+      });
     }
 
-    for (const comment of Array.isArray(reviewThread.comments?.nodes)
-      ? reviewThread.comments.nodes
-      : []) {
+    for (const comment of reviewThread.comments.nodes) {
       const normalized = toReviewThreadComment(
         comment as GithubGraphqlReviewThreadCommentPayload,
         reviewThread,
@@ -155,7 +176,7 @@ export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
   return {
     comments,
     summary: {
-      openCount,
+      openCount: openThreadIds.size,
     },
   };
 };
