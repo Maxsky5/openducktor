@@ -4,8 +4,9 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { commentLocationLabel, sourceLabel } from "./task-execution-ci-presentation";
-import { TaskExecutionCiTimestampLine } from "./task-execution-ci-timestamp-line";
+import { PierreDiffViewer } from "./pierre-diff-viewer";
+import { commentLocationLabel } from "./task-execution-ci-presentation";
+import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
 export function TaskExecutionCiCommentCard({
   comment,
@@ -17,14 +18,13 @@ export function TaskExecutionCiCommentCard({
   const showThreadBadge = comment.isResolved !== null;
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
-  const wasUpdated = Boolean(comment.updatedAt && comment.updatedAt !== comment.createdAt);
-  const activityTimestamp = wasUpdated
-    ? comment.updatedAt
-    : (comment.createdAt ?? comment.updatedAt);
+  const activityTimestamp = comment.createdAt ?? comment.updatedAt;
+  const hasBody = comment.body.trim().length > 0;
+  const hasPatch = Boolean(comment.patch?.trim() && comment.path);
 
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
-      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2.5">
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2">
         <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <MessageSquare className="size-3.5" />
         </div>
@@ -36,14 +36,10 @@ export function TaskExecutionCiCommentCard({
                 Bot
               </Badge>
             ) : null}
-          </div>
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-            <span>{sourceLabel(comment.source)}</span>
             {activityTimestamp ? (
-              <TaskExecutionCiTimestampLine
-                label={wasUpdated ? "Updated" : "Created"}
-                timestamp={activityTimestamp}
-              />
+              <span className="text-[11px] text-muted-foreground">
+                <TaskExecutionCiRelativeTime timestamp={activityTimestamp} />
+              </span>
             ) : null}
             {showThreadBadge ? (
               <Badge
@@ -56,7 +52,7 @@ export function TaskExecutionCiCommentCard({
           </div>
           {location ? (
             <div
-              className="mt-1 truncate font-mono text-[11px] text-muted-foreground"
+              className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
               title={location}
             >
               {location}
@@ -82,7 +78,7 @@ export function TaskExecutionCiCommentCard({
           ) : null}
         </div>
       </header>
-      {comment.body.trim().length > 0 ? (
+      {hasBody ? (
         <div className="min-w-0 overflow-hidden border-t border-border px-3 py-3">
           <MarkdownRenderer
             markdown={comment.body}
@@ -90,11 +86,27 @@ export function TaskExecutionCiCommentCard({
             className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
           />
         </div>
-      ) : (
+      ) : null}
+      {hasPatch && comment.path && comment.patch ? (
+        <div
+          className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
+          data-testid="ci-review-comment-diff"
+        >
+          <PierreDiffViewer
+            patch={comment.patch}
+            filePath={comment.path}
+            diffStyle="unified"
+            diffIndicators="bars"
+            lineOverflow="wrap"
+            hunkSeparators="line-info"
+          />
+        </div>
+      ) : null}
+      {!hasBody && !hasPatch ? (
         <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
           No comment body.
         </p>
-      )}
+      ) : null}
     </article>
   );
 }

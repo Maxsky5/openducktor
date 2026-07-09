@@ -3,6 +3,7 @@ import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
@@ -43,7 +44,9 @@ const loadedContext = {
     {
       id: "thread-comment-1",
       author: "codex",
-      body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.\n\n```ts\nconst isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n```",
+      body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
+      patch:
+        "@@ -10,3 +10,3 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
       updatedAt: "2026-07-08T10:07:00Z",
@@ -68,20 +71,18 @@ const noPullRequestContext = {
 
 const renderPanel = (queryClient = createQueryClient()): string => {
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(
-        TooltipProvider,
-        null,
-        createElement(TaskExecutionCiChecksPanel, {
-          model: {
-            isActive: true,
-            queryInput,
-          },
-        }),
-      ),
-    ),
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="light">
+        <TooltipProvider>
+          <TaskExecutionCiChecksPanel
+            model={{
+              isActive: true,
+              queryInput,
+            }}
+          />
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>,
   );
 };
 
@@ -161,7 +162,7 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("2026-07-08T10:00:00Z");
     expect(html).toContain("Completed");
     expect(html).toContain("2026-07-08T10:05:00Z");
-    expect(html).toContain("Review thread");
+    expect(html).not.toContain("Review thread");
     expect(html).toContain("All");
     expect(html).toContain("Humans");
     expect(html).toContain("Bots");
@@ -171,9 +172,12 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("Unresolved");
     expect(html).toContain("This thread still needs work.");
     expect(html).toContain("isAnyLoading");
-    expect(html).toContain("Updated");
-    expect(html).toContain("2026-07-08T10:07:00Z");
-    expect(html).not.toContain("Created 7/8/2026");
+    expect(html).not.toContain('Updated <time dateTime="2026-07-08T10:06:00Z"');
+    expect(html).not.toContain('Created <time dateTime="2026-07-08T10:06:00Z"');
+    expect(html).toContain("ago");
+    expect(html).toContain("2026-07-08T10:06:00Z");
+    expect(html).toContain('data-testid="ci-review-comment-diff"');
+    expect(html).not.toContain("language-ts");
     expect(html).toContain('aria-label="Open comment from codex"');
     expect(html).toContain("prose-pre:whitespace-pre-wrap");
     expect(html).toContain("prose-pre:break-words");

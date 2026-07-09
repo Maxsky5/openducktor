@@ -665,7 +665,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(hasVisibleText(root, "Repository context")).toBe(true);
+    expect(hasVisibleText(root, "Repository context")).toBe(false);
     expect(hasVisibleText(root, "Repository branch")).toBe(true);
     expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(0);

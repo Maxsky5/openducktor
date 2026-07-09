@@ -104,16 +104,6 @@ export const ciChecksIndicatorStatus = (
   return null;
 };
 
-export const sourceLabel = (source: PullRequestReviewComment["source"]): string => {
-  if (source === "review_thread") {
-    return "Review thread";
-  }
-  if (source === "review") {
-    return "Review";
-  }
-  return "Comment";
-};
-
 const BOT_LOGIN_SUFFIX = "[bot]";
 const AUTOMATION_LOGIN_PATTERNS = [
   /bot$/i,

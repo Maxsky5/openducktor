@@ -171,7 +171,19 @@ const fairnestPullRequestReviewThreadNodes = [
         {
           id: "thread-comment-fairnest-1",
           author: { login: "gemini-code-assist" },
-          body: "Disable all login options while any login flow is active.",
+          body: [
+            "Disable all login options while any login flow is active.",
+            "",
+            "```suggestion",
+            "  const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;",
+            "```",
+          ].join("\n"),
+          diffHunk: [
+            "@@ -12,7 +12,8 @@ export default function LandingPage() {",
+            "   const { login } = useAuth();",
+            "-  const [isLoggingIn, setIsLoggingIn] = useState(false);",
+            "+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+          ].join("\n"),
           url: "https://github.com/Maxsky5/fairnest/pull/128#discussion_r1",
           createdAt: "2026-07-08T20:19:39Z",
           updatedAt: "2026-07-08T20:19:39Z",
@@ -405,10 +417,12 @@ describe("createGithubPullRequestReviewProvider", () => {
 
   test("includes unresolved code review threads alongside review summaries", async () => {
     const provider = createGithubPullRequestReviewProvider();
+    const commands: string[][] = [];
 
     const context = await Effect.runPromise(
       provider.read({
         dependencies: createDependencies({
+          commands,
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: fairnestPullRequestReviewThreadNodes,
         }),
@@ -439,13 +453,34 @@ describe("createGithubPullRequestReviewProvider", () => {
     expect(
       context.comments
         .filter((comment) => comment.source === "review_thread")
-        .map((comment) => [comment.author, comment.path, comment.line, comment.isResolved]),
+        .map((comment) => [
+          comment.author,
+          comment.path,
+          comment.line,
+          comment.isResolved,
+          comment.patch,
+        ]),
     ).toEqual([
-      ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 16, false],
-      ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 86, false],
-      ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 119, false],
-      ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false],
-      ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false],
+      [
+        "gemini-code-assist",
+        "apps/web/src/components/LandingPage.tsx",
+        16,
+        false,
+        [
+          "@@ -12,7 +12,8 @@ export default function LandingPage() {",
+          "   const { login } = useAuth();",
+          "-  const [isLoggingIn, setIsLoggingIn] = useState(false);",
+          "+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+        ].join("\n"),
+      ],
+      ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 86, false, null],
+      ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 119, false, null],
+      ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
+      ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
     ]);
+    expect(context.comments[2]?.body).toBe(
+      "Disable all login options while any login flow is active.",
+    );
+    expect(commands.flat().join(" ")).toContain("diffHunk");
   });
 });

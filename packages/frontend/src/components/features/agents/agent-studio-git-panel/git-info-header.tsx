@@ -133,10 +133,6 @@ function GitActionIconButton({
   );
 }
 
-type GitInfoHeaderSummaryRowProps = {
-  isRepositoryMode: boolean;
-};
-
 type GitBranchContextRowProps = {
   currentBranchLabel: string;
   branchState: {

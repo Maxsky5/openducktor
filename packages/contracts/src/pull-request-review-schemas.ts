@@ -64,6 +64,7 @@ export const pullRequestReviewCommentSchema = z.object({
   id: z.string().min(1),
   author: z.string().nullable(),
   body: z.string(),
+  patch: z.string().nullable(),
   url: z.string().nullable(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),

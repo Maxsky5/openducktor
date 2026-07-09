@@ -247,6 +247,7 @@ const toComment = (
     id: toNullableString(payload.id) ?? fallbackId,
     author: toNullableString(payload.author?.login),
     body,
+    patch: null,
     url: toNullableString(payload.url),
     createdAt: toNullableString(payload.createdAt) ?? toNullableString(payload.submittedAt),
     updatedAt: toNullableString(payload.updatedAt),

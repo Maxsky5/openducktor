@@ -8,6 +8,7 @@ type GithubGraphqlReviewThreadCommentPayload = {
   id?: unknown;
   author?: { login?: unknown } | null;
   body?: unknown;
+  diffHunk?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
   url?: unknown;
@@ -55,6 +56,7 @@ query PullRequestReviewThreads($owner: String!, $name: String!, $number: Int!) {
                 login
               }
               body
+              diffHunk
               url
               createdAt
               updatedAt
@@ -101,6 +103,14 @@ const parseJson = (payload: string): unknown => {
   }
 };
 
+const GITHUB_SUGGESTION_BLOCK = /^```suggestion[^\n]*\n[\s\S]*?^```[ \t]*$/gm;
+
+const withoutGithubSuggestionBlocks = (body: string): string =>
+  body
+    .replace(GITHUB_SUGGESTION_BLOCK, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
 const toReviewThreadComment = (
   payload: GithubGraphqlReviewThreadCommentPayload,
   thread: GithubGraphqlReviewThreadPayload,
@@ -112,7 +122,8 @@ const toReviewThreadComment = (
   return {
     id: requireString(payload.id, "id"),
     author: toNullableString(payload.author?.login),
-    body,
+    body: withoutGithubSuggestionBlocks(body),
+    patch: toNullableString(payload.diffHunk),
     url: toNullableString(payload.url),
     createdAt: toNullableString(payload.createdAt),
     updatedAt: toNullableString(payload.updatedAt),
