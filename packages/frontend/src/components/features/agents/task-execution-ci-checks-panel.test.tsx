@@ -90,6 +90,7 @@ describe("TaskExecutionCiChecksPanel", () => {
 
     expect(html).toContain("Loading CI checks");
     expect(html).toContain("Reading the current pull request");
+    expect(html).not.toContain("h-8 rounded-md bg-muted");
   });
 
   test("renders an actionable unavailable state with the provider reason", () => {

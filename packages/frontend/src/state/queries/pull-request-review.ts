@@ -1,15 +1,20 @@
 import type { PullRequestReviewContext } from "@openducktor/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "@/state/operations/host";
 
 type PullRequestReviewQueryHost = Pick<typeof host, "pullRequestReviewContextGet">;
+export type PullRequestReviewContextQueryInput = {
+  repoPath: string;
+  taskId?: string;
+  workingDirectory?: string;
+};
 
 const PULL_REQUEST_REVIEW_STALE_TIME_MS = 30_000;
 const EMPTY_VALUE = "__none__";
 
 export const pullRequestReviewQueryKeys = {
   all: ["pull-request-review"] as const,
-  context: (input: { repoPath: string; taskId?: string; workingDirectory?: string }) =>
+  context: (input: PullRequestReviewContextQueryInput) =>
     [
       ...pullRequestReviewQueryKeys.all,
       "context",
@@ -21,7 +26,7 @@ export const pullRequestReviewQueryKeys = {
 };
 
 export const pullRequestReviewContextQueryOptions = (
-  input: { repoPath: string; taskId?: string; workingDirectory?: string },
+  input: PullRequestReviewContextQueryInput,
   hostClient: PullRequestReviewQueryHost = host,
 ) =>
   queryOptions({
@@ -29,3 +34,10 @@ export const pullRequestReviewContextQueryOptions = (
     queryFn: (): Promise<PullRequestReviewContext> => hostClient.pullRequestReviewContextGet(input),
     staleTime: PULL_REQUEST_REVIEW_STALE_TIME_MS,
   });
+
+export const prefetchPullRequestReviewContextFromQuery = (
+  queryClient: QueryClient,
+  input: PullRequestReviewContextQueryInput,
+  hostClient?: PullRequestReviewQueryHost,
+): Promise<void> =>
+  queryClient.prefetchQuery(pullRequestReviewContextQueryOptions(input, hostClient));

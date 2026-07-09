@@ -1,4 +1,5 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
@@ -9,6 +10,10 @@ import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
+import {
+  type PullRequestReviewContextQueryInput,
+  prefetchPullRequestReviewContextFromQuery,
+} from "@/state/queries/pull-request-review";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
@@ -213,6 +218,7 @@ export function useAgentsPageRightPanelModel({
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
+  const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const isGitTabActive = activeTabId === "git" && isPanelOpen;
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
@@ -318,32 +324,44 @@ export function useAgentsPageRightPanelModel({
     [activeTabId, diffData.targetBranch, fileExplorerRoot, isPanelOpen, onSelectFile, selectedFile],
   );
   const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
-  const ciChecksModel = useMemo(
+  const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");
+  const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
     () =>
-      tabs.some((tab) => tab.id === "ci_checks")
+      workspaceRepoPath
         ? {
-            isActive: activeTabId === "ci_checks" && isPanelOpen,
-            queryInput: workspaceRepoPath
+            repoPath: workspaceRepoPath,
+            ...(selectedView.taskId ? { taskId: selectedView.taskId } : {}),
+            ...(selectedView.selectedSession.identity?.workingDirectory
               ? {
-                  repoPath: workspaceRepoPath,
-                  ...(selectedView.taskId ? { taskId: selectedView.taskId } : {}),
-                  ...(selectedView.selectedSession.identity?.workingDirectory
-                    ? {
-                        workingDirectory: selectedView.selectedSession.identity.workingDirectory,
-                      }
-                    : {}),
+                  workingDirectory: selectedView.selectedSession.identity.workingDirectory,
                 }
-              : null,
+              : {}),
           }
         : null,
     [
-      activeTabId,
-      isPanelOpen,
       selectedView.selectedSession.identity?.workingDirectory,
       selectedView.taskId,
-      tabs,
       workspaceRepoPath,
     ],
+  );
+  const hasLinkedPullRequest = selectedView.selectedTask?.pullRequest != null;
+  useEffect(() => {
+    if (!hasCiChecksTab || !hasLinkedPullRequest || !ciReviewQueryInput) {
+      return;
+    }
+
+    void prefetchPullRequestReviewContextFromQuery(queryClient, ciReviewQueryInput);
+  }, [ciReviewQueryInput, hasCiChecksTab, hasLinkedPullRequest, queryClient]);
+
+  const ciChecksModel = useMemo(
+    () =>
+      hasCiChecksTab
+        ? {
+            isActive: activeTabId === "ci_checks" && isPanelOpen,
+            queryInput: ciReviewQueryInput,
+          }
+        : null,
+    [activeTabId, ciReviewQueryInput, hasCiChecksTab, isPanelOpen],
   );
   const rightPanelModel = useMemo(
     () =>

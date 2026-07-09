@@ -39,16 +39,6 @@ const STATE_VISUALS: Record<TaskExecutionCiPanelStateKind, StateVisual> = {
   },
 };
 
-function LoadingPreview(): ReactElement {
-  return (
-    <div className="mt-3 w-full space-y-2" aria-hidden="true">
-      <div className="h-8 rounded-md bg-muted" />
-      <div className="h-8 rounded-md bg-muted" />
-      <div className="h-8 rounded-md bg-muted" />
-    </div>
-  );
-}
-
 export function TaskExecutionCiPanelState({
   actionLabel,
   actionPendingLabel,
@@ -83,7 +73,6 @@ export function TaskExecutionCiPanelState({
             {detail}
           </pre>
         ) : null}
-        {kind === "loading" ? <LoadingPreview /> : null}
         {canAct ? (
           <Button
             type="button"
