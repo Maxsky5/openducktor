@@ -419,6 +419,7 @@ export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
   "deprecationNotice",
   "error",
   "externalAgentConfig/import/completed",
+  "externalAgentConfig/import/progress",
   "fs/changed",
   "fuzzyFileSearch/sessionCompleted",
   "fuzzyFileSearch/sessionUpdated",
@@ -442,6 +443,7 @@ export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
   "mcpServer/oauthLogin/completed",
   "mcpServer/startupStatus/updated",
   "model/rerouted",
+  "model/safetyBuffering/updated",
   "model/verification",
   "process/exited",
   "process/outputDelta",
@@ -452,6 +454,7 @@ export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
   "thread/archived",
   "thread/closed",
   "thread/compacted",
+  "thread/deleted",
   "thread/goal/cleared",
   "thread/goal/updated",
   "thread/name/updated",
@@ -470,6 +473,7 @@ export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
   "thread/unarchived",
   "turn/completed",
   "turn/diff/updated",
+  "turn/moderationMetadata",
   "turn/plan/updated",
   "turn/started",
   "warning",
@@ -481,7 +485,9 @@ export type CodexAppServerServerNotificationMethod =
   (typeof CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS)[number];
 
 export type CodexAppServerServerNotification = {
-  method: CodexAppServerServerNotificationMethod;
+  id?: never;
+  // Notifications are additive, so the wire shape stays open while known methods remain typed above.
+  method: string;
   params: CodexAppServerJsonValue;
 };
 
