@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { type AppUpdateState, canInstallAppUpdate } from "@openducktor/contracts";
+import {
+  type AppUpdateState,
+  canDownloadAppUpdate,
+  canInstallAppUpdate,
+} from "@openducktor/contracts";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import {
   createElectronAppUpdateService,
@@ -616,6 +620,34 @@ describe("electron app update service", () => {
     adapter.emitNativeUpdateDownloaded();
 
     expect(adapter.nativeQuitAndInstallCalls).toBe(1);
+  });
+
+  test("keeps macOS relaunch-required install state stable after later updater errors", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+
+    adapter.emit("error", new Error("native install failed"));
+    adapter.emit("error", new Error("native install still failed"));
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        message: "native install still failed Quit and reopen OpenDucktor before trying again.",
+        operation: "install",
+      },
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(false);
+    expect(canDownloadAppUpdate(service.getState())).toBe(false);
   });
 
   test("host shutdown failures disable same-process install retry", async () => {

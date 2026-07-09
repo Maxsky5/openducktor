@@ -198,6 +198,20 @@ describe("AppUpdatePrompt", () => {
     ).toBeTruthy();
     expect(screen.getByText("Installing update")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+
+    act(() => {
+      appUpdates.emit({
+        status: "downloaded",
+        currentVersion: "0.4.2",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+        installRequested: true,
+      });
+    });
+
+    expect(
+      screen.getByText("Cannot install updates while another update action is active."),
+    ).toBeTruthy();
   });
 
   test("shows terminal install failures without offering another restart action", async () => {

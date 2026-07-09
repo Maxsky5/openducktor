@@ -71,7 +71,6 @@ export function useAppUpdateState(): AppUpdateStateController {
     void appUpdates
       .subscribeState((nextState) => {
         if (!disposed) {
-          setCommandError(null);
           setState(nextState);
         }
       })

@@ -325,11 +325,10 @@ export const createElectronAppUpdateService = ({
 
   const applyAdapterError = (cause: unknown): void => {
     const previousState = state;
-    const operation =
-      activeOperation ??
-      (previousState.status === "downloaded" && previousState.installRequested === true
-        ? "install"
-        : "check");
+    const installHandoffStarted =
+      previousState.status === "downloaded" &&
+      (previousState.installRequested === true || previousState.installRetryDisabled === true);
+    const operation = activeOperation ?? (installHandoffStarted ? "install" : "check");
     const availableVersion = availableVersionFromState(previousState);
     const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
     const message = errorMessage(cause);
