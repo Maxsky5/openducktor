@@ -5,6 +5,16 @@ import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
+import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import {
+  type AgentChatDraftSessionIdentity,
+  toAgentChatDraftStorageKey,
+  writeAgentChatDraftToStorage,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+import {
+  resetAgentChatDraftStoreForTests,
+  setAgentChatDraftStorageForTests,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -66,6 +76,39 @@ const toastErrorMock = mock(() => {});
 const originalToastLoading = toast.loading;
 const originalToastSuccess = toast.success;
 const originalToastError = toast.error;
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+
+const createMemoryStorage = (): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
+
+const writeTestDraft = (
+  storage: TestStorage,
+  identity: AgentChatDraftSessionIdentity,
+  text: string,
+): void => {
+  writeAgentChatDraftToStorage({
+    storage,
+    identity,
+    taskId: "TASK-1",
+    draft: { segments: [createTextSegment(text, "text-1")], attachments: [] },
+    updatedAt: "2026-07-08T10:00:00.000Z",
+  });
+};
 
 const createUnavailableHostClient = () =>
   createHostClient(async () => {
@@ -289,6 +332,7 @@ const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktree
 
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
+    resetAgentChatDraftStoreForTests();
     await applyHostMocks();
     latestHarnessValue = null;
     (toast as { loading: typeof toast.loading }).loading =
@@ -980,6 +1024,14 @@ describe("useTaskApprovalFlow", () => {
       }) as unknown as never,
     );
 
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = {
+      workspaceId: "workspace-repo",
+      externalSessionId: "builder-session",
+    };
+    writeTestDraft(storage, draftIdentity, "pending direct merge draft");
+
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
@@ -1018,6 +1070,7 @@ describe("useTaskApprovalFlow", () => {
     await waitFor(() => {
       expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
     });
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).not.toBeNull();
 
     await act(async () => {
       expectCompletionModal().onCompleteDirectMerge();
@@ -1032,6 +1085,7 @@ describe("useTaskApprovalFlow", () => {
       remote: "upstream",
     });
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
 
     await act(async () => {
       await harness.unmount();
@@ -1040,6 +1094,13 @@ describe("useTaskApprovalFlow", () => {
 
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
     const refreshTasksMock = mock(async () => {});
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    const draftIdentity = {
+      workspaceId: "workspace-repo",
+      externalSessionId: "builder-session",
+    };
+    writeTestDraft(storage, draftIdentity, "direct merge draft");
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         targetBranch: { branch: "release/2026.03" },
@@ -1083,6 +1144,7 @@ describe("useTaskApprovalFlow", () => {
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
+    expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 

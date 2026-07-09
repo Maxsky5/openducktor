@@ -12,6 +12,18 @@ export type TaskChatDraftCleanupPlan = {
   error: Error | null;
 };
 
+type TaskChatDraftCleanupInput = {
+  queryClient: QueryClient;
+  repoPath: string;
+  workspaceId: string | null;
+  taskIds: string[];
+};
+
+type RunTaskMutationWithChatDraftCleanupInput<TResult> = TaskChatDraftCleanupInput & {
+  mutation: () => Promise<TResult>;
+  shouldCleanup?: (result: TResult) => boolean;
+};
+
 const toError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
@@ -26,12 +38,7 @@ export const prepareTaskChatDraftCleanupTargets = async ({
   repoPath,
   workspaceId,
   taskIds,
-}: {
-  queryClient: QueryClient;
-  repoPath: string;
-  workspaceId: string | null;
-  taskIds: string[];
-}): Promise<TaskChatDraftCleanupPlan> => {
+}: TaskChatDraftCleanupInput): Promise<TaskChatDraftCleanupPlan> => {
   try {
     if (!workspaceId) {
       throw new Error("Cannot clean chat drafts without an active workspace id.");
@@ -81,4 +88,25 @@ export const runTaskChatDraftCleanupAfterSuccess = (plan: TaskChatDraftCleanupPl
     reportTaskChatDraftCleanupFailure(error);
     return false;
   }
+};
+
+export const runTaskMutationWithChatDraftCleanup = async <TResult>({
+  queryClient,
+  repoPath,
+  workspaceId,
+  taskIds,
+  mutation,
+  shouldCleanup = () => true,
+}: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
+  const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
+    queryClient,
+    repoPath,
+    workspaceId,
+    taskIds,
+  });
+  const result = await mutation();
+  if (shouldCleanup(result)) {
+    runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+  }
+  return result;
 };

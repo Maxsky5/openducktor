@@ -8,11 +8,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { host } from "../shared/host";
-import {
-  prepareTaskChatDraftCleanupTargets,
-  runTaskChatDraftCleanupAfterSuccess,
-  type TaskChatDraftCleanupPlan,
-} from "./task-chat-draft-cleanup";
+import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { collectTaskDeletionIds } from "./task-deletion-ids";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
@@ -27,11 +23,6 @@ type UseTaskMutationCommandsArgs = {
   tasks: TaskCard[];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
 };
-
-const emptyTaskChatDraftCleanupPlan = (): TaskChatDraftCleanupPlan => ({
-  targets: [],
-  error: null,
-});
 
 export type TaskMutationCommands = {
   createTask: (input: TaskCreateInput) => Promise<void>;
@@ -51,32 +42,6 @@ export function useTaskMutationCommands({
   runTaskMutation,
 }: UseTaskMutationCommandsArgs): TaskMutationCommands {
   const queryClient = useQueryClient();
-
-  const prepareCleanupTargets = useCallback(
-    async (repoPath: string, taskIds: string[]): Promise<TaskChatDraftCleanupPlan> =>
-      prepareTaskChatDraftCleanupTargets({
-        queryClient,
-        repoPath,
-        workspaceId: activeWorkspaceId,
-        taskIds,
-      }),
-    [activeWorkspaceId, queryClient],
-  );
-
-  const prepareClosingCleanupTargets = useCallback(
-    async (
-      repoPath: string,
-      taskId: string,
-      status: TaskStatus,
-    ): Promise<TaskChatDraftCleanupPlan> => {
-      if (status !== "closed") {
-        return emptyTaskChatDraftCleanupPlan();
-      }
-
-      return prepareCleanupTargets(repoPath, [taskId]);
-    },
-    [prepareCleanupTargets],
-  );
 
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
@@ -135,16 +100,22 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "remove-task", taskIds: taskIdsToRemove },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareCleanupTargets(repoPath, taskIdsToRemove);
-          await host.taskDelete(repoPath, taskId, deleteSubtasks);
-          runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+          await runTaskMutationWithChatDraftCleanup({
+            queryClient,
+            repoPath,
+            workspaceId: activeWorkspaceId,
+            taskIds: taskIdsToRemove,
+            mutation: async () => {
+              await host.taskDelete(repoPath, taskId, deleteSubtasks);
+            },
+          });
         },
         successTitle: "Task deleted",
         successDescription: taskId,
         failureTitle: "Failed to delete task",
       });
     },
-    [prepareCleanupTargets, runTaskMutation, tasks],
+    [activeWorkspaceId, queryClient, runTaskMutation, tasks],
   );
 
   const closeTask = useCallback(
@@ -152,16 +123,22 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareCleanupTargets(repoPath, [taskId]);
-          await host.taskClose(repoPath, taskId);
-          runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+          await runTaskMutationWithChatDraftCleanup({
+            queryClient,
+            repoPath,
+            workspaceId: activeWorkspaceId,
+            taskIds: [taskId],
+            mutation: async () => {
+              await host.taskClose(repoPath, taskId);
+            },
+          });
         },
         successTitle: "Task closed",
         successDescription: taskId,
         failureTitle: "Failed to close task",
       });
     },
-    [prepareCleanupTargets, runTaskMutation],
+    [activeWorkspaceId, queryClient, runTaskMutation],
   );
 
   const transitionTask = useCallback(
@@ -169,15 +146,26 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareClosingCleanupTargets(repoPath, taskId, status);
-          await host.taskTransition(repoPath, taskId, status, reason);
-          runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+          if (status !== "closed") {
+            await host.taskTransition(repoPath, taskId, status, reason);
+            return;
+          }
+
+          await runTaskMutationWithChatDraftCleanup({
+            queryClient,
+            repoPath,
+            workspaceId: activeWorkspaceId,
+            taskIds: [taskId],
+            mutation: async () => {
+              await host.taskTransition(repoPath, taskId, status, reason);
+            },
+          });
         },
         successDescription: taskId,
         failureTitle: "Failed to transition task",
       });
     },
-    [prepareClosingCleanupTargets, runTaskMutation],
+    [activeWorkspaceId, queryClient, runTaskMutation],
   );
 
   const humanApproveTask = useCallback(
@@ -185,16 +173,22 @@ export function useTaskMutationCommands({
       await runTaskMutation({
         refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
-          const cleanupTargets = await prepareCleanupTargets(repoPath, [taskId]);
-          await host.humanApprove(repoPath, taskId);
-          runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+          await runTaskMutationWithChatDraftCleanup({
+            queryClient,
+            repoPath,
+            workspaceId: activeWorkspaceId,
+            taskIds: [taskId],
+            mutation: async () => {
+              await host.humanApprove(repoPath, taskId);
+            },
+          });
         },
         successTitle: "Task approved",
         successDescription: taskId,
         failureTitle: "Failed to approve task",
       });
     },
-    [prepareCleanupTargets, runTaskMutation],
+    [activeWorkspaceId, queryClient, runTaskMutation],
   );
 
   const humanRequestChangesTask = useCallback(

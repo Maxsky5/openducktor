@@ -4,10 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "../shared/host";
-import {
-  prepareTaskChatDraftCleanupTargets,
-  runTaskChatDraftCleanupAfterSuccess,
-} from "./task-chat-draft-cleanup";
+import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
@@ -146,18 +143,19 @@ export function useTaskPullRequestOperations({
     const { repoPath, taskId, pullRequest } = pendingMergedPullRequestState;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
-      const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
+      await runTaskMutationWithChatDraftCleanup({
         queryClient,
         repoPath,
         workspaceId: activeWorkspaceId,
         taskIds: [taskId],
+        mutation: async () => {
+          await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
+        },
       });
-      await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
       setPendingMergedPullRequestState((current) =>
         current?.repoPath === repoPath && current.taskId === taskId ? null : current,
       );
       await refreshTaskData(repoPath, taskId);
-      runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
       });
