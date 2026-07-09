@@ -163,6 +163,25 @@ afterEach(async () => {
 });
 
 describe("PierreDiffViewer", () => {
+  test("preloads a diff rendered immediately without a separate preload queue", async () => {
+    const { PierrePreloadedDiffViewer } = pierreViewerModule;
+    const primeDiffHighlightCache = mock();
+    workerPoolMock = {
+      getDiffResultCache: mock(() => null),
+      primeDiffHighlightCache,
+    };
+
+    render(<PierrePreloadedDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
+
+    expect(screen.getByTestId("pierre-file-diff")).not.toBeNull();
+    await waitFor(
+      () => {
+        expect(primeDiffHighlightCache).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+  });
+
   test("preloads parsed diffs by priming the worker cache", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
     const primeDiffHighlightCache = mock();

@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PierreDiffViewer } from "./pierre-diff-viewer";
+import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import { commentLocationLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
@@ -92,7 +92,7 @@ export function TaskExecutionCiCommentCard({
           className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
           data-testid="ci-review-comment-diff"
         >
-          <PierreDiffViewer
+          <PierrePreloadedDiffViewer
             patch={comment.patch}
             filePath={comment.path}
             diffStyle="unified"

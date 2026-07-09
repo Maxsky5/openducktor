@@ -352,3 +352,14 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     </div>
   );
 });
+
+export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer(
+  props: PierreDiffViewerProps,
+): ReactElement {
+  return (
+    <>
+      <PierreDiffPreloader patch={props.patch} filePath={props.filePath} />
+      <PierreDiffViewer {...props} />
+    </>
+  );
+});
