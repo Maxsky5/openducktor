@@ -145,6 +145,7 @@ export const createElectronMainShutdownController = ({
 }: ShutdownControllerOptions): ElectronMainShutdownController => {
   let hostShutdownStarted = false;
   let hostShutdownComplete = false;
+  let hostShutdownExitCode: number | null = null;
 
   const shutdownHost = async (
     reason: string,
@@ -152,7 +153,7 @@ export const createElectronMainShutdownController = ({
   ): Promise<number | null> => {
     if (hostShutdownStarted) {
       if (hostShutdownComplete) {
-        return 0;
+        return hostShutdownExitCode ?? 0;
       }
       if (!rejectIfInProgress) {
         return null;
@@ -179,6 +180,7 @@ export const createElectronMainShutdownController = ({
     }
 
     hostShutdownComplete = true;
+    hostShutdownExitCode = exitCode;
     return exitCode;
   };
 
@@ -202,6 +204,7 @@ export const createElectronMainShutdownController = ({
     isHostShutdownStarted: () => hostShutdownStarted,
     markHostShutdownComplete: () => {
       hostShutdownComplete = true;
+      hostShutdownExitCode ??= 0;
     },
     markHostShutdownStarted: () => {
       hostShutdownStarted = true;

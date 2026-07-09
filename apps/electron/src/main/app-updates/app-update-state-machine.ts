@@ -9,6 +9,7 @@ import type {
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
 type DownloadingAppUpdateState = Extract<AppUpdateState, { status: "downloading" }>;
 type DownloadedAppUpdateState = Extract<AppUpdateState, { status: "downloaded" }>;
+type ErrorAppUpdateState = Extract<AppUpdateState, { status: "error" }>;
 type AppUpdateStateWithAvailableVersion = AppUpdateState & { availableVersion: string };
 
 const availableVersionFromState = (state: AppUpdateState | undefined): string | undefined =>
@@ -68,6 +69,16 @@ export const createDisabledUpdateState = ({
 
 export const markDisabledManualCheck = (
   state: DisabledAppUpdateState,
+  initiator: AppUpdateCheckInitiator,
+  checkedAt: string,
+): AppUpdateState => ({
+  ...state,
+  checkInitiator: initiator,
+  checkedAt,
+});
+
+export const markErrorManualCheck = (
+  state: ErrorAppUpdateState,
   initiator: AppUpdateCheckInitiator,
   checkedAt: string,
 ): AppUpdateState => ({
@@ -190,6 +201,16 @@ export const markDownloaded = ({
   ...(checkedAtFromState(previousState) ? { checkedAt: checkedAtFromState(previousState) } : {}),
 });
 
+export const markDownloadedInstallRequested = (
+  previousState: DownloadedAppUpdateState,
+): AppUpdateState => {
+  const { error: _error, installRequested: _installRequested, ...installState } = previousState;
+  return {
+    ...installState,
+    installRequested: true,
+  };
+};
+
 export const updateErrorCodeForOperation = (
   operation: AppUpdateOperation,
 ): "check_failed" | "download_failed" | "install_failed" => {
@@ -241,12 +262,15 @@ export const markDownloadedInstallError = ({
   cause?: unknown;
   message: string;
   previousState: DownloadedAppUpdateState;
-}): AppUpdateState => ({
-  ...previousState,
-  error: createUpdateError({
-    cause,
-    code: "install_failed",
-    message,
-    operation: "install",
-  }),
-});
+}): AppUpdateState => {
+  const { installRequested: _installRequested, ...retryableState } = previousState;
+  return {
+    ...retryableState,
+    error: createUpdateError({
+      cause,
+      code: "install_failed",
+      message,
+      operation: "install",
+    }),
+  };
+};

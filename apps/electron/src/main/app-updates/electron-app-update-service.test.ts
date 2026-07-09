@@ -3,20 +3,23 @@ import type { AppUpdateState } from "@openducktor/contracts";
 import {
   createElectronAppUpdateService,
   type ElectronAppUpdaterAdapter,
+  type ElectronUpdaterCheckResult,
   type ElectronUpdaterConfigureOptions,
   type ElectronUpdaterEventMap,
 } from "./electron-app-update-service";
 
 class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
+  configureError: unknown = null;
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
   downloadCalls = 0;
   installCalls: Array<{ isForceRunAfter: boolean | undefined; isSilent: boolean | undefined }> = [];
   onDownload: (() => void | Promise<void>) | null = null;
-  nextCheckResult = {
-    isUpdateAvailable: false,
-    updateInfo: { version: "0.4.2" },
-  };
+  nextCheckResult: ElectronUpdaterCheckResult | null | Promise<ElectronUpdaterCheckResult | null> =
+    {
+      isUpdateAvailable: false,
+      updateInfo: { version: "0.4.2" },
+    };
   nextDownloadResult: Promise<readonly string[]> = Promise.resolve(["/tmp/OpenDucktor.dmg"]);
 
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -27,6 +30,9 @@ class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   }
 
   configure(options: ElectronUpdaterConfigureOptions): void {
+    if (this.configureError) {
+      throw this.configureError;
+    }
     this.configureOptions = options;
   }
 
@@ -180,6 +186,63 @@ describe("electron app update service", () => {
     expect(adapter.configureOptions).toBeNull();
   });
 
+  test("does not run checks after initialization failures", async () => {
+    const cases: Array<{
+      configureAdapter?(adapter: FakeUpdaterAdapter): void;
+      configureService?: Partial<Parameters<typeof createElectronAppUpdateService>[0]>;
+      expectedMessage: string;
+    }> = [
+      {
+        configureService: {
+          readUpdateConfig: () => {
+            throw new Error("config unreadable");
+          },
+        },
+        expectedMessage: "Failed to read Electron update configuration",
+      },
+      {
+        configureService: {
+          readUpdateConfig: () => "provider: [\n",
+        },
+        expectedMessage: "Electron update feed configuration is invalid",
+      },
+      {
+        configureAdapter: (adapter) => {
+          adapter.configureError = new Error("configure failed");
+        },
+        expectedMessage: "Electron updater initialization failed",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const adapter = new FakeUpdaterAdapter();
+      testCase.configureAdapter?.(adapter);
+      const { service } = createService({ adapter, ...testCase.configureService });
+
+      service.startBackgroundCheck();
+      const manualResult = await service.check({ initiator: "menu" });
+
+      expect(adapter.checkCalls).toBe(0);
+      expect(manualResult).toMatchObject({
+        accepted: false,
+        rejection: {
+          code: "updater_unavailable",
+          operation: "check",
+        },
+        state: {
+          status: "error",
+          checkInitiator: "menu",
+          checkedAt: fixedNow,
+          error: {
+            code: "updater_unavailable",
+            operation: "initialize",
+          },
+        },
+      });
+      expect(manualResult.state.error?.message).toContain(testCase.expectedMessage);
+    }
+  });
+
   test("configures the updater for explicit download and install control", () => {
     const { adapter, service } = createService();
 
@@ -214,6 +277,49 @@ describe("electron app update service", () => {
     });
     expect(states.map((state) => state.status)).toEqual(["checking", "available"]);
     expect(adapter.downloadCalls).toBe(0);
+  });
+
+  test("promotes an active background check when the menu requests a manual check", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    let resolveCheck: (result: ElectronUpdaterCheckResult) => void = () => {};
+    adapter.nextCheckResult = new Promise<ElectronUpdaterCheckResult>((resolve) => {
+      resolveCheck = resolve;
+    });
+    const { service } = createService({ adapter });
+    const states: AppUpdateState[] = [];
+    service.subscribe((state) => states.push(state));
+
+    service.startBackgroundCheck();
+    await Promise.resolve();
+    const menuResult = await service.check({ initiator: "menu" });
+
+    expect(menuResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "check",
+      },
+      state: {
+        status: "checking",
+        checkInitiator: "menu",
+      },
+    });
+    expect(states.map((state) => state.status)).toEqual(["checking", "checking"]);
+    expect(states.at(-1)).toMatchObject({ checkInitiator: "menu" });
+    expect(adapter.checkCalls).toBe(1);
+
+    resolveCheck({
+      isUpdateAvailable: false,
+      updateInfo: { version: "0.4.2" },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(service.getState()).toMatchObject({
+      status: "upToDate",
+      checkInitiator: "menu",
+      checkedAt: fixedNow,
+    });
   });
 
   test("treats a null update check result as an actionable error", async () => {
@@ -388,6 +494,54 @@ describe("electron app update service", () => {
     expect(result.accepted).toBe(true);
     expect(order).toEqual(["shutdown", "after-install-call"]);
     expect(adapter.installCalls).toEqual([{ isSilent: false, isForceRunAfter: true }]);
+  });
+
+  test("keeps install handoff guarded until a delayed updater error restores retry", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    const firstResult = await service.install();
+    const duplicateResult = await service.install();
+
+    expect(firstResult).toMatchObject({
+      accepted: true,
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        installRequested: true,
+      },
+    });
+    expect(duplicateResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "install",
+      },
+    });
+    expect(adapter.installCalls).toHaveLength(1);
+
+    adapter.emit("error", new Error("native install failed"));
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      error: {
+        code: "install_failed",
+        message: "native install failed",
+        operation: "install",
+      },
+    });
+
+    const retryResult = await service.install();
+
+    expect(retryResult.accepted).toBe(true);
+    expect(adapter.installCalls).toHaveLength(2);
   });
 
   test("install failures keep downloaded state retryable with an install error", async () => {

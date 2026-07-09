@@ -23,9 +23,11 @@ function AppUpdateProgress({ percent }: AppUpdateProgressProps): ReactElement {
       <div
         className="h-2 overflow-hidden rounded-full bg-muted"
         role="progressbar"
+        aria-label="Update download progress"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(percent)}
+        aria-valuetext={`${Math.round(percent)}% downloaded`}
       >
         <div className="h-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
       </div>
@@ -67,10 +69,14 @@ function SettingsAppUpdatesContent({
   const controller = useAppUpdateState();
   const display = getAppUpdateStatusDisplay(controller.state ?? state);
   const visibleState = controller.state ?? state;
-  const isBusy = controller.actionInFlight !== null || visibleState.status === "checking";
+  const installRequested =
+    visibleState.status === "downloaded" && visibleState.installRequested === true;
+  const isBusy =
+    controller.actionInFlight !== null || visibleState.status === "checking" || installRequested;
   const downloadAllowed = canDownloadUpdate(visibleState);
   const installAllowed = canInstallUpdate(visibleState);
   const error = getAppUpdateError(visibleState);
+  const errorMessage = controller.commandError?.message ?? error?.message;
 
   return (
     <div className="rounded-md border border-border bg-card p-4">
@@ -101,9 +107,9 @@ function SettingsAppUpdatesContent({
         {visibleState.status === "downloading" && (
           <AppUpdateProgress percent={getAppUpdateProgressPercent(visibleState) ?? 0} />
         )}
-        {error && (
+        {errorMessage && (
           <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-            {error.message}
+            {errorMessage}
           </p>
         )}
         <div className="flex flex-wrap gap-2">

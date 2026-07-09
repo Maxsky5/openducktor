@@ -16,8 +16,10 @@ import {
   markDisabledManualCheck,
   markDownloaded,
   markDownloadedInstallError,
+  markDownloadedInstallRequested,
   markDownloading,
   markDownloadProgress,
+  markErrorManualCheck,
   markUpdateError,
   markUpToDate,
   updateErrorCodeForOperation,
@@ -157,6 +159,7 @@ export const createElectronAppUpdateService = ({
     appUpdateConfigPath ?? join(resourcesPath, DEFAULT_APP_UPDATE_CONFIG_FILE);
   let activeOperation: AppUpdateOperation | null = null;
   let disposed = false;
+  let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
 
   const publishState = (nextState: AppUpdateState): AppUpdateState => {
@@ -201,6 +204,16 @@ export const createElectronAppUpdateService = ({
       message: `Cannot ${operation} updates while another update action is active.`,
       operation,
     });
+
+  const rejectUpdaterUnavailable = (operation: AppUpdateOperation): AppUpdateCommandResult => {
+    const currentState = state;
+    const error = currentState.status === "error" ? currentState.error : undefined;
+    return commandRejected({
+      code: error?.code ?? "updater_unavailable",
+      message: error?.message ?? "Electron updater is not available.",
+      operation,
+    });
+  };
 
   const rejectInvalidState = (
     operation: AppUpdateOperation,
@@ -295,12 +308,17 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyAdapterError = (cause: unknown): void => {
-    const operation = activeOperation ?? "check";
     const previousState = state;
+    const operation =
+      activeOperation ??
+      (previousState.status === "downloaded" && previousState.installRequested === true
+        ? "install"
+        : "check");
     const availableVersion = availableVersionFromState(previousState);
     const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
     const message = errorMessage(cause);
     if (operation === "install" && previousState.status === "downloaded") {
+      activeOperation = null;
       publishState(
         markDownloadedInstallError({
           cause,
@@ -414,6 +432,7 @@ export const createElectronAppUpdateService = ({
         logger,
       });
       registerAdapterEvents();
+      updaterReady = true;
       publishState({ status: "idle", currentVersion });
     } catch (cause) {
       setErrorState({
@@ -433,6 +452,18 @@ export const createElectronAppUpdateService = ({
       if (currentState.status === "disabled") {
         publishState(markDisabledManualCheck(currentState, initiator, now()));
         return rejectDisabled("check", currentState);
+      }
+      if (!updaterReady) {
+        if (currentState.status === "error" && initiator !== "background") {
+          publishState(markErrorManualCheck(currentState, initiator, now()));
+        }
+        return rejectUpdaterUnavailable("check");
+      }
+      if (activeOperation === "check") {
+        if (currentState.status === "checking" && initiator !== "background") {
+          publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
+        }
+        return rejectBusy("check");
       }
       if (
         activeOperation !== null ||
@@ -500,6 +531,9 @@ export const createElectronAppUpdateService = ({
       if (state.status === "disabled") {
         return rejectDisabled("download", state);
       }
+      if (!updaterReady) {
+        return rejectUpdaterUnavailable("download");
+      }
       if (activeOperation !== null) {
         return rejectBusy("download");
       }
@@ -547,6 +581,9 @@ export const createElectronAppUpdateService = ({
       if (state.status === "disabled") {
         return rejectDisabled("install", state);
       }
+      if (!updaterReady) {
+        return rejectUpdaterUnavailable("install");
+      }
       if (activeOperation !== null) {
         return rejectBusy("install");
       }
@@ -563,8 +600,12 @@ export const createElectronAppUpdateService = ({
         await installDownloadedUpdate(() => {
           adapter.quitAndInstall(false, true);
         });
+        if (activeOperation === "install" && state.status === "downloaded") {
+          publishState(markDownloadedInstallRequested(state));
+        }
         return commandAccepted();
       } catch (cause) {
+        activeOperation = null;
         logger.error("OpenDucktor update install failed", cause);
         publishState(
           markDownloadedInstallError({
@@ -574,8 +615,6 @@ export const createElectronAppUpdateService = ({
           }),
         );
         return commandAccepted();
-      } finally {
-        activeOperation = null;
       }
     },
     startBackgroundCheck: () => {

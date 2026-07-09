@@ -274,4 +274,54 @@ describe("Electron main lifecycle policy", () => {
       },
     ]);
   });
+
+  test("shutdown controller preserves a failed host disposal outcome across run retries", async () => {
+    const disposalError = new ElectronLifecycleError({
+      operation: "electron.main.dispose-host",
+      message: "dispose failed",
+      reason: "update-install",
+    });
+    const installCalls: string[] = [];
+    let disposeCalls = 0;
+
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => {
+        disposeCalls += 1;
+        return Effect.fail(disposalError);
+      },
+      exitProcess: () => {},
+      logger: {
+        error() {},
+        info() {},
+      },
+      quitApp: () => {},
+    });
+
+    await expect(
+      controller.shutdownHostAndRun({
+        reason: "update-install",
+        runAfterShutdown: () => {
+          installCalls.push("install");
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.shutdown-host-before-run",
+    });
+
+    await expect(
+      controller.shutdownHostAndRun({
+        reason: "update-install",
+        runAfterShutdown: () => {
+          installCalls.push("install");
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.shutdown-host-before-run",
+    });
+
+    expect(disposeCalls).toBe(1);
+    expect(installCalls).toEqual([]);
+  });
 });

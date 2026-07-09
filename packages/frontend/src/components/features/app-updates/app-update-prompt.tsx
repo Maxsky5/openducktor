@@ -46,15 +46,22 @@ export function AppUpdatePrompt(): ReactElement | null {
   }
 
   const display = getAppUpdateStatusDisplay(state);
-  const isBusy = controller.actionInFlight !== null || state.status === "checking";
+  const installRequested = state.status === "downloaded" && state.installRequested === true;
+  const isBusy =
+    controller.actionInFlight !== null || state.status === "checking" || installRequested;
   const showProgress = state.status === "downloading";
   const progressPercent = Math.round(getAppUpdateProgressPercent(state) ?? 0);
   const availableVersion = getAppUpdateAvailableVersion(state);
   const error = getAppUpdateError(state);
+  const errorMessage = controller.commandError?.message ?? error?.message;
+  const liveDescription = controller.commandError?.message ?? display.description;
 
   return (
     <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(420px,calc(100vw-2rem))]">
       <Card className="pointer-events-auto rounded-lg border-border bg-card p-4 shadow-lg">
+        <p role="status" aria-live="polite" className="sr-only">
+          {display.label}. {liveDescription}
+        </p>
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -73,9 +80,11 @@ export function AppUpdatePrompt(): ReactElement | null {
                 <div
                   className="h-2 overflow-hidden rounded-full bg-muted"
                   role="progressbar"
+                  aria-label="Update download progress"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={progressPercent}
+                  aria-valuetext={`${progressPercent}% downloaded`}
                 >
                   <div
                     className="h-full bg-primary transition-[width]"
@@ -85,9 +94,9 @@ export function AppUpdatePrompt(): ReactElement | null {
                 <p className="text-xs text-muted-foreground">{progressPercent}% downloaded</p>
               </div>
             )}
-            {error && (
+            {errorMessage && (
               <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-                {error.message}
+                {errorMessage}
               </p>
             )}
             <div className="flex flex-wrap gap-2">

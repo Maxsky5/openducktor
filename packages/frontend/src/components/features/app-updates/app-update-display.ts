@@ -88,6 +88,13 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
     };
   }
   if (state.status === "downloaded") {
+    if (state.installRequested === true) {
+      return {
+        badgeVariant: "secondary",
+        label: "Installing update",
+        description: "OpenDucktor is handing off to the updater. Keep the app open.",
+      };
+    }
     return {
       badgeVariant: "success",
       label: "Ready to install",

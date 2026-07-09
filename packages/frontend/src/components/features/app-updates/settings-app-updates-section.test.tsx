@@ -58,6 +58,11 @@ describe("SettingsAppUpdatesSection", () => {
     render(<SettingsAppUpdatesSection disabled={false} />);
 
     expect(await screen.findByText("67% downloaded")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("progressbar", { name: "Update download progress" })
+        .getAttribute("aria-valuetext"),
+    ).toBe("67% downloaded");
 
     act(() => {
       appUpdates.emit({
@@ -69,5 +74,23 @@ describe("SettingsAppUpdatesSection", () => {
     });
 
     expect(await screen.findByRole("button", { name: "Restart to Install" })).toBeTruthy();
+  });
+
+  test("shows installer handoff and suppresses update actions", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRequested: true,
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<SettingsAppUpdatesSection disabled={false} />);
+
+    expect(await screen.findByText("Installing update")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+    ).toBe(true);
   });
 });

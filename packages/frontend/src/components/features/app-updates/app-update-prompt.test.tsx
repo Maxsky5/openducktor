@@ -55,6 +55,7 @@ describe("AppUpdatePrompt", () => {
     render(<AppUpdatePrompt />);
 
     expect(await screen.findByText("Update available")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Update available");
     expect(screen.getByText(/Current 0.4.2/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
 
@@ -86,6 +87,30 @@ describe("AppUpdatePrompt", () => {
 
     await waitFor(() => expect(appUpdates.download).toHaveBeenCalled());
     expect(await screen.findByText("40% downloaded")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("progressbar", { name: "Update download progress" })
+        .getAttribute("aria-valuetext"),
+    ).toBe("40% downloaded");
+  });
+
+  test("keeps an available update visible when download command transport fails", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "available",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    appUpdates.download.mockRejectedValue(new Error("bridge download failed"));
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
+
+    expect((await screen.findAllByText("bridge download failed")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Current 0.4.2/)).toBeTruthy();
+    expect(screen.getByText(/New 0.4.3/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
   });
 
   test("offers explicit restart after download", async () => {
@@ -102,6 +127,42 @@ describe("AppUpdatePrompt", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
 
     await waitFor(() => expect(appUpdates.install).toHaveBeenCalled());
+  });
+
+  test("keeps a downloaded update visible when install command transport fails", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    appUpdates.install.mockRejectedValue(new Error("bridge install failed"));
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
+
+    expect(await screen.findByText("bridge install failed")).toBeTruthy();
+    expect(screen.getByText("Ready to install")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Restart to Install" })).toBeTruthy();
+  });
+
+  test("shows installer handoff without offering another restart action", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRequested: true,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Installing update")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Installing update");
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
   });
 
   test("resurfaces a dismissed downloaded prompt when install fails", async () => {

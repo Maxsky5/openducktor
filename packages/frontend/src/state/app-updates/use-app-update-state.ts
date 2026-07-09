@@ -21,9 +21,15 @@ const errorMessage = (cause: unknown): string =>
 
 export type AppUpdateAction = "check" | "download" | "install";
 
+export type AppUpdateCommandError = {
+  message: string;
+  operation: AppUpdateOperation;
+};
+
 export type AppUpdateStateController = {
   actionInFlight: AppUpdateAction | null;
   checkFromSettings(): Promise<AppUpdateCommandResult | null>;
+  commandError: AppUpdateCommandError | null;
   download(): Promise<AppUpdateCommandResult | null>;
   install(): Promise<AppUpdateCommandResult | null>;
   isLoadingInitialState: boolean;
@@ -34,6 +40,7 @@ export function useAppUpdateState(): AppUpdateStateController {
   const [state, setState] = useState<AppUpdateState | null>(null);
   const [isLoadingInitialState, setIsLoadingInitialState] = useState(true);
   const [actionInFlight, setActionInFlight] = useState<AppUpdateAction | null>(null);
+  const [commandError, setCommandError] = useState<AppUpdateCommandError | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -44,6 +51,7 @@ export function useAppUpdateState(): AppUpdateStateController {
       .getState()
       .then((nextState) => {
         if (!disposed) {
+          setCommandError(null);
           setState(nextState);
         }
       })
@@ -61,6 +69,7 @@ export function useAppUpdateState(): AppUpdateStateController {
     void appUpdates
       .subscribeState((nextState) => {
         if (!disposed) {
+          setCommandError(null);
           setState(nextState);
         }
       })
@@ -90,12 +99,14 @@ export function useAppUpdateState(): AppUpdateStateController {
       command: () => Promise<AppUpdateCommandResult>,
     ): Promise<AppUpdateCommandResult | null> => {
       setActionInFlight(action);
+      setCommandError(null);
       try {
         const result = await command();
+        setCommandError(null);
         setState(result.state);
         return result;
       } catch (cause) {
-        setState(unavailableState(errorMessage(cause), operation));
+        setCommandError({ message: errorMessage(cause), operation });
         return null;
       } finally {
         setActionInFlight(null);
@@ -110,6 +121,7 @@ export function useAppUpdateState(): AppUpdateStateController {
       runAction("check", "check", () =>
         getShellBridge().appUpdates.check({ initiator: "settings" }),
       ),
+    commandError,
     download: () => runAction("download", "download", () => getShellBridge().appUpdates.download()),
     install: () => runAction("install", "install", () => getShellBridge().appUpdates.install()),
     isLoadingInitialState,

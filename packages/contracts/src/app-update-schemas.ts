@@ -118,6 +118,7 @@ export const appUpdateStateSchema = z.discriminatedUnion("status", [
       progressPercent: appUpdateProgressPercentSchema,
       checkInitiator: appUpdateCheckInitiatorSchema.optional(),
       checkedAt: appUpdateCheckedAtSchema.optional(),
+      installRequested: z.literal(true).optional(),
       error: appUpdateErrorSchema.optional(),
     })
     .strict(),
@@ -152,7 +153,7 @@ export const canDownloadAppUpdate = (
 };
 
 export const canInstallAppUpdate = (state: AppUpdateState): state is AppUpdateInstallableState =>
-  state.status === "downloaded";
+  state.status === "downloaded" && state.installRequested !== true;
 
 export const appUpdateCommandRejectionSchema = z
   .object({
