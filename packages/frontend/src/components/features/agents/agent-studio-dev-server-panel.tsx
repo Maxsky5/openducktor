@@ -16,6 +16,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import {
+  createDevServerTaskScope,
+  formatDevServerTaskScopeKey,
+} from "@/types/dev-server-task-scope";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
 
@@ -138,8 +142,9 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const terminalScopeKey =
-    model.repoPath && model.taskId ? `${model.repoPath}::${model.taskId}` : "__no-task__";
+  const terminalScopeKey = formatDevServerTaskScopeKey(
+    createDevServerTaskScope(model.repoPath, model.taskId),
+  );
   const selectedScriptTerminalBuffer =
     model.selectedScriptTerminalBuffer ??
     (selectedScriptContent

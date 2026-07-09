@@ -617,6 +617,98 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  test("does not expose a pending dev-server mutation after the active task changes", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async (_repoPath, taskId) =>
+      buildState({
+        taskId,
+        worktreePath: `/tmp/worktree/${taskId}`,
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: taskId === "task-7" ? 4242 : 5252,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+    const stopDeferred = createDeferred<DevServerGroupState>();
+    devServerStop = async () => stopDeferred.promise;
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-7");
+      });
+
+      act(() => {
+        harness.getLatest().onStop();
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().isStopPending).toBe(true);
+      });
+
+      act(() => {
+        harness.update({
+          repoPath: "/repo",
+          taskId: "task-8",
+          repoSettings,
+          enabled: true,
+        });
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+      });
+      expect(harness.getLatest().isStopPending).toBe(false);
+      expect(harness.getLatest().isStartPending).toBe(false);
+      expect(harness.getLatest().isRestartPending).toBe(false);
+
+      stopDeferred.resolve(
+        buildState({
+          taskId: "task-7",
+          worktreePath: "/tmp/worktree/task-7",
+        }),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("surfaces dev-server actions without an active task as actionable errors", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: null,
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      act(() => {
+        harness.getLatest().onStart();
+      });
+
+      expect(harness.getLatest().error).toBe(
+        "Builder dev servers require an active repository and task.",
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("replaces a returned task terminal buffer after its sequence resets while inactive", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

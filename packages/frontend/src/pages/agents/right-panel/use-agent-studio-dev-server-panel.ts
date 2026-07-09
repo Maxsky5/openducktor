@@ -11,6 +11,12 @@ import {
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
+import {
+  createDevServerTaskScope,
+  type DevServerTaskScope,
+  isSameDevServerTaskScope,
+  MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE,
+} from "@/types/dev-server-task-scope";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   applyDevServerEventToState,
@@ -36,12 +42,7 @@ type UseAgentStudioDevServerPanelArgs = {
   enabled: boolean;
 };
 
-type DevServerMutationVariables = {
-  repoPath: string;
-  taskId: string;
-};
-
-type DevServerMutationCommand = (scope: DevServerMutationVariables) => Promise<DevServerGroupState>;
+type DevServerMutationCommand = (scope: DevServerTaskScope) => Promise<DevServerGroupState>;
 
 type DevServerMutationOptions = {
   restoreCachedStateOnError?: boolean;
@@ -109,8 +110,8 @@ export function useAgentStudioDevServerPanel({
   const hasConfiguredScripts = configuredScripts.length > 0;
   const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
-  const terminalBufferScope = useMemo(
-    () => (repoPath && taskId ? { repoPath, taskId } : null),
+  const activeTaskScope = useMemo(
+    () => createDevServerTaskScope(repoPath, taskId),
     [repoPath, taskId],
   );
 
@@ -125,7 +126,7 @@ export function useAgentStudioDevServerPanel({
     selectedScriptTerminalBuffer,
     syncSelectedScriptTerminalBuffer,
     syncTerminalBuffersFromMutationState,
-  } = useAgentStudioDevServerTerminalBuffers(terminalBufferScope);
+  } = useAgentStudioDevServerTerminalBuffers(activeTaskScope);
 
   const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
     useAgentStudioDevServerStateQuery({
@@ -231,10 +232,10 @@ export function useAgentStudioDevServerPanel({
   );
 
   const isActiveMutationScope = useCallback(
-    (scope: DevServerMutationVariables): boolean => {
-      return scope.repoPath === repoPath && scope.taskId === taskId;
+    (scope: DevServerTaskScope | null | undefined): boolean => {
+      return isSameDevServerTaskScope(scope ?? null, activeTaskScope);
     },
-    [repoPath, taskId],
+    [activeTaskScope],
   );
 
   const syncMutationSuccessState = useCallback(
@@ -264,7 +265,7 @@ export function useAgentStudioDevServerPanel({
   }, [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId]);
 
   const invalidateState = useCallback(
-    (scope: DevServerMutationVariables): void => {
+    (scope: DevServerTaskScope): void => {
       void queryClient.invalidateQueries({
         queryKey: devServerQueryKeys.state(scope.repoPath, scope.taskId),
         exact: true,
@@ -277,7 +278,7 @@ export function useAgentStudioDevServerPanel({
   const createScopedMutationOptions = useCallback(
     (mutationFn: DevServerMutationCommand, options: DevServerMutationOptions = {}) => ({
       mutationFn,
-      onMutate: (scope: DevServerMutationVariables) => {
+      onMutate: (scope: DevServerTaskScope) => {
         if (isActiveMutationScope(scope)) {
           dispatchLocalState({ type: "actionStarted" });
           beginMutationReplaySync(effectiveState);
@@ -286,7 +287,7 @@ export function useAgentStudioDevServerPanel({
       onSuccess: (data: DevServerGroupState) => {
         syncMutationSuccessState(data);
       },
-      onError: (error: unknown, scope: DevServerMutationVariables) => {
+      onError: (error: unknown, scope: DevServerTaskScope) => {
         if (isActiveMutationScope(scope)) {
           cancelMutationReplaySync();
           if (options.restoreCachedStateOnError) {
@@ -298,7 +299,7 @@ export function useAgentStudioDevServerPanel({
       onSettled: (
         _data: DevServerGroupState | undefined,
         error: unknown,
-        scope: DevServerMutationVariables,
+        scope: DevServerTaskScope,
       ) => {
         if (error) {
           invalidateState(scope);
@@ -316,7 +317,7 @@ export function useAgentStudioDevServerPanel({
     ],
   );
 
-  const startMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+  const startMutation = useMutation<DevServerGroupState, unknown, DevServerTaskScope>(
     createScopedMutationOptions(
       async (scope): Promise<DevServerGroupState> =>
         hostClient.devServerStart(scope.repoPath, scope.taskId),
@@ -324,14 +325,14 @@ export function useAgentStudioDevServerPanel({
     ),
   );
 
-  const stopMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+  const stopMutation = useMutation<DevServerGroupState, unknown, DevServerTaskScope>(
     createScopedMutationOptions(
       async (scope): Promise<DevServerGroupState> =>
         hostClient.devServerStop(scope.repoPath, scope.taskId),
     ),
   );
 
-  const restartMutation = useMutation<DevServerGroupState, unknown, DevServerMutationVariables>(
+  const restartMutation = useMutation<DevServerGroupState, unknown, DevServerTaskScope>(
     createScopedMutationOptions(
       async (scope): Promise<DevServerGroupState> =>
         hostClient.devServerRestart(scope.repoPath, scope.taskId),
@@ -406,9 +407,13 @@ export function useAgentStudioDevServerPanel({
 
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
+  const isStartPending = startMutation.isPending && isActiveMutationScope(startMutation.variables);
+  const isStopPending = stopMutation.isPending && isActiveMutationScope(stopMutation.variables);
+  const isRestartPending =
+    restartMutation.isPending && isActiveMutationScope(restartMutation.variables);
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
-    startMutation.isPending || restartMutation.isPending,
+    isStartPending || isRestartPending,
   );
   const hasAvailableScripts = (effectiveState?.scripts.length ?? 0) > 0 || hasConfiguredScripts;
 
@@ -455,12 +460,13 @@ export function useAgentStudioDevServerPanel({
     selectedScript,
     selectedScriptTerminalBuffer,
     error,
-    isStartPending: startMutation.isPending,
-    isStopPending: stopMutation.isPending,
-    isRestartPending: restartMutation.isPending,
+    isStartPending,
+    isStopPending,
+    isRestartPending,
     onSelectScript,
     onStart: () => {
-      if (!repoPath || !taskId) {
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
         return;
       }
 
@@ -470,21 +476,23 @@ export function useAgentStudioDevServerPanel({
         replaceTerminalBuffersFromState(optimisticState, selectedScriptIdRef.current);
         dispatchLocalState({ type: "liveStateChanged", state: optimisticState });
       }
-      startMutation.mutate({ repoPath, taskId });
+      startMutation.mutate(activeTaskScope);
     },
     onStop: () => {
-      if (!repoPath || !taskId) {
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
         return;
       }
 
-      stopMutation.mutate({ repoPath, taskId });
+      stopMutation.mutate(activeTaskScope);
     },
     onRestart: () => {
-      if (!repoPath || !taskId) {
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
         return;
       }
 
-      restartMutation.mutate({ repoPath, taskId });
+      restartMutation.mutate(activeTaskScope);
     },
   };
 }

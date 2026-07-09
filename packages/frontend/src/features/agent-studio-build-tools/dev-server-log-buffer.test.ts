@@ -257,6 +257,52 @@ describe("dev-server-log-buffer", () => {
     ).toBe(false);
   });
 
+  test("merges a delayed same-run replay prefix with an already observed live suffix", () => {
+    const store = createDevServerTerminalBufferStore();
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 10,
+      data: "live-10\r\n",
+      timestamp: "2026-03-25T10:00:10.000Z",
+    });
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) => ({
+              scriptId: "frontend",
+              sequence,
+              data: `replay-${sequence}\r\n`,
+              timestamp: `2026-03-25T10:00:${String(sequence).padStart(2, "0")}.000Z`,
+            })),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual([
+      "replay-0\r\n",
+      "replay-1\r\n",
+      "replay-2\r\n",
+      "replay-3\r\n",
+      "replay-4\r\n",
+      "replay-5\r\n",
+      "replay-6\r\n",
+      "replay-7\r\n",
+      "replay-8\r\n",
+      "replay-9\r\n",
+      "live-10\r\n",
+    ]);
+  });
+
   test("replaces a populated buffer when an authoritative snapshot clears replay", () => {
     const store = createDevServerTerminalBufferStore();
     replaceDevServerTerminalBuffer(store, "frontend", [

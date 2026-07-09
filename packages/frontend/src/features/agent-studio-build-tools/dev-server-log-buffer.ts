@@ -271,6 +271,43 @@ const isNewerRunSnapshot = (
   );
 };
 
+const shouldMergeSameRunReplayPrefix = (
+  currentContext: DevServerTerminalBufferReplacementContext,
+  script: DevServerScriptState,
+  nextWindow: DevServerTerminalSequenceWindow,
+): boolean => {
+  if (script.startedAt === null) {
+    return false;
+  }
+
+  if (
+    nextWindow.firstSequence === null ||
+    nextWindow.lastSequence === null ||
+    currentContext.current.firstSequence === null
+  ) {
+    return false;
+  }
+
+  return nextWindow.firstSequence <= currentContext.current.firstSequence;
+};
+
+const mergeReplayPrefixWithCurrentEntries = (
+  nextChunks: readonly DevServerTerminalChunk[],
+  currentEntries: readonly AgentStudioDevServerTerminalChunkEntry[],
+): DevServerTerminalChunk[] => {
+  const chunksBySequence = new Map<number, DevServerTerminalChunk>();
+  for (const chunk of nextChunks) {
+    chunksBySequence.set(chunk.sequence, chunk);
+  }
+  for (const chunk of currentEntries) {
+    chunksBySequence.set(chunk.sequence, chunk);
+  }
+
+  return trimDevServerTerminalChunks(
+    [...chunksBySequence.values()].sort((left, right) => left.sequence - right.sequence),
+  );
+};
+
 export const getDevServerTerminalBufferReplacement = (
   currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
@@ -346,6 +383,16 @@ export const getDevServerTerminalBufferReplacement = (
       return {
         snapshotWindow: nextWindow,
         terminalChunks: nextChunks,
+      };
+    }
+
+    if (shouldMergeSameRunReplayPrefix(currentContext, script, nextWindow)) {
+      return {
+        snapshotWindow: nextWindow,
+        terminalChunks: mergeReplayPrefixWithCurrentEntries(
+          nextChunks,
+          currentContext.currentEntries,
+        ),
       };
     }
 
