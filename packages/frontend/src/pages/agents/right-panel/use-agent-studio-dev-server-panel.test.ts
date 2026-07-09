@@ -16,6 +16,7 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
   name: "Frontend",
   command: "bun run dev",
   status: "stopped",
+  runId: overrides.pid === null || overrides.pid === undefined ? null : "frontend:1",
   pid: null,
   startedAt: null,
   exitCode: null,
@@ -43,6 +44,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
   test("applies terminal chunk events without cloning buffered replay into query state", () => {
     const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: index,
       data: `line-${index}`,
       timestamp: `2026-03-19T15:30:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -56,6 +58,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
       taskId: "task-7",
       terminalChunk: {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 2000,
         data: "latest-chunk",
         timestamp: "2026-03-19T15:31:00.000Z",

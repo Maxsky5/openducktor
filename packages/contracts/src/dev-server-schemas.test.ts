@@ -9,6 +9,7 @@ describe("dev-server-schemas", () => {
       taskId: "task-7",
       terminalChunk: {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 12,
         data: "\u001b[32mready\u001b[0m\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -46,5 +47,6 @@ describe("dev-server-schemas", () => {
     });
 
     expect(parsed.scripts[0]?.bufferedTerminalChunks).toEqual([]);
+    expect(parsed.scripts[0]?.runId).toBeNull();
   });
 });

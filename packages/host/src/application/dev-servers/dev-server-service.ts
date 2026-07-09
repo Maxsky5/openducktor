@@ -28,7 +28,7 @@ import type {
   CreateDevServerServiceInput,
   DevServerService,
   DisposableDevServerService,
-  StoppedDevServerScript,
+  FailedDevServerScriptStart,
 } from "./dev-server-service-types";
 import {
   appendTerminalChunk,
@@ -42,8 +42,8 @@ import {
   formatTerminalProcessOutput,
   formatTerminalSystemMessage,
   nextTerminalSequence,
-  resetTerminalChunks,
   scriptHasLiveProcess,
+  startTerminalRun,
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
@@ -59,12 +59,6 @@ export type {
 } from "./dev-server-service-types";
 
 const nowIso = (): string => new Date().toISOString();
-type FailedDevServerScriptStart = {
-  command: string;
-  message: string;
-  name: string;
-  scriptId: string;
-};
 export const createDevServerService = ({
   eventBus,
   processPort,
@@ -72,12 +66,10 @@ export const createDevServerService = ({
   workspaceSettingsService,
 }: CreateDevServerServiceInput): DisposableDevServerService => {
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-  const publish = (event: DevServerEvent): void => {
+  const publish = (event: DevServerEvent): void =>
     eventBus?.publish(DEV_SERVER_EVENT_CHANNEL, devServerEventSchema.parse(event));
-  };
-  const emitSnapshot = (runtime: DevServerGroupRuntime): void => {
+  const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
     publish({ type: "snapshot", state: runtime.state });
-  };
   const getWorktreePath = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const worktree = taskWorktreeService
@@ -100,6 +92,7 @@ export const createDevServerService = ({
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
         terminalBufferedBytesByScriptId: new Map<string, number>(),
         terminalNextSequenceByScriptId: new Map<string, number>(),
+        terminalRunGenerationByScriptId: new Map<string, number>(),
       };
       repoGroups.set(taskId, runtime);
       groups.set(repoConfig.repoPath, repoGroups);
@@ -147,9 +140,16 @@ export const createDevServerService = ({
     if (!script) {
       return;
     }
+    if (!script.runId) {
+      throw new HostInvariantError({
+        invariant: "dev_server_script_run_known",
+        message: `Dev server script has no active run id: ${scriptId}`,
+      });
+    }
     const timestamp = nowIso();
     const terminalChunk = {
       scriptId,
+      runId: script.runId,
       sequence: nextTerminalSequence(runtime, script),
       data,
       timestamp,
@@ -234,11 +234,11 @@ export const createDevServerService = ({
       }
       updateScriptState(runtime, scriptConfig.id, (script) => {
         script.status = "starting";
+        startTerminalRun(runtime, script);
         script.pid = null;
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
-        resetTerminalChunks(runtime, script);
       });
       appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
       const handle = yield* processPort
@@ -475,14 +475,13 @@ export const createDevServerService = ({
     stopAll() {
       return Effect.gen(function* () {
         const errors: string[] = [];
-        const stoppedScripts: StoppedDevServerScript[] = [];
-        for (const repoGroups of groups.values()) {
+        const stoppedScripts: ReturnType<typeof listRunningScripts> = [];
+        for (const repoGroups of groups.values())
           for (const runtime of repoGroups.values()) {
             stoppedScripts.push(...listRunningScripts(runtime));
             errors.push(...(yield* stopRuntime(runtime)));
             emitSnapshot(runtime);
           }
-        }
         if (errors.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({

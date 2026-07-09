@@ -12,6 +12,7 @@ export type DevServerGroupRuntime = {
   state: DevServerGroupState;
   terminalBufferedBytesByScriptId: Map<string, number>;
   terminalNextSequenceByScriptId: Map<string, number>;
+  terminalRunGenerationByScriptId: Map<string, number>;
 };
 
 export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
@@ -30,6 +31,7 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   name: script.name,
   command: script.command,
   status: "stopped",
+  runId: null,
   pid: null,
   startedAt: null,
   exitCode: null,
@@ -92,6 +94,11 @@ export const syncRuntimeTerminalBufferByteCounts = (runtime: DevServerGroupRunti
   for (const scriptId of runtime.terminalNextSequenceByScriptId.keys()) {
     if (!activeScriptIds.has(scriptId)) {
       runtime.terminalNextSequenceByScriptId.delete(scriptId);
+    }
+  }
+  for (const scriptId of runtime.terminalRunGenerationByScriptId.keys()) {
+    if (!activeScriptIds.has(scriptId)) {
+      runtime.terminalRunGenerationByScriptId.delete(scriptId);
     }
   }
 
@@ -169,6 +176,16 @@ export const appendTerminalChunk = (
     script.scriptId,
     trimTerminalChunksWithByteCount(chunks, totalBytes),
   );
+};
+
+export const startTerminalRun = (
+  runtime: DevServerGroupRuntime,
+  script: DevServerScriptState,
+): void => {
+  const nextGeneration = (runtime.terminalRunGenerationByScriptId.get(script.scriptId) ?? 0) + 1;
+  runtime.terminalRunGenerationByScriptId.set(script.scriptId, nextGeneration);
+  script.runId = `${script.scriptId}:${nextGeneration}`;
+  resetTerminalChunks(runtime, script);
 };
 
 export const resetTerminalChunks = (

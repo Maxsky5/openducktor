@@ -104,11 +104,7 @@ const EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW: DevServerTerminalSequenceWindow
 const readDevServerScriptRunIdentity = (
   script: DevServerScriptState,
 ): DevServerTerminalRunIdentity => {
-  if (script.startedAt === null || script.pid === null) {
-    return null;
-  }
-
-  return JSON.stringify([script.startedAt, script.pid]);
+  return script.runId;
 };
 
 const readSnapshotBufferWindow = (
@@ -142,6 +138,7 @@ const areTerminalChunksEqual = (
     return (
       other !== undefined &&
       chunk.scriptId === other.scriptId &&
+      chunk.runId === other.runId &&
       chunk.sequence === other.sequence &&
       chunk.data === other.data &&
       chunk.timestamp === other.timestamp
@@ -181,7 +178,14 @@ export const appendDevServerTerminalChunk = (
   store: DevServerTerminalBufferStore,
   terminalChunk: DevServerTerminalChunk,
 ): void => {
-  const buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
+  let buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
+  if (buffer.runIdentity !== null && buffer.runIdentity !== terminalChunk.runId) {
+    replaceDevServerTerminalBuffer(store, terminalChunk.scriptId, [], terminalChunk.runId);
+    buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
+  } else {
+    buffer.runIdentity = terminalChunk.runId;
+  }
+
   if (buffer.lastSequence !== null && terminalChunk.sequence <= buffer.lastSequence) {
     return;
   }

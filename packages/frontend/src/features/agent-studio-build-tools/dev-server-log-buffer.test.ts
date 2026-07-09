@@ -22,6 +22,7 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
   name: "Frontend",
   command: "bun run dev",
   status: "stopped",
+  runId: overrides.pid === null || overrides.pid === undefined ? null : "frontend:1",
   pid: null,
   startedAt: null,
   exitCode: null,
@@ -44,6 +45,7 @@ const buildChunk = (
   overrides: Partial<DevServerTerminalChunk> = {},
 ): DevServerTerminalChunk => ({
   scriptId: "frontend",
+  runId: "frontend:1",
   sequence,
   data: `line-${sequence}\r\n`,
   timestamp: `2026-03-25T10:00:${String(sequence % 60).padStart(2, "0")}.000Z`,
@@ -56,6 +58,7 @@ describe("dev-server-log-buffer", () => {
       { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS + 2 },
       (_, index) => ({
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -74,6 +77,7 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 0,
       data: "\u001b[32mready\u001b[0m\r\n",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -85,6 +89,7 @@ describe("dev-server-log-buffer", () => {
     for (let index = 1; index <= MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
       appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -102,12 +107,14 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 4,
       data: "latest",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 3,
       data: "older",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -118,17 +125,43 @@ describe("dev-server-log-buffer", () => {
     expect(buffer?.entries[0]?.data).toBe("latest");
   });
 
+  test("accepts lower sequence chunks from a new run after resetting old output", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      runId: "frontend:1",
+      sequence: 100,
+      data: "old-run",
+      timestamp: "2026-03-25T10:00:00.000Z",
+    });
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      runId: "frontend:2",
+      sequence: 0,
+      data: "new-run",
+      timestamp: "2026-03-25T10:01:00.000Z",
+    });
+
+    const buffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(buffer?.entries).toHaveLength(1);
+    expect(buffer?.entries[0]?.data).toBe("new-run");
+    expect(buffer?.lastSequence).toBe(0);
+  });
+
   test("accepts sequential live chunks after replay gaps", () => {
     const store = createDevServerTerminalBufferStore();
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 1,
       data: "oversized-live",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 2,
       data: "later-live",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -145,6 +178,7 @@ describe("dev-server-log-buffer", () => {
     for (let index = 0; index < MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
       appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -154,6 +188,7 @@ describe("dev-server-log-buffer", () => {
     const previousSnapshot = getDevServerTerminalBuffer(store, "frontend");
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
       data: "latest",
       timestamp: "2026-03-25T10:01:00.000Z",
@@ -169,6 +204,7 @@ describe("dev-server-log-buffer", () => {
     const store = createDevServerTerminalBufferStore();
     appendDevServerTerminalChunk(store, {
       scriptId: "stale",
+      runId: "stale:1",
       sequence: 0,
       data: "stale",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -183,6 +219,7 @@ describe("dev-server-log-buffer", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 7,
                 data: "frontend failed\r\n",
                 timestamp: "2026-03-25T10:01:00.000Z",
@@ -201,6 +238,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 8,
         data: "restarted\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -217,6 +255,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 0,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -227,6 +266,7 @@ describe("dev-server-log-buffer", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
+          runId: "frontend:1",
           sequence: 1,
           data: "fresh\r\n",
           timestamp: "2026-03-25T10:01:00.000Z",
@@ -247,6 +287,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 2,
         data: "local-live\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -257,6 +298,7 @@ describe("dev-server-log-buffer", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
+          runId: "frontend:1",
           sequence: 1,
           data: "stale\r\n",
           timestamp: "2026-03-25T10:01:00.000Z",
@@ -327,6 +369,93 @@ describe("dev-server-log-buffer", () => {
     ]);
   });
 
+  test("merges same-run replay after a live chunk arrives before state hydration", () => {
+    const store = createDevServerTerminalBufferStore();
+    appendDevServerTerminalChunk(
+      store,
+      buildChunk(10, {
+        data: "live-10\r\n",
+        timestamp: "2026-03-25T10:00:10.000Z",
+      }),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            runId: "frontend:1",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
+              buildChunk(sequence, { data: `replay-${sequence}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual([
+      "replay-0\r\n",
+      "replay-1\r\n",
+      "replay-2\r\n",
+      "replay-3\r\n",
+      "replay-4\r\n",
+      "replay-5\r\n",
+      "replay-6\r\n",
+      "replay-7\r\n",
+      "replay-8\r\n",
+      "replay-9\r\n",
+      "live-10\r\n",
+    ]);
+  });
+
+  test("rejects stale previous-run replay after a new-run live chunk arrives before state", () => {
+    const store = createDevServerTerminalBufferStore();
+    appendDevServerTerminalChunk(
+      store,
+      buildChunk(5, {
+        runId: "frontend:2",
+        data: "new-run-5\r\n",
+        timestamp: "2026-03-25T10:10:05.000Z",
+      }),
+    );
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            runId: "frontend:1",
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            bufferedTerminalChunks: Array.from({ length: 101 }, (_, sequence) =>
+              buildChunk(sequence, { data: `old-run-${sequence}\r\n` }),
+            ),
+          }),
+        ],
+      }),
+    );
+    appendDevServerTerminalChunk(
+      store,
+      buildChunk(6, {
+        runId: "frontend:2",
+        data: "new-run-6\r\n",
+        timestamp: "2026-03-25T10:10:06.000Z",
+      }),
+    );
+
+    expect(didChange).toBe(false);
+    expect(
+      getDevServerTerminalBuffer(store, "frontend")?.entries.map((entry) => entry.data),
+    ).toEqual(["new-run-5\r\n", "new-run-6\r\n"]);
+  });
+
   test("keeps current-run live output when a delayed previous-run replay arrives", () => {
     const store = createDevServerTerminalBufferStore();
     syncDevServerTerminalBufferStore(
@@ -335,10 +464,12 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
+            runId: "frontend:2",
             pid: 5252,
             startedAt: "2026-03-25T10:10:00.000Z",
             bufferedTerminalChunks: [
               buildChunk(10, {
+                runId: "frontend:2",
                 data: "new-run-10\r\n",
                 timestamp: "2026-03-25T10:10:10.000Z",
               }),
@@ -354,6 +485,7 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
+            runId: "frontend:1",
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
@@ -378,10 +510,12 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
+            runId: "frontend:2",
             pid: 5252,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: [
               buildChunk(10, {
+                runId: "frontend:2",
                 data: "current-run-10\r\n",
                 timestamp: "2026-03-25T10:00:10.000Z",
               }),
@@ -397,6 +531,7 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
+            runId: "frontend:1",
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
@@ -519,6 +654,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 2,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -542,6 +678,7 @@ describe("dev-server-log-buffer", () => {
       "frontend",
       Array.from({ length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS }, (_, offset) => ({
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 4_000 + offset,
         data: `old-run-${offset}\r\n`,
         timestamp: `2026-03-25T10:00:${String(offset % 60).padStart(2, "0")}.000Z`,
@@ -560,6 +697,7 @@ describe("dev-server-log-buffer", () => {
               { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS },
               (_, offset) => ({
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 150 + offset,
                 data: `new-run-${offset}\r\n`,
                 timestamp: `2026-03-25T10:31:${String(offset % 60).padStart(2, "0")}.000Z`,
@@ -581,6 +719,7 @@ describe("dev-server-log-buffer", () => {
     const store = createDevServerTerminalBufferStore();
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 4_000,
       data: "old-live-only\r\n",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -609,6 +748,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 3_999,
         data: "old-snapshot\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -616,6 +756,7 @@ describe("dev-server-log-buffer", () => {
     ]);
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 4_000,
       data: "old-live-only\r\n",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -644,6 +785,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 0,
         data: "snapshot\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -651,6 +793,7 @@ describe("dev-server-log-buffer", () => {
     ]);
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence: 1,
       data: "live-only\r\n",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -667,6 +810,7 @@ describe("dev-server-log-buffer", () => {
     expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 1,
         data: "live-only\r\n",
         timestamp: "2026-03-25T10:00:01.000Z",
@@ -691,12 +835,14 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 2,
         data: "latest\r\n",
         timestamp: "2026-03-25T10:00:02.000Z",
       },
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 1,
         data: "older\r\n",
         timestamp: "2026-03-25T10:00:01.000Z",
@@ -725,6 +871,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
+        runId: "frontend:1",
         sequence: 0,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -733,6 +880,7 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "removed", [
       {
         scriptId: "removed",
+        runId: "removed:1",
         sequence: 0,
         data: "removed\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -747,6 +895,7 @@ describe("dev-server-log-buffer", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 2,
                 data: "fresh\r\n",
                 timestamp: "2026-03-25T10:02:00.000Z",

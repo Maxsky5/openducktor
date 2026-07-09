@@ -34,6 +34,7 @@ export const buildOptimisticStartingState = (state: DevServerGroupState): DevSer
   scripts: state.scripts.map((script) => ({
     ...script,
     status: "starting",
+    runId: null,
     pid: null,
     startedAt: null,
     exitCode: null,

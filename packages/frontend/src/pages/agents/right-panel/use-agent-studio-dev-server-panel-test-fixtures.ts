@@ -23,6 +23,7 @@ export const buildScript = (
   name: "Frontend",
   command: "bun run dev",
   status: "stopped",
+  runId: overrides.pid === null || overrides.pid === undefined ? null : "frontend:1",
   pid: null,
   startedAt: null,
   exitCode: null,

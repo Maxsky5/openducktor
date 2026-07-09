@@ -114,6 +114,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 4,
               data: "rehydrated output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -176,6 +177,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const bufferedTerminalChunks = Array.from({ length: 300 }, (_, sequence) => ({
       scriptId: "frontend",
+      runId: "frontend:1",
       sequence,
       data: `subscription-gap output ${sequence}\r\n`,
       timestamp: "2026-03-19T15:31:00.000Z",
@@ -257,6 +259,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "Starting `cd apps/web && pnpm dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -275,6 +278,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "Starting `cd apps/web && pnpm dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -330,6 +334,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "$ cd apps/web && pnpm dev\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -341,6 +346,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 2,
             data: "ELIFECYCLE Command failed.\r\n",
             timestamp: "2026-03-19T15:30:02.000Z",
@@ -401,6 +407,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         taskId: "task-7",
         terminalChunk: {
           scriptId: "frontend",
+          runId: "frontend:1",
           sequence: 1,
           data: "$ cd apps/web && pnpm dev\r\n",
           timestamp: "2026-03-19T15:30:01.000Z",
@@ -412,6 +419,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         taskId: "task-7",
         terminalChunk: {
           scriptId: "frontend",
+          runId: "frontend:1",
           sequence: 2,
           data: "ELIFECYCLE Command failed.\r\n",
           timestamp: "2026-03-19T15:30:02.000Z",
@@ -433,6 +441,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
+          runId: "frontend:1",
           sequence: 0,
           data: "Starting `cd apps/web && pnpm dev`\r\n",
           timestamp: "2026-03-19T15:30:00.000Z",
@@ -495,6 +504,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
                 ? [
                     {
                       scriptId: "frontend",
+                      runId: "frontend:1",
                       sequence: 7,
                       data: "previous task output\r\n",
                       timestamp: "2026-03-19T15:30:00.000Z",
@@ -597,6 +607,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
                 bufferedTerminalChunks: [
                   {
                     scriptId: "frontend",
+                    runId: "frontend:1",
                     sequence: 0,
                     data: "task seven restarted output\r\n",
                     timestamp: "2026-03-19T15:31:00.000Z",
@@ -728,6 +739,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runId: "frontend:1",
                   sequence: 7,
                   data: "old task seven output\r\n",
                   timestamp: "2026-03-19T15:30:00.000Z",
@@ -802,6 +814,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runId: "frontend:1",
                   sequence: 0,
                   data: "new task seven output\r\n",
                   timestamp: "2026-03-19T15:31:00.000Z",
@@ -845,6 +858,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -863,6 +877,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 2,
               data: "reconnected output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",

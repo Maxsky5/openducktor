@@ -96,6 +96,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -148,6 +149,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "first\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -173,12 +175,14 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "first\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "second\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -205,6 +209,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 4,
               data: "rehydrated\r\n",
               timestamp: "2026-03-19T15:30:02.000Z",
@@ -260,6 +265,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -285,12 +291,14 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "stalled\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -316,18 +324,21 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "stalled\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 2,
               data: "still live\r\n",
               timestamp: "2026-03-19T15:30:02.000Z",
@@ -379,6 +390,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "old failed output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -404,6 +416,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "Starting `cd apps/web && pnpm dev`\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -458,6 +471,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 7,
               data: "task one output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -483,6 +497,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "task two output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -547,12 +562,14 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "\u001b[38;2;255;0",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: ";0mready",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -579,18 +596,21 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "\u001b[38;2;255;0",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: ";0mready",
               timestamp: "2026-03-19T15:30:01.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 2,
               data: "\u001b[0m\r\n",
               timestamp: "2026-03-19T15:30:02.000Z",
@@ -617,6 +637,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "\u001b[38;2;255;0;0mready\u001b[0m\r\n",
               timestamp: "2026-03-19T15:30:03.000Z",
@@ -653,6 +674,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "frontend\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -678,6 +700,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "backend",
+              runId: "backend:1",
               sequence: 0,
               data: "backend\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -711,6 +734,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "frontend ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -736,12 +760,14 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "frontend ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "stale frontend\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -767,6 +793,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "backend",
+              runId: "backend:1",
               sequence: 0,
               data: "backend ready\r\n",
               timestamp: "2026-03-19T15:30:02.000Z",
@@ -843,6 +870,7 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -869,12 +897,14 @@ describe("AgentStudioDevServerTerminal", () => {
           entries: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
             },
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "broken\r\n",
               timestamp: "2026-03-19T15:30:01.000Z",
@@ -945,6 +975,7 @@ describe("AgentStudioDevServerTerminal", () => {
             entries: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 0,
                 data: "ready\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",

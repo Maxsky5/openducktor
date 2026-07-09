@@ -29,6 +29,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
                 bufferedTerminalChunks: [
                   {
                     scriptId: "frontend",
+                    runId: "frontend:1",
                     sequence: 0,
                     data: "task seven output\r\n",
                     timestamp: "2026-03-25T10:00:00.000Z",
@@ -56,6 +57,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
                 bufferedTerminalChunks: [
                   {
                     scriptId: "frontend",
+                    runId: "frontend:1",
                     sequence: 0,
                     data: "task eight state\r\n",
                     timestamp: "2026-03-25T10:00:01.000Z",
@@ -73,6 +75,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
             taskId: "task-8",
             terminalChunk: {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "task eight event\r\n",
               timestamp: "2026-03-25T10:00:02.000Z",
@@ -135,6 +138,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
                 bufferedTerminalChunks: [
                   {
                     scriptId: "frontend",
+                    runId: "frontend:1",
                     sequence: 0,
                     data: "task seven output\r\n",
                     timestamp: "2026-03-25T10:00:00.000Z",
@@ -166,6 +170,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
             taskId: "task-7",
             terminalChunk: {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "task seven still live\r\n",
               timestamp: "2026-03-25T10:00:01.000Z",

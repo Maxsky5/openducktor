@@ -11,6 +11,7 @@ export type DevServerScriptStatus = z.infer<typeof devServerScriptStatusSchema>;
 
 export const devServerTerminalChunkSchema = z.object({
   scriptId: z.string().min(1),
+  runId: z.string().min(1),
   sequence: z.number().int().nonnegative(),
   data: z.string(),
   timestamp: z.string(),
@@ -22,6 +23,7 @@ export const devServerScriptStateSchema = z.object({
   name: z.string().min(1),
   command: z.string().min(1),
   status: devServerScriptStatusSchema,
+  runId: z.string().min(1).nullable().default(null),
   pid: z.number().int().positive().nullable(),
   startedAt: z.string().nullable(),
   exitCode: z.number().int().nullable(),

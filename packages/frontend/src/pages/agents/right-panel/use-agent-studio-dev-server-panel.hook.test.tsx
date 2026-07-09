@@ -256,6 +256,7 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 0,
                 data: "Starting `bun run dev`\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -378,6 +379,7 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 0,
                 data: "Starting `bun run dev`\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -405,6 +407,7 @@ describe("useAgentStudioDevServerPanel", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runId: "frontend:1",
                   sequence: 0,
                   data: "Starting `bun run dev`\r\n",
                   timestamp: "2026-03-19T15:30:00.000Z",
@@ -491,6 +494,7 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runId: "frontend:1",
                 sequence: 0,
                 data: "ready\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -507,6 +511,7 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "backend",
+                runId: "backend:1",
                 sequence: 0,
                 data: "Dev server exited with code 1.\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -578,6 +583,7 @@ describe("useAgentStudioDevServerPanel", () => {
       scripts: [
         buildScript({
           status: "running",
+          runId: "frontend:1",
           pid: 4242,
           startedAt: "2026-03-19T15:30:00.000Z",
         }),
@@ -640,6 +646,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 0,
             data: "\u001b[32mready\u001b[0m\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -731,6 +738,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 0,
             data: "fresh-line",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -767,6 +775,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -821,6 +830,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "closing dev server\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -869,6 +879,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 3,
               data: "old run output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -882,11 +893,13 @@ describe("useAgentStudioDevServerPanel", () => {
       scripts: [
         buildScript({
           status: "running",
+          runId: "frontend:2",
           pid: 4343,
           startedAt: "2026-03-19T15:31:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:2",
               sequence: 4,
               data: "new run output\r\n",
               timestamp: "2026-03-19T15:31:01.000Z",
@@ -947,6 +960,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:2",
             sequence: 4,
             data: "new run output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -955,7 +969,7 @@ describe("useAgentStudioDevServerPanel", () => {
       });
 
       await waitFor(() => {
-        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(2);
+        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(1);
       });
 
       restartDeferred.resolve(restartedState);
@@ -993,6 +1007,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "Dev server exited with code 1.\r\n",
               timestamp: "2026-03-19T15:35:00.000Z",
@@ -1100,6 +1115,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1118,6 +1134,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 1,
               data: "fresh output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -1205,6 +1222,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1304,6 +1322,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1377,6 +1396,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "live output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1404,6 +1424,7 @@ describe("useAgentStudioDevServerPanel", () => {
         expect(getLatest().selectedScriptTerminalBuffer?.entries).toEqual([
           {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "live output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1431,6 +1452,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1530,6 +1552,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 0,
             data: "new run output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1574,6 +1597,7 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runId: "frontend:1",
               sequence: 0,
               data: "Starting `bun run dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1611,6 +1635,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "old failed output\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -1622,6 +1647,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 2,
             data: "ELIFECYCLE Command failed.\r\n",
             timestamp: "2026-03-19T15:30:02.000Z",
@@ -1661,6 +1687,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 0,
             data: "Starting `bun run dev`\r\n",
             timestamp: "2026-03-19T15:31:00.000Z",
@@ -1672,6 +1699,7 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runId: "frontend:1",
             sequence: 1,
             data: "new dev server ready\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1694,12 +1722,14 @@ describe("useAgentStudioDevServerPanel", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runId: "frontend:1",
                   sequence: 0,
                   data: "Starting `bun run dev`\r\n",
                   timestamp: "2026-03-19T15:31:00.000Z",
                 },
                 {
                   scriptId: "frontend",
+                  runId: "frontend:1",
                   sequence: 1,
                   data: "new dev server ready\r\n",
                   timestamp: "2026-03-19T15:31:01.000Z",
