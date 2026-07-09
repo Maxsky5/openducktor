@@ -240,6 +240,27 @@ describe("agent chat draft storage", () => {
     expect(storage.getItem(key)).toBeNull();
   });
 
+  test("removes drafts with future update dates during restore", () => {
+    const storage = createMemoryStorage();
+    const key = toAgentChatDraftStorageKey(identity);
+    writeAgentChatDraftToStorage({
+      storage,
+      identity,
+      taskId: "task-1",
+      draft: { segments: [createTextSegment("future", "text-1")], attachments: [] },
+      updatedAt: "2026-07-09T10:00:01.000Z",
+    });
+
+    const result = readAgentChatDraftFromStorage({
+      storage,
+      identity,
+      now: new Date("2026-07-09T10:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("invalid");
+    expect(storage.getItem(key)).toBeNull();
+  });
+
   test("persists payloads at the size boundary and removes stale payloads above it", () => {
     const storage = createMemoryStorage();
     const key = toAgentChatDraftStorageKey(identity);

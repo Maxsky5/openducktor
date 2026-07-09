@@ -5,6 +5,7 @@ import {
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import {
+  AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES,
   type AgentChatDraftSessionIdentity,
   toAgentChatDraftStorageKey,
   writeAgentChatDraftToStorage,
@@ -92,6 +93,20 @@ const installManualTimers = () => {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
     },
+  };
+};
+
+const createDeferred = <T>() => {
+  let resolveValue: (value: T) => void = () => {};
+  let rejectValue: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveValue = resolve;
+    rejectValue = reject;
+  });
+  return {
+    promise,
+    resolve: resolveValue,
+    reject: rejectValue,
   };
 };
 
@@ -288,7 +303,7 @@ describe("agent chat draft store", () => {
     expect(storage.getItem(toAgentChatDraftStorageKey(freshIdentity))).not.toBeNull();
   });
 
-  test("removes stale storage and reports staging failures without dropping memory", async () => {
+  test("preserves stale storage and reports staging failures without dropping memory", async () => {
     const errors: Error[] = [];
     const storage = createMemoryStorage();
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
@@ -326,9 +341,47 @@ describe("agent chat draft store", () => {
 
     await flushAgentChatDraft(identity);
 
-    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toContain("old");
     expect(errors[0]?.message).toBe("stage failed");
     expect(hydrateAgentChatDraft(identity, "task-1").attachments?.[0]?.file).toBe(file);
+  });
+
+  test("abandons in-flight staging when the draft entry is replaced", async () => {
+    const storage = createMemoryStorage();
+    const staging = createDeferred<string>();
+    const stagedFile = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    const stager = mock(() => staging.promise);
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
+    setAgentChatDraftAttachmentStagerForTests(stager);
+
+    setAgentChatDraft(identity, "task-1", {
+      segments: [createTextSegment("with file", "text-1")],
+      attachments: [
+        createComposerAttachment(
+          {
+            name: "brief.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+            file: stagedFile,
+          },
+          "attachment-1",
+        ),
+      ],
+    });
+    const staleFlush = flushAgentChatDraft(identity);
+    await Promise.resolve();
+
+    clearAgentChatDraft(identity);
+    setAgentChatDraft(identity, "task-1", buildDraft("replacement"));
+    staging.resolve("/tmp/staged/brief.pdf");
+    await staleFlush;
+    await flushAgentChatDraft(identity);
+
+    const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
+    expect(stager).toHaveBeenCalledTimes(1);
+    expect(raw).toContain("replacement");
+    expect(raw).not.toContain("/tmp/staged/brief.pdf");
   });
 
   test("does not mark failed storage writes as persisted", async () => {
@@ -351,6 +404,47 @@ describe("agent chat draft store", () => {
       expect.stringContaining("Failed to persist chat draft storage key"),
       expect.stringContaining("Failed to persist chat draft storage key"),
     ]);
+  });
+
+  test("does not mark oversized drafts as persisted", async () => {
+    const errors: Error[] = [];
+    const storage = createMemoryStorage();
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftPersistenceErrorReporter((error) => {
+      errors.push(error);
+    });
+    setAgentChatDraft(
+      identity,
+      "task-1",
+      buildDraft("x".repeat(AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES)),
+    );
+
+    await flushAgentChatDraft(identity);
+    await flushAgentChatDraft(identity);
+
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+    expect(errors.map((error) => error.message)).toEqual([
+      expect.stringContaining("Chat draft is too large to persist"),
+      expect.stringContaining("Chat draft is too large to persist"),
+    ]);
+  });
+
+  test("keeps memory when throwing storage cleanup fails", () => {
+    const storage = createMemoryStorage({
+      removeItem: () => {
+        throw new Error("remove failed");
+      },
+    });
+    setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraft(identity, "task-1", buildDraft("keep me"));
+
+    expect(() => clearAgentChatDraft(identity, { throwOnStorageError: true })).toThrow(
+      "Failed to remove chat draft storage key",
+    );
+
+    expect(hydrateAgentChatDraft(identity, "task-1").segments[0]).toEqual(
+      expect.objectContaining({ text: "keep me" }),
+    );
   });
 
   test("clears storage only when the submitted draft version is still current", () => {

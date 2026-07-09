@@ -89,15 +89,26 @@ export const runTaskMutationWithChatDraftCleanup = async <TResult>({
   mutation,
   shouldCleanup = () => true,
 }: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
-  const cleanupTargets = await prepareTaskChatDraftCleanupTargets({
-    queryClient,
-    repoPath,
-    workspaceId,
-    taskIds,
-  });
+  let cleanupTargets: TaskChatDraftCleanupPlan | null = null;
+  let cleanupTargetLookupError: unknown = null;
+  try {
+    cleanupTargets = await prepareTaskChatDraftCleanupTargets({
+      queryClient,
+      repoPath,
+      workspaceId,
+      taskIds,
+    });
+  } catch (error) {
+    cleanupTargetLookupError = error;
+  }
+
   const result = await mutation();
   if (shouldCleanup(result)) {
-    runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+    if (cleanupTargetLookupError) {
+      reportTaskChatDraftCleanupFailure(cleanupTargetLookupError);
+    } else if (cleanupTargets) {
+      runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+    }
   }
   return result;
 };

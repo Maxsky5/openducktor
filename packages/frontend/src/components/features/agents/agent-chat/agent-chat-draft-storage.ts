@@ -323,7 +323,11 @@ export const parseAgentChatDraftPayload = ({
   if (!Number.isFinite(updatedAtMs)) {
     return { status: "invalid", reason: "Stored chat draft update date is invalid." };
   }
-  if (now.getTime() - updatedAtMs >= AGENT_CHAT_DRAFT_STORAGE_TTL_MS) {
+  const ageMs = now.getTime() - updatedAtMs;
+  if (ageMs < 0) {
+    return { status: "invalid", reason: "Stored chat draft update date is in the future." };
+  }
+  if (ageMs >= AGENT_CHAT_DRAFT_STORAGE_TTL_MS) {
     return { status: "expired" };
   }
   if (!isRecord(parsed.draft) || !Array.isArray(parsed.draft.segments)) {

@@ -1160,7 +1160,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("blocks direct merge when cleanup target lookup fails", async () => {
+  test("reports cleanup target lookup failure after direct merge succeeds", async () => {
     agentSessionsListMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
@@ -1198,20 +1198,21 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
-    expect(taskDirectMergeMock).not.toHaveBeenCalled();
-    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("session lookup failed");
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Approval failed",
-      expect.objectContaining({ description: "session lookup failed" }),
-    );
+    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      mergeMethod: "merge_commit",
+      squashCommitMessage: undefined,
+    });
+    await waitForTaskApprovalModalClosed();
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+      description: "session lookup failed",
+    });
 
     await act(async () => {
       await harness.unmount();
     });
   });
 
-  test("blocks direct merge completion when cleanup target lookup fails", async () => {
+  test("reports cleanup target lookup failure after direct merge completion succeeds", async () => {
     agentSessionsListMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
@@ -1258,15 +1259,14 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
-    expect(gitPushBranchMock).not.toHaveBeenCalled();
-    expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
-    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("session lookup failed");
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Failed to finish direct merge",
-      expect.objectContaining({ description: "session lookup failed" }),
-    );
+    expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
+      remote: "origin",
+    });
+    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    await waitForTaskApprovalModalClosed();
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+      description: "session lookup failed",
+    });
 
     await act(async () => {
       await harness.unmount();

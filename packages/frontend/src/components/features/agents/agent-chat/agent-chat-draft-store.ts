@@ -5,6 +5,7 @@ import {
   createEmptyComposerDraft,
 } from "./agent-chat-composer-draft";
 import {
+  AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES,
   type AgentChatDraftSessionIdentity,
   cleanupExpiredAgentChatDraftStorage as cleanupExpiredDraftStorage,
   readAgentChatDraftFromStorage,
@@ -197,7 +198,7 @@ const stageAttachmentForEntry = async (
   try {
     const stagedPath = await attachmentStager(attachment.file);
     const currentEntry = readEntry(entry.identity);
-    if (!currentEntry) {
+    if (currentEntry !== entry) {
       return false;
     }
 
@@ -242,7 +243,6 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
       break;
     }
 
-    removeAgentChatDraftFromStorage({ storage, identity: entry.identity });
     if (!unpersistableAttachment.file) {
       throw new Error(
         `Attachment "${unpersistableAttachment.name}" cannot be persisted because it has no local file path.`,
@@ -251,7 +251,7 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
 
     const didStage = await stageAttachmentForEntry(entry, unpersistableAttachment);
     const currentEntry = readEntry(entry.identity);
-    if (!currentEntry) {
+    if (currentEntry !== entry) {
       return;
     }
     if (
@@ -265,13 +265,22 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
   }
 
   const version = entry.version;
-  writeAgentChatDraftToStorage({
+  const writeResult = writeAgentChatDraftToStorage({
     storage,
     identity: entry.identity,
     taskId: entry.taskId,
     draft: entry.draft,
     updatedAt: nowProvider().toISOString(),
   });
+  if (writeResult.status === "oversized") {
+    throw new Error(
+      `Chat draft is too large to persist (${writeResult.byteLength} bytes, maximum ${AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES} bytes).`,
+    );
+  }
+  if (writeResult.status === "unpersistable_attachments") {
+    throw new Error("Chat draft contains attachments that cannot be persisted.");
+  }
+
   entry.persistedVersion = version;
 };
 
@@ -354,6 +363,15 @@ export const clearAgentChatDraft = (
     return false;
   }
 
+  if (options?.throwOnStorageError) {
+    removeAgentChatDraftFromStorage({ storage: getDraftStorage(), identity });
+    if (entry) {
+      clearEntryTimers(entry);
+      draftEntries.delete(key);
+    }
+    return true;
+  }
+
   if (entry) {
     clearEntryTimers(entry);
     draftEntries.delete(key);
@@ -362,9 +380,6 @@ export const clearAgentChatDraft = (
   try {
     removeAgentChatDraftFromStorage({ storage: getDraftStorage(), identity });
   } catch (error) {
-    if (options?.throwOnStorageError) {
-      throw error;
-    }
     reportPersistenceError(error);
   }
 
@@ -393,6 +408,9 @@ export const flushAgentChatDraft = (identity: AgentChatDraftSessionIdentity): Pr
       reportPersistenceError(error);
     })
     .finally(() => {
+      if (readEntry(entry.identity) !== entry) {
+        return;
+      }
       entry.isFlushing = false;
       entry.flushPromise = null;
       const hasNewUserChanges = entry.userVersion !== userVersion;

@@ -20,6 +20,7 @@ import {
 type ComposerDraftState = {
   key: string;
   identity: AgentChatDraftSessionIdentity | null;
+  taskId: string;
   draft: AgentChatComposerDraft;
 };
 
@@ -32,6 +33,7 @@ type UseAgentChatComposerDraftStateArgs = {
 type SubmittedDraftSnapshot = {
   key: string;
   identity: AgentChatDraftSessionIdentity | null;
+  taskId: string;
   version: number | null;
   draft: AgentChatComposerDraft;
 };
@@ -66,6 +68,7 @@ const createInitialDraftState = ({
 }: UseAgentChatComposerDraftStateArgs): ComposerDraftState => ({
   key: toComposerDraftStateKey(draftStateKey, persistenceIdentity),
   identity: persistenceIdentity,
+  taskId,
   draft: persistenceIdentity
     ? hydrateAgentChatDraft(persistenceIdentity, taskId)
     : createEmptyComposerDraft(),
@@ -86,7 +89,11 @@ export function useAgentChatComposerDraftState({
 
   useLayoutEffect(() => {
     const current = latestStateRef.current;
-    if (current.key === nextStateKey && areIdentitiesEqual(current.identity, persistenceIdentity)) {
+    if (
+      current.key === nextStateKey &&
+      current.taskId === taskId &&
+      areIdentitiesEqual(current.identity, persistenceIdentity)
+    ) {
       return;
     }
 
@@ -100,6 +107,7 @@ export function useAgentChatComposerDraftState({
     setState({
       key: nextStateKey,
       identity: persistenceIdentity,
+      taskId,
       draft: nextDraft,
     });
   }, [nextStateKey, persistenceIdentity, taskId]);
@@ -128,27 +136,27 @@ export function useAgentChatComposerDraftState({
     };
   }, []);
 
-  const commitDraft = useCallback(
-    (nextDraft: AgentChatComposerDraft): void => {
-      const activeIdentity = latestStateRef.current.identity;
-      const activeKey = latestStateRef.current.key;
-      if (activeIdentity) {
-        setAgentChatDraft(activeIdentity, taskId, nextDraft);
-      }
-      setState({
-        key: activeKey,
-        identity: activeIdentity,
-        draft: nextDraft,
-      });
-    },
-    [taskId],
-  );
+  const commitDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
+    const activeIdentity = latestStateRef.current.identity;
+    const activeKey = latestStateRef.current.key;
+    const activeTaskId = latestStateRef.current.taskId;
+    if (activeIdentity) {
+      setAgentChatDraft(activeIdentity, activeTaskId, nextDraft);
+    }
+    setState({
+      key: activeKey,
+      identity: activeIdentity,
+      taskId: activeTaskId,
+      draft: nextDraft,
+    });
+  }, []);
 
   const setDisplayedDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
     const current = latestStateRef.current;
     setState({
       key: current.key,
       identity: current.identity,
+      taskId: current.taskId,
       draft: nextDraft,
     });
   }, []);
@@ -159,6 +167,7 @@ export function useAgentChatComposerDraftState({
       return {
         key: current.key,
         identity: current.identity,
+        taskId: current.taskId,
         version: current.identity ? readAgentChatDraftVersion(current.identity) : null,
         draft,
       };
@@ -174,16 +183,23 @@ export function useAgentChatComposerDraftState({
   }, []);
 
   const restoreSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    setState((current) => {
-      if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
-        return current;
-      }
+    const current = latestStateRef.current;
+    if (
+      current.key !== snapshot.key ||
+      current.taskId !== snapshot.taskId ||
+      draftHasMeaningfulContent(current.draft)
+    ) {
+      return;
+    }
 
-      return {
-        key: current.key,
-        identity: current.identity,
-        draft: snapshot.draft,
-      };
+    if (current.identity) {
+      setAgentChatDraft(current.identity, current.taskId, snapshot.draft);
+    }
+    setState({
+      key: current.key,
+      identity: current.identity,
+      taskId: current.taskId,
+      draft: snapshot.draft,
     });
   }, []);
 
