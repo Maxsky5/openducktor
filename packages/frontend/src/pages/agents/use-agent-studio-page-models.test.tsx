@@ -413,6 +413,8 @@ describe("useAgentStudioPageModels", () => {
     expect(state.agentChatModel.composer.draftPersistenceIdentity).toEqual({
       workspaceId: "workspace-repo",
       externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
     expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);

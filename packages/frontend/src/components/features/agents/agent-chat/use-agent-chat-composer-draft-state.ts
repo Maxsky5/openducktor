@@ -54,7 +54,10 @@ const areIdentitiesEqual = (
   left: AgentChatDraftSessionIdentity | null,
   right: AgentChatDraftSessionIdentity | null,
 ): boolean =>
-  left?.workspaceId === right?.workspaceId && left?.externalSessionId === right?.externalSessionId;
+  left === right ||
+  (left !== null &&
+    right !== null &&
+    toAgentChatDraftStorageKey(left) === toAgentChatDraftStorageKey(right));
 
 const createInitialDraftState = ({
   draftStateKey,

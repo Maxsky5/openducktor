@@ -67,6 +67,7 @@ const defaultAgentSessionsList = async () => [
       externalSessionId: "builder-session-old",
       taskId: "TASK-1",
       role: "build",
+      workingDirectory: "/repo",
       startedAt: "2026-03-12T11:59:00Z",
     }),
   },
@@ -75,6 +76,7 @@ const defaultAgentSessionsList = async () => [
       externalSessionId: "builder-session",
       taskId: "TASK-1",
       role: "build",
+      workingDirectory: "/repo",
       startedAt: "2026-03-12T12:00:00Z",
     }),
   },
@@ -128,6 +130,13 @@ const writeTestDraft = (
     updatedAt: "2026-07-08T10:00:00.000Z",
   });
 };
+
+const createDraftIdentity = (externalSessionId: string): AgentChatDraftSessionIdentity => ({
+  workspaceId: "workspace-repo",
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+});
 
 const createUnavailableHostClient = () =>
   createHostClient(async () => {
@@ -1030,10 +1039,7 @@ describe("useTaskApprovalFlow", () => {
 
     const storage = createMemoryStorage();
     setAgentChatDraftStorageForTests(storage);
-    const draftIdentity = {
-      workspaceId: "workspace-repo",
-      externalSessionId: "builder-session",
-    };
+    const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "pending direct merge draft");
 
     const Harness = (): ReactElement | null => {
@@ -1100,10 +1106,7 @@ describe("useTaskApprovalFlow", () => {
     const refreshTasksMock = mock(async () => {});
     const storage = createMemoryStorage();
     setAgentChatDraftStorageForTests(storage);
-    const draftIdentity = {
-      workspaceId: "workspace-repo",
-      externalSessionId: "builder-session",
-    };
+    const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "direct merge draft");
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({

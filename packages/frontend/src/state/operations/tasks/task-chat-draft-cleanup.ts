@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toAgentChatDraftStorageKey } from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
 import {
   type AgentChatDraftCleanupTarget,
   clearAgentChatDraftsForTargets,
@@ -51,11 +52,14 @@ export const prepareTaskChatDraftCleanupTargets = async ({
 
   for (const [taskId, sessions] of Object.entries(sessionListsByTaskId)) {
     for (const session of sessions) {
-      targets.set(`${workspaceId}:${session.externalSessionId}`, {
+      const target: AgentChatDraftCleanupTarget = {
         workspaceId,
         externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
         taskId,
-      });
+      };
+      targets.set(toAgentChatDraftStorageKey(target), target);
     }
   }
 

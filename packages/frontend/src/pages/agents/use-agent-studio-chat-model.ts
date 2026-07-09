@@ -175,15 +175,17 @@ export function useAgentStudioChatModel({
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
   const draftPersistenceIdentity = useMemo<AgentChatDraftSessionIdentity | null>(() => {
-    if (!composer.workspaceId || !selectedSessionIdentity?.externalSessionId) {
+    if (!composer.workspaceId || !selectedSessionIdentity) {
       return null;
     }
 
     return {
       workspaceId: composer.workspaceId,
       externalSessionId: selectedSessionIdentity.externalSessionId,
+      runtimeKind: selectedSessionIdentity.runtimeKind,
+      workingDirectory: selectedSessionIdentity.workingDirectory,
     };
-  }, [composer.workspaceId, selectedSessionIdentity?.externalSessionId]);
+  }, [composer.workspaceId, selectedSessionIdentity]);
   const surfaceState = useMemo(
     () =>
       deriveAgentStudioChatSurfaceState({

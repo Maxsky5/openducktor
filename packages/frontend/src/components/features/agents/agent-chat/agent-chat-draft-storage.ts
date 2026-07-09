@@ -1,4 +1,11 @@
+import { runtimeKindSchema } from "@openducktor/contracts";
 import type { AgentAttachmentKind } from "@openducktor/core";
+import {
+  type AgentSessionIdentityLike,
+  agentSessionIdentityKey,
+  parseAgentSessionIdentityKey,
+} from "@/lib/agent-session-identity";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { buildComposerAttachmentFromPath } from "./agent-chat-attachments";
 import {
   type AgentChatComposerAttachment,
@@ -7,9 +14,8 @@ import {
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
 
-export type AgentChatDraftSessionIdentity = {
+export type AgentChatDraftSessionIdentity = AgentSessionIdentityLike & {
   workspaceId: string;
-  externalSessionId: string;
 };
 
 export type PersistedAgentChatDraftAttachment = {
@@ -21,9 +27,11 @@ export type PersistedAgentChatDraftAttachment = {
 };
 
 export type PersistedAgentChatDraftPayload = {
-  version: 1;
+  version: 2;
   workspaceId: string;
   externalSessionId: string;
+  runtimeKind: AgentChatDraftSessionIdentity["runtimeKind"];
+  workingDirectory: string;
   taskId: string;
   updatedAt: string;
   draft: {
@@ -51,7 +59,8 @@ export type AgentChatDraftStorageReadResult =
   | { status: "expired" }
   | { status: "oversized"; byteLength: number };
 
-export const AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v1";
+export const AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v2";
+const LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v1";
 export const AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES = 20_480;
 export const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -75,16 +84,14 @@ const optionalNonEmptyString = (value: unknown): value is string | undefined =>
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
-export const toAgentChatDraftStorageKey = ({
-  workspaceId,
-  externalSessionId,
-}: AgentChatDraftSessionIdentity): string =>
-  `${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:${encodeURIComponent(workspaceId)}:${encodeURIComponent(
-    externalSessionId,
-  )}`;
+export const toAgentChatDraftStorageKey = (identity: AgentChatDraftSessionIdentity): string =>
+  `${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:${encodeURIComponent(
+    identity.workspaceId,
+  )}:${agentSessionIdentityKey(identity)}`;
 
 export const isAgentChatDraftStorageKey = (key: string): boolean =>
-  key.startsWith(`${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`);
+  key.startsWith(`${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`) ||
+  key.startsWith(`${LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`);
 
 export const measureAgentChatDraftPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
@@ -185,9 +192,11 @@ export const serializeAgentChatDraftPayload = ({
   }
 
   const payload: PersistedAgentChatDraftPayload = {
-    version: 1,
+    version: 2,
     workspaceId: identity.workspaceId,
     externalSessionId: identity.externalSessionId,
+    runtimeKind: identity.runtimeKind,
+    workingDirectory: normalizeWorkingDirectory(identity.workingDirectory),
     taskId,
     updatedAt,
     draft: {
@@ -276,12 +285,31 @@ export const parseAgentChatDraftPayload = ({
   if (!isRecord(parsed)) {
     return { status: "invalid", reason: "Stored chat draft is not an object." };
   }
-  if (parsed.version !== 1) {
+  if (parsed.version !== 2) {
     return { status: "invalid", reason: "Stored chat draft uses an unsupported version." };
   }
+  if (!isNonEmptyString(parsed.workspaceId)) {
+    return { status: "invalid", reason: "Stored chat draft is missing a workspace id." };
+  }
+  const parsedRuntimeKind = runtimeKindSchema.safeParse(parsed.runtimeKind);
+  if (!parsedRuntimeKind.success) {
+    return { status: "invalid", reason: "Stored chat draft runtime kind is invalid." };
+  }
+  if (!isNonEmptyString(parsed.workingDirectory)) {
+    return { status: "invalid", reason: "Stored chat draft is missing a working directory." };
+  }
+  if (!isNonEmptyString(parsed.externalSessionId)) {
+    return { status: "invalid", reason: "Stored chat draft is missing a session id." };
+  }
+  const parsedIdentity: AgentChatDraftSessionIdentity = {
+    workspaceId: parsed.workspaceId,
+    externalSessionId: parsed.externalSessionId,
+    runtimeKind: parsedRuntimeKind.data,
+    workingDirectory: parsed.workingDirectory,
+  };
   if (
-    parsed.workspaceId !== identity.workspaceId ||
-    parsed.externalSessionId !== identity.externalSessionId
+    parsedIdentity.workspaceId !== identity.workspaceId ||
+    agentSessionIdentityKey(parsedIdentity) !== agentSessionIdentityKey(identity)
   ) {
     return { status: "invalid", reason: "Stored chat draft identity does not match the key." };
   }
@@ -346,6 +374,38 @@ const removeDraftStoragePayload = (storage: Pick<Storage, "removeItem">, key: st
   } catch (cause) {
     throw new Error(`Failed to remove chat draft storage key "${key}".`, { cause });
   }
+};
+
+const decodeDraftKeyPart = (value: string): string | null => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+};
+
+const parseDraftStorageKeyIdentity = (key: string): AgentChatDraftSessionIdentity | null => {
+  const keyPrefix = `${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`;
+  if (!key.startsWith(keyPrefix)) {
+    return null;
+  }
+
+  const suffix = key.slice(keyPrefix.length);
+  const workspaceSeparatorIndex = suffix.indexOf(":");
+  if (workspaceSeparatorIndex === -1) {
+    return null;
+  }
+
+  const workspaceId = decodeDraftKeyPart(suffix.slice(0, workspaceSeparatorIndex));
+  const sessionIdentity = parseAgentSessionIdentityKey(suffix.slice(workspaceSeparatorIndex + 1));
+  if (!workspaceId || !sessionIdentity) {
+    return null;
+  }
+
+  return {
+    workspaceId,
+    ...sessionIdentity,
+  };
 };
 
 export const writeAgentChatDraftToStorage = ({
@@ -421,21 +481,21 @@ export const cleanupExpiredAgentChatDraftStorage = ({
   }
 
   for (const key of keys) {
+    if (key.startsWith(`${LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`)) {
+      removeDraftStoragePayload(storage, key);
+      continue;
+    }
+
     const raw = readDraftStoragePayload(storage, key);
-    const parts = key.split(":");
-    const workspaceId = parts.at(-2);
-    const externalSessionId = parts.at(-1);
-    if (!workspaceId || !externalSessionId) {
+    const identity = parseDraftStorageKeyIdentity(key);
+    if (!identity) {
       removeDraftStoragePayload(storage, key);
       continue;
     }
 
     const result = parseAgentChatDraftPayload({
       raw,
-      identity: {
-        workspaceId: decodeURIComponent(workspaceId),
-        externalSessionId: decodeURIComponent(externalSessionId),
-      },
+      identity,
       now,
     });
     if (

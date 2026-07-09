@@ -132,6 +132,16 @@ const writeTestDraft = (
   });
 };
 
+const createDraftIdentity = (
+  externalSessionId: string,
+  workingDirectory = "/repo",
+): AgentChatDraftSessionIdentity => ({
+  workspaceId: "repo",
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory,
+});
+
 const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
   id,
   title: id,
@@ -1811,10 +1821,20 @@ describe("use-task-operations", () => {
     });
     const agentSessionsList = mock(async (_repoPath: string, taskId: string) => {
       if (taskId === "A") {
-        return [buildAgentSessionRecord({ externalSessionId: "session-a" })];
+        return [
+          buildAgentSessionRecord({
+            externalSessionId: "session-shared",
+            workingDirectory: "/repo/parent",
+          }),
+        ];
       }
       if (taskId === "B") {
-        return [buildAgentSessionRecord({ externalSessionId: "session-b" })];
+        return [
+          buildAgentSessionRecord({
+            externalSessionId: "session-b",
+            workingDirectory: "/repo/child",
+          }),
+        ];
       }
       return [];
     });
@@ -1860,9 +1880,9 @@ describe("use-task-operations", () => {
     try {
       const storage = createMemoryStorage();
       setAgentChatDraftStorageForTests(storage);
-      const parentDraftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
-      const childDraftIdentity = { workspaceId: "repo", externalSessionId: "session-b" };
-      const unrelatedDraftIdentity = { workspaceId: "repo", externalSessionId: "session-c" };
+      const parentDraftIdentity = createDraftIdentity("session-shared", "/repo/parent");
+      const childDraftIdentity = createDraftIdentity("session-b", "/repo/child");
+      const unrelatedDraftIdentity = createDraftIdentity("session-shared", "/repo/unrelated");
       writeTestDraft(storage, parentDraftIdentity, "parent draft");
       writeTestDraft(storage, childDraftIdentity, "child draft");
       writeTestDraft(storage, unrelatedDraftIdentity, "unrelated draft");
@@ -1941,7 +1961,7 @@ describe("use-task-operations", () => {
 
     const storage = createMemoryStorage();
     setAgentChatDraftStorageForTests(storage);
-    const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+    const draftIdentity = createDraftIdentity("session-a");
     writeTestDraft(storage, draftIdentity, "parent draft");
 
     const harness = createHookHarness({
@@ -2003,7 +2023,7 @@ describe("use-task-operations", () => {
       },
     });
     setAgentChatDraftStorageForTests(storage);
-    const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+    const draftIdentity = createDraftIdentity("session-a");
     writeTestDraft(storage, draftIdentity, "parent draft");
 
     const harness = createHookHarness({
@@ -2202,7 +2222,7 @@ describe("use-task-operations", () => {
     try {
       const storage = createMemoryStorage();
       setAgentChatDraftStorageForTests(storage);
-      const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+      const draftIdentity = createDraftIdentity("session-a");
       writeTestDraft(storage, draftIdentity, "close draft");
 
       await harness.mount();
@@ -2714,7 +2734,7 @@ describe("use-task-operations", () => {
     try {
       const storage = createMemoryStorage();
       setAgentChatDraftStorageForTests(storage);
-      const draftIdentity = { workspaceId: "repo", externalSessionId: "session-a" };
+      const draftIdentity = createDraftIdentity("session-a");
       writeTestDraft(storage, draftIdentity, "merged draft");
 
       await harness.mount();

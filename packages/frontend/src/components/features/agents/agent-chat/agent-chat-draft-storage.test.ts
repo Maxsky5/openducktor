@@ -41,6 +41,8 @@ const createMemoryStorage = (): TestStorage => {
 const identity: AgentChatDraftSessionIdentity = {
   workspaceId: "workspace:one",
   externalSessionId: "session/one",
+  runtimeKind: "opencode",
+  workingDirectory: "/workspace/one",
 };
 
 const command = {
@@ -94,9 +96,9 @@ const buildStructuredDraft = (): AgentChatComposerDraft => ({
 });
 
 describe("agent chat draft storage", () => {
-  test("builds storage keys from workspace and external session identity", () => {
+  test("builds storage keys from workspace and canonical session identity", () => {
     expect(toAgentChatDraftStorageKey(identity)).toBe(
-      "openducktor:agent-chat:draft:v1:workspace%3Aone:session%2Fone",
+      "openducktor:agent-chat:draft:v2:workspace%3Aone:session%2Fone|opencode|%2Fworkspace%2Fone",
     );
   });
 
@@ -160,9 +162,11 @@ describe("agent chat draft storage", () => {
     storage.setItem(
       key,
       JSON.stringify({
-        version: 1,
+        version: 2,
         workspaceId: identity.workspaceId,
         externalSessionId: identity.externalSessionId,
+        runtimeKind: identity.runtimeKind,
+        workingDirectory: identity.workingDirectory,
         taskId: "task-1",
         updatedAt: "2026-07-01T10:00:00.000Z",
         draft: {
@@ -170,6 +174,36 @@ describe("agent chat draft storage", () => {
             { id: "text-1", kind: "text", text: "Use " },
             { id: "skill-1", kind: "skill_mention", skill: {} },
           ],
+          attachments: [],
+        },
+      }),
+    );
+
+    const result = readAgentChatDraftFromStorage({
+      storage,
+      identity,
+      now: new Date("2026-07-02T10:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("invalid");
+    expect(storage.getItem(key)).toBeNull();
+  });
+
+  test("removes payloads whose canonical session identity does not match the key", () => {
+    const storage = createMemoryStorage();
+    const key = toAgentChatDraftStorageKey(identity);
+    storage.setItem(
+      key,
+      JSON.stringify({
+        version: 2,
+        workspaceId: identity.workspaceId,
+        externalSessionId: identity.externalSessionId,
+        runtimeKind: identity.runtimeKind,
+        workingDirectory: "/another/workspace",
+        taskId: "task-1",
+        updatedAt: "2026-07-01T10:00:00.000Z",
+        draft: {
+          segments: [{ id: "text-1", kind: "text", text: "wrong workspace" }],
           attachments: [],
         },
       }),
@@ -262,8 +296,18 @@ describe("agent chat draft storage", () => {
 
   test("cleanup scans only chat draft keys", () => {
     const storage = createMemoryStorage();
-    const expiredIdentity = { workspaceId: "workspace", externalSessionId: "expired" };
-    const freshIdentity = { workspaceId: "workspace", externalSessionId: "fresh" };
+    const expiredIdentity = {
+      workspaceId: "workspace",
+      externalSessionId: "expired",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+    const freshIdentity = {
+      workspaceId: "workspace",
+      externalSessionId: "fresh",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
     writeAgentChatDraftToStorage({
       storage,
       identity: expiredIdentity,
@@ -278,6 +322,7 @@ describe("agent chat draft storage", () => {
       draft: { segments: [createTextSegment("fresh", "text-1")], attachments: [] },
       updatedAt: "2026-07-08T09:00:00.000Z",
     });
+    storage.setItem("openducktor:agent-chat:draft:v1:workspace:legacy-session", "legacy");
     storage.setItem("openducktor:other-feature", "keep");
 
     cleanupExpiredAgentChatDraftStorage({
@@ -287,6 +332,7 @@ describe("agent chat draft storage", () => {
 
     expect(storage.getItem(toAgentChatDraftStorageKey(expiredIdentity))).toBeNull();
     expect(storage.getItem(toAgentChatDraftStorageKey(freshIdentity))).not.toBeNull();
+    expect(storage.getItem("openducktor:agent-chat:draft:v1:workspace:legacy-session")).toBeNull();
     expect(storage.getItem("openducktor:other-feature")).toBe("keep");
   });
 });

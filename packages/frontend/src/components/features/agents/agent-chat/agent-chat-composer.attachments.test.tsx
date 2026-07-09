@@ -106,9 +106,14 @@ const createMemoryStorage = (spies?: { getItem?: (key: string) => void }): TestS
   };
 };
 
-const sessionIdentity = (externalSessionId: string): AgentChatDraftSessionIdentity => ({
+const sessionIdentity = (
+  externalSessionId: string,
+  workingDirectory = "/repo",
+): AgentChatDraftSessionIdentity => ({
   workspaceId: "workspace-repo",
   externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory,
 });
 
 const createDeferred = <T,>() => {
@@ -180,8 +185,8 @@ describe("AgentChatComposer attachments", () => {
   test("restores independent in-memory drafts when switching sessions", async () => {
     const storage = createMemoryStorage();
     setAgentChatDraftStorageForTests(storage);
-    const sessionA = sessionIdentity("session-a");
-    const sessionB = sessionIdentity("session-b");
+    const sessionA = sessionIdentity("session-shared", "/repo-a");
+    const sessionB = sessionIdentity("session-shared", "/repo-b");
     const { container, rerender } = render(
       <AgentChatComposer
         model={{

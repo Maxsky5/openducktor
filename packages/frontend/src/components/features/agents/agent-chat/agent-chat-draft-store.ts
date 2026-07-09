@@ -424,6 +424,8 @@ export const clearAgentChatDraftsForTargets = (targets: AgentChatDraftCleanupTar
     uniqueIdentities.set(toAgentChatDraftStorageKey(target), {
       workspaceId: target.workspaceId,
       externalSessionId: target.externalSessionId,
+      runtimeKind: target.runtimeKind,
+      workingDirectory: target.workingDirectory,
     });
   }
 

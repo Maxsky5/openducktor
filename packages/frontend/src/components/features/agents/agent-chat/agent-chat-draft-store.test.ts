@@ -98,6 +98,8 @@ const installManualTimers = () => {
 const identity: AgentChatDraftSessionIdentity = {
   workspaceId: "workspace",
   externalSessionId: "session-a",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
 };
 
 const buildDraft = (text: string): AgentChatComposerDraft => ({
@@ -250,8 +252,18 @@ describe("agent chat draft store", () => {
 
   test("runs expired draft cleanup during first hydration only", () => {
     const storage = createMemoryStorage();
-    const expiredIdentity = { workspaceId: "workspace", externalSessionId: "expired" };
-    const freshIdentity = { workspaceId: "workspace", externalSessionId: "fresh" };
+    const expiredIdentity = {
+      workspaceId: "workspace",
+      externalSessionId: "expired",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+    const freshIdentity = {
+      workspaceId: "workspace",
+      externalSessionId: "fresh",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
     setAgentChatDraftStorageForTests(storage);
     setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
     writeAgentChatDraftToStorage({
