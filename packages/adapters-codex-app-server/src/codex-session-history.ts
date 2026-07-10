@@ -113,7 +113,19 @@ const projectCodexThreadReadToHistory = ({
   let didInsertForkBoundary = false;
   const projectedHistory = codexTurnItemsFromThreadRead(response)
     .flatMap(
-      ({ item, turnIndex, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
+      (
+        {
+          item,
+          turnIndex,
+          turnId,
+          timestamp,
+          timestampIsApproximate,
+          isFinalAgentMessage,
+          turnTiming,
+          model,
+        },
+        index,
+      ) => {
         const turnModel =
           model ??
           (turnId ? modelByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) : undefined);
@@ -157,6 +169,9 @@ const projectCodexThreadReadToHistory = ({
             finalTokenUsage,
           );
           history = message ? [message] : [];
+        }
+        if (timestampIsApproximate) {
+          history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
         }
         if (
           forkBoundaryMessage &&

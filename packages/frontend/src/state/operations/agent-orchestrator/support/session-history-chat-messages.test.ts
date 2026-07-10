@@ -23,6 +23,39 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     expect(messages).toEqual([]);
   });
 
+  test("preserves approximate timestamp metadata on hydrated tool messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "hydrated-tool",
+          role: "assistant",
+          timestamp: "2026-07-10T20:33:01.000Z",
+          timestampIsApproximate: true,
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "hydrated-tool",
+              partId: "hydrated-tool-part",
+              callId: "hydrated-tool-call",
+              tool: "search",
+              toolType: "search",
+              status: "completed",
+            },
+          ],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: "tool:hydrated-tool:hydrated-tool-call",
+        timestampIsApproximate: true,
+      }),
+    ]);
+  });
+
   test("maps compacted session history notices to chat notice messages", () => {
     const messages = historyToChatMessages(
       [

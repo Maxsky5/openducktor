@@ -115,6 +115,8 @@ export type AgentChatMessage = {
   role: "user" | "assistant" | "system" | "thinking" | "tool";
   content: string;
   timestamp: string;
+  /** The timestamp is retained for ordering but hidden from the transcript clock label. */
+  timestampIsApproximate?: true;
   meta?: AgentChatMessageMeta;
 };
 

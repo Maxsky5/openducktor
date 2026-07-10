@@ -23,6 +23,108 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 1_783_715_580,
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "child-turn",
+                  startedAt: 1_783_715_581,
+                  completedAt: null,
+                  durationMs: null,
+                  status: "inProgress",
+                  items: [
+                    {
+                      id: "child-user",
+                      type: "userMessage",
+                      content: [{ type: "text", text: "Inspect the repository" }],
+                    },
+                    {
+                      id: "child-commentary",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "I’m checking the repository now.",
+                    },
+                    {
+                      id: "child-command",
+                      type: "commandExecution",
+                      command: "pwd",
+                      cwd: "/repo",
+                      processId: null,
+                      source: "model",
+                      status: "completed",
+                      commandActions: [{ type: "unknown", command: "pwd" }],
+                      aggregatedOutput: "/repo",
+                      exitCode: 0,
+                      durationMs: 12,
+                    },
+                    {
+                      id: "child-tool",
+                      type: "mcpToolCall",
+                      server: "semble",
+                      tool: "search",
+                      status: "completed",
+                      arguments: { query: "architecture" },
+                      appContext: null,
+                      pluginId: null,
+                      result: { content: [{ type: "text", text: "result" }] },
+                      error: null,
+                      durationMs: 107,
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    const byId = new Map(history.map((message) => [message.messageId, message]));
+    const hasApproximateTimestamp = (messageId: string): boolean | undefined =>
+      (byId.get(messageId) as { timestampIsApproximate?: boolean } | undefined)
+        ?.timestampIsApproximate;
+
+    expect(byId.get("child-user")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-user")).toBeUndefined();
+    expect(byId.get("child-commentary")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-commentary")).toBe(true);
+    expect(byId.get("child-command")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-command")).toBe(true);
+    expect(byId.get("child-tool")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-tool")).toBe(true);
+    expect(
+      (
+        byId.get("child-command")?.parts[0] as
+          | { startedAtMs?: number; endedAtMs?: number }
+          | undefined
+      )?.startedAtMs,
+    ).toBeUndefined();
+    expect(
+      (byId.get("child-tool")?.parts[0] as { startedAtMs?: number; endedAtMs?: number } | undefined)
+        ?.endedAtMs,
+    ).toBeUndefined();
+  });
+
   test("preserves inherited Codex history and inserts the exact subagent fork boundary", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const childTurns = [

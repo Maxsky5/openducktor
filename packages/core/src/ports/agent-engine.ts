@@ -158,6 +158,8 @@ export type AgentSessionHistoryMessage =
       messageId: RuntimeHistoryAnchor;
       role: "user";
       timestamp: string;
+      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
+      timestampIsApproximate?: true;
       text: string;
       displayParts: AgentUserMessageDisplayPart[];
       state: AgentUserMessageState;
@@ -168,6 +170,8 @@ export type AgentSessionHistoryMessage =
       messageId: RuntimeHistoryAnchor;
       role: "assistant";
       timestamp: string;
+      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
+      timestampIsApproximate?: true;
       text: string;
       durationMs?: number;
       totalTokens?: number;
@@ -179,6 +183,8 @@ export type AgentSessionHistoryMessage =
       messageId: RuntimeHistoryAnchor;
       role: "system";
       timestamp: string;
+      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
+      timestampIsApproximate?: true;
       text: string;
       /**
        * Runtime adapters use system messages only for system/developer context
