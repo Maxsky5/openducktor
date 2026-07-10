@@ -1,41 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  DevServerEvent,
-  DevServerGroupState,
-  DevServerScriptState,
-} from "@openducktor/contracts";
+import type { DevServerEvent } from "@openducktor/contracts";
 import {
   applyDevServerEventToState,
+  buildTaskMemoryKey,
   isDevServerPanelExpanded,
   selectDefaultDevServerTab,
-} from "./use-agent-studio-dev-server-panel";
-
-const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => ({
-  scriptId: "frontend",
-  name: "Frontend",
-  command: "bun run dev",
-  status: "stopped",
-  pid: null,
-  startedAt: null,
-  exitCode: null,
-  lastError: null,
-  bufferedTerminalChunks: [],
-  ...overrides,
-});
-
-const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
-  repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
-  scripts: [buildScript()],
-  updatedAt: "2026-03-19T15:30:00.000Z",
-  ...overrides,
-});
+} from "./use-agent-studio-dev-server-panel-helpers";
+import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-test-fixtures";
 
 describe("useAgentStudioDevServerPanel helpers", () => {
+  test("builds task memory keys without delimiter collisions", () => {
+    expect(buildTaskMemoryKey("/repo::task-b", "task-c")).not.toBe(
+      buildTaskMemoryKey("/repo", "task-b::task-c"),
+    );
+  });
+
   test("applies terminal chunk events without cloning buffered replay into query state", () => {
     const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: index,
       data: `line-${index}`,
       timestamp: `2026-03-19T15:30:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -49,6 +35,10 @@ describe("useAgentStudioDevServerPanel helpers", () => {
       taskId: "task-7",
       terminalChunk: {
         scriptId: "frontend",
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 2000,
         data: "latest-chunk",
         timestamp: "2026-03-19T15:31:00.000Z",

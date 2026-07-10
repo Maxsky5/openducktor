@@ -28,10 +28,9 @@ import type {
   CreateDevServerServiceInput,
   DevServerService,
   DisposableDevServerService,
-  StoppedDevServerScript,
+  FailedDevServerScriptStart,
 } from "./dev-server-service-types";
 import {
-  appendTerminalChunk,
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
@@ -39,14 +38,12 @@ import {
   DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
-  formatTerminalProcessOutput,
-  formatTerminalSystemMessage,
-  nextTerminalSequence,
-  resetTerminalChunks,
   scriptHasLiveProcess,
+  startTerminalRun,
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
+import { createDevServerTerminalWriter } from "./dev-server-terminal-writer";
 
 export type {
   CreateDevServerServiceInput,
@@ -59,26 +56,19 @@ export type {
 } from "./dev-server-service-types";
 
 const nowIso = (): string => new Date().toISOString();
-const groupKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
-type FailedDevServerScriptStart = {
-  command: string;
-  message: string;
-  name: string;
-  scriptId: string;
-};
 export const createDevServerService = ({
   eventBus,
   processPort,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateDevServerServiceInput): DisposableDevServerService => {
-  const groups = new Map<string, DevServerGroupRuntime>();
-  const publish = (event: DevServerEvent): void => {
+  const hostInstanceId = globalThis.crypto.randomUUID();
+  const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
+  const publish = (event: DevServerEvent): void =>
     eventBus?.publish(DEV_SERVER_EVENT_CHANNEL, devServerEventSchema.parse(event));
-  };
-  const emitSnapshot = (runtime: DevServerGroupRuntime): void => {
+  const terminalWriter = createDevServerTerminalWriter(publish);
+  const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
     publish({ type: "snapshot", state: runtime.state });
-  };
   const getWorktreePath = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const worktree = taskWorktreeService
@@ -88,8 +78,9 @@ export const createDevServerService = ({
     });
   const getRuntime = (taskId: string, repoConfig: RepoConfig, worktreePath: string | null) =>
     Effect.sync(() => {
-      const key = groupKey(repoConfig.repoPath, taskId);
-      const existing = groups.get(key);
+      const repoGroups =
+        groups.get(repoConfig.repoPath) ?? new Map<string, DevServerGroupRuntime>();
+      const existing = repoGroups.get(taskId);
       if (existing) {
         syncGroupState(existing.state, repoConfig, taskId, worktreePath);
         syncRuntimeTerminalBufferByteCounts(existing);
@@ -100,8 +91,10 @@ export const createDevServerService = ({
         state: buildGroupState(repoConfig, taskId, worktreePath, nowIso()),
         terminalBufferedBytesByScriptId: new Map<string, number>(),
         terminalNextSequenceByScriptId: new Map<string, number>(),
+        terminalRunGeneration: 0,
       };
-      groups.set(key, runtime);
+      repoGroups.set(taskId, runtime);
+      groups.set(repoConfig.repoPath, repoGroups);
       return runtime;
     });
   const resolveRuntime = (repoPath: string, taskId: string) =>
@@ -134,41 +127,6 @@ export const createDevServerService = ({
       updatedAt: runtime.state.updatedAt,
     });
   };
-  const pushTerminalChunk = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    data: string,
-  ): void => {
-    if (data.length === 0) {
-      return;
-    }
-    const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-    if (!script) {
-      return;
-    }
-    const timestamp = nowIso();
-    const terminalChunk = {
-      scriptId,
-      sequence: nextTerminalSequence(runtime, script),
-      data,
-      timestamp,
-    };
-    appendTerminalChunk(runtime, script, terminalChunk);
-    runtime.state.updatedAt = timestamp;
-    publish({
-      type: "terminal_chunk",
-      repoPath: runtime.state.repoPath,
-      taskId: runtime.state.taskId,
-      terminalChunk,
-    });
-  };
-  const appendTerminalSystemMessage = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    message: string,
-  ): void => {
-    pushTerminalChunk(runtime, scriptId, formatTerminalSystemMessage(message));
-  };
   const markStartFailed = (
     runtime: DevServerGroupRuntime,
     scriptId: string,
@@ -182,11 +140,12 @@ export const createDevServerService = ({
       script.exitCode = exitCode;
       script.lastError = message;
     });
-    appendTerminalSystemMessage(runtime, scriptId, message);
+    terminalWriter.appendSystemMessage(runtime, scriptId, message);
   };
   const handleProcessExit = (
     runtime: DevServerGroupRuntime,
     scriptId: string,
+    expectedRunId: string,
     pid: number,
     exitCode: number | null,
     signal: string | null,
@@ -194,14 +153,18 @@ export const createDevServerService = ({
   ): void => {
     const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
     const isStartingWithoutRecordedPid = script?.pid === null && script.status === "starting";
-    if (!script || (script.pid !== pid && !isStartingWithoutRecordedPid)) {
+    if (
+      !script ||
+      script.runIdentity?.runId !== expectedRunId ||
+      (script.pid !== pid && !isStartingWithoutRecordedPid)
+    ) {
       return;
     }
     runtime.processes.delete(scriptId);
     const expectedStop = script.status === "stopping";
     const message = error ?? devServerExitMessage(exitCode, signal);
     if (!expectedStop) {
-      appendTerminalSystemMessage(runtime, scriptId, message);
+      terminalWriter.appendSystemMessage(runtime, scriptId, message);
     }
     updateScriptState(runtime, scriptId, (state) => {
       state.pid = null;
@@ -233,13 +196,28 @@ export const createDevServerService = ({
       }
       updateScriptState(runtime, scriptConfig.id, (script) => {
         script.status = "starting";
+        startTerminalRun(runtime, script, hostInstanceId);
         script.pid = null;
         script.startedAt = null;
         script.exitCode = null;
         script.lastError = null;
-        resetTerminalChunks(runtime, script);
       });
-      appendTerminalSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
+      const expectedRunId = runtime.state.scripts.find(
+        (candidate) => candidate.scriptId === scriptConfig.id,
+      )?.runIdentity?.runId;
+      if (!expectedRunId) {
+        return yield* Effect.fail(
+          new HostInvariantError({
+            invariant: "dev_server_script_run_known",
+            message: `Dev server script has no active run id: ${scriptConfig.id}`,
+          }),
+        );
+      }
+      terminalWriter.appendSystemMessage(
+        runtime,
+        scriptConfig.id,
+        `Starting \`${scriptConfig.command}\``,
+      );
       const handle = yield* processPort
         .start({
           command: scriptConfig.command,
@@ -251,9 +229,17 @@ export const createDevServerService = ({
             TERM: DEV_SERVER_TERM,
           },
           onExit: ({ pid, exitCode, signal, error }) =>
-            handleProcessExit(runtime, scriptConfig.id, pid, exitCode, signal, error),
+            handleProcessExit(
+              runtime,
+              scriptConfig.id,
+              expectedRunId,
+              pid,
+              exitCode,
+              signal,
+              error,
+            ),
           onOutput: ({ data }) =>
-            pushTerminalChunk(runtime, scriptConfig.id, formatTerminalProcessOutput(data)),
+            terminalWriter.pushProcessOutput(runtime, scriptConfig.id, expectedRunId, data),
         })
         .pipe(
           Effect.catchAll((error) =>
@@ -474,12 +460,13 @@ export const createDevServerService = ({
     stopAll() {
       return Effect.gen(function* () {
         const errors: string[] = [];
-        const stoppedScripts: StoppedDevServerScript[] = [];
-        for (const runtime of groups.values()) {
-          stoppedScripts.push(...listRunningScripts(runtime));
-          errors.push(...(yield* stopRuntime(runtime)));
-          emitSnapshot(runtime);
-        }
+        const stoppedScripts: ReturnType<typeof listRunningScripts> = [];
+        for (const repoGroups of groups.values())
+          for (const runtime of repoGroups.values()) {
+            stoppedScripts.push(...listRunningScripts(runtime));
+            errors.push(...(yield* stopRuntime(runtime)));
+            emitSnapshot(runtime);
+          }
         if (errors.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({

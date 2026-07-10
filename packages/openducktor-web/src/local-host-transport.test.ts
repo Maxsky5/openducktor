@@ -279,6 +279,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
+      transportEpoch: "task-events:1",
     });
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
@@ -307,13 +308,15 @@ describe("local host SSE subscriptions", () => {
     expect(didResolve).toBe(false);
 
     eventSource.emit("open", "");
-    const unsubscribe = await subscription;
+    const { transportEpoch, unsubscribe } = await subscription;
+    expect(transportEpoch).toBe("dev-server-events:0");
     expect(listener).not.toHaveBeenCalled();
 
     eventSource.emit("open", "");
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
+      transportEpoch: "dev-server-events:1",
     });
 
     unsubscribe();
@@ -340,8 +343,8 @@ describe("local host SSE subscriptions", () => {
     const retrySubscription = subscribeLocalHostDevServerEvents(mock(() => {}));
     const retryEventSource = await waitForEventSourceInstance(1);
     retryEventSource.emit("open", "");
-    const unsubscribe = await retrySubscription;
-    expect(typeof unsubscribe).toBe("function");
+    const { transportEpoch, unsubscribe } = await retrySubscription;
+    expect(transportEpoch).toBe("dev-server-events:0");
     unsubscribe();
     expect(retryEventSource.closed).toBe(true);
   });
@@ -356,7 +359,7 @@ describe("local host SSE subscriptions", () => {
     const subscription = subscribeLocalHostDevServerEvents(listener);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const unsubscribe = await subscription;
+    const { unsubscribe } = await subscription;
 
     eventSource.emit("error", "lost connection");
 
@@ -373,6 +376,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
+      transportEpoch: "dev-server-events:1",
     });
 
     eventSource.emit("error", "lost again");
@@ -398,8 +402,8 @@ describe("local host SSE subscriptions", () => {
     const throwingSubscription = subscribeLocalHostDevServerEvents(throwingListener);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const unsubscribeThrowing = await throwingSubscription;
-    const unsubscribe = await subscribeLocalHostDevServerEvents(listener);
+    const { unsubscribe: unsubscribeThrowing } = await throwingSubscription;
+    const { unsubscribe } = await subscribeLocalHostDevServerEvents(listener);
 
     expect(() => eventSource.emit("error", "lost connection")).toThrow("listener failed");
     expect(listener).toHaveBeenNthCalledWith(1, {
@@ -410,6 +414,38 @@ describe("local host SSE subscriptions", () => {
 
     eventSource.emit("error", "still disconnected");
     expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribeThrowing();
+    unsubscribe();
+  });
+
+  test("isolates named dev-server stream-warning listener failures", async () => {
+    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const throwingListener = mock(() => {
+      throw new Error("listener failed");
+    });
+    const listener = mock(() => {});
+
+    const throwingSubscription = subscribeLocalHostDevServerEvents(throwingListener);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const { unsubscribe: unsubscribeThrowing } = await throwingSubscription;
+    const { unsubscribe } = await subscribeLocalHostDevServerEvents(listener);
+
+    expect(() =>
+      eventSource.emit(
+        "stream-warning",
+        "Dev server stream skipped 2 events; reconnect will replay buffered events.",
+      ),
+    ).toThrow("listener failed");
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "Dev server stream skipped 2 events; reconnect will replay buffered events.",
+    });
 
     unsubscribeThrowing();
     unsubscribe();

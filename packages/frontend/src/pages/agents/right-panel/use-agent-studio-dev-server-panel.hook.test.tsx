@@ -30,12 +30,18 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
+let nextSubscriptionTransportEpoch = 0;
 let subscribeDevServerEventsMock = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
+): Promise<{ transportEpoch: string; unsubscribe: () => void }> => {
   devServerEventListener = listener;
-  return () => {
-    devServerEventListener = null;
+  const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
+  nextSubscriptionTransportEpoch += 1;
+  return {
+    transportEpoch,
+    unsubscribe: () => {
+      devServerEventListener = null;
+    },
   };
 };
 
@@ -59,10 +65,16 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+  nextSubscriptionTransportEpoch = 0;
   subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
     devServerEventListener = listener;
-    return () => {
-      devServerEventListener = null;
+    const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
+    nextSubscriptionTransportEpoch += 1;
+    return {
+      transportEpoch,
+      unsubscribe: () => {
+        devServerEventListener = null;
+      },
     };
   };
 });
@@ -256,6 +268,10 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 0,
                 data: "Starting `bun run dev`\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -378,6 +394,10 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 0,
                 data: "Starting `bun run dev`\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -405,6 +425,10 @@ describe("useAgentStudioDevServerPanel", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runIdentity: {
+                    runId: "frontend:1",
+                    runOrder: { hostInstanceId: "host-1", generation: 1 },
+                  },
                   sequence: 0,
                   data: "Starting `bun run dev`\r\n",
                   timestamp: "2026-03-19T15:30:00.000Z",
@@ -419,14 +443,40 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("applies a starting state immediately when start is clicked", async () => {
+  test("starts from a stopped owned run without clearing replay before host ownership arrives", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
+    const stoppedState = buildState({
+      scripts: [
+        buildScript({
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
+              sequence: 3,
+              data: "stopped replay\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
     const startDeferred = createDeferred<DevServerGroupState>();
-    devServerGetState = async () => buildState();
-    devServerStart = async () => startDeferred.promise;
+    let startCalls = 0;
+    devServerGetState = async () => stoppedState;
+    devServerStart = async () => {
+      startCalls += 1;
+      return startDeferred.promise;
+    };
 
     let latest: HookResult | null = null;
     const getLatest = (): HookResult => {
@@ -463,10 +513,35 @@ describe("useAgentStudioDevServerPanel", () => {
         getLatest().onStart();
       });
 
-      expect(getLatest().mode).toBe("active");
-      expect(getLatest().isExpanded).toBe(true);
-      expect(getLatest().scripts[0]?.status).toBe("starting");
+      expect(getLatest().scripts[0]?.status).toBe("stopped");
       expect(getLatest().selectedScript?.scriptId).toBe("frontend");
+      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
+        "stopped replay\r\n",
+      ]);
+      await waitFor(() => {
+        expect(startCalls).toBe(1);
+        expect(getLatest().mode).toBe("active");
+        expect(getLatest().isExpanded).toBe(true);
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:31:00.000Z",
+          script: buildScript({
+            status: "starting",
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
+          }),
+        });
+      });
+
+      expect(getLatest().scripts[0]?.status).toBe("starting");
+      expect(getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
     } finally {
       startDeferred.resolve(buildState());
       view.unmount();
@@ -491,6 +566,10 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 0,
                 data: "ready\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -507,6 +586,10 @@ describe("useAgentStudioDevServerPanel", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "backend",
+                runIdentity: {
+                  runId: "backend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 0,
                 data: "Dev server exited with code 1.\r\n",
                 timestamp: "2026-03-19T15:30:00.000Z",
@@ -578,6 +661,10 @@ describe("useAgentStudioDevServerPanel", () => {
       scripts: [
         buildScript({
           status: "running",
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
           pid: 4242,
           startedAt: "2026-03-19T15:30:00.000Z",
         }),
@@ -640,6 +727,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 0,
             data: "\u001b[32mready\u001b[0m\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -731,6 +822,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 0,
             data: "fresh-line",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -767,6 +862,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "ready\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -780,6 +879,10 @@ describe("useAgentStudioDevServerPanel", () => {
       scripts: [
         buildScript({
           status: "stopped",
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
           pid: null,
           startedAt: null,
           bufferedTerminalChunks: [],
@@ -821,6 +924,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 1,
             data: "closing dev server\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -869,6 +976,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 3,
               data: "old run output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -882,11 +993,19 @@ describe("useAgentStudioDevServerPanel", () => {
       scripts: [
         buildScript({
           status: "running",
+          runIdentity: {
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-1", generation: 2 },
+          },
           pid: 4343,
           startedAt: "2026-03-19T15:31:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:2",
+                runOrder: { hostInstanceId: "host-1", generation: 2 },
+              },
               sequence: 4,
               data: "new run output\r\n",
               timestamp: "2026-03-19T15:31:01.000Z",
@@ -947,6 +1066,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             sequence: 4,
             data: "new run output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -955,7 +1078,7 @@ describe("useAgentStudioDevServerPanel", () => {
       });
 
       await waitFor(() => {
-        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(2);
+        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(1);
       });
 
       restartDeferred.resolve(restartedState);
@@ -970,7 +1093,7 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("reopens with cached dev-server state while a fresh refetch completes", async () => {
+  test("does not reuse cached dev-server state across subscription sessions", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -993,6 +1116,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 1,
               data: "Dev server exited with code 1.\r\n",
               timestamp: "2026-03-19T15:35:00.000Z",
@@ -1002,15 +1129,11 @@ describe("useAgentStudioDevServerPanel", () => {
       ],
     });
     const reopenFetch = createDeferred<DevServerGroupState>();
-    let phase: "initial" | "reopen" | "steady" = "initial";
+    let phase: "initial" | "reopen" = "initial";
 
     devServerGetState = async () => {
       if (phase === "reopen") {
         return reopenFetch.promise;
-      }
-
-      if (phase === "steady") {
-        return refreshedState;
       }
 
       return initialState;
@@ -1068,12 +1191,11 @@ describe("useAgentStudioDevServerPanel", () => {
       );
 
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.status).toBe("running");
+        expect(getLatest().scripts).toHaveLength(0);
+        expect(getLatest().mode).toBe("loading");
+        expect(getLatest().isLoading).toBe(true);
       });
-      expect(getLatest().mode).toBe("active");
-      expect(getLatest().isLoading).toBe(false);
 
-      phase = "steady";
       reopenFetch.resolve(refreshedState);
 
       await waitFor(() => {
@@ -1100,6 +1222,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1118,6 +1244,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 1,
               data: "fresh output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -1176,7 +1306,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1205,6 +1335,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1274,7 +1408,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1304,6 +1438,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1377,6 +1515,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 1,
             data: "live output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1394,7 +1536,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1404,6 +1546,10 @@ describe("useAgentStudioDevServerPanel", () => {
         expect(getLatest().selectedScriptTerminalBuffer?.entries).toEqual([
           {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 1,
             data: "live output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1431,6 +1577,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1530,6 +1680,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 0,
             data: "new run output\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1543,7 +1697,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1574,6 +1728,10 @@ describe("useAgentStudioDevServerPanel", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "Starting `bun run dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1611,6 +1769,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 1,
             data: "old failed output\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -1622,6 +1784,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 2,
             data: "ELIFECYCLE Command failed.\r\n",
             timestamp: "2026-03-19T15:30:02.000Z",
@@ -1650,6 +1816,10 @@ describe("useAgentStudioDevServerPanel", () => {
           updatedAt: "2026-03-19T15:31:00.000Z",
           script: buildScript({
             status: "starting",
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: null,
             startedAt: "2026-03-19T15:31:00.000Z",
             bufferedTerminalChunks: [],
@@ -1661,6 +1831,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             sequence: 0,
             data: "Starting `bun run dev`\r\n",
             timestamp: "2026-03-19T15:31:00.000Z",
@@ -1672,6 +1846,10 @@ describe("useAgentStudioDevServerPanel", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             sequence: 1,
             data: "new dev server ready\r\n",
             timestamp: "2026-03-19T15:31:01.000Z",
@@ -1689,17 +1867,29 @@ describe("useAgentStudioDevServerPanel", () => {
           scripts: [
             buildScript({
               status: "running",
+              runIdentity: {
+                runId: "frontend:2",
+                runOrder: { hostInstanceId: "host-1", generation: 2 },
+              },
               pid: 4343,
               startedAt: "2026-03-19T15:31:00.000Z",
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
+                  runIdentity: {
+                    runId: "frontend:2",
+                    runOrder: { hostInstanceId: "host-1", generation: 2 },
+                  },
                   sequence: 0,
                   data: "Starting `bun run dev`\r\n",
                   timestamp: "2026-03-19T15:31:00.000Z",
                 },
                 {
                   scriptId: "frontend",
+                  runIdentity: {
+                    runId: "frontend:2",
+                    runOrder: { hostInstanceId: "host-1", generation: 2 },
+                  },
                   sequence: 1,
                   data: "new dev server ready\r\n",
                   timestamp: "2026-03-19T15:31:01.000Z",
@@ -1819,9 +2009,13 @@ describe("useAgentStudioDevServerPanel", () => {
     const taskTwoFetch = createDeferred<DevServerGroupState>();
     let didStartTaskTwoFetch = false;
 
-    queryClient.setQueryData(devServerQueryKeys.state("/repo-b", "task-2"), cachedTaskTwoState, {
-      updatedAt: 1,
-    });
+    queryClient.setQueryData(
+      devServerQueryKeys.state("/repo-b", "task-2", "test:1"),
+      cachedTaskTwoState,
+      {
+        updatedAt: 1,
+      },
+    );
     devServerGetState = async (repoPath, taskId) => {
       if (repoPath === "/repo-a" && taskId === "task-1") {
         return taskOneState;
@@ -1849,16 +2043,16 @@ describe("useAgentStudioDevServerPanel", () => {
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
       harness.update(currentArgs);
 
-      expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
-      expect(harness.getLatest().mode).toBe("active");
-      expect(harness.getLatest().isLoading).toBe(false);
+      expect(harness.getLatest().scripts).toEqual([]);
+      expect(harness.getLatest().mode).toBe("loading");
+      expect(harness.getLatest().isLoading).toBe(true);
 
       await waitFor(() => {
         expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
+        expect(didStartTaskTwoFetch).toBe(true);
       });
       expect(harness.getLatest().mode).toBe("active");
       expect(harness.getLatest().isLoading).toBe(false);
-      expect(didStartTaskTwoFetch).toBe(true);
 
       taskTwoFetch.resolve(freshTaskTwoState);
       await waitFor(() => {

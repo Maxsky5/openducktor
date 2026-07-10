@@ -106,6 +106,10 @@ const selectedScript: DevServerScriptState = {
   name: "Frontend",
   command: "bun run dev",
   status: "running",
+  runIdentity: {
+    runId: "frontend:1",
+    runOrder: { hostInstanceId: "host-1", generation: 1 },
+  },
   pid: 123,
   startedAt: "2026-03-19T10:00:00.000Z",
   exitCode: null,
@@ -113,6 +117,10 @@ const selectedScript: DevServerScriptState = {
   bufferedTerminalChunks: [
     {
       scriptId: "frontend",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "ready in 120ms\r\n",
       timestamp: "2026-03-19T10:00:01.000Z",

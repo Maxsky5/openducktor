@@ -1,3 +1,4 @@
+import type { DevServerEventSubscription } from "@openducktor/frontend";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
@@ -28,6 +29,7 @@ type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListener>;
   ready: Promise<void>;
+  readTransportEpoch: () => string | null;
   handleMessage: (event: MessageEvent<string>) => void;
   handleOpen: () => void;
   handleError: (event: Event) => void;
@@ -35,12 +37,13 @@ type BrowserSseChannel = {
 };
 
 type BrowserSseSubscription = {
-  ready: Promise<void>;
+  ready: Promise<string>;
   unsubscribe: () => void;
 };
 
 const sseChannels = new Map<string, BrowserSseChannel>();
 let nextSseListenerId = 0;
+let nextSseTransportEpoch = 0;
 let sessionPromise: Promise<void> | null = null;
 
 const readFailureKind = (payload: unknown): string | undefined => {
@@ -180,6 +183,29 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
+const dispatchBrowserSseWarning = (
+  listeners: Iterable<BrowserSseListener>,
+  warningPayload: unknown,
+): void => {
+  let didListenerThrow = false;
+  let firstListenerError: unknown;
+
+  for (const currentListener of listeners) {
+    try {
+      currentListener(warningPayload);
+    } catch (error) {
+      if (!didListenerThrow) {
+        firstListenerError = error;
+      }
+      didListenerThrow = true;
+    }
+  }
+
+  if (didListenerThrow) {
+    throw firstListenerError;
+  }
+};
+
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
@@ -219,6 +245,7 @@ const subscribeSseChannelEffect = (
       const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
       let hasOpened = false;
       let hasReportedPostOpenError = false;
+      let transportEpoch: string | null = null;
       let resolveReady: () => void = () => {};
       let rejectReady: (error: unknown) => void = () => {};
       const ready = new Promise<void>((resolve, reject) => {
@@ -233,6 +260,8 @@ const subscribeSseChannelEffect = (
         }
       };
       const handleOpen = (): void => {
+        transportEpoch = `${path}:${nextSseTransportEpoch}`;
+        nextSseTransportEpoch += 1;
         if (!hasOpened) {
           hasOpened = true;
           hasReportedPostOpenError = false;
@@ -244,7 +273,9 @@ const subscribeSseChannelEffect = (
           return;
         }
         for (const currentListener of listeners.values()) {
-          currentListener(browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND));
+          currentListener(
+            browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
+          );
         }
       };
       const handleError = (event: Event): void => {
@@ -256,21 +287,10 @@ const subscribeSseChannelEffect = (
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
             `EventSource ${path} reported an error after opening.`,
           );
-          let hasListenerError = false;
-          let listenerError: unknown;
-          for (const currentListener of listeners.values()) {
-            try {
-              currentListener(warningPayload);
-            } catch (error) {
-              if (!hasListenerError) {
-                listenerError = error;
-              }
-              hasListenerError = true;
-            }
-          }
-          hasReportedPostOpenError = true;
-          if (hasListenerError) {
-            throw listenerError;
+          try {
+            dispatchBrowserSseWarning(listeners.values(), warningPayload);
+          } finally {
+            hasReportedPostOpenError = true;
           }
           return;
         }
@@ -288,11 +308,11 @@ const subscribeSseChannelEffect = (
         if (!shouldEmitControlEvents) {
           return;
         }
-        for (const currentListener of listeners.values()) {
-          currentListener(
-            browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, event.data),
-          );
-        }
+        const warningPayload = browserLiveControlEvent(
+          BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+          event.data,
+        );
+        dispatchBrowserSseWarning(listeners.values(), warningPayload);
       };
 
       eventSource.addEventListener("message", handleMessage as EventListener);
@@ -303,6 +323,7 @@ const subscribeSseChannelEffect = (
         eventSource,
         listeners,
         ready,
+        readTransportEpoch: () => transportEpoch,
         handleMessage,
         handleOpen,
         handleError,
@@ -314,9 +335,23 @@ const subscribeSseChannelEffect = (
     const listenerId = nextSseListenerId;
     nextSseListenerId += 1;
     channel.listeners.set(listenerId, listener);
+    const activeChannel = channel;
+    const subscriptionReady = activeChannel.ready.then(() => {
+      const transportEpoch = activeChannel.readTransportEpoch();
+      if (transportEpoch === null) {
+        throw new WebDependencyError({
+          dependency: "event-source",
+          operation: "read-transport-epoch",
+          message: `EventSource ${path} opened without a transport epoch.`,
+          details: { path },
+        });
+      }
+      return transportEpoch;
+    });
+    void subscriptionReady.catch(() => {});
 
     return {
-      ready: channel.ready,
+      ready: subscriptionReady,
       unsubscribe: () => {
         const currentChannel = sseChannels.get(path);
         if (!currentChannel) {
@@ -341,7 +376,7 @@ export const subscribeLocalHostRunEvents = async (
 
 export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
+): Promise<DevServerEventSubscription> => {
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
@@ -391,7 +426,10 @@ export const subscribeLocalHostDevServerEvents = async (
         subscription.unsubscribe();
         return yield* causeToWebBoundaryError(readyExit.cause);
       }
-      return subscription.unsubscribe;
+      return {
+        transportEpoch: readyExit.value,
+        unsubscribe: subscription.unsubscribe,
+      };
     }),
   );
 };

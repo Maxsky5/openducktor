@@ -16,6 +16,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import {
+  createDevServerTaskScope,
+  formatDevServerTaskScopeKey,
+} from "@/types/dev-server-task-scope";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
 
@@ -138,15 +142,23 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const selectedScriptTerminalBuffer =
-    model.selectedScriptTerminalBuffer ??
-    (selectedScriptContent
-      ? {
-          entries: selectedScriptContent.bufferedTerminalChunks,
-          lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
-          resetToken: 0,
-        }
-      : null);
+  const terminalScopeKey = formatDevServerTaskScopeKey(
+    createDevServerTaskScope(model.repoPath, model.taskId),
+  );
+  const selectedScriptTerminalBuffer = useMemo(() => {
+    if (model.selectedScriptTerminalBuffer !== null) {
+      return model.selectedScriptTerminalBuffer;
+    }
+    if (selectedScriptContent === null) {
+      return null;
+    }
+
+    return {
+      entries: selectedScriptContent.bufferedTerminalChunks,
+      lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
+      resetToken: 0,
+    };
+  }, [model.selectedScriptTerminalBuffer, selectedScriptContent]);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
   const disabledReasonId = useId();
@@ -356,6 +368,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
                 <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
                   <AgentStudioDevServerTerminal
+                    scopeKey={terminalScopeKey}
                     scriptId={selectedScriptContent.scriptId}
                     terminalBuffer={selectedScriptTerminalBuffer}
                     onRendererError={setRendererError}

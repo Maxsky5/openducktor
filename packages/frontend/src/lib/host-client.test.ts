@@ -25,7 +25,10 @@ const createRuntimeInstanceSummary = (runtimeId: string): RuntimeInstanceSummary
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
   client: {} as HostClient,
   subscribeRunEvents: async () => () => {},
-  subscribeDevServerEvents: async () => () => {},
+  subscribeDevServerEvents: async () => ({
+    transportEpoch: "test:0",
+    unsubscribe: () => {},
+  }),
   subscribeTaskEvents: async () => () => {},
   capabilities: {
     canOpenExternalUrls: true,

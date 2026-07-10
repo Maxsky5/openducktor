@@ -19,8 +19,18 @@ describe("browser-live-control-events", () => {
       isBrowserLiveControlEvent({
         __openducktorBrowserLive: true,
         kind: BROWSER_LIVE_RECONNECTED_EVENT_KIND,
+        transportEpoch: "test:1",
       }),
     ).toBe(true);
+  });
+
+  test("rejects reconnect events without a transport epoch", () => {
+    expect(
+      isBrowserLiveControlEvent({
+        __openducktorBrowserLive: true,
+        kind: BROWSER_LIVE_RECONNECTED_EVENT_KIND,
+      }),
+    ).toBe(false);
   });
 
   test("rejects control events with non-string messages", () => {

@@ -1,6 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import { memo, type ReactElement, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { formatDevServerTerminalIdentityKey } from "@/types/dev-server-task-scope";
 import {
   type CreateTerminalBinding,
   defaultCreateTerminalBinding,
@@ -9,6 +10,7 @@ import {
 } from "./use-agent-studio-dev-server-terminal";
 
 type AgentStudioDevServerTerminalProps = {
+  scopeKey: string;
   scriptId: string;
   terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   onRendererError: (message: string | null) => void;
@@ -16,6 +18,7 @@ type AgentStudioDevServerTerminalProps = {
 };
 
 export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTerminal({
+  scopeKey,
   scriptId,
   terminalBuffer,
   onRendererError,
@@ -30,7 +33,7 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
 
   useDevServerTerminalRendering({
     ...terminalRenderController,
-    scriptId,
+    terminalIdentityKey: formatDevServerTerminalIdentityKey(scopeKey, scriptId),
     terminalBuffer,
     onRendererError,
   });

@@ -52,6 +52,10 @@ const runningScript: DevServerScriptState = {
   name: "Frontend",
   command: "bun run dev",
   status: "running",
+  runIdentity: {
+    runId: "frontend:1",
+    runOrder: { hostInstanceId: "host-1", generation: 1 },
+  },
   pid: 4321,
   startedAt: "2026-03-19T15:30:00.000Z",
   exitCode: null,
@@ -59,12 +63,20 @@ const runningScript: DevServerScriptState = {
   bufferedTerminalChunks: [
     {
       scriptId: "frontend",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "Starting `bun run dev`\r\n",
       timestamp: "2026-03-19T15:30:00.000Z",
     },
     {
       scriptId: "frontend",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 1,
       data: "ready on http://localhost:5173\r\n",
       timestamp: "2026-03-19T15:30:01.000Z",
@@ -77,6 +89,10 @@ const backendScript: DevServerScriptState = {
   name: "Backend",
   command: "bun run api",
   status: "running",
+  runIdentity: {
+    runId: "backend:1",
+    runOrder: { hostInstanceId: "host-1", generation: 1 },
+  },
   pid: 999,
   startedAt: "2026-03-19T15:31:00.000Z",
   exitCode: null,
@@ -84,6 +100,10 @@ const backendScript: DevServerScriptState = {
   bufferedTerminalChunks: [
     {
       scriptId: "backend",
+      runIdentity: {
+        runId: "backend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "api ready\r\n",
       timestamp: "2026-03-19T15:31:01.000Z",
@@ -96,6 +116,10 @@ const failedScript: DevServerScriptState = {
   name: "Failed server",
   command: "bun run broken",
   status: "failed",
+  runIdentity: {
+    runId: "failed:1",
+    runOrder: { hostInstanceId: "host-1", generation: 1 },
+  },
   pid: null,
   startedAt: null,
   exitCode: 1,
@@ -103,6 +127,10 @@ const failedScript: DevServerScriptState = {
   bufferedTerminalChunks: [
     {
       scriptId: "failed",
+      runIdentity: {
+        runId: "failed:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "Process exited\r\n",
       timestamp: "2026-03-19T15:32:01.000Z",

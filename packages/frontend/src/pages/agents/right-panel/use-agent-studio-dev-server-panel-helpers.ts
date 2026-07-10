@@ -5,11 +5,15 @@ import type {
 } from "@openducktor/contracts";
 import { trimDevServerTerminalChunks } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
+import {
+  createDevServerTaskScope,
+  formatDevServerTaskScopeKey,
+} from "@/types/dev-server-task-scope";
 
 export type { BrowserLiveControlEvent as DevServerSubscriptionControlEvent } from "@/types";
 
 export const buildTaskMemoryKey = (repoPath: string, taskId: string): string => {
-  return `${repoPath}::${taskId}`;
+  return formatDevServerTaskScopeKey(createDevServerTaskScope(repoPath, taskId));
 };
 
 const replaceScript = (
@@ -22,20 +26,6 @@ const replaceScript = (
 const trimBufferedTerminalReplay = (script: DevServerScriptState): DevServerScriptState => ({
   ...script,
   bufferedTerminalChunks: trimDevServerTerminalChunks(script.bufferedTerminalChunks),
-});
-
-export const buildOptimisticStartingState = (state: DevServerGroupState): DevServerGroupState => ({
-  ...state,
-  updatedAt: new Date().toISOString(),
-  scripts: state.scripts.map((script) => ({
-    ...script,
-    status: "starting",
-    pid: null,
-    startedAt: null,
-    exitCode: null,
-    lastError: null,
-    bufferedTerminalChunks: [],
-  })),
 });
 
 export const isDevServerSubscriptionControlEvent = isBrowserLiveControlEvent;

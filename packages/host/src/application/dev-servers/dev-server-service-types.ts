@@ -54,6 +54,13 @@ export type StoppedDevServerScript = {
   taskId: string;
 };
 
+export type FailedDevServerScriptStart = {
+  command: string;
+  message: string;
+  name: string;
+  scriptId: string;
+};
+
 export type DevServerStopAllResult = {
   stoppedScripts: StoppedDevServerScript[];
 };

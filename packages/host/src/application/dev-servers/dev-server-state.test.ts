@@ -2,6 +2,8 @@ import type { RepoConfig } from "@openducktor/contracts";
 import {
   buildGroupState,
   type DevServerGroupRuntime,
+  startTerminalRun,
+  syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
 
@@ -28,6 +30,7 @@ const createRuntime = (): DevServerGroupRuntime => ({
   state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
   terminalBufferedBytesByScriptId: new Map(),
   terminalNextSequenceByScriptId: new Map(),
+  terminalRunGeneration: 0,
 });
 
 describe("dev-server state helpers", () => {
@@ -39,6 +42,7 @@ describe("dev-server state helpers", () => {
     runtime.terminalNextSequenceByScriptId.set("web", 3);
     runtime.terminalNextSequenceByScriptId.set("api", 9);
     runtime.terminalNextSequenceByScriptId.set("removed-sequence-only", 17);
+    runtime.terminalRunGeneration = 2;
 
     syncRuntimeTerminalBufferByteCounts(runtime);
 
@@ -47,5 +51,27 @@ describe("dev-server state helpers", () => {
     expect(runtime.terminalNextSequenceByScriptId.has("removed-sequence-only")).toBe(false);
     expect(runtime.terminalBufferedBytesByScriptId.get("web")).toBe(12);
     expect(runtime.terminalNextSequenceByScriptId.get("web")).toBe(3);
+    expect(runtime.terminalRunGeneration).toBe(2);
+  });
+
+  test("does not reuse a run identity after a script is removed and re-added", () => {
+    const runtime = createRuntime();
+    const firstScript = runtime.state.scripts[0];
+    if (!firstScript) {
+      throw new Error("Expected configured web script.");
+    }
+    startTerminalRun(runtime, firstScript, "host-1");
+    const firstRunId = firstScript.runIdentity?.runId;
+
+    syncGroupState(runtime.state, { ...repoConfig, devServers: [] }, "task-1", "/worktrees/task-1");
+    syncRuntimeTerminalBufferByteCounts(runtime);
+    syncGroupState(runtime.state, repoConfig, "task-1", "/worktrees/task-1");
+    const readdedScript = runtime.state.scripts[0];
+    if (!readdedScript) {
+      throw new Error("Expected re-added web script.");
+    }
+    startTerminalRun(runtime, readdedScript, "host-1");
+
+    expect(readdedScript.runIdentity?.runId).not.toBe(firstRunId);
   });
 });

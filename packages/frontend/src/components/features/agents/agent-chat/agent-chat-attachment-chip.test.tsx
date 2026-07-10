@@ -16,7 +16,10 @@ const configureAttachmentPreviewShellBridge = (
   configureShellBridge({
     client: {} as ShellBridge["client"],
     subscribeRunEvents: async () => () => {},
-    subscribeDevServerEvents: async () => () => {},
+    subscribeDevServerEvents: async () => ({
+      transportEpoch: "test:0",
+      unsubscribe: () => {},
+    }),
     subscribeTaskEvents: async () => () => {},
     capabilities: {
       canOpenExternalUrls: true,

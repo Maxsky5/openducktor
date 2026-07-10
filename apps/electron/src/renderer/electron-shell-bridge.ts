@@ -6,6 +6,7 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
+let nextDevServerTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -41,7 +42,12 @@ export const createElectronShellBridge = (): ShellBridge => {
       canPreviewLocalAttachments: true,
     },
     subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
-    subscribeDevServerEvents: subscribeElectronEvent(electronApi, DEV_SERVER_EVENT_CHANNEL),
+    subscribeDevServerEvents: async (listener) => {
+      const unsubscribe = electronApi.subscribe(DEV_SERVER_EVENT_CHANNEL, listener);
+      const transportEpoch = `electron:${nextDevServerTransportEpoch}`;
+      nextDevServerTransportEpoch += 1;
+      return { transportEpoch, unsubscribe };
+    },
     subscribeTaskEvents: subscribeElectronEvent(electronApi, TASK_EVENT_CHANNEL),
     subscribeCodexAppServerEvents: subscribeElectronEvent(
       electronApi,

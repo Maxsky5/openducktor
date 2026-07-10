@@ -8,13 +8,19 @@ import {
   DEV_SERVER_DISABLED_REASON,
   DEV_SERVER_EMPTY_REASON,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
+import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@/lib/browser-live/constants";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
+import {
+  createDevServerTaskScope,
+  type DevServerTaskScope,
+  isSameDevServerTaskScope,
+  MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE,
+} from "@/types/dev-server-task-scope";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   applyDevServerEventToState,
-  buildOptimisticStartingState,
   buildTaskMemoryKey,
   isDevServerPanelExpanded,
   isDevServerSubscriptionControlEvent,
@@ -36,14 +42,27 @@ type UseAgentStudioDevServerPanelArgs = {
   enabled: boolean;
 };
 
+type DevServerMutationCommand = (scope: DevServerTaskScope) => Promise<DevServerGroupState>;
+
+type DevServerMutationOptions = {
+  restoreCachedStateOnError?: boolean;
+};
+
+type DevServerMutationContext = {
+  transportEpoch: string | null;
+};
+
 type DevServerPanelLocalState = {
   liveState: DevServerGroupState | null;
   actionError: string | null;
   subscriptionError: string | null;
+  subscriptionTaskMemoryKey: string | null;
+  transportEpoch: string | null;
 };
 
 type DevServerPanelAction =
   | { type: "scopeReset" }
+  | { type: "transportReconnected"; transportEpoch: string }
   | { type: "liveStateChanged"; state: DevServerGroupState | null }
   | {
       type: "liveStateUpdated";
@@ -53,7 +72,7 @@ type DevServerPanelAction =
   | { type: "actionFailed"; error: string }
   | { type: "subscriptionFailed"; error: string }
   | { type: "eventsSynced" }
-  | { type: "subscriptionReady" };
+  | { type: "subscriptionReady"; taskMemoryKey: string; transportEpoch: string };
 
 const devServerPanelReducer = (
   state: DevServerPanelLocalState,
@@ -61,7 +80,21 @@ const devServerPanelReducer = (
 ): DevServerPanelLocalState => {
   switch (action.type) {
     case "scopeReset":
-      return { liveState: null, actionError: null, subscriptionError: null };
+      return {
+        ...state,
+        liveState: null,
+        actionError: null,
+        subscriptionError: null,
+        subscriptionTaskMemoryKey: null,
+        transportEpoch: null,
+      };
+    case "transportReconnected":
+      return {
+        ...state,
+        liveState: null,
+        subscriptionError: null,
+        transportEpoch: action.transportEpoch,
+      };
     case "liveStateChanged":
       return { ...state, liveState: action.state };
     case "liveStateUpdated":
@@ -75,7 +108,12 @@ const devServerPanelReducer = (
     case "eventsSynced":
       return { ...state, actionError: null, subscriptionError: null };
     case "subscriptionReady":
-      return { ...state, subscriptionError: null };
+      return {
+        ...state,
+        subscriptionError: null,
+        subscriptionTaskMemoryKey: action.taskMemoryKey,
+        transportEpoch: action.transportEpoch,
+      };
   }
 };
 
@@ -91,13 +129,27 @@ export function useAgentStudioDevServerPanel({
     liveState: null,
     actionError: null,
     subscriptionError: null,
+    subscriptionTaskMemoryKey: null,
+    transportEpoch: null,
   });
-  const { liveState, actionError, subscriptionError } = localState;
+  const { liveState, actionError, subscriptionError, subscriptionTaskMemoryKey, transportEpoch } =
+    localState;
+  const transportEpochRef = useRef(transportEpoch);
 
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
-  const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
+  const subscriptionEnabled =
+    enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
+  const queryEnabled =
+    subscriptionEnabled &&
+    taskMemoryKey !== null &&
+    taskMemoryKey === subscriptionTaskMemoryKey &&
+    transportEpoch !== null;
+  const activeTaskScope = useMemo(
+    () => createDevServerTaskScope(repoPath, taskId),
+    [repoPath, taskId],
+  );
 
   const {
     applyTerminalBuffersFromEvent,
@@ -110,7 +162,7 @@ export function useAgentStudioDevServerPanel({
     selectedScriptTerminalBuffer,
     syncSelectedScriptTerminalBuffer,
     syncTerminalBuffersFromMutationState,
-  } = useAgentStudioDevServerTerminalBuffers();
+  } = useAgentStudioDevServerTerminalBuffers(activeTaskScope);
 
   const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
     useAgentStudioDevServerStateQuery({
@@ -118,6 +170,7 @@ export function useAgentStudioDevServerPanel({
       taskId,
       queryEnabled,
       liveState,
+      transportEpoch,
     });
 
   const { effectiveSelectedScriptId, onSelectScript, resetSelectedScript, selectedScriptIdRef } =
@@ -128,12 +181,13 @@ export function useAgentStudioDevServerPanel({
     });
 
   const requestTerminalRehydrate = useCallback((): void => {
-    if (!repoPath || !taskId) {
+    const activeTransportEpoch = transportEpochRef.current;
+    if (!repoPath || !taskId || !activeTransportEpoch) {
       return;
     }
 
     void queryClient.refetchQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId),
+      queryKey: devServerQueryKeys.state(repoPath, taskId, activeTransportEpoch),
       exact: true,
       type: "active",
     });
@@ -141,15 +195,18 @@ export function useAgentStudioDevServerPanel({
 
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
-      if (!repoPath || !taskId) {
+      const activeTransportEpoch = transportEpochRef.current;
+      if (!repoPath || !taskId || !activeTransportEpoch) {
         return;
       }
 
+      if (!applyTerminalBuffersFromEvent(event, selectedScriptIdRef.current)) {
+        return;
+      }
       markMutationReplayObserved(event);
-      applyTerminalBuffersFromEvent(event, selectedScriptIdRef.current);
 
       if (event.type !== "terminal_chunk") {
-        const queryKey = devServerQueryKeys.state(repoPath, taskId);
+        const queryKey = devServerQueryKeys.state(repoPath, taskId, activeTransportEpoch);
         const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
         dispatchLocalState({
           type: "liveStateUpdated",
@@ -182,154 +239,198 @@ export function useAgentStudioDevServerPanel({
     previousTaskMemoryKeyRef.current = taskMemoryKey;
 
     if (scopeChanged) {
-      clearTerminalBuffers();
+      transportEpochRef.current = null;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
     }
 
-    if (!queryEnabled) {
+    if (!subscriptionEnabled) {
+      transportEpochRef.current = null;
       clearTerminalBuffers();
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
       return;
     }
 
-    if (queryData) {
-      hydrateTerminalBuffersFromState(queryData, selectedScriptIdRef.current);
-      dispatchLocalState({ type: "liveStateChanged", state: queryData });
+    if (queryEnabled && queryData) {
+      if (hydrateTerminalBuffersFromState(queryData, effectiveSelectedScriptId)) {
+        dispatchLocalState({ type: "liveStateChanged", state: queryData });
+      }
     }
   }, [
     clearTerminalBuffers,
+    effectiveSelectedScriptId,
     hydrateTerminalBuffersFromState,
     queryData,
     queryEnabled,
     resetSelectedScript,
-    selectedScriptIdRef,
+    subscriptionEnabled,
     taskMemoryKey,
   ]);
 
   const syncQueryState = useCallback(
-    (nextState: DevServerGroupState): void => {
-      syncTerminalBuffersFromMutationState(nextState, selectedScriptIdRef.current);
+    (nextState: DevServerGroupState): boolean => {
+      if (!syncTerminalBuffersFromMutationState(nextState, selectedScriptIdRef.current)) {
+        return false;
+      }
       dispatchLocalState({ type: "liveStateChanged", state: nextState });
+      return true;
     },
     [selectedScriptIdRef, syncTerminalBuffersFromMutationState],
   );
 
-  const restoreCachedState = useCallback((): void => {
-    if (!repoPath || !taskId) {
-      return;
-    }
+  const isActiveMutationScope = useCallback(
+    (scope: DevServerTaskScope | null | undefined): boolean => {
+      return isSameDevServerTaskScope(scope ?? null, activeTaskScope);
+    },
+    [activeTaskScope],
+  );
 
-    const cachedState =
-      queryClient.getQueryData<DevServerGroupState>(devServerQueryKeys.state(repoPath, taskId)) ??
-      null;
-    replaceTerminalBuffersFromState(cachedState, selectedScriptIdRef.current);
-    dispatchLocalState({ type: "liveStateChanged", state: cachedState });
-  }, [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId]);
+  const syncMutationSuccessState = useCallback(
+    (nextState: DevServerGroupState, mutationTransportEpoch: string): void => {
+      const isActiveState = nextState.repoPath === repoPath && nextState.taskId === taskId;
+      if (isActiveState && !syncQueryState(nextState)) {
+        return;
+      }
+      queryClient.setQueryData(
+        devServerQueryKeys.state(nextState.repoPath, nextState.taskId, mutationTransportEpoch),
+        nextState,
+      );
+    },
+    [queryClient, repoPath, syncQueryState, taskId],
+  );
 
-  const invalidateState = useCallback((): void => {
-    if (!repoPath || !taskId) {
-      return;
-    }
-
-    void queryClient.invalidateQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId),
-      exact: true,
-      refetchType: "active",
-    });
-  }, [queryClient, repoPath, taskId]);
-
-  const startMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
+  const restoreCachedState = useCallback(
+    (mutationTransportEpoch: string): void => {
       if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
+        return;
       }
 
-      return hostClient.devServerStart(repoPath, taskId);
-    },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
-    },
-    onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
-      }
-      syncQueryState(data);
-    },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      restoreCachedState();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
-      if (error) {
-        invalidateState();
+      const cachedState =
+        queryClient.getQueryData<DevServerGroupState>(
+          devServerQueryKeys.state(repoPath, taskId, mutationTransportEpoch),
+        ) ?? null;
+      if (replaceTerminalBuffersFromState(cachedState, selectedScriptIdRef.current)) {
+        dispatchLocalState({ type: "liveStateChanged", state: cachedState });
       }
     },
-  });
+    [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId],
+  );
 
-  const stopMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
+  const invalidateState = useCallback(
+    (scope: DevServerTaskScope, mutationTransportEpoch: string): void => {
+      void queryClient.invalidateQueries({
+        queryKey: devServerQueryKeys.state(scope.repoPath, scope.taskId, mutationTransportEpoch),
+        exact: true,
+        refetchType: "active",
+      });
+    },
+    [queryClient],
+  );
 
-      return hostClient.devServerStop(repoPath, taskId);
-    },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
-    },
-    onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
-      }
-      syncQueryState(data);
-    },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
-      if (error) {
-        invalidateState();
-      }
-    },
-  });
+  const createScopedMutationOptions = useCallback(
+    (mutationFn: DevServerMutationCommand, options: DevServerMutationOptions = {}) => ({
+      mutationFn,
+      onMutate: (scope: DevServerTaskScope) => {
+        if (isActiveMutationScope(scope)) {
+          dispatchLocalState({ type: "actionStarted" });
+          beginMutationReplaySync(effectiveState);
+        }
+        return {
+          transportEpoch: transportEpochRef.current,
+        } satisfies DevServerMutationContext;
+      },
+      onSuccess: (
+        data: DevServerGroupState,
+        _scope: DevServerTaskScope,
+        context: DevServerMutationContext | undefined,
+      ) => {
+        if (!context?.transportEpoch || context.transportEpoch !== transportEpochRef.current) {
+          return;
+        }
+        syncMutationSuccessState(data, context.transportEpoch);
+      },
+      onError: (
+        error: unknown,
+        scope: DevServerTaskScope,
+        context: DevServerMutationContext | undefined,
+      ) => {
+        if (!context?.transportEpoch || context.transportEpoch !== transportEpochRef.current) {
+          return;
+        }
+        if (isActiveMutationScope(scope)) {
+          cancelMutationReplaySync();
+          if (options.restoreCachedStateOnError) {
+            restoreCachedState(context.transportEpoch);
+          }
+          dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
+        }
+      },
+      onSettled: (
+        _data: DevServerGroupState | undefined,
+        error: unknown,
+        scope: DevServerTaskScope,
+        context: DevServerMutationContext | undefined,
+      ) => {
+        if (
+          error &&
+          context?.transportEpoch &&
+          context.transportEpoch === transportEpochRef.current
+        ) {
+          invalidateState(scope, context.transportEpoch);
+        }
+      },
+    }),
+    [
+      beginMutationReplaySync,
+      cancelMutationReplaySync,
+      effectiveState,
+      invalidateState,
+      isActiveMutationScope,
+      restoreCachedState,
+      syncMutationSuccessState,
+    ],
+  );
 
-  const restartMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
+  const startMutation = useMutation<
+    DevServerGroupState,
+    unknown,
+    DevServerTaskScope,
+    DevServerMutationContext
+  >(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerStart(scope.repoPath, scope.taskId),
+      { restoreCachedStateOnError: true },
+    ),
+  );
 
-      return hostClient.devServerRestart(repoPath, taskId);
-    },
-    onMutate: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      beginMutationReplaySync(effectiveState);
-    },
-    onSuccess: (data) => {
-      if (repoPath && taskId) {
-        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
-      }
-      syncQueryState(data);
-    },
-    onError: (error: unknown) => {
-      cancelMutationReplaySync();
-      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
-    },
-    onSettled: (_data, error) => {
-      if (error) {
-        invalidateState();
-      }
-    },
-  });
+  const stopMutation = useMutation<
+    DevServerGroupState,
+    unknown,
+    DevServerTaskScope,
+    DevServerMutationContext
+  >(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerStop(scope.repoPath, scope.taskId),
+    ),
+  );
+
+  const restartMutation = useMutation<
+    DevServerGroupState,
+    unknown,
+    DevServerTaskScope,
+    DevServerMutationContext
+  >(
+    createScopedMutationOptions(
+      async (scope): Promise<DevServerGroupState> =>
+        hostClient.devServerRestart(scope.repoPath, scope.taskId),
+    ),
+  );
 
   useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
+    if (!subscriptionEnabled || repoPath === null || taskId === null || taskMemoryKey === null) {
       return;
     }
 
@@ -337,7 +438,20 @@ export function useAgentStudioDevServerPanel({
     let unsubscribe: (() => void) | null = null;
 
     void subscribeDevServerEvents((payload) => {
+      if (cancelled) {
+        return;
+      }
+
       if (isDevServerSubscriptionControlEvent(payload)) {
+        if (payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
+          transportEpochRef.current = payload.transportEpoch;
+          clearTerminalBuffers();
+          dispatchLocalState({
+            type: "transportReconnected",
+            transportEpoch: payload.transportEpoch,
+          });
+          return;
+        }
         requestTerminalRehydrate();
         return;
       }
@@ -372,15 +486,20 @@ export function useAgentStudioDevServerPanel({
       syncStateFromEvent(event);
       dispatchLocalState({ type: "eventsSynced" });
     })
-      .then((cleanup) => {
+      .then((subscription) => {
         if (cancelled) {
-          cleanup();
+          subscription.unsubscribe();
           return;
         }
 
-        unsubscribe = cleanup;
-        dispatchLocalState({ type: "subscriptionReady" });
-        requestTerminalRehydrate();
+        unsubscribe = subscription.unsubscribe;
+        transportEpochRef.current = subscription.transportEpoch;
+        clearTerminalBuffers();
+        dispatchLocalState({
+          type: "subscriptionReady",
+          taskMemoryKey,
+          transportEpoch: subscription.transportEpoch,
+        });
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -392,22 +511,43 @@ export function useAgentStudioDevServerPanel({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [queryEnabled, repoPath, requestTerminalRehydrate, syncStateFromEvent, taskId]);
+  }, [
+    clearTerminalBuffers,
+    repoPath,
+    requestTerminalRehydrate,
+    subscriptionEnabled,
+    syncStateFromEvent,
+    taskId,
+    taskMemoryKey,
+  ]);
 
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
+  const isStartPending =
+    startMutation.isPending &&
+    startMutation.context?.transportEpoch === transportEpoch &&
+    isActiveMutationScope(startMutation.variables);
+  const isStopPending =
+    stopMutation.isPending &&
+    stopMutation.context?.transportEpoch === transportEpoch &&
+    isActiveMutationScope(stopMutation.variables);
+  const isRestartPending =
+    restartMutation.isPending &&
+    restartMutation.context?.transportEpoch === transportEpoch &&
+    isActiveMutationScope(restartMutation.variables);
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
-    startMutation.isPending || restartMutation.isPending,
+    isStartPending || isRestartPending,
   );
   const hasAvailableScripts = (effectiveState?.scripts.length ?? 0) > 0 || hasConfiguredScripts;
+  const isAwaitingSubscription = subscriptionEnabled && !queryEnabled && subscriptionError === null;
 
   const mode: AgentStudioDevServerPanelMode = useMemo(() => {
     if (!hasAvailableScripts) {
       return "empty";
     }
 
-    if (isAwaitingFreshState) {
+    if (isAwaitingSubscription || isAwaitingFreshState) {
       return "loading";
     }
 
@@ -420,7 +560,13 @@ export function useAgentStudioDevServerPanel({
     }
 
     return "stopped";
-  }, [effectiveState, hasAvailableScripts, isAwaitingFreshState, isExpanded]);
+  }, [
+    effectiveState,
+    hasAvailableScripts,
+    isAwaitingFreshState,
+    isAwaitingSubscription,
+    isExpanded,
+  ]);
 
   const error =
     actionError ?? subscriptionError ?? (stateQuery.error ? errorMessage(stateQuery.error) : null);
@@ -435,7 +581,7 @@ export function useAgentStudioDevServerPanel({
   return {
     mode,
     isExpanded,
-    isLoading: isAwaitingFreshState || stateQuery.isLoading,
+    isLoading: isAwaitingSubscription || isAwaitingFreshState || stateQuery.isLoading,
     disabledReason,
     repoPath,
     taskId,
@@ -445,24 +591,33 @@ export function useAgentStudioDevServerPanel({
     selectedScript,
     selectedScriptTerminalBuffer,
     error,
-    isStartPending: startMutation.isPending,
-    isStopPending: stopMutation.isPending,
-    isRestartPending: restartMutation.isPending,
+    isStartPending,
+    isStopPending,
+    isRestartPending,
     onSelectScript,
     onStart: () => {
-      dispatchLocalState({ type: "actionStarted" });
-      if (effectiveState) {
-        const optimisticState = buildOptimisticStartingState(effectiveState);
-        replaceTerminalBuffersFromState(optimisticState, selectedScriptIdRef.current);
-        dispatchLocalState({ type: "liveStateChanged", state: optimisticState });
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
+        return;
       }
-      startMutation.mutate();
+
+      startMutation.mutate(activeTaskScope);
     },
     onStop: () => {
-      stopMutation.mutate();
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
+        return;
+      }
+
+      stopMutation.mutate(activeTaskScope);
     },
     onRestart: () => {
-      restartMutation.mutate();
+      if (!activeTaskScope) {
+        dispatchLocalState({ type: "actionFailed", error: MISSING_DEV_SERVER_TASK_SCOPE_MESSAGE });
+        return;
+      }
+
+      restartMutation.mutate(activeTaskScope);
     },
   };
 }
