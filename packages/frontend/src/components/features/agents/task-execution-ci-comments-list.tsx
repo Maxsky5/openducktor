@@ -1,5 +1,5 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
-import { MessageSquare } from "lucide-react";
+import { ChevronRight, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -63,67 +63,71 @@ export function TaskExecutionCiCommentsList({
   const visibleComments = useMemo(() => filterComments(comments, filter), [comments, filter]);
   const groups = useMemo(() => groupComments(visibleComments), [visibleComments]);
 
-  if (comments.length === 0) {
-    return <div className="px-4 py-4 text-sm text-muted-foreground">No comments reported.</div>;
-  }
-
   return (
-    <div className="space-y-3 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-foreground">Comments</h3>
-          <Badge variant="secondary" className="shrink-0">
-            {comments.length}
-          </Badge>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 rounded-md border border-border bg-muted/30 p-1">
-        {COMMENT_FILTERS.map((item) => {
-          const isActive = filter === item.id;
-          return (
-            <Button
-              key={item.id}
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-7 justify-center gap-1 rounded-sm px-2 hover:bg-foreground/5",
-                isActive && "bg-foreground/10 text-foreground shadow-sm hover:bg-foreground/15",
-              )}
-              aria-pressed={isActive}
-              onClick={() => {
-                setFilter(item.id);
-              }}
-            >
-              <span>{item.label}</span>
-              <span className="tabular-nums">{counts[item.id]}</span>
-            </Button>
-          );
-        })}
-      </div>
-      {groups.length === 0 ? (
-        <div className="py-4 text-center text-sm text-muted-foreground">
-          No comments for this filter.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {groups.map((group) => (
-            <section key={group.title} className="space-y-2">
-              <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
-              <div className="space-y-2">
-                {group.comments.map((comment) => (
-                  <TaskExecutionCiCommentCard
-                    key={comment.id}
-                    comment={comment}
-                    isBot={isBotCommentAuthor(comment.author)}
-                  />
+    <details className="group/comments" open>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/comments:rotate-90" />
+        <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+        <h3 className="text-sm font-semibold text-foreground">Comments</h3>
+        <Badge variant="secondary" className="shrink-0">
+          {comments.length}
+        </Badge>
+      </summary>
+      <div className="border-t border-border">
+        {comments.length === 0 ? (
+          <div className="px-4 py-4 text-sm text-muted-foreground">No comments reported.</div>
+        ) : (
+          <div className="space-y-3 px-4 py-3">
+            <div className="grid grid-cols-3 rounded-md border border-border bg-muted/30 p-1">
+              {COMMENT_FILTERS.map((item) => {
+                const isActive = filter === item.id;
+                return (
+                  <Button
+                    key={item.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 justify-center gap-1 rounded-sm px-2 hover:bg-foreground/5",
+                      isActive &&
+                        "bg-foreground/10 text-foreground shadow-sm hover:bg-foreground/15",
+                    )}
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      setFilter(item.id);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span className="tabular-nums">{counts[item.id]}</span>
+                  </Button>
+                );
+              })}
+            </div>
+            {groups.length === 0 ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                No comments for this filter.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {groups.map((group) => (
+                  <section key={group.title} className="space-y-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
+                    <div className="space-y-2">
+                      {group.comments.map((comment) => (
+                        <TaskExecutionCiCommentCard
+                          key={comment.id}
+                          comment={comment}
+                          isBot={isBotCommentAuthor(comment.author)}
+                        />
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
-            </section>
-          ))}
-        </div>
-      )}
-    </div>
+            )}
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
