@@ -78,7 +78,7 @@ export function TaskExecutionCiCommentsList({
           </Badge>
         </div>
       </div>
-      <div className="grid grid-cols-3 rounded-md border border-border bg-muted/30 p-0.5">
+      <div className="grid grid-cols-3 rounded-md border border-border bg-muted/30 p-1">
         {COMMENT_FILTERS.map((item) => {
           const isActive = filter === item.id;
           return (
@@ -88,9 +88,8 @@ export function TaskExecutionCiCommentsList({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 justify-center gap-1 border border-transparent px-2 hover:bg-foreground/5",
-                isActive &&
-                  "border-border bg-foreground/10 text-foreground shadow-sm hover:bg-foreground/15",
+                "h-7 justify-center gap-1 rounded-sm px-2 hover:bg-foreground/5",
+                isActive && "bg-foreground/10 text-foreground shadow-sm hover:bg-foreground/15",
               )}
               aria-pressed={isActive}
               onClick={() => {

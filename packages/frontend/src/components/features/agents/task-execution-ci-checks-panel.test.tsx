@@ -166,9 +166,6 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("All");
     expect(html).toContain("Humans");
     expect(html).toContain("Bots");
-    expect(html).toMatch(
-      /<button class="[^"]*border-border[^"]*bg-foreground\/10[^"]*text-foreground[^"]*"[^>]*aria-pressed="true"/,
-    );
     expect(html).toContain("codex");
     expect(html).toContain("Bot");
     expect(html).toContain("Needs review");

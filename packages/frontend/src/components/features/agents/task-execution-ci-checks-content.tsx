@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { TaskExecutionCiChecksList } from "./task-execution-ci-checks-list";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
-import { aggregateLabel, checksSummaryLabel } from "./task-execution-ci-presentation";
+import { checksSummaryLabel } from "./task-execution-ci-presentation";
 
 type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
 type RefreshState = "idle" | "refreshing";
@@ -50,9 +50,9 @@ export function TaskExecutionCiLoaded({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <section className="border-b border-border">
           <TaskExecutionCiChecksList
+            aggregateStatus={context.aggregateStatus}
             checks={context.checks}
             summaryLabel={checkSummary}
-            aggregateLabel={aggregateLabel(context.aggregateStatus)}
           />
         </section>
         <section>

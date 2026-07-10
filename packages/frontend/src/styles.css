@@ -59,7 +59,7 @@
   --success-surface: oklch(0.962 0.044 166.961); /* ~emerald-50 */
   --success-surface-foreground: oklch(0.266 0.065 152.934); /* ~emerald-900 */
   --success-border: oklch(0.748 0.15 164.295); /* ~emerald-300 */
-  --success-muted: oklch(0.448 0.119 151.328); /* ~emerald-700 */
+  --success-muted: oklch(0.448 0.119 151.328); /* ~emerald-800 */
   --success-accent: oklch(0.596 0.145 163.225); /* ~emerald-500 */
   --success-ring: oklch(0.692 0.138 162.345); /* ~emerald-400 */
 
