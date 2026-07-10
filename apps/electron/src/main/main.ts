@@ -396,7 +396,13 @@ const registerHostEventForwarding = (): void => {
 
 const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateService): void => {
   appUpdateService.subscribe((state) => {
-    const parsedState = readAppUpdateStateForIpc(state);
+    let parsedState: AppUpdateState;
+    try {
+      parsedState = readAppUpdateStateForIpc(state);
+    } catch (cause) {
+      electronMainLogger.error("OpenDucktor update state forwarding failed", cause);
+      return;
+    }
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.isDestroyed() || window.webContents.isDestroyed()) {
         continue;
