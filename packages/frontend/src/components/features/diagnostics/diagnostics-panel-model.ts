@@ -76,6 +76,35 @@ type BuildDiagnosticsPanelModelInput = {
 
 type RuntimeHealthState = RepoRuntimeHealthMap[string] | undefined;
 
+const CLI_RUNTIME_KINDS = ["opencode", "codex"] as const;
+
+const formatCliRuntimeValue = (cliHealth: RuntimeCheck["runtimes"][number]): string => {
+  const value = cliHealth.ok ? (cliHealth.version ?? "detected") : "missing";
+  return cliHealth.enabled === false ? `${value} (runtime disabled)` : value;
+};
+
+const buildCliRuntimeRows = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeCheck: RuntimeCheck,
+): DiagnosticKeyValueRowModel[] =>
+  CLI_RUNTIME_KINDS.map((runtimeKind) => {
+    const definition = runtimeDefinitions.find((entry) => entry.kind === runtimeKind);
+    if (!definition) {
+      throw new Error(`Missing runtime definition for runtime kind "${runtimeKind}".`);
+    }
+
+    const cliHealth = runtimeCheck.runtimes.find((entry) => entry.kind === runtimeKind);
+    if (!cliHealth) {
+      throw new Error(`Missing CLI diagnostic for runtime kind "${runtimeKind}".`);
+    }
+
+    return {
+      label: definition.label,
+      value: formatCliRuntimeValue(cliHealth),
+      breakAll: true,
+    };
+  });
+
 const getFailureBadge = (
   ok: boolean | null,
   failureKind: RepoRuntimeFailureKind,
@@ -444,6 +473,10 @@ export const buildDiagnosticsPanelModel = (
         error: "Issue",
         checking: "Checking",
       });
+  const cliRuntimeRows =
+    runtimeCheck && !isLoadingRuntimeDefinitions && runtimeDefinitionsError === null
+      ? buildCliRuntimeRows(runtimeDefinitions, runtimeCheck)
+      : [];
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",
@@ -453,6 +486,7 @@ export const buildDiagnosticsPanelModel = (
       ? [
           { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
           { label: "GitHub CLI", value: runtimeCheck.ghVersion ?? "missing" },
+          ...cliRuntimeRows,
         ]
       : [],
     errors:

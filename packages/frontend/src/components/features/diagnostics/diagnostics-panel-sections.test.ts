@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type TaskStoreCheck,
   type WorkspaceRecord,
@@ -103,10 +104,13 @@ describe("DiagnosticsPanelSections", () => {
   });
 
   test("renders key-value labels consistently across sections", () => {
+    const opencodeValue = "1.2.9 (/Users/dev/.opencode/bin/opencode)";
+    const codexValue =
+      "codex-cli 0.42.0 (/Applications/OpenDucktor.app/Contents/Resources/bin/codex)";
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/Users/dev/fairnest",
       activeWorkspace: makeWorkspace("/Users/dev/fairnest"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -118,7 +122,8 @@ describe("DiagnosticsPanelSections", () => {
         ghAuthLogin: "octocat",
         ghAuthError: null,
         runtimes: [
-          { kind: "opencode", ok: true, version: "1.2.9 (/Users/dev/.opencode/bin/opencode)" },
+          { kind: "opencode", ok: true, version: opencodeValue },
+          { kind: "codex", enabled: false, ok: true, version: codexValue },
         ],
         errors: [],
       },
@@ -162,6 +167,10 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Worktree directory:");
     expect(html).toContain("Git:");
     expect(html).toContain("GitHub CLI:");
+    expect(html).toContain("OpenCode:");
+    expect(html).toContain("Codex:");
+    expect(html).toContain(opencodeValue);
+    expect(html).toContain(`${codexValue} (runtime disabled)`);
     expect(html).toContain("OpenCode Runtime");
     expect(html).toContain("Working directory:");
     expect(html).toContain("Server name:");
@@ -179,7 +188,7 @@ describe("DiagnosticsPanelSections", () => {
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
       }),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -190,7 +199,10 @@ describe("DiagnosticsPanelSections", () => {
         ghAuthOk: false,
         ghAuthLogin: null,
         ghAuthError: "gh not found in PATH",
-        runtimes: [{ kind: "opencode", ok: false, version: null }],
+        runtimes: [
+          { kind: "opencode", ok: false, version: null },
+          { kind: "codex", enabled: false, ok: false, version: null },
+        ],
         errors: ["gh not found in PATH"],
       },
       taskStoreCheck: makeTaskStoreCheck({
