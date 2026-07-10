@@ -9,7 +9,9 @@ export type ResolveSessionRuntimePolicySync = (input: {
   sessionScope?: AgentSessionScope | null;
 }) => AgentSessionRuntimePolicy;
 
-const openCodeRuntimePolicy = (): AgentSessionRuntimePolicy => ({ kind: "opencode" });
+const settingsIndependentRuntimePolicy = (
+  runtimeKind: "opencode" | "claude",
+): AgentSessionRuntimePolicy => ({ kind: runtimeKind });
 
 export const loadSessionRuntimePolicyResolver = async ({
   runtimeKinds,
@@ -18,12 +20,12 @@ export const loadSessionRuntimePolicyResolver = async ({
   runtimeKinds: readonly RuntimeKind[];
   loadSettingsSnapshot: LoadSettingsSnapshot;
 }): Promise<ResolveSessionRuntimePolicySync> => {
-  if (runtimeKinds.every((runtimeKind) => runtimeKind === "opencode")) {
+  if (runtimeKinds.every((runtimeKind) => runtimeKind !== "codex")) {
     return ({ runtimeKind }) => {
-      if (runtimeKind !== "opencode") {
+      if (runtimeKind === "codex") {
         throw new Error(`Runtime policy for '${runtimeKind}' was not loaded.`);
       }
-      return openCodeRuntimePolicy();
+      return settingsIndependentRuntimePolicy(runtimeKind);
     };
   }
 

@@ -191,8 +191,16 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
 
 const makeMockClient = (
   options: {
-    permissionReplyResult?: { data?: unknown; error?: unknown; response?: unknown };
-    questionReplyResult?: { data?: unknown; error?: unknown; response?: unknown };
+    permissionReplyResult?: {
+      data?: unknown;
+      error?: unknown;
+      response?: unknown;
+    };
+    questionReplyResult?: {
+      data?: unknown;
+      error?: unknown;
+      response?: unknown;
+    };
   } = {},
 ): {
   client: OpencodeClient;
@@ -358,7 +366,10 @@ const makeMockClient = (
     },
     global: {
       event: async () => {
-        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        async function* iterator(): AsyncGenerator<{
+          directory: string;
+          payload: Event;
+        }> {
           for (const event of [] as Event[]) {
             yield { directory: "/repo", payload: event };
           }
@@ -644,7 +655,12 @@ describe("opencode-sdk-adapter", () => {
     const toolIdCalls: Array<{ directory: string }> = [];
     const statusResponses = [
       { openducktor: { status: "connected" } },
-      { openducktor: { status: "failed", error: "MCP error -32000: Connection closed" } },
+      {
+        openducktor: {
+          status: "failed",
+          error: "MCP error -32000: Connection closed",
+        },
+      },
       { openducktor: { status: "connected" } },
     ];
     let statusResponseIndex = 0;
@@ -793,15 +809,28 @@ describe("opencode-sdk-adapter", () => {
 
   test("listAvailableSlashCommands forwards runtime inputs to the catalog loader", async () => {
     const list = mock(async () => ({
-      data: [{ name: "review", description: "Review changes", source: "command", hints: [] }],
+      data: [
+        {
+          name: "review",
+          description: "Review changes",
+          source: "command",
+          hints: [],
+        },
+      ],
       error: undefined,
     }));
-    const createClient = mock(() => ({ command: { list } })) as () => OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+    const createClient = mock(() => ({
+      command: { list },
+    })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
 
     const catalog = await adapter.listAvailableSlashCommands({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
+      workingDirectory: defaultRepoPath,
     });
 
     expect(createClient).toHaveBeenCalledWith({
@@ -834,13 +863,16 @@ describe("opencode-sdk-adapter", () => {
       adapter.listAvailableSlashCommands({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
+        workingDirectory: defaultRepoPath,
       }),
     ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
   });
 
   test("accepts equivalent repo paths when validating resolved runtimes", async () => {
     const list = mock(async () => ({ data: [], error: undefined }));
-    const createClient = mock(() => ({ command: { list } })) as () => OpencodeClient;
+    const createClient = mock(() => ({
+      command: { list },
+    })) as () => OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -852,6 +884,7 @@ describe("opencode-sdk-adapter", () => {
     await adapter.listAvailableSlashCommands({
       repoPath: `${defaultRepoPath}/`,
       runtimeKind: "opencode",
+      workingDirectory: `${defaultRepoPath}/`,
     });
 
     expect(createClient).toHaveBeenCalledWith({
@@ -872,6 +905,7 @@ describe("opencode-sdk-adapter", () => {
       adapter.listAvailableSlashCommands({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
+        workingDirectory: defaultRepoPath,
       }),
     ).rejects.toThrow(
       "OpenCode runtime route 'stdio' is unsupported for list available slash commands; local_http is required for repo '/repo'.",
@@ -916,8 +950,13 @@ describe("opencode-sdk-adapter", () => {
       data: ["src/", "src/index.ts"],
       error: undefined,
     }));
-    const createClient = mock(() => ({ find: { files } })) as () => OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+    const createClient = mock(() => ({
+      find: { files },
+    })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
 
     const results = await adapter.searchFiles({
       repoPath: defaultRepoPath,

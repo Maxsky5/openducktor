@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_SESSION_ACCENT_COLOR,
   CODEX_SESSION_ACCENT_COLOR,
   resolveAgentAccentColor,
   resolveAgentSessionAccentColor,
@@ -41,6 +42,21 @@ describe("agent accent colors", () => {
         runtimeKind: "codex",
       }),
     ).toBe(CODEX_SESSION_ACCENT_COLOR);
+  });
+
+  test("uses the Claude runtime accent when no profile color is available", () => {
+    expect(
+      resolveAgentSessionAccentColor({
+        agentName: undefined,
+        runtimeKind: "claude",
+      }),
+    ).toBe(CLAUDE_SESSION_ACCENT_COLOR);
+    expect(
+      resolveAgentSessionAccentColor({
+        agentName: "   ",
+        runtimeKind: "claude",
+      }),
+    ).toBe(CLAUDE_SESSION_ACCENT_COLOR);
   });
 
   test("does not guess a runtime accent without Codex identity", () => {

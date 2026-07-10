@@ -1,3 +1,4 @@
+import { CLAUDE_RUNTIME_HOST_COMMAND_NAMES } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 
 export const HOST_COMMAND_NAMES = [
@@ -23,6 +24,7 @@ export const HOST_COMMAND_NAMES = [
   "build_completed",
   "build_resumed",
   "build_start",
+  ...CLAUDE_RUNTIME_HOST_COMMAND_NAMES,
   "codex_app_server_request",
   "dev_server_get_state",
   "dev_server_restart",

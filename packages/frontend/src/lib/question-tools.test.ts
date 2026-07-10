@@ -5,6 +5,7 @@ describe("question-tools", () => {
   test("matches canonical question tool names", () => {
     expect(isQuestionToolName("question")).toBe(true);
     expect(isQuestionToolName("ask_question")).toBe(true);
+    expect(isQuestionToolName("AskUserQuestion")).toBe(true);
     expect(isQuestionToolName("request_user_input")).toBe(true);
   });
 

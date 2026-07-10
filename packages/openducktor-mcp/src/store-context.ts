@@ -4,6 +4,7 @@ import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-ut
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
+const HOST_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
 
 class ConfiguredWorkspaceNotFoundError extends Error {}
 
@@ -55,6 +56,15 @@ const readBooleanEnv = (name: string): boolean | undefined => {
     return false;
   }
   throw new Error(`${name} must be true, false, 1, or 0.`);
+};
+
+const readHostTokenFromFile = async (tokenFile: string): Promise<string | undefined> => {
+  try {
+    return normalizeOptionalInput(await readFile(tokenFile, "utf8"));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed reading ${HOST_TOKEN_FILE_ENV} for OpenDucktor MCP: ${reason}`);
+  }
 };
 
 const validateConfiguredWorkspace = async (
@@ -193,9 +203,11 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
+  const hostTokenFile = normalizeOptionalInput(process.env[HOST_TOKEN_FILE_ENV]);
   let resolvedHostToken =
     normalizeOptionalInput(context.hostToken) ??
-    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]);
+    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]) ??
+    (hostTokenFile ? await readHostTokenFromFile(hostTokenFile) : undefined);
   let hostUrl: string;
   if (explicitHostUrl) {
     hostUrl = await validateExplicitHostUrl(explicitHostUrl, workspaceId, resolvedHostToken);

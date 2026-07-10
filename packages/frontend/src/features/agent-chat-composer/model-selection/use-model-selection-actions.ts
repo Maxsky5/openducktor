@@ -3,6 +3,21 @@ import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import { catalogModelOptionValue } from "@/components/features/agents";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { reportModelUpdateError } from "./model-update-error";
+
+const findSelectedCatalogModel = (
+  catalog: AgentModelCatalog | null,
+  selection: AgentModelSelection | null,
+) => {
+  if (!catalog || !selection) {
+    return null;
+  }
+  return (
+    catalog.models.find(
+      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
+    ) ?? null
+  );
+};
 
 export const useModelSelectionActions = ({
   loadedSessionIdentity,
@@ -16,7 +31,7 @@ export const useModelSelectionActions = ({
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ) => void;
+  ) => Promise<void> | void;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
   selectedModelSelection: AgentModelSelection | null;
   selectionCatalog: AgentModelCatalog | null;
@@ -26,10 +41,13 @@ export const useModelSelectionActions = ({
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 } => {
+  const effectiveRuntimeKind = loadedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
       if (loadedSessionIdentity) {
-        updateAgentSessionModel(loadedSessionIdentity, selection);
+        void Promise.resolve(updateAgentSessionModel(loadedSessionIdentity, selection)).catch(
+          reportModelUpdateError,
+        );
         return;
       }
       applyDraftSelection(selection);
@@ -39,15 +57,19 @@ export const useModelSelectionActions = ({
 
   const handleSelectAgentProfile = useCallback(
     (profileId: string) => {
+      const selectedModel = findSelectedCatalogModel(selectionCatalog, selectedModelSelection);
+      if (loadedSessionIdentity && selectedModel?.liveSessionUpdates?.profile === false) {
+        return;
+      }
       const baseSelection =
         selectedModelSelection ??
         (() => {
           const firstModel = selectionCatalog?.models[0];
-          if (!firstModel || !selectedRuntimeKind) {
+          if (!firstModel || !effectiveRuntimeKind) {
             return null;
           }
           return {
-            runtimeKind: selectedRuntimeKind,
+            runtimeKind: effectiveRuntimeKind,
             providerId: firstModel.providerId,
             modelId: firstModel.modelId,
             ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
@@ -58,12 +80,18 @@ export const useModelSelectionActions = ({
       }
       applySelection({ ...baseSelection, profileId });
     },
-    [applySelection, selectedRuntimeKind, selectedModelSelection, selectionCatalog],
+    [
+      applySelection,
+      effectiveRuntimeKind,
+      loadedSessionIdentity,
+      selectedModelSelection,
+      selectionCatalog,
+    ],
   );
 
   const handleSelectModel = useCallback(
     (nextValue: string) => {
-      if (!selectionCatalog || !selectedRuntimeKind) {
+      if (!selectionCatalog || !effectiveRuntimeKind) {
         return;
       }
       const model = selectionCatalog.models.find(
@@ -73,7 +101,7 @@ export const useModelSelectionActions = ({
         return;
       }
       applySelection({
-        runtimeKind: selectedRuntimeKind,
+        runtimeKind: effectiveRuntimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
@@ -82,17 +110,22 @@ export const useModelSelectionActions = ({
           : {}),
       });
     },
-    [applySelection, selectedRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
+    [applySelection, effectiveRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
   );
 
   const handleSelectVariant = useCallback(
     (variant: string) => {
+      const selectedModel = findSelectedCatalogModel(selectionCatalog, selectedModelSelection);
+      const liveVariants = selectedModel?.liveSessionUpdates?.variants;
+      if (loadedSessionIdentity && liveVariants && !liveVariants.includes(variant)) {
+        return;
+      }
       if (!selectedModelSelection) {
         return;
       }
       applySelection({ ...selectedModelSelection, variant });
     },
-    [applySelection, selectedModelSelection],
+    [applySelection, loadedSessionIdentity, selectedModelSelection, selectionCatalog],
   );
 
   return { handleSelectAgentProfile, handleSelectModel, handleSelectVariant };

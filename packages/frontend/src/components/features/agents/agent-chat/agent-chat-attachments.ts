@@ -211,18 +211,28 @@ export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean 
 };
 
 const readAttachmentValidationError = (
-  attachment: Pick<AgentChatComposerAttachment, "kind">,
+  attachment: Pick<AgentChatComposerAttachment, "kind" | "mime">,
   support: AgentModelAttachmentSupport | null | undefined,
 ): string | null => {
   if (!support) {
     return "The selected model does not expose attachment capability data.";
   }
 
-  if (support[attachment.kind]) {
+  if (!support[attachment.kind]) {
+    return `The selected model does not support ${attachment.kind} attachments.`;
+  }
+
+  const supportedMimeTypes = support.mimeTypes?.[attachment.kind];
+  if (!supportedMimeTypes || supportedMimeTypes.length === 0) {
     return null;
   }
 
-  return `The selected model does not support ${attachment.kind} attachments.`;
+  const mime = attachment.mime?.trim().toLowerCase();
+  if (mime && supportedMimeTypes.includes(mime)) {
+    return null;
+  }
+
+  return `The selected model supports ${attachment.kind} attachments only as ${supportedMimeTypes.join(", ")}.`;
 };
 
 export const validateComposerAttachments = (

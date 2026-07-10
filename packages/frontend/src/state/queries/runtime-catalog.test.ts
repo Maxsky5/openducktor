@@ -15,6 +15,7 @@ import {
   repoRuntimeSkillsQueryOptions,
   repoRuntimeSlashCommandsQueryOptions,
   runtimeCatalogQueryKeys,
+  sessionStartRuntimeCatalogQueryOptions,
 } from "./runtime-catalog";
 
 const repoRuntimeRefFixture: RepoRuntimeRef = {
@@ -67,16 +68,41 @@ describe("runtime catalog queries", () => {
     expect(loadCatalog).toHaveBeenCalledWith(repoRuntimeRefFixture);
   });
 
-  test("loads slash commands only for a concrete repo runtime ref", async () => {
+  test("loads slash commands only for a concrete runtime working-directory ref", async () => {
     const queryClient = new QueryClient();
     const loadSlashCommands = mock(async () => slashCommandCatalogFixture);
 
     const catalog = await queryClient.fetchQuery(
-      repoRuntimeSlashCommandsQueryOptions(repoRuntimeRefFixture, loadSlashCommands),
+      repoRuntimeSlashCommandsQueryOptions(workingDirectoryRefFixture, loadSlashCommands),
     );
 
+    expect(runtimeCatalogQueryKeys.repoSlashCommands(workingDirectoryRefFixture)).toEqual([
+      "runtime-catalog",
+      "slash-commands",
+      "/repo",
+      "opencode",
+      "/repo/worktree",
+    ]);
     expect(catalog).toBe(slashCommandCatalogFixture);
-    expect(loadSlashCommands).toHaveBeenCalledWith(repoRuntimeRefFixture);
+    expect(loadSlashCommands).toHaveBeenCalledWith(workingDirectoryRefFixture);
+  });
+
+  test("uses a fresh session-start runtime catalog query key", async () => {
+    const queryClient = new QueryClient();
+    const loadCatalog = mock(async () => modelCatalogFixture);
+
+    const catalog = await queryClient.fetchQuery(
+      sessionStartRuntimeCatalogQueryOptions(repoRuntimeRefFixture, loadCatalog),
+    );
+
+    expect(runtimeCatalogQueryKeys.repoSessionStart("/repo/", "opencode")).toEqual([
+      "runtime-catalog",
+      "session-start",
+      "/repo",
+      "opencode",
+    ]);
+    expect(catalog).toBe(modelCatalogFixture);
+    expect(loadCatalog).toHaveBeenCalledWith(repoRuntimeRefFixture);
   });
 
   test("loads skills only for a concrete runtime working-directory ref", async () => {

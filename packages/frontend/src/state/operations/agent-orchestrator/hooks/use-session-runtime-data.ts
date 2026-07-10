@@ -126,6 +126,9 @@ export const useSessionRuntimeData = ({
     if (runtimePolicyTarget.runtimeKind === "opencode") {
       return { runtimePolicy: { kind: "opencode" } as const, error: null };
     }
+    if (runtimePolicyTarget.runtimeKind === "claude") {
+      return { runtimePolicy: { kind: "claude" } as const, error: null };
+    }
     const settingsSnapshot = settingsSnapshotQuery.data;
     if (!settingsSnapshot) {
       return { runtimePolicy: null, error: null };

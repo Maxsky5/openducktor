@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { resolveRuntimePromptInputSupport } from "./runtime-prompt-input-support";
 
 describe("runtime-prompt-input-support", () => {
@@ -22,6 +26,20 @@ describe("runtime-prompt-input-support", () => {
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
         runtimeKind: "codex",
+      }),
+    ).toEqual({
+      runtimeSupportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: true,
+      supportsSubagentReferences: false,
+    });
+  });
+
+  test("derives Claude slash command, file search, and skill reference capabilities", () => {
+    expect(
+      resolveRuntimePromptInputSupport({
+        runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+        runtimeKind: "claude",
       }),
     ).toEqual({
       runtimeSupportsSlashCommands: true,

@@ -23,7 +23,7 @@ describe("agent studio thread session", () => {
     ).toBe(BUFFERING_MESSAGE);
   });
 
-  test("does not project a status from a different runtime identity", () => {
+  test("does not project a thread from a different runtime identity", () => {
     const selectedSession = createAgentSessionFixture({
       externalSessionId: "session-shared",
       runtimeKind: "codex",
@@ -42,10 +42,6 @@ describe("agent studio thread session", () => {
         activityState: "running",
         loadedSession: staleLoadedSession,
       }),
-    ).toMatchObject({
-      runtimeKind: "codex",
-      workingDirectory: "/repo/selected-worktree",
-      runtimeStatusMessage: null,
-    });
+    ).toBeNull();
   });
 });

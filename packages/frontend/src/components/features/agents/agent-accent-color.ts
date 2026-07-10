@@ -4,6 +4,7 @@ const FALLBACK_SATURATION = 74;
 const FALLBACK_LIGHTNESS = 46;
 
 export const CODEX_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-codex)";
+export const CLAUDE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-claude)";
 
 type AgentSessionAccentColorInput = {
   agentName?: string | null | undefined;
@@ -69,6 +70,9 @@ export const resolveAgentSessionAccentColor = ({
   }
   if (runtimeKind === "codex") {
     return CODEX_SESSION_ACCENT_COLOR;
+  }
+  if (runtimeKind === "claude") {
+    return CLAUDE_SESSION_ACCENT_COLOR;
   }
   return undefined;
 };

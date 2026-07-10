@@ -30,7 +30,11 @@ const makeCatalogWithProfile = (): AgentModelCatalog => ({
 describe("model-selection-options", () => {
   test("keeps current-session options when catalog metadata is unavailable", () => {
     const options = resolveModelSelectionOptions({
-      selectionCatalog: { ...makeCatalogWithProfile(), models: [], profiles: [] },
+      selectionCatalog: {
+        ...makeCatalogWithProfile(),
+        models: [],
+        profiles: [],
+      },
       selectedModelSelection: makeSelectedSessionModel(),
     });
 
@@ -58,5 +62,78 @@ describe("model-selection-options", () => {
         selectedModelSelection: makeSelectedSessionModel(),
       }).agentAccentColorsByProfileId,
     ).toEqual({ "build-agent": "#f59e0b" });
+  });
+
+  test("filters active-session variants to live-updatable options", () => {
+    const options = resolveModelSelectionOptions({
+      liveSession: true,
+      selectionCatalog: {
+        ...makeCatalogWithProfile(),
+        models: [
+          {
+            id: "anthropic/claude-sonnet",
+            providerId: "anthropic",
+            providerName: "Anthropic",
+            modelId: "claude-sonnet",
+            modelName: "Claude Sonnet",
+            variants: ["low", "medium", "high", "xhigh", "max"],
+            liveSessionUpdates: {
+              profile: false,
+              variants: ["low", "medium", "high", "xhigh"],
+            },
+          },
+        ],
+      },
+      selectedModelSelection: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        variant: "high",
+      },
+    });
+
+    expect(options.variantOptions.map((option) => option.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+  });
+
+  test("keeps the current active-session variant visible when it is not live-updatable", () => {
+    const options = resolveModelSelectionOptions({
+      liveSession: true,
+      selectionCatalog: {
+        ...makeCatalogWithProfile(),
+        models: [
+          {
+            id: "anthropic/claude-sonnet",
+            providerId: "anthropic",
+            providerName: "Anthropic",
+            modelId: "claude-sonnet",
+            modelName: "Claude Sonnet",
+            variants: ["low", "medium", "high", "xhigh", "max"],
+            liveSessionUpdates: {
+              profile: false,
+              variants: ["low", "medium", "high", "xhigh"],
+            },
+          },
+        ],
+      },
+      selectedModelSelection: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        variant: "max",
+      },
+    });
+
+    expect(options.variantOptions.map((option) => option.value)).toEqual([
+      "max",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
   });
 });

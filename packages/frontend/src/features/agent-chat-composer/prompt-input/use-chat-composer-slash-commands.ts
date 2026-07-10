@@ -1,11 +1,14 @@
 import {
   isManualSessionCompactionSlashCommand,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-  type RepoRuntimeRef,
   type ReusablePrompt,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
+import type {
+  AgentSlashCommand,
+  AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
@@ -55,7 +58,7 @@ export const filterSlashCommandsForComposerScope = (
     ? commands
     : commands.filter((command) => !isManualSessionCompactionSlashCommand(command));
 
-const skippedSlashCommandsQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+const skippedSlashCommandsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
   skippedQueryOptions<AgentSlashCommandCatalog>({
     queryKey: runtimeRef
       ? runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef)
@@ -72,7 +75,9 @@ export const useChatComposerSlashCommands = ({
   promptInputRuntime: ChatComposerPromptInputRuntime;
   runtimeSupportsSlashCommands: boolean;
   reusablePrompts: ReusablePrompt[];
-  loadSlashCommandsForRepo: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadSlashCommandsForRepo: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSlashCommandCatalog>;
 }): {
   supportsSlashCommands: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;

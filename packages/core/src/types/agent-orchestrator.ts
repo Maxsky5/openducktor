@@ -79,6 +79,10 @@ export type AgentModelDescriptor = {
   contextWindow?: number;
   outputLimit?: number;
   attachmentSupport?: AgentModelAttachmentSupport;
+  liveSessionUpdates?: {
+    profile?: boolean;
+    variants?: string[];
+  };
 };
 
 export type AgentDescriptor = {
@@ -141,6 +145,7 @@ export type AgentModelAttachmentSupport = {
   audio: boolean;
   video: boolean;
   pdf: boolean;
+  mimeTypes?: Partial<Record<AgentAttachmentKind, string[]>>;
 };
 
 export type AgentAttachmentReference = {

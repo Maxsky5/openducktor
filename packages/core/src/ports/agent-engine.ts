@@ -50,12 +50,14 @@ export type AgentSessionScope = AgentSessionWorkflowScope;
 export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
 export type AgentSessionRuntimePolicy =
   | { kind: "opencode" }
+  | { kind: "claude" }
   | { kind: "codex"; policy: CodexEffectivePolicy };
 export type AgentRuntimePolicyBinding =
   | {
       runtimeKind: "opencode";
       runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "opencode" }>;
     }
+  | { runtimeKind: "claude"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "claude" }> }
   | { runtimeKind: "codex"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "codex" }> };
 
 export const workflowAgentSessionScope = (
@@ -143,7 +145,7 @@ export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
 export type ListAgentModelsInput = RepoRuntimeRef;
 
-export type ListAgentSlashCommandsInput = RepoRuntimeRef;
+export type ListAgentSlashCommandsInput = RuntimeWorkingDirectoryRef;
 
 export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
 

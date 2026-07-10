@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
@@ -102,6 +103,53 @@ describe("selected-session-view-projection", () => {
 
     expect(projection.transcriptState).toEqual({ kind: "visible" });
     expect(projection.sessionAuxiliaryError).toBe("This session stopped streaming.");
+  });
+
+  test("ignores a loaded session that does not match the selected identity", () => {
+    const selectedSummary = createAgentSessionSummaryFixture({
+      externalSessionId: "selected-planner-session",
+      runtimeKind: "claude",
+      status: "running",
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "sonnet",
+        variant: "high",
+        profileId: "planner",
+      },
+    });
+    const staleLoadedSession = createAgentSessionFixture({
+      externalSessionId: "stale-spec-session",
+      runtimeKind: "claude",
+      status: "idle",
+      messages: createSessionMessagesState("stale-spec-session", [
+        {
+          id: "stale-ok",
+          role: "assistant",
+          content: "OK",
+          timestamp: "2026-06-28T19:55:51.000Z",
+          meta: { kind: "assistant", isFinal: true },
+        },
+      ]),
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "sonnet",
+        variant: "high",
+        profileId: "spec",
+      },
+    });
+
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(selectedSummary),
+      session: staleLoadedSession,
+      sessionSummary: selectedSummary,
+      selectedTask: createTaskCardFixture(),
+    });
+
+    expect(projection.activityState).toBe("running");
+    expect(projection.selectedModel).toBe(selectedSummary.selectedModel);
+    expect(projection.transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
   });
 
   test("uses the selected-session summary while the full session is not loaded", () => {

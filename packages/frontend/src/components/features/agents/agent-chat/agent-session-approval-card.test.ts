@@ -95,6 +95,60 @@ describe("resolveApprovalReplyOutcomes", () => {
     );
   });
 
+  test("renders non-command tool input for approval context", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          requestType: "file_change" as const,
+          title: "Approve edit",
+          tool: {
+            name: "Edit",
+            input: {
+              file_path: "apps/api/src/lib/auth.ts",
+              old_string: "socialProviders: {",
+              new_string: "socialProviders: { facebook: {} }",
+            },
+          },
+        },
+        runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+        onReply: async () => {},
+      }),
+    );
+
+    expect(html).toContain("Tool input:");
+    expect(html).toContain("apps/api/src/lib/auth.ts");
+    expect(html).toContain("socialProviders");
+    expect(html).toContain("max-h-40 overflow-auto");
+  });
+
+  test("does not duplicate command tool input when command details are already rendered", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          requestType: "command_execution" as const,
+          title: "Approve command",
+          command: {
+            command: "grep -rn facebook apps/api/src/lib/auth.ts",
+            workingDirectory: "/workspace",
+          },
+          tool: {
+            name: "Bash",
+            input: {
+              command: "grep -rn facebook apps/api/src/lib/auth.ts",
+            },
+          },
+        },
+        runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+        onReply: async () => {},
+      }),
+    );
+
+    expect(html).toContain("Command: grep -rn facebook apps/api/src/lib/auth.ts");
+    expect(html).not.toContain("Tool input:");
+  });
+
   test("labels subagent approval requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {

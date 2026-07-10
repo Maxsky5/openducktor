@@ -15,9 +15,10 @@ Use it when you need to:
 
 This guide describes the integration model and the runtime support policy.
 
-- Supported runtime kinds today are OpenCode (`opencode`) and Codex (`codex`).
+- Supported runtime kinds today are OpenCode (`opencode`), Codex (`codex`), and Claude (`claude`).
 - OpenCode remains the default runtime.
 - Codex is supported through the local app-server adapter and host-managed stdio route.
+- Claude is supported through the official Claude Agent SDK and the OpenDucktor MCP bridge. Its descriptor is the source of truth for the SDK-backed capability surface, including skills, slash commands, file search, and foreground subagents.
 - New runtimes must fit the descriptor/capability model or extend that model in the same change set.
 
 ## Runtime Vocabulary
@@ -88,6 +89,7 @@ Supported shapes:
 
 - `{ type: "local_http", endpoint }`
 - `{ type: "stdio", identity }`
+- `{ type: "host_service", identity }`
 
 This is a live route, not a persisted identifier.
 
@@ -218,7 +220,10 @@ Read-only role tool blocking is part of the runtime definition, not the generic 
 Rules:
 
 - `AGENT_ROLE_TOOL_POLICY` continues to define which `odt_*` workflow tools each role may call.
-- Each runtime descriptor must declare `readOnlyRoleBlockedTools` for that runtime's native mutating tool IDs.
+- Each runtime descriptor must declare `readOnlyRoleBlockedTools` for runtime-native tool IDs
+  that must be unavailable in read-only workflow roles. This includes native mutating
+  tools and any runtime-owned tools, such as network tools, that would violate the
+  read-only role contract.
 - Each runtime descriptor must declare `workflowToolAliasesByCanonical` for any native workflow tool IDs that differ from canonical `odt_*` names.
 - Runtime adapters must consume `readOnlyRoleBlockedTools` both when constructing runtime permission rules and when building the runtime `tools` selection sent on prompt turns for `spec`, `planner`, and `qa`.
 - Runtime adapters and desktop workflow-tool consumers must resolve native workflow tool IDs through `workflowToolAliasesByCanonical` instead of hardcoded runtime prefixes in shared code.
@@ -226,6 +231,8 @@ Rules:
 - Do not block `bash` generically for read-only roles. Read-only roles still need shell access for inspections, tests, and lint commands; mutation control for shell commands remains a runtime/permission-flow concern.
 
 For OpenCode today, the blocked list is sourced from the runtime's native tool inventory and currently includes edit-style tools such as `edit`, `write`, `apply_patch`, `ast_grep_replace`, and `lsp_rename`.
+
+Claude currently blocks `Bash` in read-only workflow roles because the Agent SDK exposes shell execution as a single tool boundary and OpenDucktor cannot soundly distinguish every mutating shell program or flag. This adapter-owned fail-closed limitation takes precedence over shell convenience until the runtime provides a trustworthy enforcement boundary; generic orchestration must not special-case it.
 
 ## Eligibility Model
 
@@ -255,7 +262,8 @@ The current transport model assumes only these shared invariants:
 Today the shared contracts support:
 
 - `local_http` live routes and runtime connections for OpenCode's HTTP surface,
-- `stdio` live routes and runtime connections for non-HTTP-capable runtime plumbing.
+- `stdio` live routes and runtime connections for non-HTTP-capable runtime plumbing,
+- `host_service` live routes for in-process host-managed runtime services such as Claude Agent SDK.
 
 When a runtime-specific operation only works over one transport, the adapter or host branch must reject unsupported route or connection types explicitly instead of coercing them into HTTP.
 
@@ -488,7 +496,7 @@ These constraints describe the current integration surface. If a runtime does no
 
 ### Reference implementation
 
-The built-in runtime implementations are `opencode` and `codex`. OpenCode is the default and remains the broadest reference implementation. Codex is the reference for a host-managed app-server runtime that uses the stdio route and adapter-owned request/response/event mapping.
+The built-in runtime implementations are `opencode`, `codex`, and `claude`. OpenCode is the default and remains the broadest reference implementation. Codex is the reference for a host-managed app-server runtime that uses the stdio route and adapter-owned request/response/event mapping. Claude is the reference for a host-managed SDK runtime with adapter-owned catalog, session, and event mapping.
 
 Codex startup snapshots are owned by the adapter's thread inventory reader. After
 startup, Codex `thread/status/changed` notifications update that inventory through
@@ -508,7 +516,7 @@ Current contract rules:
 - that startup result is authoritative for the live `RuntimeRoute`, spawned child/process guard, and startup report,
 - transport-specific startup behavior such as OpenCode's local HTTP port allocation stays inside the owning runtime implementation.
 
-This keeps the shared startup contract route-driven. A host-managed runtime may still return `RuntimeRoute::LocalHttp` when that is real, but another runtime may return `RuntimeRoute::Stdio` or a dynamically discovered HTTP endpoint without forcing shared code to reconstruct the route from a host-picked port.
+This keeps the shared startup contract route-driven. A host-managed runtime may still return `RuntimeRoute::LocalHttp` when that is real, but another runtime may return `RuntimeRoute::Stdio`, `RuntimeRoute::HostService`, or a dynamically discovered HTTP endpoint without forcing shared code to reconstruct the route from a host-picked port.
 
 Startup telemetry follows the same rule: `port` is optional in shared startup event payloads and is only populated when a real startup port exists.
 

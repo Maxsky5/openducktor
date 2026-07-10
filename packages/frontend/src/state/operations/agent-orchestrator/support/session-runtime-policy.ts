@@ -33,6 +33,9 @@ export const resolveAgentSessionRuntimePolicy = async ({
   if (runtimeKind === "opencode") {
     return { kind: "opencode" };
   }
+  if (runtimeKind === "claude") {
+    return { kind: "claude" };
+  }
   const snapshot = await loadSettingsSnapshot();
   return resolveAgentSessionRuntimePolicyFromSnapshot({
     runtimeKind,
@@ -52,6 +55,9 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
 }): AgentSessionRuntimePolicy => {
   if (runtimeKind === "opencode") {
     return { kind: "opencode" };
+  }
+  if (runtimeKind === "claude") {
+    return { kind: "claude" };
   }
   if (runtimeKind !== "codex") {
     throw new Error(`Unsupported runtime kind '${runtimeKind}' for session runtime policy.`);

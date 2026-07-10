@@ -17,12 +17,20 @@ export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
   repo: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
-  repoSlashCommands: ({ repoPath, runtimeKind }: RepoRuntimeRef) =>
+  repoSessionStart: (repoPath: string, runtimeKind: RuntimeKind) =>
+    [
+      ...runtimeCatalogQueryKeys.all,
+      "session-start",
+      normalizeWorkingDirectory(repoPath),
+      runtimeKind,
+    ] as const,
+  repoSlashCommands: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
       ...runtimeCatalogQueryKeys.all,
       "slash-commands",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
+      normalizeWorkingDirectory(workingDirectory),
     ] as const,
   repoSkillsScope: ({
     repoPath,
@@ -74,17 +82,30 @@ export const repoRuntimeCatalogQueryOptions = (
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
-export const repoRuntimeSlashCommandsQueryOptions = (
+export const sessionStartRuntimeCatalogQueryOptions = (
   runtimeRef: RepoRuntimeRef,
-  loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>,
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
 ) =>
-  queryOptions<AgentSlashCommandCatalog, Error, AgentSlashCommandCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef),
-    queryFn: (): Promise<AgentSlashCommandCatalog> =>
-      loadRepoRuntimeSlashCommands({
+  queryOptions<AgentModelCatalog, Error, AgentModelCatalog, QueryKey>({
+    queryKey: runtimeCatalogQueryKeys.repoSessionStart(runtimeRef.repoPath, runtimeRef.runtimeKind),
+    queryFn: (): Promise<AgentModelCatalog> =>
+      loadRepoRuntimeCatalog({
         repoPath: runtimeRef.repoPath,
         runtimeKind: runtimeRef.runtimeKind,
       }),
+    gcTime: 0,
+    staleTime: 0,
+  });
+
+export const repoRuntimeSlashCommandsQueryOptions = (
+  runtimeRef: RuntimeWorkingDirectoryRef,
+  loadRepoRuntimeSlashCommands: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSlashCommandCatalog>,
+) =>
+  queryOptions<AgentSlashCommandCatalog, Error, AgentSlashCommandCatalog, QueryKey>({
+    queryKey: runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef),
+    queryFn: (): Promise<AgentSlashCommandCatalog> => loadRepoRuntimeSlashCommands(runtimeRef),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 

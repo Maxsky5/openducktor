@@ -87,7 +87,6 @@ export function useAgentStudioSelectionController({
   selectAgentStudioSelection,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
   const navigationBase = useMemo(

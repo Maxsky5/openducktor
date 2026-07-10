@@ -6,6 +6,7 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { inactiveRepoRuntimeReadinessTarget } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -100,6 +101,10 @@ export function useAgentStudioSelectedSessionView({
     ? null
     : selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
+  const loadedSession = useMemo(
+    () => (matchesAgentSessionIdentity(session, selectedSessionIdentity) ? session : null),
+    [selectedSessionIdentity, session],
+  );
   const { getSessionFault, sessionReadModelLoadState } = useAgentSessionReadModelState();
   const selectedSessionFault = getSessionFault(selectedSessionIdentity);
   const runtimeTarget = useMemo(
@@ -161,8 +166,8 @@ export function useAgentStudioSelectedSessionView({
     }
 
     return deriveSelectedSessionViewProjection({
+      session: loadedSession,
       selectedSessionIdentity,
-      session,
       sessionSummary: selection.sessionSummary,
       selectedTask,
       sessionFault: selectedSessionFault,
@@ -175,7 +180,7 @@ export function useAgentStudioSelectedSessionView({
     routeSessionResolution,
     selectedSessionIdentity,
     selectedTask,
-    session,
+    loadedSession,
     selection.sessionSummary,
     selectedSessionFault,
     sessionReadModelLoadState,
@@ -203,7 +208,7 @@ export function useAgentStudioSelectedSessionView({
       identity: selectedSessionIdentity,
       activityState: selectedSessionActivityState,
       selectedModel: selectedSessionModel,
-      loadedSession: session,
+      loadedSession,
       runtimeData,
       runtimeReadiness,
       transcriptState,
@@ -217,7 +222,7 @@ export function useAgentStudioSelectedSessionView({
       selectedSessionIdentity,
       selectedSessionModel,
       selectedSessionViewProjection.sessionAuxiliaryError,
-      session,
+      loadedSession,
     ],
   );
 

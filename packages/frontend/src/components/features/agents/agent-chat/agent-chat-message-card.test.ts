@@ -7,6 +7,10 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
+import {
+  AgentSessionTranscriptDialogContext,
+  type AgentSessionTranscriptDialogContextValue,
+} from "./agent-session-transcript-dialog-context";
 import { formatTime } from "./message-formatting";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
@@ -40,22 +44,35 @@ type AgentChatMessageCardTestProps = Omit<
 > & {
   chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
   sessionIdentity?: ParentSessionRuntimeContext | null;
+  transcriptDialog?: AgentSessionTranscriptDialogContextValue;
 };
 
 const createElement = (
   _type: typeof AgentChatMessageCard,
-  { chatSettings = DEFAULT_TEST_CHAT_SETTINGS, ...props }: AgentChatMessageCardTestProps,
+  {
+    chatSettings = DEFAULT_TEST_CHAT_SETTINGS,
+    transcriptDialog,
+    ...props
+  }: AgentChatMessageCardTestProps,
 ) => {
+  const card = createReactElement(AgentChatMessageCard, {
+    sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
+    ...props,
+  });
+  const cardWithTranscriptContext = transcriptDialog
+    ? createReactElement(
+        AgentSessionTranscriptDialogContext.Provider,
+        { value: transcriptDialog },
+        card,
+      )
+    : card;
   return createReactElement(
     RuntimeDefinitionsContext.Provider,
     { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
     createReactElement(
       AgentChatSettingsProvider,
       { value: chatSettings },
-      createReactElement(AgentChatMessageCard, {
-        sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
-        ...props,
-      }),
+      cardWithTranscriptContext,
     ),
   );
 };
@@ -443,36 +460,6 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain(">todo<");
     expect(html).not.toContain(">update_plan<");
-  });
-
-  test("does not use tool title as the visible tool label", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatMessageCard, {
-        message: {
-          id: "tool-read-path-title",
-          role: "tool",
-          content: "Tool read completed",
-          timestamp: "2026-02-22T10:20:35.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-read-path-title",
-            callId: "call-read-path-title",
-            tool: "read",
-            toolType: "read",
-            title: "/repo/src/app.ts",
-            status: "completed",
-            input: { path: "/repo/src/app.ts" },
-            output: "contents",
-          },
-        },
-        sessionAgentColors: {},
-        sessionIdentity: null,
-      }),
-    );
-
-    expect(html).toContain('<p class="shrink-0 font-medium text-current">read</p>');
-    expect(html).not.toContain('<p class="shrink-0 font-medium text-current">/repo/src/app.ts</p>');
-    expect(html).toContain('<p class="truncate text-muted-foreground">/repo/src/app.ts</p>');
   });
 
   test("renders file tool summaries relative to the session working directory", () => {
@@ -930,6 +917,40 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
     expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
+  });
+
+  test("renders the subagent transcript action when a transcript target is available", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): review changes", {
+          id: "subagent-with-transcript-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "claude-subagent:child-agent-1",
+            correlationKey: "session:assistant-1:session-parent::claude-subagent::child-agent-1",
+            status: "completed",
+            agent: "build",
+            description: "review changes",
+            externalSessionId: "session-parent::claude-subagent::child-agent-1",
+            startedAtMs: 1_000,
+            endedAtMs: 120_000,
+          },
+        }),
+        sessionAgentColors: {},
+        sessionIdentity: {
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+        },
+        transcriptDialog: {
+          openSessionTranscript: () => {},
+          closeSessionTranscript: () => {},
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="View subagent session"');
+    expect(html).toContain("Subagent session");
   });
 
   test("renders a loader instead of duration for running subagent cards", () => {

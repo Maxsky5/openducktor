@@ -9,7 +9,10 @@ const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
   "question_resolved",
   "session_compaction_started",
   "session_compacted",
+  "transcript_retracted",
   "session_context_updated",
+  "session_context_error",
+  "runtime_slash_commands_changed",
   "session_error",
   "session_idle",
   "session_finished",
@@ -95,6 +98,21 @@ const mergeQueuedSessionEvent = (
     };
   }
 
+  if (
+    previous.type === "assistant_part" &&
+    previous.part.kind === "subagent" &&
+    event.type === "assistant_part" &&
+    event.part.kind === "subagent"
+  ) {
+    return {
+      ...event,
+      part: {
+        ...previous.part,
+        ...event.part,
+      },
+    };
+  }
+
   return event;
 };
 
@@ -111,18 +129,26 @@ const shouldDropQueuedCandidate = (
     return false;
   }
 
-  if (event.type !== "assistant_message") {
-    return false;
+  if (event.type === "assistant_message") {
+    if (candidate.event.type === "assistant_delta") {
+      return candidate.event.messageId === event.messageId;
+    }
+
+    if (candidate.event.type === "assistant_part") {
+      return (
+        candidate.event.part.messageId === event.messageId && candidate.event.part.kind === "text"
+      );
+    }
   }
 
-  if (candidate.event.type === "assistant_delta") {
-    return candidate.event.messageId === event.messageId;
-  }
-
-  if (candidate.event.type === "assistant_part") {
-    return (
-      candidate.event.part.messageId === event.messageId && candidate.event.part.kind === "text"
-    );
+  if (
+    event.type === "assistant_part" &&
+    event.part.kind === "text" &&
+    event.part.completed &&
+    !event.part.synthetic &&
+    candidate.event.type === "assistant_delta"
+  ) {
+    return candidate.event.messageId === event.part.messageId && candidate.event.channel === "text";
   }
 
   return false;
@@ -131,6 +157,11 @@ const shouldDropQueuedCandidate = (
 export const isImmediateSessionEvent = (event: SessionEvent): event is ImmediateSessionEvent => {
   return IMMEDIATE_SESSION_EVENT_TYPES.has(event.type);
 };
+
+export const shouldFlushQueuedSessionEventImmediately = (event: QueuedSessionEvent): boolean =>
+  event.type === "assistant_part" &&
+  event.part.kind === "text" &&
+  minAssistantPartEmitIntervalMs(event) === null;
 
 const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
   events: Item[],
@@ -169,6 +200,10 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
 
   return entries;
 };
+
+export const prepareForcedQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
+  events: Item[],
+): Item[] => mergeQueuedSessionEvents(events).map((entry) => entry.item);
 
 export type QueuedSessionEventBatchItem<Event extends QueuedSessionEvent = QueuedSessionEvent> = {
   event: Event;

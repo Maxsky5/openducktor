@@ -66,10 +66,10 @@ The web runner opens OpenDucktor in your browser. Choose the desktop app or the 
 OpenDucktor is macOS-first. Windows and Linux support is experimental.
 
 - `git`
-- `opencode` or `codex`
+- `opencode`, `codex`, or `claude`
 - `gh` plus `gh auth login` if you use GitHub and want OpenDucktor to open pull requests for you
 
-OpenDucktor supports local OpenCode and Codex runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
+OpenDucktor supports local OpenCode, Codex, and Claude Code runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 
 Task data is stored in an OpenDucktor-managed SQLite database, so no external task-store CLI is required for normal app use.
 
@@ -80,7 +80,7 @@ Task data is stored in an OpenDucktor-managed SQLite database, so no external ta
 - Autopilot rules that can automatically start the next workflow action when task transitions are observed.
 - Task-linked documents for specifications, implementation plans, and QA reports.
 - A canonical Git worktree for each task, shared by fresh Specification, Planner, Builder, and QA sessions while the runtime process remains repository-scoped.
-- Runtime-aware Agent Studio support for OpenCode and Codex, including model selection, history hydration, permissions/questions, and workflow-tool routing through the runtime descriptor model.
+- Runtime-aware Agent Studio support for OpenCode, Codex, and Claude Code, including model selection, history hydration, permissions/questions, and workflow-tool routing through the runtime descriptor model.
 - Global and repository-level prompt customization for adapting agent behavior to your workflow.
 - A built-in OpenDucktor MCP server used internally by managed agent sessions and available externally through `@openducktor/mcp`.
 - A local web runner available through `@openducktor/web` for running the shared frontend with the TypeScript host in a browser.
@@ -107,7 +107,7 @@ That keeps the workflow task-centric and auditable: agents act through a control
 
 - Platform support today: macOS is the primary supported desktop target.
 - Windows and Linux: experimental Electron desktop builds. Feedback is welcome, but these builds are not stable yet.
-- Supported runtimes today: OpenCode (`opencode`) and Codex (`codex`)
+- Supported runtimes today: OpenCode (`opencode`), Codex (`codex`), and Claude Code (`claude`)
   - OpenCode remains the default runtime.
   - More runtimes may be added through the runtime descriptor and adapter model.
 - The project is still early and should be treated as an active prototype

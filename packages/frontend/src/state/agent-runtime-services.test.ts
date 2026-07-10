@@ -31,6 +31,7 @@ describe("agent runtime services", () => {
     expect(agentEngine.listRuntimeDefinitions().map((runtime) => runtime.kind)).toEqual([
       "opencode",
       "codex",
+      "claude",
     ]);
   });
 

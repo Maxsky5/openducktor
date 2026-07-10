@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { RepoRuntimeRef } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
@@ -122,8 +127,36 @@ const createModalCatalog = (): AgentModelCatalog => ({
   ],
 });
 
+const createClaudeModalCatalog = (): AgentModelCatalog => ({
+  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "default",
+      providerId: "claude",
+      providerName: "Claude",
+      modelId: "default",
+      modelName: "Default (recommended)",
+      variants: ["low", "medium", "high"],
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    },
+  ],
+  defaultModelsByProvider: {
+    claude: "default",
+  },
+  profiles: [],
+});
+
+const createModalCatalogForRuntime = (runtimeRef: RepoRuntimeRef): AgentModelCatalog =>
+  runtimeRef.runtimeKind === "claude" ? createClaudeModalCatalog() : createModalCatalog();
+
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
   const checksStateContextValue = createChecksStateContextValue();
+  const repoRuntimeHealthContextValue = createRepoRuntimeHealthContextValue();
+  const readyRuntimeHealth = repoRuntimeHealthContextValue.runtimeHealthByRuntime.opencode;
+  if (!readyRuntimeHealth) {
+    throw new Error("Expected opencode runtime health fixture");
+  }
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -153,7 +186,12 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
         createElement(
           RepoRuntimeHealthContext.Provider,
           {
-            value: createRepoRuntimeHealthContextValue(),
+            value: createRepoRuntimeHealthContextValue({
+              runtimeHealthByRuntime: {
+                opencode: readyRuntimeHealth,
+                claude: readyRuntimeHealth,
+              },
+            }),
           },
           createElement(
             ChecksStateContext.Provider,
@@ -162,13 +200,20 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
               RuntimeDefinitionsContext.Provider,
               {
                 value: {
-                  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                  availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+                  availableRuntimeDefinitions: [
+                    OPENCODE_RUNTIME_DESCRIPTOR,
+                    CLAUDE_RUNTIME_DESCRIPTOR,
+                  ],
                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                   isLoadingRuntimeDefinitions: false,
                   runtimeDefinitionsError: null,
-                  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                  loadRepoRuntimeCatalog: async () => createModalCatalog(),
+                  refreshRuntimeDefinitions: async () => [
+                    OPENCODE_RUNTIME_DESCRIPTOR,
+                    CLAUDE_RUNTIME_DESCRIPTOR,
+                  ],
+                  loadRepoRuntimeCatalog: async (runtimeRef) =>
+                    createModalCatalogForRuntime(runtimeRef),
                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
                   loadRepoRuntimeSkills: async () => ({ skills: [] }),
                   loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
@@ -436,7 +481,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       selectedSessionIdentity: sessionIdentity("session-active"),
       loadedSession,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
     });
 
     await harness.mount();
@@ -471,7 +518,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "planner",
       selectionForNewSession: null,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
@@ -567,17 +616,42 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      loadedSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
+      loadedSession: createSession({
+        externalSessionId: "session-spec",
+        role: "spec",
+      }),
       selectedTask: createPromptTask({
         agentWorkflows: {
-          spec: { required: true, canSkip: false, available: true, completed: true },
-          planner: { required: true, canSkip: false, available: true, completed: false },
-          builder: { required: true, canSkip: false, available: true, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
+          spec: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          planner: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
         },
       }),
       selectionForNewSession: null,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
@@ -623,6 +697,140 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("handleCreateSession seeds cross-role modals from the current selection", async () => {
+    const currentSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4",
+      variant: "thinking",
+      profileId: "spec",
+    };
+    const harness = createInternalModalHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      loadedSession: createSession({
+        externalSessionId: "session-spec",
+        role: "spec",
+      }),
+      selectedTask: createPromptTask({
+        agentWorkflows: {
+          spec: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          planner: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+        },
+      }),
+      selectionForNewSession: currentSelection,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
+        role: "planner",
+        label: "Planner · Start Planner",
+        description: "Create a new planner session from scratch",
+        disabled: false,
+      });
+    });
+
+    const modal = await waitForSessionStartModal(harness);
+    expect(modal.selectedModelSelection).toEqual(currentSelection);
+
+    await harness.unmount();
+  });
+
+  test("handleCreateSession seeds cross-role modals from the selected session runtime", async () => {
+    const harness = createInternalModalHookHarness({
+      ...createBaseArgs(),
+      role: "planner",
+      selectedSessionIdentity: {
+        externalSessionId: "session-plan",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktrees/session-plan",
+      },
+      loadedSession: createSession({
+        externalSessionId: "session-plan",
+        role: "planner",
+        runtimeKind: "claude",
+        selectedModel: null,
+      }),
+      selectedTask: createPromptTask({
+        agentWorkflows: {
+          spec: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          planner: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+        },
+      }),
+      selectionForNewSession: null,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_implementation_start:fresh",
+        launchActionId: "build_implementation_start",
+        role: "build",
+        label: "Builder · Start Implementation",
+        description: "Create a new builder session from scratch",
+        disabled: false,
+      });
+    });
+
+    const modal = await waitForSessionStartModal(harness);
+    expect(modal.selectedRuntimeKind).toBe("claude");
+    expect(modal.selectedModelSelection).toMatchObject({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "default",
+      variant: "low",
+    });
+
+    await harness.unmount();
+  });
+
   test("handleCreateSession does not start a second session while the selected session is working before hydration", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const harness = createHookHarness({
@@ -630,7 +838,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedSessionIdentity: sessionIdentity("session-selected"),
       loadedSession: null,
       isSessionWorking: true,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
     });
 
     await harness.mount();
@@ -776,13 +986,37 @@ describe("useAgentStudioSessionStartFlow", () => {
         documentSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
-          qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+          qaReport: {
+            has: true,
+            updatedAt: "2026-02-22T10:00:00.000Z",
+            verdict: "rejected",
+          },
         },
         agentWorkflows: {
-          spec: { required: true, canSkip: false, available: true, completed: true },
-          planner: { required: true, canSkip: false, available: true, completed: true },
-          builder: { required: true, canSkip: false, available: true, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
+          spec: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          planner: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: true,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: true,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
         },
       }),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
@@ -866,7 +1100,11 @@ describe("useAgentStudioSessionStartFlow", () => {
         documentSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
-          qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+          qaReport: {
+            has: true,
+            updatedAt: "2026-02-22T10:00:00.000Z",
+            verdict: "rejected",
+          },
         },
       }),
       sessionsForTask: summarizeSessions([existingSession]),
@@ -924,7 +1162,10 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
-      expect.objectContaining({ kind: "text", text: expect.stringContaining("task-1") }),
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("task-1"),
+      }),
     ]);
 
     await harness.unmount();
@@ -949,7 +1190,11 @@ describe("useAgentStudioSessionStartFlow", () => {
         documentSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
-          qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+          qaReport: {
+            has: true,
+            updatedAt: "2026-02-22T10:00:00.000Z",
+            verdict: "rejected",
+          },
         },
       }),
       sessionsForTask: summarizeSessions([
@@ -961,7 +1206,9 @@ describe("useAgentStudioSessionStartFlow", () => {
           workingDirectory: "/repo/worktrees/session-existing",
         }),
       ]),
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       scheduleQueryUpdate: (updates) => {
         updateCalls.push(updates);
       },
@@ -1005,7 +1252,9 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -1045,7 +1294,9 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       canStartRole: () => false,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -1154,7 +1405,9 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession,
+      }),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: summarizeSessions([
         createSession({
@@ -1201,10 +1454,14 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(modal.selectedSourceSessionValue).toBe(selectedSourceOption.value);
     expect(modal.existingSessionOptions).toEqual([
       expect.objectContaining({
-        sourceSession: expect.objectContaining({ externalSessionId: "session-build-latest" }),
+        sourceSession: expect.objectContaining({
+          externalSessionId: "session-build-latest",
+        }),
       }),
       expect.objectContaining({
-        sourceSession: expect.objectContaining({ externalSessionId: "session-build-older" }),
+        sourceSession: expect.objectContaining({
+          externalSessionId: "session-build-older",
+        }),
       }),
     ]);
     expect(startAgentSession).not.toHaveBeenCalled();

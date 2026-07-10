@@ -188,11 +188,13 @@ describe("runtime-catalog", () => {
       operations.loadRepoRuntimeSlashCommands({
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
       }),
     ).resolves.toEqual(slashCommandCatalogFixture);
     expect(listAvailableSlashCommands).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
     });
   });
 

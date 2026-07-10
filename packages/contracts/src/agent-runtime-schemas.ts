@@ -6,7 +6,7 @@ import {
 } from "./agent-workflow-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
-export const knownRuntimeKindValues = ["opencode", "codex"] as const;
+export const knownRuntimeKindValues = ["opencode", "codex", "claude"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
 export type KnownRuntimeKind = z.infer<typeof knownRuntimeKindSchema>;
 
@@ -108,6 +108,7 @@ export const runtimePromptInputPartTypeValues = [
   "slash_command",
   "file_reference",
   "folder_reference",
+  "attachment",
   "skill_mention",
   "subagent_reference",
   "app_mention",
