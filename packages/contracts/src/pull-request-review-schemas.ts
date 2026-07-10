@@ -40,11 +40,16 @@ export type PullRequestReviewCheckConclusion = z.infer<
   typeof pullRequestReviewCheckConclusionSchema
 >;
 
+const urlSchema = z.string().url();
+const nullableUrlSchema = urlSchema.nullable();
+const dateTimeSchema = z.string().datetime({ offset: true });
+const nullableDateTimeSchema = dateTimeSchema.nullable();
+
 export const pullRequestReviewPullRequestSchema = z.object({
   providerId: pullRequestReviewProviderIdSchema,
   number: z.number().int().positive(),
   title: z.string().min(1),
-  url: z.string().min(1),
+  url: urlSchema,
   state: pullRequestReviewStateSchema,
 });
 export type PullRequestReviewPullRequest = z.infer<typeof pullRequestReviewPullRequestSchema>;
@@ -54,10 +59,10 @@ export const pullRequestReviewCheckSchema = z.object({
   workflow: z.string().nullable(),
   status: pullRequestReviewCheckStatusSchema,
   conclusion: pullRequestReviewCheckConclusionSchema.nullable(),
-  url: z.string().nullable(),
+  url: nullableUrlSchema,
   details: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  completedAt: z.string().nullable(),
+  startedAt: nullableDateTimeSchema,
+  completedAt: nullableDateTimeSchema,
 });
 export type PullRequestReviewCheck = z.infer<typeof pullRequestReviewCheckSchema>;
 
@@ -66,9 +71,9 @@ export const pullRequestReviewCommentSchema = z.object({
   author: z.string().nullable(),
   body: z.string(),
   patch: z.string().nullable(),
-  url: z.string().nullable(),
-  createdAt: z.string().nullable(),
-  updatedAt: z.string().nullable(),
+  url: nullableUrlSchema,
+  createdAt: nullableDateTimeSchema,
+  updatedAt: nullableDateTimeSchema,
   path: z.string().nullable(),
   line: z.number().int().positive().nullable(),
   threadId: z.string().nullable(),
@@ -106,7 +111,7 @@ export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
     checks: z.array(pullRequestReviewCheckSchema),
     comments: z.array(pullRequestReviewCommentSchema),
     reviewThreads: pullRequestReviewThreadsSummarySchema,
-    refreshedAt: z.string().min(1),
+    refreshedAt: dateTimeSchema,
   }),
 ]);
 export type PullRequestReviewContext = z.infer<typeof pullRequestReviewContextSchema>;

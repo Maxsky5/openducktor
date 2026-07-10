@@ -93,6 +93,44 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.unmount();
   });
 
+  test.each([
+    ["enabled", true, true],
+    ["disabled", false, false],
+  ])("reports GitHub integration as %s", async (_label, enabled, expected) => {
+    const hostClient = createRepoConfigHost(async () =>
+      createRepoConfig({
+        git: {
+          providers: {
+            github: { enabled, autoDetected: false },
+          },
+        },
+      }),
+    );
+    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.repoSettings !== null);
+
+    expect(harness.getLatest().githubIntegrationEnabled).toBe(expected);
+
+    await harness.unmount();
+  });
+
+  test("keeps GitHub integration disabled while config is loading or absent", async () => {
+    const config = createDeferred<RepoConfig>();
+    const hostClient = createRepoConfigHost(() => config.promise);
+    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+
+    await harness.mount();
+    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+
+    config.resolve(createRepoConfig());
+    await harness.waitFor((state) => !state.isLoadingRepoSettings);
+    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({

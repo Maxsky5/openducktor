@@ -5,7 +5,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../shared/host";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { useTaskPullRequestOperations } from "./use-task-pull-request-operations";
@@ -48,9 +48,9 @@ const createOperationsHarness = () => {
   const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
     await options.run("/repo");
   };
-  const Harness = () => {
+  const Harness = ({ activeRepoPath }: { activeRepoPath: string | null }) => {
     const operations = useTaskPullRequestOperations({
-      activeRepoPath: "/repo",
+      activeRepoPath,
       activeWorkspaceId: null,
       refreshTaskData,
       runTaskMutation,
@@ -58,14 +58,14 @@ const createOperationsHarness = () => {
     return operations;
   };
   let latest: ReturnType<typeof useTaskPullRequestOperations> | null = null;
-  const Hook = () => {
-    latest = Harness();
+  const Hook = (props: { activeRepoPath: string | null }) => {
+    latest = Harness(props);
     return null;
   };
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  const harness = createHookHarness(Hook, {}, { wrapper });
+  const harness = createHookHarness(Hook, { activeRepoPath: "/repo" }, { wrapper });
 
   return {
     queryClient,
@@ -130,6 +130,50 @@ describe("useTaskPullRequestOperations", () => {
       await testHarness.harness.run(() => testHarness.getLatest().unlinkPullRequest("task-1"));
 
       expectReviewQueryInvalidated(testHarness.queryClient, testHarness.queryKey);
+    } finally {
+      await testHarness.harness.unmount();
+    }
+  });
+
+  test("does not cancel a merged pull request while linking starts in the same turn", async () => {
+    const linkResult = createDeferred<ReturnType<typeof createTaskCardFixture>>();
+    host.taskPullRequestDetect = mock(async () => ({ outcome: "merged" as const, pullRequest }));
+    host.taskPullRequestLinkMerged = mock(() => linkResult.promise);
+    const testHarness = createOperationsHarness();
+    await testHarness.harness.mount();
+
+    try {
+      await testHarness.harness.run(() => testHarness.getLatest().syncPullRequests("task-1"));
+
+      let linkPromise: Promise<void> | null = null;
+      await testHarness.harness.run(() => {
+        linkPromise = testHarness.getLatest().linkMergedPullRequest();
+        testHarness.getLatest().cancelLinkMergedPullRequest();
+      });
+
+      expect(testHarness.getLatest().pendingMergedPullRequest).not.toBeNull();
+      await testHarness.harness.run(async () => {
+        linkResult.resolve(createTaskCardFixture({ id: "task-1", pullRequest }));
+        await linkPromise;
+      });
+    } finally {
+      await testHarness.harness.unmount();
+    }
+  });
+
+  test("clears repository-scoped pull request state after switching repositories", async () => {
+    host.taskPullRequestDetect = mock(async () => ({ outcome: "merged" as const, pullRequest }));
+    const testHarness = createOperationsHarness();
+    await testHarness.harness.mount();
+
+    try {
+      await testHarness.harness.run(() => testHarness.getLatest().syncPullRequests("task-1"));
+      expect(testHarness.getLatest().pendingMergedPullRequest).not.toBeNull();
+
+      await testHarness.harness.update({ activeRepoPath: "/other-repo" });
+
+      expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
+      expect(testHarness.getLatest().detectingPullRequestTaskId).toBeNull();
     } finally {
       await testHarness.harness.unmount();
     }

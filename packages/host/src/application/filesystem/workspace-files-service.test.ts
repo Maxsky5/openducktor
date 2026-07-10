@@ -65,17 +65,21 @@ const createFakeGitPort = ({
   files = [],
   statuses = [],
   diffs = [],
+  changedFiles,
 }: {
   isRepository?: boolean;
   files?: string[];
   statuses?: FileStatus[];
   diffs?: FileDiff[];
+  changedFiles?: Array<{ path: string; status: string }>;
 } = {}): GitPort =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
     listFiles: () => Effect.succeed(files),
     getStatus: () => Effect.succeed(statuses),
     getDiff: () => Effect.succeed(diffs),
+    listChangedFiles: () =>
+      Effect.succeed(changedFiles ?? diffs.map((diff) => ({ path: diff.file, status: diff.type }))),
   }) as unknown as GitPort;
 
 describe("createWorkspaceFilesService", () => {
@@ -102,13 +106,6 @@ describe("createWorkspaceFilesService", () => {
 
     const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
 
-    expect(tree.paths).toEqual([
-      "README.md",
-      "src/",
-      "src/index.ts",
-      "src/util/",
-      "src/util/helpers.ts",
-    ]);
     expect(tree.entries).toContainEqual({
       path: "src",
       kind: "directory",
@@ -314,5 +311,109 @@ describe("createWorkspaceFilesService", () => {
     await expect(
       Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "../secret.txt" })),
     ).rejects.toThrow("outside the selected workspace root");
+  });
+
+  test("accepts contained files whose names begin with two dots", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/..config": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+        files: { "/repo/..config": encoder.encode("ok") },
+      }),
+      createFakeGitPort(),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "..config" })),
+    ).resolves.toMatchObject({ kind: "text", relativePath: "..config", contents: "ok" });
+  });
+
+  test("uses changed-file metadata without loading full diffs", async () => {
+    let getDiffCalls = 0;
+    let listChangedFilesCalls = 0;
+    const gitPort = createFakeGitPort({
+      files: ["src/index.ts"],
+      changedFiles: [{ path: "src/index.ts", status: "modified" }],
+    });
+    gitPort.getDiff = () => {
+      getDiffCalls += 1;
+      return Effect.succeed([]);
+    };
+    gitPort.listChangedFiles = () => {
+      listChangedFilesCalls += 1;
+      return Effect.succeed([{ path: "src/index.ts", status: "modified" }]);
+    };
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/src/index.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+      }),
+      gitPort,
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries).toContainEqual({
+      path: "src/index.ts",
+      kind: "file",
+      size: 2,
+      mtimeMs: 20,
+      gitStatus: "modified",
+    });
+    expect(listChangedFilesCalls).toBe(1);
+    expect(getDiffCalls).toBe(0);
+  });
+
+  test("uses the renamed destination path from git status", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/src/new.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+      }),
+      createFakeGitPort({
+        files: ["src/new.ts"],
+        statuses: [{ path: "src/new.ts", status: "renamed", staged: true }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toContainEqual({
+      path: "src/new.ts",
+      kind: "file",
+      size: 2,
+      mtimeMs: 20,
+      gitStatus: "renamed",
+    });
+  });
+
+  test("preserves the more specific status when target and worktree changes overlap", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/src/new.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+      }),
+      createFakeGitPort({
+        files: ["src/new.ts"],
+        changedFiles: [{ path: "src/new.ts", status: "renamed" }],
+        statuses: [{ path: "src/new.ts", status: "modified", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries.find((entry) => entry.path === "src/new.ts")?.gitStatus).toBe("renamed");
   });
 });

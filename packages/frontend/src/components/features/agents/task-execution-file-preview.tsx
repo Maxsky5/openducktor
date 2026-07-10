@@ -3,7 +3,15 @@ import type { CodeViewFileItem, CodeViewOptions, FileContents } from "@pierre/di
 import { CodeView } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
-import { type CSSProperties, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
+import {
+  type CSSProperties,
+  memo,
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
@@ -57,6 +65,10 @@ type FilePreviewSnapshot = {
   selectedFile: TaskExecutionSelectedFile;
   result: WorkspaceTextFileReadResult;
 };
+type CommittedFilePreviewSnapshot = {
+  sessionKey: number;
+  snapshot: FilePreviewSnapshot;
+};
 
 const contentHash = (value: string): string => {
   let hash = 0x811c9dc5;
@@ -93,12 +105,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   model: TaskExecutionSelectedFilePreviewModel;
 }): ReactElement | null {
   const selectedFile = model.selectedFile;
-  const committedSnapshotRef = useRef<FilePreviewSnapshot | null>(null);
-  const committedSnapshotSessionKeyRef = useRef(model.previewSessionKey);
-  if (committedSnapshotSessionKeyRef.current !== model.previewSessionKey) {
-    committedSnapshotSessionKeyRef.current = model.previewSessionKey;
-    committedSnapshotRef.current = null;
-  }
+  const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
+    null,
+  );
   const fileQuery = useQuery({
     ...workspaceTextFileQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
@@ -116,13 +125,10 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       result: fileQuery.data,
     };
   }, [fileQuery.data, selectedFile]);
-  if (!selectedFile) {
-    committedSnapshotRef.current = null;
-  } else if (currentSnapshot) {
-    committedSnapshotRef.current = currentSnapshot;
-  }
+  const retainedSnapshot =
+    committedSnapshot?.sessionKey === model.previewSessionKey ? committedSnapshot.snapshot : null;
   const visibleSnapshot =
-    currentSnapshot ?? (model.preservePreviousSnapshot ? committedSnapshotRef.current : null);
+    currentSnapshot ?? (model.preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
@@ -183,6 +189,26 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       },
     ];
   }, [codeViewFileId, visibleSnapshot]);
+
+  useLayoutEffect(() => {
+    if (!selectedFile) {
+      setCommittedSnapshot(null);
+      return;
+    }
+    if (currentSnapshot) {
+      setCommittedSnapshot((previous) => {
+        if (
+          previous?.sessionKey === model.previewSessionKey &&
+          previous.snapshot.result === currentSnapshot.result &&
+          previous.snapshot.selectedFile.rootPath === currentSnapshot.selectedFile.rootPath &&
+          previous.snapshot.selectedFile.relativePath === currentSnapshot.selectedFile.relativePath
+        ) {
+          return previous;
+        }
+        return { sessionKey: model.previewSessionKey, snapshot: currentSnapshot };
+      });
+    }
+  }, [currentSnapshot, model.previewSessionKey, selectedFile]);
 
   useEffect(() => {
     if (!selectedFile) {

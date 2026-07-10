@@ -13,6 +13,7 @@ const createDependencies = ({
   pullRequestViewResponse = defaultPullRequestViewResponse(includeReviewId),
   reviewThreadNodes = defaultReviewThreadNodes,
   reviewThreadResponse,
+  checksResponse,
 }: {
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
@@ -21,6 +22,12 @@ const createDependencies = ({
   pullRequestViewResponse?: unknown;
   reviewThreadNodes?: unknown[];
   reviewThreadResponse?: (args: string[]) => unknown;
+  checksResponse?: {
+    ok: boolean;
+    stdout: unknown;
+    stderr?: string;
+    exitCode?: number | null;
+  };
 } = {}): GithubCommandDependencies => {
   const succeed = (stdout: unknown) =>
     Effect.gen(function* () {
@@ -48,6 +55,14 @@ const createDependencies = ({
         return succeed(pullRequestViewResponse);
       }
       if (command.includes("pr checks")) {
+        if (checksResponse) {
+          return Effect.succeed({
+            ok: checksResponse.ok,
+            stdout: JSON.stringify(checksResponse.stdout),
+            stderr: checksResponse.stderr ?? "",
+            exitCode: checksResponse.exitCode,
+          });
+        }
         return succeed([
           {
             name: "lint",
@@ -647,5 +662,105 @@ describe("createGithubPullRequestReviewProvider", () => {
     );
 
     expect(commandActivity.maxActive).toBe(3);
+  });
+
+  test("loads pending checks from gh exit code 8", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          checksResponse: {
+            ok: false,
+            exitCode: 8,
+            stdout: [
+              {
+                name: "build",
+                workflow: "CI",
+                state: "IN_PROGRESS",
+                bucket: "pending",
+                link: "https://github.com/openai/openducktor/actions/runs/3",
+              },
+            ],
+          },
+        }),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.aggregateStatus).toBe("pending");
+    expect(context.checks).toMatchObject([
+      { name: "build", status: "in_progress", conclusion: null },
+    ]);
+  });
+
+  test("maps the gh cancel bucket to a cancelled check", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          checksResponse: {
+            ok: true,
+            stdout: [
+              {
+                name: "build",
+                workflow: "CI",
+                state: "COMPLETED",
+                bucket: "cancel",
+                link: "https://github.com/openai/openducktor/actions/runs/4",
+              },
+            ],
+          },
+        }),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.aggregateStatus).toBe("failure");
+    expect(context.checks[0]?.conclusion).toBe("cancelled");
+  });
+
+  test("rejects non-pending gh checks failures", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+
+    await expect(
+      Effect.runPromise(
+        provider.read({
+          dependencies: createDependencies({
+            checksResponse: {
+              ok: false,
+              exitCode: 1,
+              stdout: [],
+              stderr: "authentication failed",
+            },
+          }),
+          repoPath: "/repo",
+          context: {
+            repository: { host: "github.com", owner: "openai", name: "openducktor" },
+            remoteName: "origin",
+          },
+          pullRequestNumber: 42,
+        }),
+      ),
+    ).rejects.toThrow("authentication failed");
   });
 });

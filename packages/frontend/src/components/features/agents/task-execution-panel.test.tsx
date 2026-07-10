@@ -635,7 +635,6 @@ describe("TaskExecutionPanel", () => {
       },
       {
         rootPath: "/repo/.worktrees/task-12",
-        paths: ["package.json", "apps/web.ts", "README.md"],
         entries: [
           {
             kind: "file",
@@ -670,7 +669,6 @@ describe("TaskExecutionPanel", () => {
     fileTreeSelectedPaths = ["src/old.ts"];
     const fileTree: WorkspaceFileTree = {
       rootPath: "/repo/.worktrees/task-12",
-      paths: ["src/old.ts"],
       entries: [
         {
           kind: "file",
@@ -725,7 +723,6 @@ describe("TaskExecutionPanel", () => {
     const requestedRoot = "/repo/symlinked-worktree";
     const fileTree: WorkspaceFileTree = {
       rootPath: "/private/repo/worktree",
-      paths: ["src/index.ts"],
       entries: [
         {
           kind: "file",

@@ -64,6 +64,7 @@ const createSnapshot = (gitConflictId: string | null) => ({
     gitConflict: null,
     worktreePath: null,
     targetBranch: "origin/main",
+    upstreamStatus: "tracking",
     hashVersion: null,
     statusHash: null,
     diffHash: null,
@@ -80,6 +81,15 @@ const createSnapshot = (gitConflictId: string | null) => ({
     effectiveTargetBranch: "origin/main",
     selectionValue: "origin/main",
     displayTargetBranch: "origin/main",
+  },
+  worktree: {
+    path: "/repo/.worktrees/task-1",
+    status: "ready",
+    error: null,
+    retry: async () => {},
+    isResolving: false,
+    shouldBlockDiffLoading: false,
+    resolutionTaskId: null,
   },
   devServerModel: {
     mode: "stopped",

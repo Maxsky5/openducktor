@@ -68,7 +68,12 @@ export function TaskExecutionCiChecksList({
         {checks.length === 0 ? (
           <div className="px-4 py-4 text-sm text-muted-foreground">No checks reported.</div>
         ) : (
-          checks.map((check) => <TaskExecutionCiCheckCard key={check.name} check={check} />)
+          checks.map((check, index) => (
+            <TaskExecutionCiCheckCard
+              key={`${check.workflow ?? ""}:${check.name}:${check.url ?? check.startedAt ?? index}`}
+              check={check}
+            />
+          ))
         )}
       </div>
     </details>

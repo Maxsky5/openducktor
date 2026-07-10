@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import { loadChangedFiles } from "../../infrastructure/git/git-changed-files";
 import {
   createDefaultGitRunner,
   type GitCommandRunner,
@@ -144,6 +145,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     getStatus(workingDirectory) {
       return getStatusUnchecked(runner, workingDirectory);
+    },
+    listChangedFiles(workingDirectory, targetBranch) {
+      return loadChangedFiles(runner, workingDirectory, targetBranch);
     },
     getDiff(workingDirectory, targetBranch) {
       return Effect.gen(function* () {

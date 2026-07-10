@@ -166,23 +166,27 @@ export function buildAgentsPageDiffModel({
 
 export const resolveTaskExecutionFileExplorerRoot = ({
   workspaceRepoPath,
-  selectedSessionIdentity,
+  contextMode,
+  worktreePath,
+  isWorktreeResolving,
+  worktreeError,
 }: {
   workspaceRepoPath: string | null;
-  selectedSessionIdentity: BuildToolsSelectedView["selectedSession"]["identity"];
+  contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
+  worktreePath: string | null;
+  isWorktreeResolving: boolean;
+  worktreeError: string | null;
 }): FileExplorerRoot => {
-  if (selectedSessionIdentity) {
-    const workingDirectory = selectedSessionIdentity.workingDirectory;
-    if (typeof workingDirectory === "string" && workingDirectory.trim().length > 0) {
-      return {
-        rootPath: workingDirectory,
-        unavailableReason: null,
-      };
+  if (contextMode === "worktree") {
+    if (worktreePath) {
+      return { rootPath: worktreePath, unavailableReason: null };
     }
-
+    if (isWorktreeResolving) {
+      return { rootPath: null, unavailableReason: "Resolving task worktree..." };
+    }
     return {
       rootPath: null,
-      unavailableReason: "Selected session has no working directory.",
+      unavailableReason: worktreeError ?? "Task worktree is unavailable.",
     };
   }
 
@@ -197,6 +201,23 @@ export const resolveTaskExecutionFileExplorerRoot = ({
     rootPath: null,
     unavailableReason: "No repository is selected.",
   };
+};
+
+export const resolveTaskExecutionFileExplorerTargetBranch = ({
+  contextMode,
+  targetBranch,
+  upstreamStatus,
+}: {
+  contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
+  targetBranch: string | null;
+  upstreamStatus: ReturnType<
+    typeof useAgentStudioBuildToolsWorktreeSnapshot
+  >["diffData"]["upstreamStatus"];
+}): string | null => {
+  if (contextMode === "repository" && upstreamStatus !== "tracking") {
+    return null;
+  }
+  return targetBranch;
 };
 
 export function useAgentsPageRightPanelModel({
@@ -309,19 +330,40 @@ export function useAgentsPageRightPanelModel({
     () =>
       resolveTaskExecutionFileExplorerRoot({
         workspaceRepoPath,
-        selectedSessionIdentity: selectedView.selectedSession.identity,
+        contextMode: buildToolsSnapshot.gitPanelContextMode,
+        worktreePath: buildToolsSnapshot.worktree.path,
+        isWorktreeResolving: buildToolsSnapshot.worktree.isResolving,
+        worktreeError: buildToolsSnapshot.worktree.error,
       }),
-    [selectedView.selectedSession.identity, workspaceRepoPath],
+    [
+      buildToolsSnapshot.gitPanelContextMode,
+      buildToolsSnapshot.worktree.error,
+      buildToolsSnapshot.worktree.isResolving,
+      buildToolsSnapshot.worktree.path,
+      workspaceRepoPath,
+    ],
   );
+  const fileExplorerTargetBranch = resolveTaskExecutionFileExplorerTargetBranch({
+    contextMode: buildToolsSnapshot.gitPanelContextMode,
+    targetBranch: diffData.targetBranch ?? null,
+    upstreamStatus: diffData.upstreamStatus,
+  });
   const fileExplorerModel = useMemo(
     () => ({
       ...fileExplorerRoot,
-      targetBranch: diffData.targetBranch ?? null,
+      targetBranch: fileExplorerTargetBranch,
       isActive: activeTabId === "file_explorer" && isPanelOpen,
       selectedFile,
       onSelectFile,
     }),
-    [activeTabId, diffData.targetBranch, fileExplorerRoot, isPanelOpen, onSelectFile, selectedFile],
+    [
+      activeTabId,
+      fileExplorerRoot,
+      fileExplorerTargetBranch,
+      isPanelOpen,
+      onSelectFile,
+      selectedFile,
+    ],
   );
   const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
   const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");

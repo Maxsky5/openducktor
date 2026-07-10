@@ -23,6 +23,7 @@ import {
   type ResolvedPullRequest,
   repositoryKey,
 } from "./github-pull-request-model";
+import { runGithubRepositoryCommandAllowFailure } from "./github-repository-command";
 
 export {
   GITHUB_PROVIDER_ID,
@@ -198,11 +199,6 @@ export const runGithubCommand = (
       }),
     );
   });
-const githubRepositorySelector = (repository: GitProviderRepository): string => {
-  const host = repository.host.trim();
-  const prefix = host.toLowerCase() === "github.com" ? "" : `${host}/`;
-  return `${prefix}${repository.owner.trim()}/${repository.name.trim()}`;
-};
 export const runGithubRepositoryCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
@@ -210,14 +206,11 @@ export const runGithubRepositoryCommand = (
   args: string[],
 ) =>
   Effect.gen(function* () {
-    const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    const result = yield* runGithubCliCommand(
-      githubCommand.systemCommands,
-      githubCommand.ghCommand,
-      [...args, "--repo", githubRepositorySelector(repository)],
-      {
-        cwd: repoPath,
-      },
+    const result = yield* runGithubRepositoryCommandAllowFailure(
+      dependencies,
+      repoPath,
+      repository,
+      args,
     );
     if (result.ok) {
       return result.stdout;

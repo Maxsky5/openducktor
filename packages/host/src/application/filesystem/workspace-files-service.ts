@@ -108,7 +108,8 @@ const isContainedPath = (
   canonicalCandidate: string,
 ): boolean => {
   const relative = filesystem.relative(canonicalRoot, canonicalCandidate);
-  return relative === "" || (!relative.startsWith("..") && !isAbsolutePathLike(relative));
+  const firstSegment = relative.split(/[\\/]/, 1)[0];
+  return relative === "" || (firstSegment !== ".." && !isAbsolutePathLike(relative));
 };
 
 const canonicalizeContainedFile = (
@@ -146,6 +147,27 @@ const normalizeGitStatus = (status: string | null | undefined): WorkspaceFileGit
     return status as WorkspaceFileGitStatus;
   }
   return "modified";
+};
+const GIT_STATUS_PRIORITY: Record<WorkspaceFileGitStatus, number> = {
+  ignored: 0,
+  modified: 1,
+  untracked: 2,
+  added: 3,
+  renamed: 4,
+  deleted: 5,
+};
+
+const mergeGitStatus = (
+  current: WorkspaceFileGitStatus | null | undefined,
+  candidate: WorkspaceFileGitStatus | null,
+): WorkspaceFileGitStatus | null => {
+  if (!current) {
+    return candidate;
+  }
+  if (!candidate) {
+    return current;
+  }
+  return GIT_STATUS_PRIORITY[candidate] > GIT_STATUS_PRIORITY[current] ? candidate : current;
 };
 
 const directoryPathsForFiles = (filePaths: readonly string[]): string[] => {
@@ -214,8 +236,8 @@ export const createWorkspaceFilesService = (
           }),
         ),
       );
-      const targetDiffs = input.targetBranch
-        ? yield* gitPort.getDiff(canonicalRoot, input.targetBranch).pipe(
+      const targetChanges = input.targetBranch
+        ? yield* gitPort.listChangedFiles(canonicalRoot, input.targetBranch).pipe(
             Effect.mapError((cause) =>
               toHostValidationError(
                 cause,
@@ -237,20 +259,22 @@ export const createWorkspaceFilesService = (
       );
       const filePathSet = new Set(listedFilePaths);
       const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
-      for (const diff of targetDiffs) {
-        filePathSet.add(diff.file);
-        gitStatusByPath.set(diff.file, normalizeGitStatus(diff.type));
+      for (const change of targetChanges) {
+        filePathSet.add(change.path);
+        gitStatusByPath.set(
+          change.path,
+          mergeGitStatus(gitStatusByPath.get(change.path), normalizeGitStatus(change.status)),
+        );
       }
       for (const status of statuses) {
         filePathSet.add(status.path);
-        gitStatusByPath.set(status.path, normalizeGitStatus(status.status));
+        gitStatusByPath.set(
+          status.path,
+          mergeGitStatus(gitStatusByPath.get(status.path), normalizeGitStatus(status.status)),
+        );
       }
       const filePaths = [...filePathSet].sort(compareWorkspacePaths);
       const directoryPaths = directoryPathsForFiles(filePaths);
-      const paths = [
-        ...directoryPaths.map((directoryPath) => `${directoryPath}/`),
-        ...filePaths,
-      ].sort(compareWorkspacePaths);
       const entries: WorkspaceFileTreeEntry[] = [
         ...directoryPaths.map((directoryPath) => ({
           path: directoryPath,
@@ -287,7 +311,6 @@ export const createWorkspaceFilesService = (
       }
       return workspaceFileTreeSchema.parse({
         rootPath: canonicalRoot,
-        paths,
         entries,
       });
     });

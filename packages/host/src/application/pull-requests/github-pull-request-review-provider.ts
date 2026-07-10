@@ -11,11 +11,13 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { combinedCommandOutput } from "../tasks/support/github-pull-request-model";
 import type {
   GithubCommandDependencies,
   GithubPullRequestContext,
 } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommand } from "../tasks/support/github-pull-requests";
+import { runGithubRepositoryCommandAllowFailure } from "../tasks/support/github-repository-command";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
@@ -168,7 +170,7 @@ const normalizeCheckConclusion = (
   if (value === "fail" || value === "failure" || value === "failed" || value === "error") {
     return "failure";
   }
-  if (value === "cancelled" || value === "canceled") {
+  if (value === "cancel" || value === "cancelled" || value === "canceled") {
     return "cancelled";
   }
   if (value === "skipping" || value === "skipped") {
@@ -347,13 +349,32 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
                 }),
             ),
           ),
-          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.context.repository, [
-            "pr",
-            "checks",
-            String(input.pullRequestNumber),
-            "--json",
-            "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
-          ]).pipe(
+          runGithubRepositoryCommandAllowFailure(
+            input.dependencies,
+            input.repoPath,
+            input.context.repository,
+            [
+              "pr",
+              "checks",
+              String(input.pullRequestNumber),
+              "--json",
+              "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
+            ],
+          ).pipe(
+            Effect.flatMap((result) => {
+              if (result.ok || result.exitCode === 8) {
+                return Effect.succeed(result.stdout);
+              }
+              return Effect.fail(
+                new HostValidationError({
+                  field: "github.checks",
+                  message:
+                    combinedCommandOutput(result.stdout, result.stderr) ||
+                    "Unable to read GitHub pull request checks.",
+                  details: { pullRequestNumber: input.pullRequestNumber },
+                }),
+              );
+            }),
             Effect.mapError(
               (cause) =>
                 new HostValidationError({

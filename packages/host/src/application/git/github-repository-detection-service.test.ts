@@ -121,6 +121,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    listChangedFiles() {
+      return Effect.succeed([]);
+    },
     getDiff() {
       return Effect.tryPromise({
         try: async () => {

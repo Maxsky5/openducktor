@@ -11,6 +11,7 @@ export type SystemCommandRunResult = {
   ok: boolean;
   stdout: string;
   stderr: string;
+  exitCode?: number | null;
 };
 
 export type SystemCommandResolveOptions = {

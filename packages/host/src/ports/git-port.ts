@@ -38,6 +38,10 @@ export type GitRemote = {
   name: string;
   url: string;
 };
+export type GitChangedFile = {
+  path: string;
+  status: string;
+};
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
@@ -96,6 +100,10 @@ export type GitPort = {
   listFiles(workingDir: string): Effect.Effect<string[], GitPortError>;
   getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
   getStatus(workingDir: string): Effect.Effect<FileStatus[], GitPortError>;
+  listChangedFiles(
+    workingDir: string,
+    targetBranch: string,
+  ): Effect.Effect<GitChangedFile[], GitPortError>;
   getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;
   getWorktreeStatusData(
     workingDir: string,

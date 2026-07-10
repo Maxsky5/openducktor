@@ -22,7 +22,6 @@ describe("workspaceFileTreeQueryOptions", () => {
         inputs.push(input);
         return {
           rootPath: "/repo",
-          paths: [],
           entries: [],
         };
       },

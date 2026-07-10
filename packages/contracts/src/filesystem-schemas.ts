@@ -38,7 +38,6 @@ export type WorkspaceFileTreeEntry = z.infer<typeof workspaceFileTreeEntrySchema
 
 export const workspaceFileTreeSchema = z.object({
   rootPath: z.string().min(1),
-  paths: z.array(z.string().min(1)),
   entries: z.array(workspaceFileTreeEntrySchema),
 });
 export type WorkspaceFileTree = z.infer<typeof workspaceFileTreeSchema>;

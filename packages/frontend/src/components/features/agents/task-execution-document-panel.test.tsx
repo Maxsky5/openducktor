@@ -66,6 +66,42 @@ describe("TaskExecutionDocumentPanel", () => {
     expect(html).not.toContain('data-testid="expand-agent-studio-document"');
   });
 
+  test("renders loading state before an empty document has loaded", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionDocumentPanel, {
+        model: {
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document.",
+            emptyState: "No spec document yet.",
+            document: { ...emptyDoc, loaded: false, isLoading: true },
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Loading document...");
+    expect(html).not.toContain("No spec document yet.");
+  });
+
+  test("renders an actionable document load error", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionDocumentPanel, {
+        model: {
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document.",
+            emptyState: "No spec document yet.",
+            document: { ...emptyDoc, error: "Unable to load specification." },
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Unable to load specification.");
+    expect(html).not.toContain("No spec document yet.");
+  });
+
   test("renders empty panel when no role document is available", () => {
     const html = renderToStaticMarkup(
       createElement(TaskExecutionDocumentPanel, {
