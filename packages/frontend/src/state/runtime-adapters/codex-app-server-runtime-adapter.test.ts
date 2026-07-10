@@ -58,7 +58,10 @@ const configureCodexTestShellBridge = (
   configureShellBridge({
     client: {} as HostClient,
     subscribeRunEvents: async () => () => {},
-    subscribeDevServerEvents: async () => () => {},
+    subscribeDevServerEvents: async () => ({
+      transportEpoch: "test:0",
+      unsubscribe: () => {},
+    }),
     subscribeTaskEvents: async () => () => {},
     subscribeCodexAppServerEvents: async () => () => {},
     capabilities: {

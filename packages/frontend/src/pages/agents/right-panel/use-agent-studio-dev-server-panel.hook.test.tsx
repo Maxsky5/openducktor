@@ -30,12 +30,18 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
+let nextSubscriptionTransportEpoch = 0;
 let subscribeDevServerEventsMock = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
+): Promise<{ transportEpoch: string; unsubscribe: () => void }> => {
   devServerEventListener = listener;
-  return () => {
-    devServerEventListener = null;
+  const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
+  nextSubscriptionTransportEpoch += 1;
+  return {
+    transportEpoch,
+    unsubscribe: () => {
+      devServerEventListener = null;
+    },
   };
 };
 
@@ -59,10 +65,16 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+  nextSubscriptionTransportEpoch = 0;
   subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
     devServerEventListener = listener;
-    return () => {
-      devServerEventListener = null;
+    const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
+    nextSubscriptionTransportEpoch += 1;
+    return {
+      transportEpoch,
+      unsubscribe: () => {
+        devServerEventListener = null;
+      },
     };
   };
 });
@@ -1045,7 +1057,7 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("reopens with cached dev-server state while a fresh refetch completes", async () => {
+  test("does not reuse cached dev-server state across subscription sessions", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -1079,15 +1091,11 @@ describe("useAgentStudioDevServerPanel", () => {
       ],
     });
     const reopenFetch = createDeferred<DevServerGroupState>();
-    let phase: "initial" | "reopen" | "steady" = "initial";
+    let phase: "initial" | "reopen" = "initial";
 
     devServerGetState = async () => {
       if (phase === "reopen") {
         return reopenFetch.promise;
-      }
-
-      if (phase === "steady") {
-        return refreshedState;
       }
 
       return initialState;
@@ -1145,12 +1153,11 @@ describe("useAgentStudioDevServerPanel", () => {
       );
 
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.status).toBe("running");
+        expect(getLatest().scripts).toHaveLength(0);
+        expect(getLatest().mode).toBe("loading");
+        expect(getLatest().isLoading).toBe(true);
       });
-      expect(getLatest().mode).toBe("active");
-      expect(getLatest().isLoading).toBe(false);
 
-      phase = "steady";
       reopenFetch.resolve(refreshedState);
 
       await waitFor(() => {
@@ -1257,7 +1264,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1357,7 +1364,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1481,7 +1488,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1636,7 +1643,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
       await act(async () => {
         await queryClient?.refetchQueries({
-          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
           type: "active",
         });
@@ -1930,9 +1937,13 @@ describe("useAgentStudioDevServerPanel", () => {
     const taskTwoFetch = createDeferred<DevServerGroupState>();
     let didStartTaskTwoFetch = false;
 
-    queryClient.setQueryData(devServerQueryKeys.state("/repo-b", "task-2"), cachedTaskTwoState, {
-      updatedAt: 1,
-    });
+    queryClient.setQueryData(
+      devServerQueryKeys.state("/repo-b", "task-2", "test:1"),
+      cachedTaskTwoState,
+      {
+        updatedAt: 1,
+      },
+    );
     devServerGetState = async (repoPath, taskId) => {
       if (repoPath === "/repo-a" && taskId === "task-1") {
         return taskOneState;
@@ -1960,16 +1971,16 @@ describe("useAgentStudioDevServerPanel", () => {
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
       harness.update(currentArgs);
 
-      expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
-      expect(harness.getLatest().mode).toBe("active");
-      expect(harness.getLatest().isLoading).toBe(false);
+      expect(harness.getLatest().scripts).toEqual([]);
+      expect(harness.getLatest().mode).toBe("loading");
+      expect(harness.getLatest().isLoading).toBe(true);
 
       await waitFor(() => {
         expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
+        expect(didStartTaskTwoFetch).toBe(true);
       });
       expect(harness.getLatest().mode).toBe("active");
       expect(harness.getLatest().isLoading).toBe(false);
-      expect(didStartTaskTwoFetch).toBe(true);
 
       taskTwoFetch.resolve(freshTaskTwoState);
       await waitFor(() => {

@@ -2,10 +2,15 @@ import { createHostClient, type HostClient } from "@openducktor/host-client";
 
 export type HostEventListener = (payload: unknown) => void;
 
+export type DevServerEventSubscription = {
+  transportEpoch: string;
+  unsubscribe: () => void;
+};
+
 export type HostBridge = {
   client: HostClient;
   subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
-  subscribeDevServerEvents: (listener: HostEventListener) => Promise<() => void>;
+  subscribeDevServerEvents: (listener: HostEventListener) => Promise<DevServerEventSubscription>;
   subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeCodexAppServerEvents?: (listener: HostEventListener) => Promise<() => void>;
 };

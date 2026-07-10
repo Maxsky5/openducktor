@@ -49,19 +49,20 @@ type DevServerMutationOptions = {
 };
 
 type DevServerMutationContext = {
-  transportGeneration: number;
+  transportEpoch: string | null;
 };
 
 type DevServerPanelLocalState = {
   liveState: DevServerGroupState | null;
   actionError: string | null;
   subscriptionError: string | null;
-  transportGeneration: number;
+  subscriptionTaskMemoryKey: string | null;
+  transportEpoch: string | null;
 };
 
 type DevServerPanelAction =
   | { type: "scopeReset" }
-  | { type: "transportReconnected"; generation: number }
+  | { type: "transportReconnected"; transportEpoch: string }
   | { type: "liveStateChanged"; state: DevServerGroupState | null }
   | {
       type: "liveStateUpdated";
@@ -71,7 +72,7 @@ type DevServerPanelAction =
   | { type: "actionFailed"; error: string }
   | { type: "subscriptionFailed"; error: string }
   | { type: "eventsSynced" }
-  | { type: "subscriptionReady" };
+  | { type: "subscriptionReady"; taskMemoryKey: string; transportEpoch: string };
 
 const devServerPanelReducer = (
   state: DevServerPanelLocalState,
@@ -79,13 +80,20 @@ const devServerPanelReducer = (
 ): DevServerPanelLocalState => {
   switch (action.type) {
     case "scopeReset":
-      return { ...state, liveState: null, actionError: null, subscriptionError: null };
+      return {
+        ...state,
+        liveState: null,
+        actionError: null,
+        subscriptionError: null,
+        subscriptionTaskMemoryKey: null,
+        transportEpoch: null,
+      };
     case "transportReconnected":
       return {
         ...state,
         liveState: null,
         subscriptionError: null,
-        transportGeneration: action.generation,
+        transportEpoch: action.transportEpoch,
       };
     case "liveStateChanged":
       return { ...state, liveState: action.state };
@@ -100,7 +108,12 @@ const devServerPanelReducer = (
     case "eventsSynced":
       return { ...state, actionError: null, subscriptionError: null };
     case "subscriptionReady":
-      return { ...state, subscriptionError: null };
+      return {
+        ...state,
+        subscriptionError: null,
+        subscriptionTaskMemoryKey: action.taskMemoryKey,
+        transportEpoch: action.transportEpoch,
+      };
   }
 };
 
@@ -116,15 +129,23 @@ export function useAgentStudioDevServerPanel({
     liveState: null,
     actionError: null,
     subscriptionError: null,
-    transportGeneration: 0,
+    subscriptionTaskMemoryKey: null,
+    transportEpoch: null,
   });
-  const { liveState, actionError, subscriptionError, transportGeneration } = localState;
-  const transportGenerationRef = useRef(transportGeneration);
+  const { liveState, actionError, subscriptionError, subscriptionTaskMemoryKey, transportEpoch } =
+    localState;
+  const transportEpochRef = useRef(transportEpoch);
 
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
-  const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
+  const subscriptionEnabled =
+    enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
+  const queryEnabled =
+    subscriptionEnabled &&
+    taskMemoryKey !== null &&
+    taskMemoryKey === subscriptionTaskMemoryKey &&
+    transportEpoch !== null;
   const activeTaskScope = useMemo(
     () => createDevServerTaskScope(repoPath, taskId),
     [repoPath, taskId],
@@ -149,7 +170,7 @@ export function useAgentStudioDevServerPanel({
       taskId,
       queryEnabled,
       liveState,
-      transportGeneration,
+      transportEpoch,
     });
 
   const { effectiveSelectedScriptId, onSelectScript, resetSelectedScript, selectedScriptIdRef } =
@@ -160,20 +181,22 @@ export function useAgentStudioDevServerPanel({
     });
 
   const requestTerminalRehydrate = useCallback((): void => {
-    if (!repoPath || !taskId) {
+    const activeTransportEpoch = transportEpochRef.current;
+    if (!repoPath || !taskId || !activeTransportEpoch) {
       return;
     }
 
     void queryClient.refetchQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId, transportGeneration),
+      queryKey: devServerQueryKeys.state(repoPath, taskId, activeTransportEpoch),
       exact: true,
       type: "active",
     });
-  }, [queryClient, repoPath, taskId, transportGeneration]);
+  }, [queryClient, repoPath, taskId]);
 
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
-      if (!repoPath || !taskId) {
+      const activeTransportEpoch = transportEpochRef.current;
+      if (!repoPath || !taskId || !activeTransportEpoch) {
         return;
       }
 
@@ -183,7 +206,7 @@ export function useAgentStudioDevServerPanel({
       markMutationReplayObserved(event);
 
       if (event.type !== "terminal_chunk") {
-        const queryKey = devServerQueryKeys.state(repoPath, taskId, transportGeneration);
+        const queryKey = devServerQueryKeys.state(repoPath, taskId, activeTransportEpoch);
         const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
         dispatchLocalState({
           type: "liveStateUpdated",
@@ -208,7 +231,6 @@ export function useAgentStudioDevServerPanel({
       repoPath,
       selectedScriptIdRef,
       taskId,
-      transportGeneration,
     ],
   );
 
@@ -217,18 +239,20 @@ export function useAgentStudioDevServerPanel({
     previousTaskMemoryKeyRef.current = taskMemoryKey;
 
     if (scopeChanged) {
+      transportEpochRef.current = null;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
     }
 
-    if (!queryEnabled) {
+    if (!subscriptionEnabled) {
+      transportEpochRef.current = null;
       clearTerminalBuffers();
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
       return;
     }
 
-    if (queryData) {
+    if (queryEnabled && queryData) {
       if (hydrateTerminalBuffersFromState(queryData, effectiveSelectedScriptId)) {
         dispatchLocalState({ type: "liveStateChanged", state: queryData });
       }
@@ -240,6 +264,7 @@ export function useAgentStudioDevServerPanel({
     queryData,
     queryEnabled,
     resetSelectedScript,
+    subscriptionEnabled,
     taskMemoryKey,
   ]);
 
@@ -262,49 +287,45 @@ export function useAgentStudioDevServerPanel({
   );
 
   const syncMutationSuccessState = useCallback(
-    (nextState: DevServerGroupState): void => {
+    (nextState: DevServerGroupState, mutationTransportEpoch: string): void => {
       const isActiveState = nextState.repoPath === repoPath && nextState.taskId === taskId;
       if (isActiveState && !syncQueryState(nextState)) {
         return;
       }
       queryClient.setQueryData(
-        devServerQueryKeys.state(nextState.repoPath, nextState.taskId, transportGeneration),
+        devServerQueryKeys.state(nextState.repoPath, nextState.taskId, mutationTransportEpoch),
         nextState,
       );
     },
-    [queryClient, repoPath, syncQueryState, taskId, transportGeneration],
+    [queryClient, repoPath, syncQueryState, taskId],
   );
 
-  const restoreCachedState = useCallback((): void => {
-    if (!repoPath || !taskId) {
-      return;
-    }
+  const restoreCachedState = useCallback(
+    (mutationTransportEpoch: string): void => {
+      if (!repoPath || !taskId) {
+        return;
+      }
 
-    const cachedState =
-      queryClient.getQueryData<DevServerGroupState>(
-        devServerQueryKeys.state(repoPath, taskId, transportGeneration),
-      ) ?? null;
-    if (replaceTerminalBuffersFromState(cachedState, selectedScriptIdRef.current)) {
-      dispatchLocalState({ type: "liveStateChanged", state: cachedState });
-    }
-  }, [
-    queryClient,
-    repoPath,
-    replaceTerminalBuffersFromState,
-    selectedScriptIdRef,
-    taskId,
-    transportGeneration,
-  ]);
+      const cachedState =
+        queryClient.getQueryData<DevServerGroupState>(
+          devServerQueryKeys.state(repoPath, taskId, mutationTransportEpoch),
+        ) ?? null;
+      if (replaceTerminalBuffersFromState(cachedState, selectedScriptIdRef.current)) {
+        dispatchLocalState({ type: "liveStateChanged", state: cachedState });
+      }
+    },
+    [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId],
+  );
 
   const invalidateState = useCallback(
-    (scope: DevServerTaskScope): void => {
+    (scope: DevServerTaskScope, mutationTransportEpoch: string): void => {
       void queryClient.invalidateQueries({
-        queryKey: devServerQueryKeys.state(scope.repoPath, scope.taskId, transportGeneration),
+        queryKey: devServerQueryKeys.state(scope.repoPath, scope.taskId, mutationTransportEpoch),
         exact: true,
         refetchType: "active",
       });
     },
-    [queryClient, transportGeneration],
+    [queryClient],
   );
 
   const createScopedMutationOptions = useCallback(
@@ -316,7 +337,7 @@ export function useAgentStudioDevServerPanel({
           beginMutationReplaySync(effectiveState);
         }
         return {
-          transportGeneration: transportGenerationRef.current,
+          transportEpoch: transportEpochRef.current,
         } satisfies DevServerMutationContext;
       },
       onSuccess: (
@@ -324,23 +345,23 @@ export function useAgentStudioDevServerPanel({
         _scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
-        if (context?.transportGeneration !== transportGenerationRef.current) {
+        if (!context?.transportEpoch || context.transportEpoch !== transportEpochRef.current) {
           return;
         }
-        syncMutationSuccessState(data);
+        syncMutationSuccessState(data, context.transportEpoch);
       },
       onError: (
         error: unknown,
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
-        if (context?.transportGeneration !== transportGenerationRef.current) {
+        if (!context?.transportEpoch || context.transportEpoch !== transportEpochRef.current) {
           return;
         }
         if (isActiveMutationScope(scope)) {
           cancelMutationReplaySync();
           if (options.restoreCachedStateOnError) {
-            restoreCachedState();
+            restoreCachedState(context.transportEpoch);
           }
           dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
         }
@@ -351,8 +372,12 @@ export function useAgentStudioDevServerPanel({
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
-        if (error && context?.transportGeneration === transportGenerationRef.current) {
-          invalidateState(scope);
+        if (
+          error &&
+          context?.transportEpoch &&
+          context.transportEpoch === transportEpochRef.current
+        ) {
+          invalidateState(scope, context.transportEpoch);
         }
       },
     }),
@@ -405,7 +430,7 @@ export function useAgentStudioDevServerPanel({
   );
 
   useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
+    if (!subscriptionEnabled || repoPath === null || taskId === null || taskMemoryKey === null) {
       return;
     }
 
@@ -413,14 +438,17 @@ export function useAgentStudioDevServerPanel({
     let unsubscribe: (() => void) | null = null;
 
     void subscribeDevServerEvents((payload) => {
+      if (cancelled) {
+        return;
+      }
+
       if (isDevServerSubscriptionControlEvent(payload)) {
         if (payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-          const nextTransportGeneration = transportGenerationRef.current + 1;
-          transportGenerationRef.current = nextTransportGeneration;
+          transportEpochRef.current = payload.transportEpoch;
           clearTerminalBuffers();
           dispatchLocalState({
             type: "transportReconnected",
-            generation: nextTransportGeneration,
+            transportEpoch: payload.transportEpoch,
           });
           return;
         }
@@ -458,15 +486,20 @@ export function useAgentStudioDevServerPanel({
       syncStateFromEvent(event);
       dispatchLocalState({ type: "eventsSynced" });
     })
-      .then((cleanup) => {
+      .then((subscription) => {
         if (cancelled) {
-          cleanup();
+          subscription.unsubscribe();
           return;
         }
 
-        unsubscribe = cleanup;
-        dispatchLocalState({ type: "subscriptionReady" });
-        requestTerminalRehydrate();
+        unsubscribe = subscription.unsubscribe;
+        transportEpochRef.current = subscription.transportEpoch;
+        clearTerminalBuffers();
+        dispatchLocalState({
+          type: "subscriptionReady",
+          taskMemoryKey,
+          transportEpoch: subscription.transportEpoch,
+        });
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -480,39 +513,41 @@ export function useAgentStudioDevServerPanel({
     };
   }, [
     clearTerminalBuffers,
-    queryEnabled,
     repoPath,
     requestTerminalRehydrate,
+    subscriptionEnabled,
     syncStateFromEvent,
     taskId,
+    taskMemoryKey,
   ]);
 
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
   const isStartPending =
     startMutation.isPending &&
-    startMutation.context?.transportGeneration === transportGeneration &&
+    startMutation.context?.transportEpoch === transportEpoch &&
     isActiveMutationScope(startMutation.variables);
   const isStopPending =
     stopMutation.isPending &&
-    stopMutation.context?.transportGeneration === transportGeneration &&
+    stopMutation.context?.transportEpoch === transportEpoch &&
     isActiveMutationScope(stopMutation.variables);
   const isRestartPending =
     restartMutation.isPending &&
-    restartMutation.context?.transportGeneration === transportGeneration &&
+    restartMutation.context?.transportEpoch === transportEpoch &&
     isActiveMutationScope(restartMutation.variables);
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
     isStartPending || isRestartPending,
   );
   const hasAvailableScripts = (effectiveState?.scripts.length ?? 0) > 0 || hasConfiguredScripts;
+  const isAwaitingSubscription = subscriptionEnabled && !queryEnabled && subscriptionError === null;
 
   const mode: AgentStudioDevServerPanelMode = useMemo(() => {
     if (!hasAvailableScripts) {
       return "empty";
     }
 
-    if (isAwaitingFreshState) {
+    if (isAwaitingSubscription || isAwaitingFreshState) {
       return "loading";
     }
 
@@ -525,7 +560,13 @@ export function useAgentStudioDevServerPanel({
     }
 
     return "stopped";
-  }, [effectiveState, hasAvailableScripts, isAwaitingFreshState, isExpanded]);
+  }, [
+    effectiveState,
+    hasAvailableScripts,
+    isAwaitingFreshState,
+    isAwaitingSubscription,
+    isExpanded,
+  ]);
 
   const error =
     actionError ?? subscriptionError ?? (stateQuery.error ? errorMessage(stateQuery.error) : null);
@@ -540,7 +581,7 @@ export function useAgentStudioDevServerPanel({
   return {
     mode,
     isExpanded,
-    isLoading: isAwaitingFreshState || stateQuery.isLoading,
+    isLoading: isAwaitingSubscription || isAwaitingFreshState || stateQuery.isLoading,
     disabledReason,
     repoPath,
     taskId,

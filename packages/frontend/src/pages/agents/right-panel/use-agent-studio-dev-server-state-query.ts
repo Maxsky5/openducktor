@@ -7,7 +7,7 @@ type UseAgentStudioDevServerStateQueryArgs = {
   taskId: string | null;
   queryEnabled: boolean;
   liveState: DevServerGroupState | null;
-  transportGeneration: number;
+  transportEpoch: string | null;
 };
 
 export function useAgentStudioDevServerStateQuery({
@@ -15,12 +15,12 @@ export function useAgentStudioDevServerStateQuery({
   taskId,
   queryEnabled,
   liveState,
-  transportGeneration,
+  transportEpoch,
 }: UseAgentStudioDevServerStateQueryArgs) {
   const queryOptions =
-    repoPath && taskId
-      ? devServerGroupStateQueryOptions(repoPath, taskId, transportGeneration)
-      : devServerGroupStateQueryOptions("__disabled__", "__disabled__", transportGeneration);
+    repoPath && taskId && transportEpoch
+      ? devServerGroupStateQueryOptions(repoPath, taskId, transportEpoch)
+      : devServerGroupStateQueryOptions("__disabled__", "__disabled__", "disabled");
   const stateQuery = useQuery({
     ...queryOptions,
     enabled: queryEnabled,

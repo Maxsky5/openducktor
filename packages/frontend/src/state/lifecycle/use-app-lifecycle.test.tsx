@@ -597,6 +597,7 @@ describe("useAppLifecycle", () => {
         subscribedTaskListener?.({
           __openducktorBrowserLive: true,
           kind: "reconnected",
+          transportEpoch: "task-events:1",
         });
         await Promise.resolve();
       });

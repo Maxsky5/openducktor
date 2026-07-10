@@ -15,6 +15,11 @@ import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-te
 
 const actualHostClientModule = await import("@/lib/host-client");
 
+type TestDevServerEventSubscription = {
+  transportEpoch: string;
+  unsubscribe: () => void;
+};
+
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
 }
@@ -28,12 +33,16 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
+let subscriptionTransportEpoch = "test:0";
 let subscribeDevServerEventsMock = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
+): Promise<TestDevServerEventSubscription> => {
   devServerEventListener = listener;
-  return () => {
-    devServerEventListener = null;
+  return {
+    transportEpoch: subscriptionTransportEpoch,
+    unsubscribe: () => {
+      devServerEventListener = null;
+    },
   };
 };
 
@@ -57,10 +66,14 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+  subscriptionTransportEpoch = "test:0";
   subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
     devServerEventListener = listener;
-    return () => {
-      devServerEventListener = null;
+    return {
+      transportEpoch: subscriptionTransportEpoch,
+      unsubscribe: () => {
+        devServerEventListener = null;
+      },
     };
   };
 });
@@ -173,7 +186,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
-  test("rehydrates full buffered terminal replay when the dev-server subscription first becomes ready", async () => {
+  test("hydrates full buffered terminal replay after the dev-server subscription becomes ready", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -186,15 +199,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       data: `subscription-gap output ${sequence}\r\n`,
       timestamp: "2026-03-19T15:31:00.000Z",
     }));
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-        }),
-      ],
-    });
     const refreshedState = buildState({
       updatedAt: "2026-03-19T15:31:00.000Z",
       scripts: [
@@ -209,9 +213,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     let getStateCalls = 0;
     devServerGetState = async () => {
       getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : refreshedState;
+      return refreshedState;
     };
-    const subscriptionReady = createDeferred<() => void>();
+    const subscriptionReady = createDeferred<TestDevServerEventSubscription>();
     subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
       devServerEventListener = listener;
       return subscriptionReady.promise;
@@ -225,13 +229,14 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     });
 
     try {
-      await waitFor(() => {
-        expect(harness.getLatest().mode).toBe("active");
-      });
-      expect(getStateCalls).toBe(1);
+      expect(harness.getLatest().mode).toBe("loading");
+      expect(getStateCalls).toBe(0);
 
-      subscriptionReady.resolve(() => {
-        devServerEventListener = null;
+      subscriptionReady.resolve({
+        transportEpoch: "test:0",
+        unsubscribe: () => {
+          devServerEventListener = null;
+        },
       });
 
       await waitFor(() => {
@@ -243,7 +248,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       expect(harness.getLatest().selectedScriptTerminalBuffer?.entries.at(-1)?.data).toBe(
         "subscription-gap output 299\r\n",
       );
-      expect(getStateCalls).toBe(2);
+      expect(getStateCalls).toBe(1);
     } finally {
       harness.unmount();
     }
@@ -299,12 +304,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       getStateCalls += 1;
       return getStateCalls === 1 ? initialState : staleRehydrate.promise;
     };
-    const subscriptionReady = createDeferred<() => void>();
-    subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
-      devServerEventListener = listener;
-      return subscriptionReady.promise;
-    };
-
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
       taskId: "task-7",
@@ -1046,6 +1045,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           __openducktorBrowserLive: true,
           kind: "reconnected",
+          transportEpoch: "test:1",
         });
       });
 
@@ -1060,7 +1060,133 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
-  test("binds query and mutation results to the browser transport generation", async () => {
+  test("rejects retired cache and callbacks when a fresh subscription opens on a new host", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+
+    const retiredHostState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          runId: "retired-run",
+          runOrder: { hostInstanceId: "host-retired", generation: 1 },
+          pid: 4141,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              runId: "retired-run",
+              runOrder: { hostInstanceId: "host-retired", generation: 1 },
+              sequence: 0,
+              data: "retired host\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const currentHostState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          runId: "current-run",
+          runOrder: { hostInstanceId: "host-current", generation: 1 },
+          pid: 5151,
+          startedAt: "2026-03-19T15:31:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              runId: "current-run",
+              runOrder: { hostInstanceId: "host-current", generation: 1 },
+              sequence: 0,
+              data: "current host\r\n",
+              timestamp: "2026-03-19T15:31:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const retiredRestart = createDeferred<DevServerGroupState>();
+    const queryClient = createQueryClient();
+    let activeHostState = retiredHostState;
+    devServerGetState = async () => activeHostState;
+    devServerRestart = async () => retiredRestart.promise;
+
+    const retiredHarness = renderDevServerPanelHook(
+      useAgentStudioDevServerPanel,
+      {
+        repoPath: "/repo",
+        taskId: "task-7",
+        repoSettings,
+        enabled: true,
+      },
+      { queryClient },
+    );
+
+    await waitFor(() => {
+      expect(retiredHarness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+        "retired host\r\n",
+      );
+    });
+    act(() => {
+      retiredHarness.getLatest().onRestart();
+    });
+    const retiredHostListener = devServerEventListener;
+    retiredHarness.unmount();
+
+    activeHostState = currentHostState;
+    subscriptionTransportEpoch = "test:1";
+    const currentHarness = renderDevServerPanelHook(
+      useAgentStudioDevServerPanel,
+      {
+        repoPath: "/repo",
+        taskId: "task-7",
+        repoSettings,
+        enabled: true,
+      },
+      { queryClient },
+    );
+
+    try {
+      expect(currentHarness.getLatest().selectedScriptTerminalBuffer).toBeNull();
+      await waitFor(() => {
+        expect(currentHarness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe(
+          "host-current",
+        );
+        expect(currentHarness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "current host\r\n",
+        );
+      });
+
+      await act(async () => {
+        retiredRestart.resolve(retiredHostState);
+        retiredHostListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            runId: "retired-run",
+            runOrder: { hostInstanceId: "host-retired", generation: 1 },
+            sequence: 1,
+            data: "late retired output\r\n",
+            timestamp: "2026-03-19T15:32:00.000Z",
+          },
+        });
+        await retiredRestart.promise;
+        await Promise.resolve();
+      });
+
+      expect(currentHarness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe("host-current");
+      expect(
+        currentHarness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+      ).toEqual(["current host\r\n"]);
+    } finally {
+      currentHarness.unmount();
+    }
+  });
+
+  test("binds query and mutation results to the browser transport epoch", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
 
     const staleInitialQuery = createDeferred<DevServerGroupState>();
@@ -1125,6 +1251,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           __openducktorBrowserLive: true,
           kind: "reconnected",
+          transportEpoch: "test:1",
         });
       });
 
@@ -1141,6 +1268,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           __openducktorBrowserLive: true,
           kind: "reconnected",
+          transportEpoch: "test:2",
         });
         staleRestart.resolve(
           buildState({
@@ -1174,7 +1302,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       await waitFor(() => {
         const staleQuery = queryClient.getQueryCache().find({
-          queryKey: devServerQueryKeys.state("/repo", "task-7", 0),
+          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
           exact: true,
         });
         const hasSettledStaleMutation = queryClient

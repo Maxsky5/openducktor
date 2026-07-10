@@ -63,7 +63,7 @@ describe("electron shell bridge", () => {
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
-    const unsubscribeDevServerEvents = await bridge.subscribeDevServerEvents(listener);
+    const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const unsubscribeTaskEvents = await bridge.subscribeTaskEvents(listener);
     const unsubscribeCodexAppServerEvents = await bridge.subscribeCodexAppServerEvents(listener);
 
@@ -80,7 +80,8 @@ describe("electron shell bridge", () => {
     );
 
     unsubscribeRunEvents();
-    unsubscribeDevServerEvents();
+    expect(devServerSubscription.transportEpoch).toMatch(/^electron:\d+$/);
+    devServerSubscription.unsubscribe();
     unsubscribeTaskEvents();
     unsubscribeCodexAppServerEvents();
     expect(unsubscribeSpy).toHaveBeenCalledTimes(4);

@@ -6,17 +6,17 @@ const DEV_SERVER_STATE_STALE_TIME_MS = 5_000;
 
 export const devServerQueryKeys = {
   all: ["dev-servers"] as const,
-  state: (repoPath: string, taskId: string, transportGeneration = 0) =>
-    [...devServerQueryKeys.all, "state", repoPath, taskId, transportGeneration] as const,
+  state: (repoPath: string, taskId: string, transportEpoch: string) =>
+    [...devServerQueryKeys.all, "state", repoPath, taskId, transportEpoch] as const,
 };
 
 export const devServerGroupStateQueryOptions = (
   repoPath: string,
   taskId: string,
-  transportGeneration = 0,
+  transportEpoch: string,
 ) =>
   queryOptions({
-    queryKey: devServerQueryKeys.state(repoPath, taskId, transportGeneration),
+    queryKey: devServerQueryKeys.state(repoPath, taskId, transportEpoch),
     queryFn: (): Promise<DevServerGroupState> => host.devServerGetState(repoPath, taskId),
     staleTime: DEV_SERVER_STATE_STALE_TIME_MS,
   });
