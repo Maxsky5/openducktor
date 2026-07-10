@@ -483,22 +483,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
-      "Resolve the current git conflict in this worktree without losing intended behavior.",
-      lineSection("Git context", [
-        "- operation: {{git.operationLabel}}",
-        "- currentBranch: {{git.currentBranch}}",
-        "- targetBranch: {{git.targetBranch}}",
-        "- conflictedFiles:",
-        "{{git.conflictedFiles}}",
-        "- gitOutput:",
-        "{{git.conflictOutput}}",
-      ]),
-      bulletSection("Conflict workflow", [
-        "Understand both sides of the conflict and the interrupted operation before editing.",
-        "Resolve only the necessary conflicts, continue or complete the interrupted git operation, rerun the relevant checks for the touched code, and reply with a concise evidence-based summary.",
-      ]),
+      "Resolve the interrupted git operation in this worktree.",
+      "Before editing, inspect the live git state, relevant history, and task context. Understand why both sides changed, preserve compatible intent, and do not invent unrelated behavior.",
+      "Resolve only what is necessary and finish the interrupted operation. If completion is unsafe or blocked, surface the blocker; do not abort or hide it with a fallback.",
+      "Run the relevant repository checks, then reply with a concise, evidence-based summary of the resolution and verification.",
       "Use taskId {{task.id}} for any odt_* tool calls.",
     ),
   },
