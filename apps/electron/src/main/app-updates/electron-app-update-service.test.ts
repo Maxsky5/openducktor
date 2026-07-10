@@ -7,6 +7,7 @@ import {
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import {
   createElectronAppUpdateService,
+  DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
   type ElectronAppUpdaterAdapter,
   type ElectronUpdaterCheckResult,
   type ElectronUpdaterConfigureOptions,
@@ -81,6 +82,44 @@ class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
 }
 
 const fixedNow = "2026-07-08T22:00:00.000Z";
+
+type FakeScheduledInterval = {
+  callback: () => void;
+  cleared: boolean;
+  intervalMs: number;
+};
+
+const flushAsyncWork = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const createFakeScheduler = () => {
+  const intervals: FakeScheduledInterval[] = [];
+  const scheduler = {
+    setInterval(callback: () => void, intervalMs: number): FakeScheduledInterval {
+      const interval = { callback, cleared: false, intervalMs };
+      intervals.push(interval);
+      return interval;
+    },
+    clearInterval(handle: unknown): void {
+      (handle as FakeScheduledInterval).cleared = true;
+    },
+  };
+
+  return {
+    intervals,
+    runInterval: async (index = 0) => {
+      const interval = intervals[index];
+      if (!interval || interval.cleared) {
+        return;
+      }
+      interval.callback();
+      await flushAsyncWork();
+    },
+    scheduler,
+  };
+};
 
 const createMissingManifestError = (): Error & { code: string } =>
   Object.assign(
@@ -244,7 +283,7 @@ describe("electron app update service", () => {
       testCase.configureAdapter?.(adapter);
       const { service } = createService({ adapter, ...testCase.configureService });
 
-      service.startBackgroundCheck();
+      service.startBackgroundChecks();
       const manualResult = await service.check({ initiator: "menu" });
 
       expect(adapter.checkCalls).toBe(0);
@@ -276,6 +315,63 @@ describe("electron app update service", () => {
       autoDownload: false,
       autoInstallOnAppQuit: false,
     });
+  });
+
+  test("starts background checks immediately and repeats hourly", async () => {
+    const fakeScheduler = createFakeScheduler();
+    const { adapter, service } = createService({
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await flushAsyncWork();
+
+    expect(adapter.checkCalls).toBe(1);
+    expect(service.getState()).toMatchObject({
+      status: "upToDate",
+      checkInitiator: "background",
+      checkedAt: fixedNow,
+    });
+    expect(fakeScheduler.intervals).toEqual([
+      {
+        callback: expect.any(Function),
+        cleared: false,
+        intervalMs: DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
+      },
+    ]);
+
+    await fakeScheduler.runInterval();
+
+    expect(adapter.checkCalls).toBe(2);
+  });
+
+  test("does not register duplicate background check intervals", async () => {
+    const fakeScheduler = createFakeScheduler();
+    const { adapter, service } = createService({
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    service.startBackgroundChecks();
+    await flushAsyncWork();
+
+    expect(adapter.checkCalls).toBe(1);
+    expect(fakeScheduler.intervals).toHaveLength(1);
+  });
+
+  test("clears scheduled background checks on dispose", async () => {
+    const fakeScheduler = createFakeScheduler();
+    const { adapter, service } = createService({
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await flushAsyncWork();
+    service.dispose();
+    await fakeScheduler.runInterval();
+
+    expect(fakeScheduler.intervals[0]?.cleared).toBe(true);
+    expect(adapter.checkCalls).toBe(1);
   });
 
   test("checks manually and publishes an available update state", async () => {
@@ -314,7 +410,7 @@ describe("electron app update service", () => {
     const states: AppUpdateState[] = [];
     service.subscribe((state) => states.push(state));
 
-    service.startBackgroundCheck();
+    service.startBackgroundChecks();
     await Promise.resolve();
     const menuResult = await service.check({ initiator: "menu" });
 

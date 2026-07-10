@@ -660,7 +660,7 @@ const startupEffect = composeElectronMainStartupEffect({
   configureReady: configureElectronReadyRuntimeEffect,
   createMainWindow: ({ appUpdateService, rendererSession }) =>
     createMainWindowEffect(rendererSession).pipe(
-      Effect.tap(() => Effect.sync(() => appUpdateService.startBackgroundCheck())),
+      Effect.tap(() => Effect.sync(() => appUpdateService.startBackgroundChecks())),
       Effect.asVoid,
     ),
   initializeHost: ({ hostCommandRouter }) => initializeHostEffect(hostCommandRouter),

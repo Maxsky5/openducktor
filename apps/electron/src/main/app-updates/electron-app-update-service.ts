@@ -77,14 +77,20 @@ export type ElectronAppUpdateService = {
   download(): Promise<AppUpdateCommandResult>;
   getState(): AppUpdateState;
   install(): Promise<AppUpdateCommandResult>;
-  startBackgroundCheck(): void;
+  startBackgroundChecks(): void;
   subscribe(listener: (state: AppUpdateState) => void): () => void;
+};
+
+export type ElectronAppUpdateScheduler = {
+  clearInterval(handle: unknown): void;
+  setInterval(callback: () => void, intervalMs: number): unknown;
 };
 
 export type ElectronAppUpdateServiceOptions = {
   adapter: ElectronAppUpdaterAdapter;
   appImagePath?: string | undefined;
   appUpdateConfigPath?: string | undefined;
+  backgroundCheckIntervalMs?: number;
   currentVersion: string;
   installDownloadedUpdate(runInstall: () => void): Promise<void>;
   isPackaged: boolean;
@@ -93,11 +99,20 @@ export type ElectronAppUpdateServiceOptions = {
   platform: NodeJS.Platform;
   readUpdateConfig?: (path: string) => string | null;
   resourcesPath: string;
+  scheduler?: ElectronAppUpdateScheduler;
 };
 
 const DEFAULT_APP_UPDATE_CONFIG_FILE = "app-update.yml";
 const HOST_SHUTDOWN_BEFORE_RUN_OPERATION = "electron.main.shutdown-host-before-run";
 const INSTALL_RELAUNCH_GUIDANCE = "Quit and reopen OpenDucktor before trying again.";
+export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
+  clearInterval: (handle) => {
+    clearInterval(handle as ReturnType<typeof setInterval>);
+  },
+  setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
+};
 
 const defaultReadUpdateConfig = (path: string): string | null => {
   try {
@@ -219,6 +234,7 @@ export const createElectronAppUpdateService = ({
   adapter,
   appImagePath,
   appUpdateConfigPath,
+  backgroundCheckIntervalMs = DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
   currentVersion,
   installDownloadedUpdate,
   isPackaged,
@@ -227,12 +243,14 @@ export const createElectronAppUpdateService = ({
   platform,
   readUpdateConfig = defaultReadUpdateConfig,
   resourcesPath,
+  scheduler = defaultAppUpdateScheduler,
 }: ElectronAppUpdateServiceOptions): ElectronAppUpdateService => {
   const listeners = new Set<(state: AppUpdateState) => void>();
   const unsubscribeAdapterListeners: Array<() => void> = [];
   const resolvedAppUpdateConfigPath =
     appUpdateConfigPath ?? join(resourcesPath, DEFAULT_APP_UPDATE_CONFIG_FILE);
   let activeOperation: AppUpdateOperation | null = null;
+  let backgroundCheckIntervalHandle: unknown = null;
   let disposed = false;
   let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
@@ -530,6 +548,13 @@ export const createElectronAppUpdateService = ({
 
   configure();
 
+  const runBackgroundCheck = (): void => {
+    if (disposed || !updaterReady) {
+      return;
+    }
+    void service.check({ initiator: "background" });
+  };
+
   const service: ElectronAppUpdateService = {
     check: async ({ initiator }) => {
       const currentState = state;
@@ -606,6 +631,10 @@ export const createElectronAppUpdateService = ({
     },
     dispose: () => {
       disposed = true;
+      if (backgroundCheckIntervalHandle !== null) {
+        scheduler.clearInterval(backgroundCheckIntervalHandle);
+        backgroundCheckIntervalHandle = null;
+      }
       listeners.clear();
       for (const unsubscribe of unsubscribeAdapterListeners.splice(0)) {
         unsubscribe();
@@ -710,11 +739,15 @@ export const createElectronAppUpdateService = ({
         return commandAccepted();
       }
     },
-    startBackgroundCheck: () => {
-      if (disposed) {
+    startBackgroundChecks: () => {
+      if (disposed || !updaterReady || backgroundCheckIntervalHandle !== null) {
         return;
       }
-      void service.check({ initiator: "background" });
+      runBackgroundCheck();
+      backgroundCheckIntervalHandle = scheduler.setInterval(
+        runBackgroundCheck,
+        backgroundCheckIntervalMs,
+      );
     },
     subscribe: (listener) => {
       listeners.add(listener);

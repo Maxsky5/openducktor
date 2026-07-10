@@ -50,6 +50,13 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('autoHideMenuBar: process.platform !== "darwin"');
   });
 
+  test("startup starts scheduled app update checks after the main window is created", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("createMainWindowEffect(rendererSession).pipe(");
+    expect(source).toContain("appUpdateService.startBackgroundChecks()");
+  });
+
   test("startup runs pre-ready setup before app readiness and initializes host before window", async () => {
     const calls: string[] = [];
 
