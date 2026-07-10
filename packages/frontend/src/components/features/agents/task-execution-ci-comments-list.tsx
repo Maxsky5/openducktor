@@ -85,9 +85,13 @@ export function TaskExecutionCiCommentsList({
             <Button
               key={item.id}
               type="button"
-              variant={isActive ? "secondary" : "ghost"}
+              variant="ghost"
               size="sm"
-              className={cn("h-7 justify-center gap-1 px-2", isActive && "bg-card shadow-none")}
+              className={cn(
+                "h-7 justify-center gap-1 border border-transparent px-2 hover:bg-foreground/5",
+                isActive &&
+                  "border-border bg-foreground/10 text-foreground shadow-sm hover:bg-foreground/15",
+              )}
               aria-pressed={isActive}
               onClick={() => {
                 setFilter(item.id);
