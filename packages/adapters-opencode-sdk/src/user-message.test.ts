@@ -76,7 +76,9 @@ describe("OpencodeSdkAdapter user message", () => {
         ],
         model: { providerId: "openai", modelId: "gpt-5" },
       }),
-    ).rejects.toThrow("must be sent without arguments or references");
+    ).rejects.toThrow(
+      "OpenCode request failed: compact session: /compact must be sent without arguments or references",
+    );
     expect(mock.mcp.statusCalls).toEqual([]);
   });
 

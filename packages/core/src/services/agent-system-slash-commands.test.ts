@@ -43,18 +43,27 @@ describe("classifySystemSlashCommandInvocation", () => {
       ...MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
       trigger: "other",
     },
-    {
-      id: "custom:other",
-      trigger: "other",
-      title: "Other",
-      description: "Other command",
-      source: "system" as const,
-      hints: [],
-    },
   ])("rejects reserved system identity lookalike %#", (command) => {
     expect(() =>
       classifySystemSlashCommandInvocation([{ kind: "slash_command", command }]),
     ).toThrow("reserved system slash command");
+  });
+
+  test("leaves unrelated system commands for their own handlers", () => {
+    expect(
+      classifySystemSlashCommandInvocation([
+        {
+          kind: "slash_command",
+          command: {
+            id: "system:other",
+            trigger: "other",
+            title: "Other",
+            source: "system",
+            hints: [],
+          },
+        },
+      ]),
+    ).toEqual({ kind: "not_system" });
   });
 
   test.each([

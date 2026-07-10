@@ -168,6 +168,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     getSession: () => undefined,
     partsById: new Map(),
     messageRoleById: new Map(),
+    compactionMessageIds: new Set(),
     pendingDeltasByPartId: new Map(),
     subagentCorrelationKeyByPartId: new Map<string, string>(),
     subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
@@ -449,6 +450,79 @@ describe("event-stream", () => {
       ),
     ).toEqual([]);
   });
+
+  test("suppresses OpenCode compaction summary messages identified by message metadata", async () => {
+    const emitted = await runEventStream([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "compact-summary-message",
+        text: "Internal summary that must not be rendered",
+        finish: "stop",
+        completedAt: 2,
+        info: { summary: true },
+      }),
+      makeMessagePartDeltaEvent({
+        messageId: "compact-summary-message",
+        partId: "compact-summary-part",
+        field: "text",
+        delta: " ignored",
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "compact-summary-message",
+        partId: "compact-summary-part",
+        text: "Internal summary update",
+        end: 3,
+      }),
+    ]);
+
+    expect(
+      emitted.filter(
+        (event) =>
+          event.type === "assistant_delta" ||
+          event.type === "assistant_part" ||
+          event.type === "assistant_message",
+      ),
+    ).toEqual([]);
+  });
+
+  test("suppresses OpenCode compaction summary messages identified by their marker part", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "compact-marker",
+            sessionID: "external-session-1",
+            messageID: "compact-summary-message",
+            type: "compaction",
+            auto: false,
+          },
+        },
+      } as unknown as Event,
+      assistantRoleEvent("compact-summary-message"),
+      makeMessagePartDeltaEvent({
+        messageId: "compact-summary-message",
+        partId: "compact-summary-part",
+        field: "text",
+        delta: "Internal summary delta",
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "compact-summary-message",
+        partId: "compact-summary-part",
+        text: "Internal summary",
+        end: 3,
+      }),
+    ]);
+
+    expect(
+      emitted.filter(
+        (event) =>
+          event.type === "assistant_delta" ||
+          event.type === "assistant_part" ||
+          event.type === "assistant_message",
+      ),
+    ).toEqual([]);
+  });
+
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
       {

@@ -8,7 +8,7 @@ import {
   maybeEmitCompletedAssistantMessage,
   shouldSuppressAssistantStreamingAfterIdle,
 } from "./assistant";
-import { applyPendingDeltas } from "./helpers";
+import { applyPendingDeltas, suppressCompactionMessage } from "./helpers";
 import { removeSubagentCorrelationForPart } from "./subagent";
 import { handleUserPartUpdated } from "./user";
 
@@ -54,6 +54,13 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   const delta = typeof deltaValue === "string" ? deltaValue : "";
 
   const knownPart = partId ? runtime.partsById.get(partId) : undefined;
+  const deltaMessageId = knownPart?.messageID ?? messageId;
+  if (deltaMessageId && runtime.compactionMessageIds.has(deltaMessageId)) {
+    if (partId) {
+      runtime.pendingDeltasByPartId.delete(partId);
+    }
+    return true;
+  }
   if (knownPart && field.length > 0) {
     const updatedPart = applyDeltaToPart(knownPart, field, delta);
     if (updatedPart) {
@@ -120,23 +127,35 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
 
+  const messageId = readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"]);
+  if (readStringProp(rawPartRecord, ["type"]) === "compaction") {
+    if (messageId) {
+      suppressCompactionMessage(runtime, messageId);
+    }
+    runtime.partsById.delete(partId);
+    runtime.pendingDeltasByPartId.delete(partId);
+    return true;
+  }
+  if (messageId && runtime.compactionMessageIds.has(messageId)) {
+    runtime.partsById.delete(partId);
+    runtime.pendingDeltasByPartId.delete(partId);
+    return true;
+  }
+
   const current = rawPartRecord as Part;
   const nextPart = applyPendingDeltas(runtime, partId, current);
   runtime.partsById.set(partId, nextPart);
-  if (readStringProp(rawPartRecord, ["type"]) === "compaction") {
-    return true;
-  }
   emitAssistantPart(runtime, nextPart);
-  const messageId = nextPart.messageID;
-  const role = runtime.messageRoleById.get(messageId);
+  const nextMessageId = nextPart.messageID;
+  const role = runtime.messageRoleById.get(nextMessageId);
   if (role === "assistant") {
     maybeEmitCompletedAssistantMessage(runtime, {
-      messageId,
+      messageId: nextMessageId,
     });
     return true;
   }
   if (role === "user") {
-    handleUserPartUpdated(runtime, messageId, readPartUpdatedTimestamp(properties, nextPart));
+    handleUserPartUpdated(runtime, nextMessageId, readPartUpdatedTimestamp(properties, nextPart));
   }
   return true;
 };

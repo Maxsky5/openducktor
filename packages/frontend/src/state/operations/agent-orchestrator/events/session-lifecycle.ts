@@ -316,11 +316,13 @@ export const handleSessionError = (
         pendingApprovals: [],
         pendingQuestions: [],
         messages: appendUserStoppedNotice
-          ? settleTerminalMessages(current, event.timestamp, {
-              outcome: "error",
-              errorMessage: sessionErrorMessage,
-              appendUserStoppedNotice: true,
-            })
+          ? removeRunningSessionCompactionNotices(
+              settleTerminalMessages(current, event.timestamp, {
+                outcome: "error",
+                errorMessage: sessionErrorMessage,
+                appendUserStoppedNotice: true,
+              }),
+            )
           : appendSessionMessage(
               {
                 externalSessionId: current.externalSessionId,

@@ -49,6 +49,26 @@ describe("use-chat-composer-slash-commands", () => {
     ).toEqual(["review"]);
   });
 
+  test("keeps system commands in Codex session composers", () => {
+    expect(
+      filterSlashCommandsForComposerScope(
+        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+        "session",
+        "codex",
+      ),
+    ).toEqual([MANUAL_SESSION_COMPACTION_SLASH_COMMAND]);
+  });
+
+  test("removes system commands from Codex repository composers", () => {
+    expect(
+      filterSlashCommandsForComposerScope(
+        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+        "repo",
+        "codex",
+      ),
+    ).toEqual([]);
+  });
+
   test("keeps compact reserved when repository scope hides the system command", () => {
     const mergedCommands = mergeSlashCommands(
       [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],

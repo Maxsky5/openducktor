@@ -165,6 +165,7 @@ export const createEventStreamRuntime = (
       : {}),
     partsById: session.partsById,
     messageRoleById: session.messageRoleById,
+    compactionMessageIds: session.compactionMessageIds,
     pendingDeltasByPartId: session.pendingDeltasByPartId,
     subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
     subagentCorrelationKeyByExternalSessionId: session.subagentCorrelationKeyByExternalSessionId,

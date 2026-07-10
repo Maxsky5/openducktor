@@ -1,5 +1,5 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readRecordProp, readStringProp } from "../../guards";
+import { asUnknownRecord, readBooleanProp, readRecordProp, readStringProp } from "../../guards";
 import { readMessageModelSelection } from "../../message-normalizers";
 import { toIsoFromEpoch } from "../../session-runtime-utils";
 import { readEventInfo, readEventProperties, readMessageCompletedAt } from "../schemas";
@@ -18,6 +18,7 @@ import {
   isAssistantMessageSettled,
   normalizeMessagePart,
   readRawMessageParts,
+  suppressCompactionMessage,
   updateMessageMetadata,
 } from "./helpers";
 import { handleUserMessageUpdated } from "./user";
@@ -36,6 +37,12 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   const messageId = infoRecord
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
+  const isCompactionSummary =
+    (infoRecord ? readBooleanProp(infoRecord, ["summary"]) : undefined) === true;
+  if (messageId && (isCompactionSummary || runtime.compactionMessageIds.has(messageId))) {
+    suppressCompactionMessage(runtime, messageId);
+    return true;
+  }
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
   const messageTimestamp = (() => {
     const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;

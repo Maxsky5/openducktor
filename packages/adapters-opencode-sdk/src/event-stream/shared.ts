@@ -54,6 +54,7 @@ export type SubagentSessionLink = {
 export type EventStreamState = {
   partsById: Map<string, Part>;
   messageRoleById: Map<string, string>;
+  compactionMessageIds: Set<string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyByExternalSessionId: Map<string, string>;

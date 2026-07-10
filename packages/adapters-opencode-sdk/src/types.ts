@@ -66,6 +66,7 @@ export type SessionRecord = {
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;
+  compactionMessageIds: Set<string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyByExternalSessionId: Map<string, string>;

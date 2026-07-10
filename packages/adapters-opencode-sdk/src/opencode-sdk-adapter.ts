@@ -76,6 +76,7 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
+import { toOpenCodeRequestError } from "./request-errors";
 import {
   type OpencodeRuntimeResolutionInput,
   resolveOpencodeRuntimeClientInput,
@@ -629,7 +630,12 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
-    const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
+    let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
+    try {
+      systemInvocation = classifySystemSlashCommandInvocation(input.parts);
+    } catch (error) {
+      throw toOpenCodeRequestError("compact session", error);
+    }
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }

@@ -20,8 +20,7 @@ export const classifySystemSlashCommandInvocation = (
   const hasReservedLookalike = slashCommands.some(
     (command) =>
       (command.trigger.toLowerCase() === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger ||
-        command.id === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.id ||
-        command.source === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.source) &&
+        command.id === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.id) &&
       !isManualSessionCompactionSlashCommand(command),
   );
 
