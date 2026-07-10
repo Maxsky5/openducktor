@@ -99,7 +99,7 @@ const isTaggedHostValidationError = (
   typeof cause.message === "string";
 
 const shutdownController = createElectronMainShutdownController({
-  disposeHost: (reason) => disposeActiveElectronRuntimeEffect(reason),
+  disposeHost: (reason) => disposeActiveElectronRuntimeForShutdownEffect(reason),
   exitProcess: (exitCode) => {
     process.exit(exitCode);
   },
@@ -523,6 +523,20 @@ const readAppUpdateCommandResultForIpc = (
   });
 };
 
+const createRejectedAppUpdateCommandResult = (
+  appUpdateService: ElectronAppUpdateService,
+  operation: AppUpdateOperation,
+  cause: unknown,
+): AppUpdateCommandResult => ({
+  accepted: false,
+  rejection: {
+    code: "invalid_state",
+    message: errorMessage(cause),
+    operation,
+  },
+  state: appUpdateService.getState(),
+});
+
 const registerIpcHandlers = (
   hostCommandRouter: EffectHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
@@ -548,7 +562,15 @@ const registerIpcHandlers = (
   );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
-    const checkInput = readElectronAppUpdateCheckInput(input);
+    let checkInput: ElectronAppUpdateCheckInput;
+    try {
+      checkInput = readElectronAppUpdateCheckInput(input);
+    } catch (cause) {
+      return readAppUpdateCommandResultForIpc(
+        createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
+        "check",
+      );
+    }
     return readAppUpdateCommandResultForIpc(await appUpdateService.check(checkInput), "check");
   });
 
@@ -592,6 +614,15 @@ const disposeActiveElectronRuntimeEffect = (
   Effect.sync(disposeActiveAppUpdateService).pipe(
     Effect.flatMap(() => disposeActiveHostEffect(reason)),
   );
+
+const disposeActiveElectronRuntimeForShutdownEffect = (
+  reason: string,
+): Effect.Effect<void, ElectronLifecycleError> => {
+  if (reason === "update-install") {
+    return disposeActiveHostEffect(reason);
+  }
+  return disposeActiveElectronRuntimeEffect(reason);
+};
 
 const initializeHostEffect = (hostCommandRouter: EffectHostCommandRouter) =>
   hostCommandRouter.initialize().pipe(

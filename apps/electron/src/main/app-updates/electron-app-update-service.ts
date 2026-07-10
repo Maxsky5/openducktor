@@ -580,7 +580,7 @@ export const createElectronAppUpdateService = ({
       if (
         activeOperation !== null ||
         state.status === "downloading" ||
-        state.status === "downloaded"
+        (state.status === "downloaded" && state.installRequested !== true)
       ) {
         return rejectBusy("check");
       }
@@ -715,6 +715,7 @@ export const createElectronAppUpdateService = ({
       publishState(markDownloadedInstallRequested(downloadedState));
       try {
         await installDownloadedUpdate(() => {
+          activeOperation = null;
           adapter.quitAndInstall(false, true);
         });
         return commandAccepted();

@@ -753,6 +753,40 @@ describe("electron app update service", () => {
     expect(adapter.installCalls).toHaveLength(1);
   });
 
+  test("allows checks after install handoff returns while the app remains running", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      installRequested: true,
+    });
+
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.4" },
+    };
+
+    const checkResult = await service.check({ initiator: "settings" });
+
+    expect(checkResult).toMatchObject({
+      accepted: true,
+      state: {
+        status: "available",
+        availableVersion: "0.4.4",
+      },
+    });
+    expect(adapter.checkCalls).toBe(2);
+  });
+
   test("treats delayed macOS updater handoff errors as terminal for the process", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {

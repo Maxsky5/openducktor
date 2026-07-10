@@ -43,11 +43,10 @@ export const isManualUpdateCheckState = (state: AppUpdateState): boolean =>
 
 export const isActionableUpdateError = (state: AppUpdateState): boolean => {
   const error = getAppUpdateError(state);
-  return (
-    state.status === "error" &&
-    Boolean(getAppUpdateAvailableVersion(state)) &&
-    (error?.operation === "download" || error?.operation === "install")
-  );
+  if (state.status !== "error" || !error) {
+    return false;
+  }
+  return canDownloadAppUpdate(state) || error.operation === "install";
 };
 
 export const canDownloadUpdate = canDownloadAppUpdate;

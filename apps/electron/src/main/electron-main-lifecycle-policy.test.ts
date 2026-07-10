@@ -66,7 +66,26 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain(
       'cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure")',
     );
-    expect(source).toContain("disposeHost: (reason) => disposeActiveElectronRuntimeEffect(reason)");
+    expect(source).toContain(
+      "disposeHost: (reason) => disposeActiveElectronRuntimeForShutdownEffect(reason)",
+    );
+  });
+
+  test("update install shutdown keeps app update listeners alive through native handoff", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("disposeActiveElectronRuntimeForShutdownEffect");
+    expect(source).toContain('if (reason === "update-install")');
+    expect(source).toContain("return disposeActiveHostEffect(reason)");
+    expect(source).toContain("return disposeActiveElectronRuntimeEffect(reason)");
+  });
+
+  test("app update check IPC returns a structured rejection for invalid input", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("createRejectedAppUpdateCommandResult");
+    expect(source).toContain("checkInput = readElectronAppUpdateCheckInput(input)");
+    expect(source).toContain('code: "invalid_state"');
   });
 
   test("app update state forwarding skips destroyed windows and logs send failures", () => {

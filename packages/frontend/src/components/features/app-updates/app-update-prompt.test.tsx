@@ -75,6 +75,29 @@ describe("AppUpdatePrompt", () => {
     expect(errorMessage.className).toContain("break-words");
   });
 
+  test("keeps downloadable background check errors visible", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "error",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkInitiator: "background",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+      error: {
+        code: "check_failed",
+        message: "OpenDucktor could not refresh the update feed.",
+        operation: "check",
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Update error")).toBeTruthy();
+    expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
+    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
+  });
+
   test("shows available updates and allows dismissal for the live cycle", async () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "available",
@@ -136,7 +159,9 @@ describe("AppUpdatePrompt", () => {
       availableVersion: "0.4.3",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    appUpdates.download.mockRejectedValue(new Error("bridge download failed"));
+    appUpdates.download.mockImplementation(async () => {
+      throw new Error("bridge download failed");
+    });
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<AppUpdatePrompt />);
 
@@ -172,7 +197,9 @@ describe("AppUpdatePrompt", () => {
       progressPercent: 100,
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    appUpdates.install.mockRejectedValue(new Error("bridge install failed"));
+    appUpdates.install.mockImplementation(async () => {
+      throw new Error("bridge install failed");
+    });
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<AppUpdatePrompt />);
 
