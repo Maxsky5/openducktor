@@ -753,7 +753,7 @@ describe("electron app update service", () => {
     expect(adapter.installCalls).toHaveLength(1);
   });
 
-  test("allows checks after install handoff returns while the app remains running", async () => {
+  test("blocks checks after install handoff starts while the app remains running", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
       isUpdateAvailable: true,
@@ -778,13 +778,30 @@ describe("electron app update service", () => {
     const checkResult = await service.check({ initiator: "settings" });
 
     expect(checkResult).toMatchObject({
-      accepted: true,
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "check",
+      },
       state: {
-        status: "available",
-        availableVersion: "0.4.4",
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        installRequested: true,
       },
     });
-    expect(adapter.checkCalls).toBe(2);
+    expect(adapter.checkCalls).toBe(1);
+
+    adapter.emit("error", new Error("native install failed"));
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        operation: "install",
+      },
+    });
   });
 
   test("treats delayed macOS updater handoff errors as terminal for the process", async () => {

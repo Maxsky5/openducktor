@@ -580,7 +580,7 @@ export const createElectronAppUpdateService = ({
       if (
         activeOperation !== null ||
         state.status === "downloading" ||
-        (state.status === "downloaded" && state.installRequested !== true)
+        state.status === "downloaded"
       ) {
         return rejectBusy("check");
       }

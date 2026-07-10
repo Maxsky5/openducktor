@@ -46,46 +46,41 @@ export function useAppUpdateState(): AppUpdateStateController {
 
   useEffect(() => {
     let disposed = false;
+    let receivedSubscribedState = false;
     let unsubscribe: (() => void) | null = null;
     const appUpdates = getShellBridge().appUpdates;
 
-    void appUpdates
-      .getState()
-      .then((nextState) => {
-        if (!disposed) {
-          setCommandError(null);
-          setState(nextState);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!disposed) {
-          setState(unavailableState(errorMessage(cause), "initialize"));
-        }
-      })
-      .finally(() => {
-        if (!disposed) {
-          setIsLoadingInitialState(false);
-        }
-      });
-
-    void appUpdates
-      .subscribeState((nextState) => {
-        if (!disposed) {
-          setState(nextState);
-        }
-      })
-      .then((unsubscribeState) => {
+    const loadInitialState = async (): Promise<void> => {
+      try {
+        const unsubscribeState = await appUpdates.subscribeState((nextState) => {
+          receivedSubscribedState = true;
+          if (!disposed) {
+            setState(nextState);
+          }
+        });
         if (disposed) {
           unsubscribeState();
           return;
         }
         unsubscribe = unsubscribeState;
-      })
-      .catch((cause: unknown) => {
+
+        const nextState = await appUpdates.getState();
+        if (!disposed && !receivedSubscribedState) {
+          setCommandError(null);
+          setState(nextState);
+        }
+      } catch (cause) {
         if (!disposed) {
           setState(unavailableState(errorMessage(cause), "initialize"));
         }
-      });
+      } finally {
+        if (!disposed) {
+          setIsLoadingInitialState(false);
+        }
+      }
+    };
+
+    void loadInitialState();
 
     return () => {
       disposed = true;

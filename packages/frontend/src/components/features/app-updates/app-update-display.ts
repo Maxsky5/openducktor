@@ -144,8 +144,9 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
 export const getAppUpdatePromptKey = (state: AppUpdateState): string => {
   const version = getAppUpdateAvailableVersion(state) ?? state.currentVersion;
   const error = getAppUpdateError(state);
+  const checkedAt = getAppUpdateCheckedAt(state);
   const marker = error
-    ? `${error.operation}:${error.code}:${error.message}`
-    : (getAppUpdateCheckedAt(state) ?? getAppUpdateDisabledReason(state) ?? "");
+    ? `${error.operation}:${error.code}:${checkedAt ?? ""}:${error.message}`
+    : (checkedAt ?? getAppUpdateDisabledReason(state) ?? "");
   return `${state.status}:${version}:${marker}`;
 };

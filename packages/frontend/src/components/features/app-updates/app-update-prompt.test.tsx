@@ -75,6 +75,83 @@ describe("AppUpdatePrompt", () => {
     expect(errorMessage.className).toContain("break-words");
   });
 
+  test("resurfaces dismissed manual check errors from later checks", async () => {
+    const repeatedError = {
+      code: "check_failed" as const,
+      message: "OpenDucktor could not refresh the update feed.",
+      operation: "check" as const,
+    };
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "error",
+      currentVersion: "0.4.2",
+      checkInitiator: "menu",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+      error: repeatedError,
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Update error")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
+    expect(screen.queryByText("Update error")).toBeNull();
+
+    act(() => {
+      appUpdates.emit({
+        status: "error",
+        currentVersion: "0.4.2",
+        checkInitiator: "menu",
+        checkedAt: "2026-07-08T23:00:00.000Z",
+        error: repeatedError,
+      });
+    });
+
+    expect(await screen.findByText("Update error")).toBeTruthy();
+    expect(screen.getByText(repeatedError.message)).toBeTruthy();
+  });
+
+  test("keeps live startup update state when the initial snapshot resolves stale", async () => {
+    const staleInitialState = {
+      status: "idle" as const,
+      currentVersion: "0.4.2",
+    };
+    const liveState = {
+      status: "available" as const,
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkInitiator: "background" as const,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    };
+    const appUpdates = createFakeAppUpdateBridge(staleInitialState);
+    let resolveInitialSnapshot: ((state: typeof staleInitialState) => void) | null = null;
+    appUpdates.getState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInitialSnapshot = resolve;
+        }),
+    );
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+
+    act(() => {
+      appUpdates.emit(liveState);
+    });
+    expect(await screen.findByText("Update available")).toBeTruthy();
+
+    await act(async () => {
+      if (!resolveInitialSnapshot) {
+        throw new Error("Initial app update snapshot was not requested.");
+      }
+      resolveInitialSnapshot(staleInitialState);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Update available")).toBeTruthy();
+    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+  });
+
   test("keeps downloadable background check errors visible", async () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "error",
