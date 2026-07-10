@@ -19,20 +19,24 @@ export const createDeferred = <T>() => {
 export const buildScript = (
   overrides: Partial<DevServerScriptState> = {},
 ): DevServerScriptState => {
-  const bufferedRun = overrides.bufferedTerminalChunks?.[0];
-  const runId =
-    overrides.runId ??
-    bufferedRun?.runId ??
-    (overrides.pid === null || overrides.pid === undefined ? null : "frontend:1");
+  const bufferedRunIdentity = overrides.bufferedTerminalChunks?.[0]?.runIdentity;
+  const defaultRunIdentity =
+    overrides.pid === null || overrides.pid === undefined
+      ? null
+      : {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        };
+  const runIdentity =
+    overrides.runIdentity === undefined
+      ? (bufferedRunIdentity ?? defaultRunIdentity)
+      : overrides.runIdentity;
   return {
     scriptId: "frontend",
     name: "Frontend",
     command: "bun run dev",
     status: "stopped",
-    runId,
-    runOrder:
-      bufferedRun?.runOrder ??
-      (runId === null ? null : { hostInstanceId: "host-1", generation: 1 }),
+    runIdentity,
     pid: null,
     startedAt: null,
     exitCode: null,

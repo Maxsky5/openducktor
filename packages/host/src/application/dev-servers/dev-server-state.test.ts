@@ -61,7 +61,7 @@ describe("dev-server state helpers", () => {
       throw new Error("Expected configured web script.");
     }
     startTerminalRun(runtime, firstScript, "host-1");
-    const firstRunId = firstScript.runId;
+    const firstRunId = firstScript.runIdentity?.runId;
 
     syncGroupState(runtime.state, { ...repoConfig, devServers: [] }, "task-1", "/worktrees/task-1");
     syncRuntimeTerminalBufferByteCounts(runtime);
@@ -72,6 +72,6 @@ describe("dev-server state helpers", () => {
     }
     startTerminalRun(runtime, readdedScript, "host-1");
 
-    expect(readdedScript.runId).not.toBe(firstRunId);
+    expect(readdedScript.runIdentity?.runId).not.toBe(firstRunId);
   });
 });

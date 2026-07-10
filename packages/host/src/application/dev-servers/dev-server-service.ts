@@ -155,7 +155,7 @@ export const createDevServerService = ({
     const isStartingWithoutRecordedPid = script?.pid === null && script.status === "starting";
     if (
       !script ||
-      script.runId !== expectedRunId ||
+      script.runIdentity?.runId !== expectedRunId ||
       (script.pid !== pid && !isStartingWithoutRecordedPid)
     ) {
       return;
@@ -204,7 +204,7 @@ export const createDevServerService = ({
       });
       const expectedRunId = runtime.state.scripts.find(
         (candidate) => candidate.scriptId === scriptConfig.id,
-      )?.runId;
+      )?.runIdentity?.runId;
       if (!expectedRunId) {
         return yield* Effect.fail(
           new HostInvariantError({

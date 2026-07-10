@@ -23,18 +23,21 @@ const testRunOrder = (runId: string) => ({
 });
 
 const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => {
-  const bufferedRun = overrides.bufferedTerminalChunks?.[0];
-  const runId =
-    overrides.runId ??
-    bufferedRun?.runId ??
-    (overrides.pid === null || overrides.pid === undefined ? null : "frontend:1");
+  const bufferedRunIdentity = overrides.bufferedTerminalChunks?.[0]?.runIdentity;
+  const defaultRunIdentity =
+    overrides.pid === null || overrides.pid === undefined
+      ? null
+      : { runId: "frontend:1", runOrder: testRunOrder("frontend:1") };
+  const runIdentity =
+    overrides.runIdentity === undefined
+      ? (bufferedRunIdentity ?? defaultRunIdentity)
+      : overrides.runIdentity;
   return {
     scriptId: "frontend",
     name: "Frontend",
     command: "bun run dev",
     status: "stopped",
-    runId,
-    runOrder: bufferedRun?.runOrder ?? (runId === null ? null : testRunOrder(runId)),
+    runIdentity,
     pid: null,
     startedAt: null,
     exitCode: null,
@@ -57,11 +60,13 @@ const buildChunk = (
   sequence: number,
   overrides: Partial<DevServerTerminalChunk> = {},
 ): DevServerTerminalChunk => {
-  const runId = overrides.runId ?? "frontend:1";
+  const runIdentity = overrides.runIdentity ?? {
+    runId: "frontend:1",
+    runOrder: testRunOrder("frontend:1"),
+  };
   return {
     scriptId: "frontend",
-    runId,
-    runOrder: testRunOrder(runId),
+    runIdentity,
     sequence,
     data: `line-${sequence}\r\n`,
     timestamp: `2026-03-25T10:00:${String(sequence % 60).padStart(2, "0")}.000Z`,
@@ -75,8 +80,10 @@ describe("dev-server-log-buffer", () => {
       { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS + 2 },
       (_, index) => ({
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -95,8 +102,10 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "\u001b[32mready\u001b[0m\r\n",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -108,8 +117,10 @@ describe("dev-server-log-buffer", () => {
     for (let index = 1; index <= MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
       appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -127,16 +138,20 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 4,
       data: "latest",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 3,
       data: "older",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -152,16 +167,20 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 100,
       data: "old-run",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:2",
-      runOrder: { hostInstanceId: "host-1", generation: 2 },
+      runIdentity: {
+        runId: "frontend:2",
+        runOrder: { hostInstanceId: "host-1", generation: 2 },
+      },
       sequence: 0,
       data: "new-run",
       timestamp: "2026-03-25T10:01:00.000Z",
@@ -178,16 +197,20 @@ describe("dev-server-log-buffer", () => {
 
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 1,
       data: "oversized-live",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 2,
       data: "later-live",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -204,8 +227,10 @@ describe("dev-server-log-buffer", () => {
     for (let index = 0; index < MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
       appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: index,
         data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -215,8 +240,10 @@ describe("dev-server-log-buffer", () => {
     const previousSnapshot = getDevServerTerminalBuffer(store, "frontend");
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
       data: "latest",
       timestamp: "2026-03-25T10:01:00.000Z",
@@ -232,8 +259,10 @@ describe("dev-server-log-buffer", () => {
     const store = createDevServerTerminalBufferStore();
     appendDevServerTerminalChunk(store, {
       scriptId: "stale",
-      runId: "stale:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "stale:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 0,
       data: "stale",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -248,8 +277,10 @@ describe("dev-server-log-buffer", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 7,
                 data: "frontend failed\r\n",
                 timestamp: "2026-03-25T10:01:00.000Z",
@@ -268,8 +299,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 8,
         data: "restarted\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -286,8 +319,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 0,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -298,8 +333,10 @@ describe("dev-server-log-buffer", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
-          runId: "frontend:1",
-          runOrder: { hostInstanceId: "host-1", generation: 1 },
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
           sequence: 1,
           data: "fresh\r\n",
           timestamp: "2026-03-25T10:01:00.000Z",
@@ -320,8 +357,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 2,
         data: "local-live\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -332,8 +371,10 @@ describe("dev-server-log-buffer", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
-          runId: "frontend:1",
-          runOrder: { hostInstanceId: "host-1", generation: 1 },
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
           sequence: 1,
           data: "stale\r\n",
           timestamp: "2026-03-25T10:01:00.000Z",
@@ -420,8 +461,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
@@ -455,8 +498,10 @@ describe("dev-server-log-buffer", () => {
     appendDevServerTerminalChunk(
       store,
       buildChunk(5, {
-        runId: "frontend:2",
-        runOrder: { hostInstanceId: "host-1", generation: 2 },
+        runIdentity: {
+          runId: "frontend:2",
+          runOrder: { hostInstanceId: "host-1", generation: 2 },
+        },
         data: "new-run-5\r\n",
         timestamp: "2026-03-25T10:10:05.000Z",
       }),
@@ -468,8 +513,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 101 }, (_, sequence) =>
@@ -482,8 +529,10 @@ describe("dev-server-log-buffer", () => {
     appendDevServerTerminalChunk(
       store,
       buildChunk(6, {
-        runId: "frontend:2",
-        runOrder: { hostInstanceId: "host-1", generation: 2 },
+        runIdentity: {
+          runId: "frontend:2",
+          runOrder: { hostInstanceId: "host-1", generation: 2 },
+        },
         data: "new-run-6\r\n",
         timestamp: "2026-03-25T10:10:06.000Z",
       }),
@@ -503,14 +552,18 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: 5252,
             startedAt: "2026-03-25T10:10:00.000Z",
             bufferedTerminalChunks: [
               buildChunk(10, {
-                runId: "frontend:2",
-                runOrder: { hostInstanceId: "host-1", generation: 2 },
+                runIdentity: {
+                  runId: "frontend:2",
+                  runOrder: { hostInstanceId: "host-1", generation: 2 },
+                },
                 data: "new-run-10\r\n",
                 timestamp: "2026-03-25T10:10:10.000Z",
               }),
@@ -526,8 +579,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
@@ -549,16 +604,20 @@ describe("dev-server-log-buffer", () => {
     appendDevServerTerminalChunk(
       store,
       buildChunk(0, {
-        runId: "frontend:2",
-        runOrder: testRunOrder("frontend:2"),
+        runIdentity: {
+          runId: "frontend:2",
+          runOrder: testRunOrder("frontend:2"),
+        },
         data: "new-run\r\n",
       }),
     );
     appendDevServerTerminalChunk(
       store,
       buildChunk(100, {
-        runId: "frontend:1",
-        runOrder: testRunOrder("frontend:1"),
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: testRunOrder("frontend:1"),
+        },
         data: "delayed-old-run\r\n",
       }),
     );
@@ -575,12 +634,16 @@ describe("dev-server-log-buffer", () => {
       buildState({
         scripts: [
           buildScript({
-            runId: "host-1-run",
-            runOrder: { hostInstanceId: "host-1", generation: 8 },
+            runIdentity: {
+              runId: "host-1-run",
+              runOrder: { hostInstanceId: "host-1", generation: 8 },
+            },
             bufferedTerminalChunks: [
               buildChunk(8, {
-                runId: "host-1-run",
-                runOrder: { hostInstanceId: "host-1", generation: 8 },
+                runIdentity: {
+                  runId: "host-1-run",
+                  runOrder: { hostInstanceId: "host-1", generation: 8 },
+                },
                 data: "old-host\r\n",
               }),
             ],
@@ -592,12 +655,16 @@ describe("dev-server-log-buffer", () => {
     const replacementState = buildState({
       scripts: [
         buildScript({
-          runId: "host-2-run",
-          runOrder: { hostInstanceId: "host-2", generation: 1 },
+          runIdentity: {
+            runId: "host-2-run",
+            runOrder: { hostInstanceId: "host-2", generation: 1 },
+          },
           bufferedTerminalChunks: [
             buildChunk(0, {
-              runId: "host-2-run",
-              runOrder: { hostInstanceId: "host-2", generation: 1 },
+              runIdentity: {
+                runId: "host-2-run",
+                runOrder: { hostInstanceId: "host-2", generation: 1 },
+              },
               data: "replacement-host\r\n",
             }),
           ],
@@ -615,12 +682,16 @@ describe("dev-server-log-buffer", () => {
     const delayedOldState = buildState({
       scripts: [
         buildScript({
-          runId: "host-1-delayed-run",
-          runOrder: { hostInstanceId: "host-1", generation: 9 },
+          runIdentity: {
+            runId: "host-1-delayed-run",
+            runOrder: { hostInstanceId: "host-1", generation: 9 },
+          },
           bufferedTerminalChunks: [
             buildChunk(9, {
-              runId: "host-1-delayed-run",
-              runOrder: { hostInstanceId: "host-1", generation: 9 },
+              runIdentity: {
+                runId: "host-1-delayed-run",
+                runOrder: { hostInstanceId: "host-1", generation: 9 },
+              },
               data: "delayed-old-host\r\n",
             }),
           ],
@@ -641,14 +712,18 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: [
               buildChunk(100, {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 data: "old-run-100\r\n",
                 timestamp: "2026-03-25T10:00:00.000Z",
               }),
@@ -664,14 +739,18 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T09:59:59.000Z",
             bufferedTerminalChunks: [
               buildChunk(0, {
-                runId: "frontend:2",
-                runOrder: { hostInstanceId: "host-1", generation: 2 },
+                runIdentity: {
+                  runId: "frontend:2",
+                  runOrder: { hostInstanceId: "host-1", generation: 2 },
+                },
                 data: "new-run-0\r\n",
                 timestamp: "2026-03-25T09:59:59.000Z",
               }),
@@ -695,14 +774,18 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: 5252,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: [
               buildChunk(10, {
-                runId: "frontend:2",
-                runOrder: { hostInstanceId: "host-1", generation: 2 },
+                runIdentity: {
+                  runId: "frontend:2",
+                  runOrder: { hostInstanceId: "host-1", generation: 2 },
+                },
                 data: "current-run-10\r\n",
                 timestamp: "2026-03-25T10:00:10.000Z",
               }),
@@ -718,8 +801,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
             bufferedTerminalChunks: Array.from({ length: 10 }, (_, sequence) =>
@@ -842,8 +927,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 2,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
@@ -851,8 +938,10 @@ describe("dev-server-log-buffer", () => {
     ]);
 
     const clearedScript = buildScript({
-      runId: "frontend:1",
-      runOrder: testRunOrder("frontend:1"),
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: testRunOrder("frontend:1"),
+      },
       bufferedTerminalChunks: [],
     });
 
@@ -871,8 +960,10 @@ describe("dev-server-log-buffer", () => {
       "frontend",
       Array.from({ length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS }, (_, offset) => ({
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 4_000 + offset,
         data: `old-run-${offset}\r\n`,
         timestamp: `2026-03-25T10:00:${String(offset % 60).padStart(2, "0")}.000Z`,
@@ -891,8 +982,10 @@ describe("dev-server-log-buffer", () => {
               { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS },
               (_, offset) => ({
                 scriptId: "frontend",
-                runId: "frontend:2",
-                runOrder: { hostInstanceId: "host-1", generation: 2 },
+                runIdentity: {
+                  runId: "frontend:2",
+                  runOrder: { hostInstanceId: "host-1", generation: 2 },
+                },
                 sequence: 150 + offset,
                 data: `new-run-${offset}\r\n`,
                 timestamp: `2026-03-25T10:31:${String(offset % 60).padStart(2, "0")}.000Z`,
@@ -914,8 +1007,10 @@ describe("dev-server-log-buffer", () => {
     const store = createDevServerTerminalBufferStore();
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 4_000,
       data: "old-live-only\r\n",
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -927,8 +1022,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: testRunOrder("frontend:2"),
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: testRunOrder("frontend:2"),
+            },
             pid: 5252,
             startedAt: "2026-03-25T10:31:00.000Z",
             bufferedTerminalChunks: [],
@@ -946,8 +1043,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 3_999,
         data: "old-snapshot\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -955,8 +1054,10 @@ describe("dev-server-log-buffer", () => {
     ]);
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 4_000,
       data: "old-live-only\r\n",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -968,8 +1069,10 @@ describe("dev-server-log-buffer", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: testRunOrder("frontend:2"),
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: testRunOrder("frontend:2"),
+            },
             pid: 5252,
             startedAt: "2026-03-25T10:31:00.000Z",
             bufferedTerminalChunks: [],
@@ -987,8 +1090,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 0,
         data: "snapshot\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -996,8 +1101,10 @@ describe("dev-server-log-buffer", () => {
     ]);
     appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: 1,
       data: "live-only\r\n",
       timestamp: "2026-03-25T10:00:01.000Z",
@@ -1008,8 +1115,10 @@ describe("dev-server-log-buffer", () => {
       buildState({
         scripts: [
           buildScript({
-            runId: "frontend:1",
-            runOrder: testRunOrder("frontend:1"),
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: testRunOrder("frontend:1"),
+            },
             bufferedTerminalChunks: [],
           }),
         ],
@@ -1020,8 +1129,10 @@ describe("dev-server-log-buffer", () => {
     expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 1,
         data: "live-only\r\n",
         timestamp: "2026-03-25T10:00:01.000Z",
@@ -1031,8 +1142,10 @@ describe("dev-server-log-buffer", () => {
       shouldReplaceDevServerTerminalBufferFromScript(
         getDevServerTerminalBufferReplacementContext(store, "frontend"),
         buildScript({
-          runId: "frontend:1",
-          runOrder: testRunOrder("frontend:1"),
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: testRunOrder("frontend:1"),
+          },
           bufferedTerminalChunks: [],
         }),
       ),
@@ -1050,16 +1163,20 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 2,
         data: "latest\r\n",
         timestamp: "2026-03-25T10:00:02.000Z",
       },
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 1,
         data: "older\r\n",
         timestamp: "2026-03-25T10:00:01.000Z",
@@ -1088,8 +1205,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 0,
         data: "stale\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -1098,8 +1217,10 @@ describe("dev-server-log-buffer", () => {
     replaceDevServerTerminalBuffer(store, "removed", [
       {
         scriptId: "removed",
-        runId: "removed:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "removed:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 0,
         data: "removed\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -1114,8 +1235,10 @@ describe("dev-server-log-buffer", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 2,
                 data: "fresh\r\n",
                 timestamp: "2026-03-25T10:02:00.000Z",

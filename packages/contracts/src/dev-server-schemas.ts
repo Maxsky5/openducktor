@@ -15,10 +15,15 @@ export const devServerRunOrderSchema = z.object({
 });
 export type DevServerRunOrder = z.infer<typeof devServerRunOrderSchema>;
 
-export const devServerTerminalChunkSchema = z.object({
-  scriptId: z.string().min(1),
+export const devServerRunIdentitySchema = z.object({
   runId: z.string().min(1),
   runOrder: devServerRunOrderSchema,
+});
+export type DevServerRunIdentity = z.infer<typeof devServerRunIdentitySchema>;
+
+export const devServerTerminalChunkSchema = z.object({
+  scriptId: z.string().min(1),
+  runIdentity: devServerRunIdentitySchema,
   sequence: z.number().int().nonnegative(),
   data: z.string(),
   timestamp: z.string(),
@@ -31,8 +36,7 @@ export const devServerScriptStateSchema = z
     name: z.string().min(1),
     command: z.string().min(1),
     status: devServerScriptStatusSchema,
-    runId: z.string().min(1).nullable(),
-    runOrder: devServerRunOrderSchema.nullable(),
+    runIdentity: devServerRunIdentitySchema.nullable(),
     pid: z.number().int().positive().nullable(),
     startedAt: z.string().nullable(),
     exitCode: z.number().int().nullable(),
@@ -40,35 +44,25 @@ export const devServerScriptStateSchema = z
     bufferedTerminalChunks: z.array(devServerTerminalChunkSchema).default([]),
   })
   .superRefine((script, context) => {
-    const hasRunId = script.runId !== null;
-    const hasRunOrder = script.runOrder !== null;
-    if (hasRunId !== hasRunOrder) {
-      context.addIssue({
-        code: "custom",
-        message: "Dev server run id and run order must either both be present or both be null.",
-        path: hasRunId ? ["runOrder"] : ["runId"],
-      });
-    }
-
     const requiresRunOwnership =
       script.status === "starting" ||
       script.status === "running" ||
       script.status === "stopping" ||
       script.bufferedTerminalChunks.length > 0;
-    if (requiresRunOwnership && (!hasRunId || !hasRunOrder)) {
+    if (requiresRunOwnership && script.runIdentity === null) {
       context.addIssue({
         code: "custom",
         message: `Dev server script status ${script.status} requires explicit run ownership.`,
-        path: ["runId"],
+        path: ["runIdentity"],
       });
     }
 
     for (const [index, chunk] of script.bufferedTerminalChunks.entries()) {
       if (
         chunk.scriptId !== script.scriptId ||
-        chunk.runId !== script.runId ||
-        chunk.runOrder.hostInstanceId !== script.runOrder?.hostInstanceId ||
-        chunk.runOrder.generation !== script.runOrder?.generation
+        chunk.runIdentity.runId !== script.runIdentity?.runId ||
+        chunk.runIdentity.runOrder.hostInstanceId !== script.runIdentity?.runOrder.hostInstanceId ||
+        chunk.runIdentity.runOrder.generation !== script.runIdentity?.runOrder.generation
       ) {
         context.addIssue({
           code: "custom",

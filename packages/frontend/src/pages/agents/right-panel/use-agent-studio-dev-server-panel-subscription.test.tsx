@@ -129,8 +129,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 4,
               data: "rehydrated output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -193,8 +195,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const bufferedTerminalChunks = Array.from({ length: 300 }, (_, sequence) => ({
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence,
       data: `subscription-gap output ${sequence}\r\n`,
       timestamp: "2026-03-19T15:31:00.000Z",
@@ -268,8 +272,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "Starting `cd apps/web && pnpm dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -288,8 +294,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "Starting `cd apps/web && pnpm dev`\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -339,8 +347,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 1,
             data: "$ cd apps/web && pnpm dev\r\n",
             timestamp: "2026-03-19T15:30:01.000Z",
@@ -352,8 +362,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
             sequence: 2,
             data: "ELIFECYCLE Command failed.\r\n",
             timestamp: "2026-03-19T15:30:02.000Z",
@@ -394,8 +406,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: 4242,
             startedAt: "2026-03-19T15:30:00.000Z",
           }),
@@ -416,8 +430,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         taskId: "task-7",
         terminalChunk: {
           scriptId: "frontend",
-          runId: "frontend:2",
-          runOrder: { hostInstanceId: "host-1", generation: 2 },
+          runIdentity: {
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-1", generation: 2 },
+          },
           sequence: 1,
           data: "$ cd apps/web && pnpm dev\r\n",
           timestamp: "2026-03-19T15:30:01.000Z",
@@ -429,8 +445,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         taskId: "task-7",
         terminalChunk: {
           scriptId: "frontend",
-          runId: "frontend:2",
-          runOrder: { hostInstanceId: "host-1", generation: 2 },
+          runIdentity: {
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-1", generation: 2 },
+          },
           sequence: 2,
           data: "ELIFECYCLE Command failed.\r\n",
           timestamp: "2026-03-19T15:30:02.000Z",
@@ -442,7 +460,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         expect(
           harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
         ).toEqual(["$ cd apps/web && pnpm dev\r\n", "ELIFECYCLE Command failed.\r\n"]);
-        expect(harness.getLatest().scripts[0]?.runId).toBe("frontend:2");
+        expect(harness.getLatest().scripts[0]?.runIdentity?.runId).toBe("frontend:2");
       });
     };
     const staleStartingScript = buildScript({
@@ -452,8 +470,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
-          runId: "frontend:1",
-          runOrder: { hostInstanceId: "host-1", generation: 1 },
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
           sequence: 0,
           data: "Starting `cd apps/web && pnpm dev`\r\n",
           timestamp: "2026-03-19T15:30:00.000Z",
@@ -462,13 +482,17 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     });
     const staleForeignStartingScript = buildScript({
       status: "starting",
-      runId: "retired-host-run",
-      runOrder: { hostInstanceId: "retired-host", generation: 99 },
+      runIdentity: {
+        runId: "retired-host-run",
+        runOrder: { hostInstanceId: "retired-host", generation: 99 },
+      },
       bufferedTerminalChunks: [
         {
           scriptId: "frontend",
-          runId: "retired-host-run",
-          runOrder: { hostInstanceId: "retired-host", generation: 99 },
+          runIdentity: {
+            runId: "retired-host-run",
+            runOrder: { hostInstanceId: "retired-host", generation: 99 },
+          },
           sequence: 0,
           data: "Retired host starting\r\n",
           timestamp: "2026-03-19T15:29:00.000Z",
@@ -534,8 +558,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         scripts: [
           buildScript({
             status: "running",
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-current", generation: 1 },
+            runIdentity: {
+              runId: "frontend:1",
+              runOrder: { hostInstanceId: "host-current", generation: 1 },
+            },
             pid: 4242,
             startedAt: "2026-03-19T15:30:00.000Z",
           }),
@@ -577,8 +603,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             name: "Backend",
             command: "bun run api",
             status: "starting",
-            runId: "backend:foreign",
-            runOrder: { hostInstanceId: "host-foreign", generation: 99 },
+            runIdentity: {
+              runId: "backend:foreign",
+              runOrder: { hostInstanceId: "host-foreign", generation: 99 },
+            },
           }),
         });
         devServerEventListener?.({
@@ -587,8 +615,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "backend",
-            runId: "backend:foreign",
-            runOrder: { hostInstanceId: "host-foreign", generation: 99 },
+            runIdentity: {
+              runId: "backend:foreign",
+              runOrder: { hostInstanceId: "host-foreign", generation: 99 },
+            },
             sequence: 0,
             data: "foreign backend output\r\n",
             timestamp: "2026-03-19T15:31:00.000Z",
@@ -598,8 +628,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       const backend = harness.getLatest().scripts.find((script) => script.scriptId === "backend");
       expect(backend?.status).toBe("stopped");
-      expect(backend?.runId).toBeNull();
-      expect(backend?.runOrder).toBeNull();
+      expect(backend?.runIdentity).toBeNull();
 
       act(() => {
         harness.getLatest().onSelectScript("backend");
@@ -628,8 +657,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
                 ? [
                     {
                       scriptId: "frontend",
-                      runId: "frontend:1",
-                      runOrder: { hostInstanceId: "host-1", generation: 1 },
+                      runIdentity: {
+                        runId: "frontend:1",
+                        runOrder: { hostInstanceId: "host-1", generation: 1 },
+                      },
                       sequence: 7,
                       data: "previous task output\r\n",
                       timestamp: "2026-03-19T15:30:00.000Z",
@@ -732,8 +763,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
                 bufferedTerminalChunks: [
                   {
                     scriptId: "frontend",
-                    runId: "frontend:1",
-                    runOrder: { hostInstanceId: "host-1", generation: 1 },
+                    runIdentity: {
+                      runId: "frontend:1",
+                      runOrder: { hostInstanceId: "host-1", generation: 1 },
+                    },
                     sequence: 0,
                     data: "task seven restarted output\r\n",
                     timestamp: "2026-03-19T15:31:00.000Z",
@@ -865,8 +898,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
-                  runId: "frontend:1",
-                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                  runIdentity: {
+                    runId: "frontend:1",
+                    runOrder: { hostInstanceId: "host-1", generation: 1 },
+                  },
                   sequence: 7,
                   data: "old task seven output\r\n",
                   timestamp: "2026-03-19T15:30:00.000Z",
@@ -941,8 +976,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
               bufferedTerminalChunks: [
                 {
                   scriptId: "frontend",
-                  runId: "frontend:2",
-                  runOrder: { hostInstanceId: "host-1", generation: 2 },
+                  runIdentity: {
+                    runId: "frontend:2",
+                    runOrder: { hostInstanceId: "host-1", generation: 2 },
+                  },
                   sequence: 0,
                   data: "new task seven output\r\n",
                   timestamp: "2026-03-19T15:31:00.000Z",
@@ -986,8 +1023,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
+              runIdentity: {
+                runId: "frontend:1",
+                runOrder: { hostInstanceId: "host-1", generation: 1 },
+              },
               sequence: 0,
               data: "stale output\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1001,15 +1040,19 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runId: "frontend:2",
-          runOrder: { hostInstanceId: "host-2", generation: 1 },
+          runIdentity: {
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-2", generation: 1 },
+          },
           pid: 4242,
           startedAt: "2026-03-19T15:30:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "frontend:2",
-              runOrder: { hostInstanceId: "host-2", generation: 1 },
+              runIdentity: {
+                runId: "frontend:2",
+                runOrder: { hostInstanceId: "host-2", generation: 1 },
+              },
               sequence: 2,
               data: "reconnected output\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -1067,15 +1110,19 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runId: "retired-run",
-          runOrder: { hostInstanceId: "host-retired", generation: 1 },
+          runIdentity: {
+            runId: "retired-run",
+            runOrder: { hostInstanceId: "host-retired", generation: 1 },
+          },
           pid: 4141,
           startedAt: "2026-03-19T15:30:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "retired-run",
-              runOrder: { hostInstanceId: "host-retired", generation: 1 },
+              runIdentity: {
+                runId: "retired-run",
+                runOrder: { hostInstanceId: "host-retired", generation: 1 },
+              },
               sequence: 0,
               data: "retired host\r\n",
               timestamp: "2026-03-19T15:30:00.000Z",
@@ -1089,15 +1136,19 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runId: "current-run",
-          runOrder: { hostInstanceId: "host-current", generation: 1 },
+          runIdentity: {
+            runId: "current-run",
+            runOrder: { hostInstanceId: "host-current", generation: 1 },
+          },
           pid: 5151,
           startedAt: "2026-03-19T15:31:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "current-run",
-              runOrder: { hostInstanceId: "host-current", generation: 1 },
+              runIdentity: {
+                runId: "current-run",
+                runOrder: { hostInstanceId: "host-current", generation: 1 },
+              },
               sequence: 0,
               data: "current host\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -1150,7 +1201,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     try {
       expect(currentHarness.getLatest().selectedScriptTerminalBuffer).toBeNull();
       await waitFor(() => {
-        expect(currentHarness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe(
+        expect(currentHarness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
           "host-current",
         );
         expect(currentHarness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
@@ -1166,8 +1217,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           taskId: "task-7",
           terminalChunk: {
             scriptId: "frontend",
-            runId: "retired-run",
-            runOrder: { hostInstanceId: "host-retired", generation: 1 },
+            runIdentity: {
+              runId: "retired-run",
+              runOrder: { hostInstanceId: "host-retired", generation: 1 },
+            },
             sequence: 1,
             data: "late retired output\r\n",
             timestamp: "2026-03-19T15:32:00.000Z",
@@ -1177,7 +1230,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         await Promise.resolve();
       });
 
-      expect(currentHarness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe("host-current");
+      expect(currentHarness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
+        "host-current",
+      );
       expect(
         currentHarness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
       ).toEqual(["current host\r\n"]);
@@ -1195,15 +1250,19 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runId: "host-current-run",
-          runOrder: { hostInstanceId: "host-current", generation: 1 },
+          runIdentity: {
+            runId: "host-current-run",
+            runOrder: { hostInstanceId: "host-current", generation: 1 },
+          },
           pid: 5252,
           startedAt: "2026-03-19T15:31:00.000Z",
           bufferedTerminalChunks: [
             {
               scriptId: "frontend",
-              runId: "host-current-run",
-              runOrder: { hostInstanceId: "host-current", generation: 1 },
+              runIdentity: {
+                runId: "host-current-run",
+                runOrder: { hostInstanceId: "host-current", generation: 1 },
+              },
               sequence: 0,
               data: "current host\r\n",
               timestamp: "2026-03-19T15:31:00.000Z",
@@ -1257,7 +1316,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       await waitFor(() => {
         expect(getStateCalls).toBe(2);
-        expect(harness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe("host-current");
+        expect(harness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
+          "host-current",
+        );
       });
 
       act(() => {
@@ -1275,8 +1336,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             scripts: [
               buildScript({
                 status: "running",
-                runId: "host-stale-run",
-                runOrder: { hostInstanceId: "host-stale", generation: 99 },
+                runIdentity: {
+                  runId: "host-stale-run",
+                  runOrder: { hostInstanceId: "host-stale", generation: 99 },
+                },
                 pid: 4242,
                 startedAt: "2026-03-19T15:29:00.000Z",
               }),
@@ -1288,8 +1351,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             scripts: [
               buildScript({
                 status: "running",
-                runId: "host-initial-stale-run",
-                runOrder: { hostInstanceId: "host-initial-stale", generation: 50 },
+                runIdentity: {
+                  runId: "host-initial-stale-run",
+                  runOrder: { hostInstanceId: "host-initial-stale", generation: 50 },
+                },
                 pid: 3131,
                 startedAt: "2026-03-19T15:28:00.000Z",
               }),
@@ -1311,7 +1376,8 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           .some((mutation) => {
             const data = mutation.state.data as DevServerGroupState | undefined;
             return (
-              mutation.state.status === "success" && data?.scripts[0]?.runId === "host-stale-run"
+              mutation.state.status === "success" &&
+              data?.scripts[0]?.runIdentity?.runId === "host-stale-run"
             );
           });
         expect(staleQuery?.state.status).toBe("success");
@@ -1319,7 +1385,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         expect(hasSettledStaleMutation).toBe(true);
         expect(staleRestartSettled).toBe(true);
         expect(staleInitialQuerySettled).toBe(true);
-        expect(harness.getLatest().scripts[0]?.runOrder?.hostInstanceId).toBe("host-current");
+        expect(harness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
+          "host-current",
+        );
         expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
           "current host\r\n",
         );

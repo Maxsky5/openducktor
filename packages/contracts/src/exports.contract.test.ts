@@ -249,6 +249,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "KANBAN_EMPTY_COLUMN_DISPLAY_VALUES",
   "devServerEventSchema",
   "devServerGroupStateSchema",
+  "devServerRunIdentitySchema",
   "devServerRunOrderSchema",
   "devServerTerminalChunkSchema",
   "devServerScriptStateSchema",

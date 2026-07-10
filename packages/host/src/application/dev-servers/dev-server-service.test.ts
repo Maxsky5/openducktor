@@ -671,10 +671,12 @@ describe("createDevServerService", () => {
     const firstRun = firstState.scripts[0];
     const replacementRun = replacementState.scripts[0];
 
-    expect(firstRun?.runOrder?.generation).toBe(1);
-    expect(replacementRun?.runOrder?.generation).toBe(1);
-    expect(replacementRun?.runOrder?.hostInstanceId).not.toBe(firstRun?.runOrder?.hostInstanceId);
-    expect(replacementRun?.runId).not.toBe(firstRun?.runId);
+    expect(firstRun?.runIdentity?.runOrder.generation).toBe(1);
+    expect(replacementRun?.runIdentity?.runOrder.generation).toBe(1);
+    expect(replacementRun?.runIdentity?.runOrder.hostInstanceId).not.toBe(
+      firstRun?.runIdentity?.runOrder.hostInstanceId,
+    );
+    expect(replacementRun?.runIdentity?.runId).not.toBe(firstRun?.runIdentity?.runId);
   });
   test("keeps runtime ownership isolated for delimiter-colliding repo and task strings", async () => {
     const { processPort, starts } = createProcessPort();

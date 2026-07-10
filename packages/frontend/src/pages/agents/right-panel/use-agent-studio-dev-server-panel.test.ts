@@ -12,20 +12,24 @@ import {
 } from "./use-agent-studio-dev-server-panel-helpers";
 
 const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => {
-  const bufferedRun = overrides.bufferedTerminalChunks?.[0];
-  const runId =
-    overrides.runId ??
-    bufferedRun?.runId ??
-    (overrides.pid === null || overrides.pid === undefined ? null : "frontend:1");
+  const bufferedRunIdentity = overrides.bufferedTerminalChunks?.[0]?.runIdentity;
+  const defaultRunIdentity =
+    overrides.pid === null || overrides.pid === undefined
+      ? null
+      : {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        };
+  const runIdentity =
+    overrides.runIdentity === undefined
+      ? (bufferedRunIdentity ?? defaultRunIdentity)
+      : overrides.runIdentity;
   return {
     scriptId: "frontend",
     name: "Frontend",
     command: "bun run dev",
     status: "stopped",
-    runId,
-    runOrder:
-      bufferedRun?.runOrder ??
-      (runId === null ? null : { hostInstanceId: "host-1", generation: 1 }),
+    runIdentity,
     pid: null,
     startedAt: null,
     exitCode: null,
@@ -54,8 +58,10 @@ describe("useAgentStudioDevServerPanel helpers", () => {
   test("applies terminal chunk events without cloning buffered replay into query state", () => {
     const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
-      runId: "frontend:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
       sequence: index,
       data: `line-${index}`,
       timestamp: `2026-03-19T15:30:${String(index % 60).padStart(2, "0")}.000Z`,
@@ -69,8 +75,10 @@ describe("useAgentStudioDevServerPanel helpers", () => {
       taskId: "task-7",
       terminalChunk: {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 2000,
         data: "latest-chunk",
         timestamp: "2026-03-19T15:31:00.000Z",

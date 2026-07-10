@@ -4,8 +4,6 @@ import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
   applyDevServerTerminalBufferReplacement,
-  canApplyDevServerGroupState,
-  canApplyDevServerScriptStateToStore,
   createDevServerTerminalBufferStore,
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
@@ -15,6 +13,10 @@ import {
   shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import {
+  canApplyDevServerGroupState,
+  canApplyDevServerScriptStateToStore,
+} from "@/features/agent-studio-build-tools/dev-server-run-ownership";
 import {
   type DevServerTaskScope,
   formatDevServerTaskScopeKey,

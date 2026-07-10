@@ -33,20 +33,13 @@ export const createDevServerTerminalWriter = (
       return;
     }
     const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-    if (!script || script.runId !== expectedRunId) {
+    if (!script || script.runIdentity?.runId !== expectedRunId) {
       return;
-    }
-    if (!script.runOrder) {
-      throw new HostInvariantError({
-        invariant: "dev_server_script_run_known",
-        message: `Dev server script has no active run order: ${scriptId}`,
-      });
     }
     const timestamp = new Date().toISOString();
     const terminalChunk = {
       scriptId,
-      runId: expectedRunId,
-      runOrder: script.runOrder,
+      runIdentity: script.runIdentity,
       sequence: nextTerminalSequence(runtime, script),
       data,
       timestamp,
@@ -64,13 +57,18 @@ export const createDevServerTerminalWriter = (
   return {
     appendSystemMessage(runtime, scriptId, message) {
       const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-      if (!script?.runId) {
+      if (!script?.runIdentity) {
         throw new HostInvariantError({
           invariant: "dev_server_script_run_known",
-          message: `Dev server script has no active run id: ${scriptId}`,
+          message: `Dev server script has no active run identity: ${scriptId}`,
         });
       }
-      pushTerminalChunk(runtime, scriptId, script.runId, formatTerminalSystemMessage(message));
+      pushTerminalChunk(
+        runtime,
+        scriptId,
+        script.runIdentity.runId,
+        formatTerminalSystemMessage(message),
+      );
     },
     pushProcessOutput(runtime, scriptId, expectedRunId, data) {
       pushTerminalChunk(runtime, scriptId, expectedRunId, formatTerminalProcessOutput(data));

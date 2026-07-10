@@ -31,8 +31,7 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   name: script.name,
   command: script.command,
   status: "stopped",
-  runId: null,
-  runOrder: null,
+  runIdentity: null,
   pid: null,
   startedAt: null,
   exitCode: null,
@@ -179,16 +178,18 @@ export const startTerminalRun = (
   hostInstanceId: string,
 ): void => {
   runtime.terminalRunGeneration += 1;
-  script.runId = JSON.stringify([
-    hostInstanceId,
-    runtime.state.repoPath,
-    runtime.state.taskId,
-    script.scriptId,
-    runtime.terminalRunGeneration,
-  ]);
-  script.runOrder = {
-    hostInstanceId,
-    generation: runtime.terminalRunGeneration,
+  script.runIdentity = {
+    runId: JSON.stringify([
+      hostInstanceId,
+      runtime.state.repoPath,
+      runtime.state.taskId,
+      script.scriptId,
+      runtime.terminalRunGeneration,
+    ]),
+    runOrder: {
+      hostInstanceId,
+      generation: runtime.terminalRunGeneration,
+    },
   };
   resetTerminalChunks(runtime, script);
 };

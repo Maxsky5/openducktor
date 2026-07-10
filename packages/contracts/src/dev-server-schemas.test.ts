@@ -9,8 +9,10 @@ describe("dev-server-schemas", () => {
       taskId: "task-7",
       terminalChunk: {
         scriptId: "frontend",
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
+        runIdentity: {
+          runId: "frontend:1",
+          runOrder: { hostInstanceId: "host-1", generation: 1 },
+        },
         sequence: 12,
         data: "\u001b[32mready\u001b[0m\r\n",
         timestamp: "2026-03-25T10:00:00.000Z",
@@ -61,8 +63,7 @@ describe("dev-server-schemas", () => {
           name: "Frontend",
           command: "bun run dev",
           status: "stopped",
-          runId: null,
-          runOrder: null,
+          runIdentity: null,
           pid: null,
           startedAt: null,
           exitCode: null,
@@ -72,9 +73,32 @@ describe("dev-server-schemas", () => {
       updatedAt: "2026-03-25T10:00:00.000Z",
     });
 
-    expect(parsed.scripts[0]?.runId).toBeNull();
-    expect(parsed.scripts[0]?.runOrder).toBeNull();
+    expect(parsed.scripts[0]?.runIdentity).toBeNull();
     expect(parsed.scripts[0]?.bufferedTerminalChunks).toEqual([]);
+  });
+
+  test("rejects structurally incomplete run identity", () => {
+    expect(() =>
+      devServerGroupStateSchema.parse({
+        repoPath: "/repo",
+        taskId: "task-7",
+        worktreePath: "/tmp/worktree/task-7",
+        scripts: [
+          {
+            scriptId: "frontend",
+            name: "Frontend",
+            command: "bun run dev",
+            status: "running",
+            runIdentity: { runId: "frontend:1" },
+            pid: 4242,
+            startedAt: "2026-03-25T10:00:00.000Z",
+            exitCode: null,
+            lastError: null,
+          },
+        ],
+        updatedAt: "2026-03-25T10:00:00.000Z",
+      }),
+    ).toThrow();
   });
 
   test("rejects buffered output that does not match script run ownership", () => {
@@ -89,8 +113,10 @@ describe("dev-server-schemas", () => {
             name: "Frontend",
             command: "bun run dev",
             status: "stopped",
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
+            runIdentity: {
+              runId: "frontend:2",
+              runOrder: { hostInstanceId: "host-1", generation: 2 },
+            },
             pid: null,
             startedAt: null,
             exitCode: 0,
@@ -98,8 +124,10 @@ describe("dev-server-schemas", () => {
             bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
+                runIdentity: {
+                  runId: "frontend:1",
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
                 sequence: 0,
                 data: "old output",
                 timestamp: "2026-03-25T10:00:00.000Z",
