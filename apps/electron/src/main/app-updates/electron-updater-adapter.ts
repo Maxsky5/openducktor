@@ -21,6 +21,12 @@ type ElectronUpdaterAdapterOptions = {
   platform?: NodeJS.Platform;
 };
 
+const updateInfoEventNames = new Set<keyof ElectronUpdaterEventMap>([
+  "update-available",
+  "update-not-available",
+  "update-downloaded",
+]);
+
 export const createElectronUpdaterAdapter = ({
   platform = process.platform,
 }: ElectronUpdaterAdapterOptions = {}): ElectronAppUpdaterAdapter => {
@@ -49,24 +55,20 @@ export const createElectronUpdaterAdapter = ({
     },
     downloadUpdate: () => autoUpdater.downloadUpdate(),
     on: (eventName, listener) => {
-      const untypedListener = (payload: ElectronUpdaterEventMap[typeof eventName]) => {
+      const untypedListener = (payload: unknown) => {
         if (eventName === "download-progress") {
-          listener(toDownloadProgress(payload as ProgressInfo) as never);
+          listener(toDownloadProgress(payload as ProgressInfo));
           return;
         }
-        if (
-          eventName === "update-available" ||
-          eventName === "update-not-available" ||
-          eventName === "update-downloaded"
-        ) {
-          listener(toUpdateInfo(payload as UpdateInfo) as never);
+        if (updateInfoEventNames.has(eventName)) {
+          listener(toUpdateInfo(payload as UpdateInfo));
           return;
         }
-        listener(payload as never);
+        listener(payload as ElectronUpdaterEventMap[typeof eventName]);
       };
-      autoUpdater.on(eventName, untypedListener as never);
+      autoUpdater.on(eventName, untypedListener);
       return () => {
-        autoUpdater.removeListener(eventName, untypedListener as never);
+        autoUpdater.removeListener(eventName, untypedListener);
       };
     },
     quitAndInstall: (isSilent, isForceRunAfter) => {

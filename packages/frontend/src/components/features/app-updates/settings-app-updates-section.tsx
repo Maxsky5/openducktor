@@ -68,12 +68,22 @@ function SettingsAppUpdatesContent({
   state,
 }: SettingsAppUpdatesContentProps): ReactElement {
   const controller = useAppUpdateState();
-  const display = getAppUpdateStatusDisplay(controller.state ?? state);
+  const isLoadingInitialState = controller.isLoadingInitialState && controller.state === null;
+  const display = isLoadingInitialState
+    ? {
+        badgeVariant: "secondary" as const,
+        label: "Loading update status",
+        description: "Reading desktop update status from the shell.",
+      }
+    : getAppUpdateStatusDisplay(controller.state ?? state);
   const visibleState = controller.state ?? state;
   const installRequested =
     visibleState.status === "downloaded" && visibleState.installRequested === true;
   const isBusy =
-    controller.actionInFlight !== null || visibleState.status === "checking" || installRequested;
+    isLoadingInitialState ||
+    controller.actionInFlight !== null ||
+    visibleState.status === "checking" ||
+    installRequested;
   const downloadAllowed = canDownloadUpdate(visibleState);
   const installAllowed = canInstallUpdate(visibleState);
   const error = getAppUpdateError(visibleState);
@@ -104,7 +114,7 @@ function SettingsAppUpdatesContent({
       </div>
 
       <div className="mt-4 space-y-3">
-        <VersionRows state={visibleState} />
+        {!isLoadingInitialState && <VersionRows state={visibleState} />}
         {visibleState.status === "downloading" && (
           <AppUpdateProgress percent={getAppUpdateProgressPercent(visibleState) ?? 0} />
         )}

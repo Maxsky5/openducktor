@@ -187,11 +187,3 @@ export const appUpdateCommandResultSchema = z.discriminatedUnion("accepted", [
     .strict(),
 ]);
 export type AppUpdateCommandResult = z.infer<typeof appUpdateCommandResultSchema>;
-
-export const appUpdateStateChangedEventSchema = z
-  .object({
-    type: z.literal("state_changed"),
-    state: appUpdateStateSchema,
-  })
-  .strict();
-export type AppUpdateStateChangedEvent = z.infer<typeof appUpdateStateChangedEventSchema>;

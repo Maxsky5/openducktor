@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
-  appUpdateStateChangedEventSchema,
+  appUpdateErrorSchema,
   appUpdateStateSchema,
   canDownloadAppUpdate,
   canInstallAppUpdate,
@@ -155,25 +156,38 @@ describe("app update schemas", () => {
     });
   });
 
-  test("parses state change events", () => {
+  test("parses manual update check input and rejects background IPC checks", () => {
+    expect(appUpdateCheckInputSchema.parse({ initiator: "settings" })).toEqual({
+      initiator: "settings",
+    });
+    expect(appUpdateCheckInputSchema.parse({ initiator: "menu" })).toEqual({
+      initiator: "menu",
+    });
+    expect(() => appUpdateCheckInputSchema.parse({ initiator: "background" })).toThrow();
+  });
+
+  test("parses update errors and rejects empty messages", () => {
     expect(
-      appUpdateStateChangedEventSchema.parse({
-        type: "state_changed",
-        state: {
-          status: "downloading",
-          currentVersion: "0.4.2",
-          availableVersion: "0.4.3",
-          progressPercent: 45,
-        },
+      appUpdateErrorSchema.parse({
+        code: "check_failed",
+        message: "Network failed",
+        operation: "check",
+        causeName: "Error",
+        details: { release: "v0.4.3" },
       }),
     ).toEqual({
-      type: "state_changed",
-      state: {
-        status: "downloading",
-        currentVersion: "0.4.2",
-        availableVersion: "0.4.3",
-        progressPercent: 45,
-      },
+      code: "check_failed",
+      message: "Network failed",
+      operation: "check",
+      causeName: "Error",
+      details: { release: "v0.4.3" },
     });
+    expect(() =>
+      appUpdateErrorSchema.parse({
+        code: "check_failed",
+        message: "",
+        operation: "check",
+      }),
+    ).toThrow();
   });
 });

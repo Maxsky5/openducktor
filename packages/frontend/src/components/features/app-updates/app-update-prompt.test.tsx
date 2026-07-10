@@ -63,6 +63,8 @@ describe("AppUpdatePrompt", () => {
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Current 0.4.2");
+    expect(screen.getByRole("status").textContent).toContain(longUpdateError);
     const errorMessages = screen.getAllByText(longUpdateError);
     expect(errorMessages).toHaveLength(1);
     const [errorMessage] = errorMessages;
@@ -87,7 +89,9 @@ describe("AppUpdatePrompt", () => {
 
     expect(await screen.findByText("Update available")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Update available");
-    expect(screen.getByText(/Current 0.4.2/)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Current 0.4.2");
+    expect(screen.getByRole("status").textContent).toContain("New 0.4.3");
+    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
@@ -138,9 +142,9 @@ describe("AppUpdatePrompt", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
 
-    expect((await screen.findAllByText("bridge download failed")).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Current 0.4.2/)).toBeTruthy();
-    expect(screen.getByText(/New 0.4.3/)).toBeTruthy();
+    expect(await screen.findAllByText("bridge download failed")).toHaveLength(1);
+    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("bridge download failed");
     expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
   });
 

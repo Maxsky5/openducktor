@@ -382,6 +382,9 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyDownloaded = (info: ElectronUpdaterUpdateInfo): void => {
+    if (state.status !== "downloading") {
+      return;
+    }
     const downloadedVersion = readUpdateVersion(info) ?? availableVersionFromState(state);
     if (!downloadedVersion) {
       setErrorState({
@@ -586,7 +589,7 @@ export const createElectronAppUpdateService = ({
       publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
       try {
         const result = await adapter.checkForUpdates();
-        if (result === null) {
+        if (result === null || result === undefined) {
           setErrorState({
             checkedAt: now(),
             code: "updater_unavailable",
@@ -716,7 +719,6 @@ export const createElectronAppUpdateService = ({
         });
         return commandAccepted();
       } catch (cause) {
-        activeOperation = null;
         logger.error("OpenDucktor update install failed", cause);
         const previousState = state.status === "downloaded" ? state : downloadedState;
         if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
@@ -737,6 +739,8 @@ export const createElectronAppUpdateService = ({
           }),
         );
         return commandAccepted();
+      } finally {
+        activeOperation = null;
       }
     },
     startBackgroundChecks: () => {

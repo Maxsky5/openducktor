@@ -62,12 +62,10 @@ export const isUpdateMetadataArtifact = (
 export const isCompanionReleaseArtifact = (fileName: string): boolean =>
   companionArtifactExtensions.has(extname(fileName));
 
+const macUpdateArtifactArchPattern = /(?:^|[^a-z0-9])(arm64|x64)(?=$|[^a-z0-9])/i;
+
 export const detectMacUpdateArtifactArchFromUrl = (url: string): "arm64" | "x64" | null => {
-  if (url.includes("arm64")) {
-    return "arm64";
-  }
-  if (url.includes("x64")) {
-    return "x64";
-  }
-  return null;
+  const match = macUpdateArtifactArchPattern.exec(url);
+  const arch = match?.[1]?.toLowerCase();
+  return arch === "arm64" || arch === "x64" ? arch : null;
 };

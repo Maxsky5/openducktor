@@ -82,6 +82,7 @@ const workspaceRoot = path.resolve(distDirectory, "../../..");
 
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
+let activeAppUpdateService: ElectronAppUpdateService | null = null;
 
 const isTaggedHostValidationError = (
   cause: unknown,
@@ -98,7 +99,7 @@ const isTaggedHostValidationError = (
   typeof cause.message === "string";
 
 const shutdownController = createElectronMainShutdownController({
-  disposeHost: (reason) => disposeActiveHostEffect(reason),
+  disposeHost: (reason) => disposeActiveElectronRuntimeEffect(reason),
   exitProcess: (exitCode) => {
     process.exit(exitCode);
   },
@@ -397,7 +398,14 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
   appUpdateService.subscribe((state) => {
     const parsedState = readAppUpdateStateForIpc(state);
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
+      if (window.isDestroyed() || window.webContents.isDestroyed()) {
+        continue;
+      }
+      try {
+        window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
+      } catch (cause) {
+        electronMainLogger.error("OpenDucktor update state forwarding failed", cause);
+      }
     }
   });
 };
@@ -567,6 +575,18 @@ const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLi
   return disposeHostEffect(activeHostCommandRouter, reason);
 };
 
+const disposeActiveAppUpdateService = (): void => {
+  activeAppUpdateService?.dispose();
+  activeAppUpdateService = null;
+};
+
+const disposeActiveElectronRuntimeEffect = (
+  reason: string,
+): Effect.Effect<void, ElectronLifecycleError> =>
+  Effect.sync(disposeActiveAppUpdateService).pipe(
+    Effect.flatMap(() => disposeActiveHostEffect(reason)),
+  );
+
 const initializeHostEffect = (hostCommandRouter: EffectHostCommandRouter) =>
   hostCommandRouter.initialize().pipe(
     Effect.mapError(
@@ -625,6 +645,8 @@ const configureElectronReadyRuntimeEffect = ({
         platform: process.platform,
         resourcesPath: process.resourcesPath,
       });
+      disposeActiveAppUpdateService();
+      activeAppUpdateService = appUpdateService;
       configureElectronLoopbackCorsPolicy(
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),
@@ -680,7 +702,7 @@ const startupEffect = composeElectronMainStartupEffect({
 });
 
 void runElectronMainStartupBoundary({
-  cleanupAfterFailure: () => disposeActiveHostEffect("startup-failure"),
+  cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure"),
   exitProcess: (exitCode) => {
     process.exit(exitCode);
   },

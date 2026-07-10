@@ -211,17 +211,6 @@ export const collectReleaseArtifactsEffect = ({
       console.warn(`No Electron updater companion blockmaps were produced for ${platform}.`);
     }
 
-    if (copiedArtifacts.length === 0) {
-      return yield* Effect.fail(
-        new ElectronOperationError({
-          operation: "electron.package.collect-release-artifacts",
-          message: `No Electron release artifacts were produced for ${platform}.`,
-          path: releaseDirectory,
-          platform,
-        }),
-      );
-    }
-
     return copiedArtifacts;
   });
 

@@ -57,6 +57,26 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("appUpdateService.startBackgroundChecks()");
   });
 
+  test("app update service is disposed with the active Electron runtime", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("let activeAppUpdateService: ElectronAppUpdateService | null = null");
+    expect(source).toContain("activeAppUpdateService?.dispose()");
+    expect(source).toContain("disposeActiveElectronRuntimeEffect");
+    expect(source).toContain(
+      'cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure")',
+    );
+    expect(source).toContain("disposeHost: (reason) => disposeActiveElectronRuntimeEffect(reason)");
+  });
+
+  test("app update state forwarding skips destroyed windows and logs send failures", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("window.isDestroyed() || window.webContents.isDestroyed()");
+    expect(source).toContain("window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL");
+    expect(source).toContain("OpenDucktor update state forwarding failed");
+  });
+
   test("startup runs pre-ready setup before app readiness and initializes host before window", async () => {
     const calls: string[] = [];
 

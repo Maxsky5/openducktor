@@ -103,6 +103,7 @@ describe("build Electron release artifact", () => {
     expect(isReleaseArtifact("macos", "OpenDucktor-0.3.1-mac-arm64.zip")).toBe(true);
     expect(isReleaseArtifact("macos", "latest-mac.yml")).toBe(true);
     expect(isReleaseArtifact("macos", "latest-mac-x64.yml")).toBe(true);
+    expect(isReleaseArtifact("macos", "latest-mac-.yml")).toBe(false);
     expect(isReleaseArtifact("macos", "OpenDucktor.app")).toBe(false);
     expect(isReleaseArtifact("macos", "builder-debug.yml")).toBe(false);
     expect(isReleaseArtifact("windows", "latest.yml")).toBe(true);

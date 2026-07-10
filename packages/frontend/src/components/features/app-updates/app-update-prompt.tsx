@@ -20,6 +20,12 @@ import {
 
 const promptStatuses = new Set(["available", "downloading", "downloaded"]);
 
+const joinLiveRegionParts = (parts: Array<string | undefined>): string =>
+  parts
+    .filter((part): part is string => Boolean(part?.trim()))
+    .map((part) => part.trim().replace(/\.+$/, ""))
+    .join(". ");
+
 export function AppUpdatePrompt(): ReactElement | null {
   const controller = useAppUpdateState();
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
@@ -55,13 +61,21 @@ export function AppUpdatePrompt(): ReactElement | null {
   const availableVersion = getAppUpdateAvailableVersion(state);
   const error = getAppUpdateError(state);
   const errorMessage = controller.commandError?.message ?? error?.message;
-  const liveDescription = controller.commandError?.message ?? display.description;
+  const visibleVersionText = `Current ${state.currentVersion}${
+    availableVersion ? ` · New ${availableVersion}` : ""
+  }`;
+  const liveRegionText = joinLiveRegionParts([
+    display.label,
+    display.description,
+    visibleVersionText,
+    errorMessage,
+  ]);
 
   return (
     <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(420px,calc(100vw-2rem))]">
       <Card className="pointer-events-auto rounded-lg border-border bg-card p-4 shadow-lg">
         <p role="status" aria-live="polite" className="sr-only">
-          {display.label}. {liveDescription}
+          {liveRegionText}
         </p>
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1 space-y-3">
@@ -71,10 +85,7 @@ export function AppUpdatePrompt(): ReactElement | null {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">{display.description}</p>
-              <p className="text-xs text-muted-foreground">
-                Current {state.currentVersion}
-                {availableVersion ? ` · New ${availableVersion}` : ""}
-              </p>
+              <p className="text-xs text-muted-foreground">{visibleVersionText}</p>
             </div>
             {showProgress && (
               <div className="space-y-1.5">

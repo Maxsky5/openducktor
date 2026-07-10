@@ -3,11 +3,15 @@ import {
   createDisabledUpdateState,
   createUpdateError,
   markAvailable,
+  markChecking,
   markDisabledManualCheck,
   markDownloaded,
   markDownloadedInstallError,
+  markDownloadedInstallRequested,
+  markDownloadedInstallRetryDisabled,
   markDownloading,
   markDownloadProgress,
+  markErrorManualCheck,
   markUpdateError,
   markUpToDate,
   updateErrorCodeForOperation,
@@ -58,6 +62,47 @@ describe("app update state machine", () => {
       status: "downloading",
       availableVersion: "0.4.3",
       progressPercent: 0,
+      checkInitiator: "settings",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+  });
+
+  test("marks checking while preserving prior update context", () => {
+    expect(
+      markChecking({
+        currentVersion: "0.4.2",
+        initiator: "menu",
+        previousState: {
+          status: "available",
+          currentVersion: "0.4.2",
+          availableVersion: "0.4.3",
+          checkInitiator: "settings",
+          checkedAt: "2026-07-08T22:00:00.000Z",
+        },
+      }),
+    ).toEqual({
+      status: "checking",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkInitiator: "menu",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+  });
+
+  test("marks manual checks on error states without replacing the original error", () => {
+    const state = {
+      status: "error" as const,
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      error: {
+        code: "check_failed" as const,
+        message: "network failed",
+        operation: "check" as const,
+      },
+    };
+
+    expect(markErrorManualCheck(state, "settings", "2026-07-08T22:00:00.000Z")).toEqual({
+      ...state,
       checkInitiator: "settings",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
@@ -154,6 +199,50 @@ describe("app update state machine", () => {
       error: {
         code: "install_failed",
         message: "shutdown failed",
+        operation: "install",
+        causeName: "Error",
+      },
+    });
+  });
+
+  test("marks downloaded install requests as pending and retry-disabled failures as terminal", () => {
+    const downloaded = {
+      status: "downloaded" as const,
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      error: {
+        code: "install_failed" as const,
+        message: "previous failure",
+        operation: "install" as const,
+      },
+    };
+
+    expect(markDownloadedInstallRequested(downloaded)).toEqual({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRequested: true,
+    });
+    expect(
+      markDownloadedInstallRetryDisabled({
+        cause: new Error("handoff failed"),
+        message: "Quit and reopen OpenDucktor before trying again.",
+        previousState: {
+          ...downloaded,
+          installRequested: true,
+        },
+      }),
+    ).toEqual({
+      status: "downloaded",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        message: "Quit and reopen OpenDucktor before trying again.",
         operation: "install",
         causeName: "Error",
       },

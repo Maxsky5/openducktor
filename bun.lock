@@ -17,9 +17,10 @@
     },
     "apps/electron": {
       "name": "@openducktor/electron",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "electron-updater": "^6.8.9",
+        "yaml": "^2.9.0",
       },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",
@@ -41,7 +42,7 @@
     },
     "packages/adapters-codex-app-server": {
       "name": "@openducktor/adapters-codex-app-server",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -50,7 +51,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@opencode-ai/sdk": "^1.17.13",
         "@openducktor/contracts": "workspace:*",
@@ -60,21 +61,21 @@
     },
     "packages/build-tools": {
       "name": "@openducktor/build-tools",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "devDependencies": {
         "bun-types": "^1.3.14",
       },
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "zod": "^4.4.3",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -82,7 +83,7 @@
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -137,7 +138,7 @@
     },
     "packages/host": {
       "name": "@openducktor/host",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -152,7 +153,7 @@
     },
     "packages/host-client": {
       "name": "@openducktor/host-client",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -161,7 +162,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "bin": {
         "openducktor-mcp": "dist/index.js",
       },
@@ -178,7 +179,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "bin": {
         "web": "dist/cli.js",
         "openducktor-web": "dist/cli.js",
@@ -199,7 +200,7 @@
     },
     "packages/path-support": {
       "name": "@openducktor/path-support",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "devDependencies": {
         "bun-types": "^1.3.14",
       },

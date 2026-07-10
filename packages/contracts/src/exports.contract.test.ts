@@ -27,7 +27,6 @@ import type {
   AppUpdateInstallableState,
   AppUpdateOperation,
   AppUpdateState,
-  AppUpdateStateChangedEvent,
   AppUpdateStatus,
   AutopilotActionId,
   AutopilotEventId,
@@ -207,7 +206,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "appUpdateErrorSchema",
   "appUpdateOperationSchema",
   "appUpdateOperationValues",
-  "appUpdateStateChangedEventSchema",
   "appUpdateStateSchema",
   "appUpdateStatusSchema",
   "appUpdateStatusValues",
@@ -558,7 +556,6 @@ type ExportedTypeContract = {
   AppUpdateInstallableState: AppUpdateInstallableState;
   AppUpdateOperation: AppUpdateOperation;
   AppUpdateState: AppUpdateState;
-  AppUpdateStateChangedEvent: AppUpdateStateChangedEvent;
   AppUpdateStatus: AppUpdateStatus;
   TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;

@@ -41,7 +41,14 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
   },
   subscribe(listener) {
     const handleEvent = (_event: Electron.IpcRendererEvent, state: unknown) => {
-      listener(appUpdateStateSchema.parse(state));
+      const parsedState = appUpdateStateSchema.safeParse(state);
+      if (!parsedState.success) {
+        console.error("Received invalid app update state from Electron main process.", {
+          issues: parsedState.error.issues,
+        });
+        return;
+      }
+      listener(parsedState.data);
     };
 
     ipcRenderer.on(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, handleEvent);

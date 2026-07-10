@@ -463,6 +463,26 @@ describe("electron app update service", () => {
     });
   });
 
+  test("treats an undefined update check result as an actionable error", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = undefined as unknown as FakeUpdaterAdapter["nextCheckResult"];
+    const { service } = createService({ adapter });
+
+    const result = await service.check({ initiator: "settings" });
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: {
+        status: "error",
+        checkedAt: fixedNow,
+        error: {
+          code: "updater_unavailable",
+          operation: "check",
+        },
+      },
+    });
+  });
+
   test("reports missing GitHub updater metadata without leaking transport internals", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = Promise.reject(createMissingManifestError());
@@ -561,6 +581,23 @@ describe("electron app update service", () => {
       },
     });
     expect(adapter.downloadCalls).toBe(0);
+  });
+
+  test("ignores downloaded events unless a download is active", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
+
+    adapter.emit("update-downloaded", { version: "0.4.3" });
+
+    expect(service.getState()).toMatchObject({
+      status: "available",
+      availableVersion: "0.4.3",
+    });
   });
 
   test("downloads only after explicit action and reflects progress", async () => {
@@ -740,7 +777,7 @@ describe("electron app update service", () => {
     expect(duplicateResult).toMatchObject({
       accepted: false,
       rejection: {
-        code: "busy",
+        code: "invalid_state",
         operation: "install",
       },
     });

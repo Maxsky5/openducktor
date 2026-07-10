@@ -13,6 +13,40 @@ const longUpdateError =
   "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again. https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml x-github-request-id-4BDD-2F6204-154326FB-1101F3BB-6A501D61";
 
 describe("SettingsAppUpdatesSection", () => {
+  test("shows an explicit loading status before the initial shell state resolves", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "idle",
+      currentVersion: "0.4.2",
+    });
+    let resolveInitialState: (state: Awaited<ReturnType<typeof appUpdates.getState>>) => void =
+      () => {};
+    appUpdates.getState.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInitialState = resolve;
+        }),
+    );
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<SettingsAppUpdatesSection disabled={false} />);
+
+    expect(await screen.findByText("Loading update status")).toBeTruthy();
+    expect(screen.getByText("Reading desktop update status from the shell.")).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+    ).toBe(true);
+    expect(screen.queryByText("Current version")).toBeNull();
+
+    act(() => {
+      resolveInitialState({
+        status: "idle",
+        currentVersion: "0.4.2",
+      });
+    });
+
+    expect(await screen.findByText("Updates ready")).toBeTruthy();
+    expect(screen.getByText("Current version")).toBeTruthy();
+  });
+
   test("runs manual checks through the shell bridge and shows up-to-date feedback", async () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "idle",

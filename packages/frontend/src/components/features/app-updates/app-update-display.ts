@@ -56,6 +56,9 @@ export const canInstallUpdate = canInstallAppUpdate;
 
 const getErrorStatusDescription = (state: AppUpdateState): string => {
   const operation = state.status === "error" ? state.error.operation : undefined;
+  if (operation === "initialize") {
+    return "OpenDucktor could not initialize the updater.";
+  }
   if (operation === "check") {
     return "OpenDucktor could not complete the update check.";
   }

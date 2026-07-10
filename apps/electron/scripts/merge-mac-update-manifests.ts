@@ -55,12 +55,10 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
     return null;
   }
 
+  const firstManifestName = manifestNames.reduce((firstName) => firstName);
   const canonicalName = manifestNames.includes(canonicalMacUpdateManifestName)
     ? canonicalMacUpdateManifestName
-    : manifestNames[0];
-  if (!canonicalName) {
-    return null;
-  }
+    : firstManifestName;
   const canonical = await readManifest(assetsDirectory, canonicalName);
   const filesByUrl = new Map<string, MacUpdateManifestFile>();
 

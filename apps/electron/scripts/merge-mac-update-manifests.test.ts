@@ -3,9 +3,17 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
+import { detectMacUpdateArtifactArchFromUrl } from "./electron-release-artifacts";
 import { mergeMacUpdateManifests } from "./merge-mac-update-manifests";
 
 describe("merge mac update manifests", () => {
+  test("detects mac update artifact architectures only from bounded tokens", () => {
+    expect(detectMacUpdateArtifactArchFromUrl("OpenDucktor-0.4.3-mac-arm64.zip")).toBe("arm64");
+    expect(detectMacUpdateArtifactArchFromUrl("OpenDucktor-0.4.3-mac-x64.zip")).toBe("x64");
+    expect(detectMacUpdateArtifactArchFromUrl("OpenDucktor-0.4.3-notarm64.zip")).toBeNull();
+    expect(detectMacUpdateArtifactArchFromUrl("OpenDucktor-0.4.3-mac-x64ish.zip")).toBeNull();
+  });
+
   test("merges arch-specific latest-mac manifests into one canonical manifest", async () => {
     const assetsDirectory = await mkdtemp(join(tmpdir(), "openducktor-mac-manifests-"));
     try {
