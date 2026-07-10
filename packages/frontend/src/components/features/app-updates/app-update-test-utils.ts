@@ -53,7 +53,10 @@ export const createFakeAppUpdateBridge = (initialState: AppUpdateState): FakeApp
 export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge => ({
   client: {} as HostClient,
   subscribeRunEvents: async () => () => {},
-  subscribeDevServerEvents: async () => () => {},
+  subscribeDevServerEvents: async () => ({
+    transportEpoch: "test:0",
+    unsubscribe: () => {},
+  }),
   subscribeTaskEvents: async () => () => {},
   subscribeCodexAppServerEvents: async () => () => {},
   appUpdates,
