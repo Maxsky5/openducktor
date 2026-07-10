@@ -229,9 +229,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           ? { systemPrompt: preparedSend.systemPrompt }
           : {}),
       });
-      const shouldStoreAcceptedUserMessage =
-        !isManualCompactionSend || readySession.runtimeKind !== "codex";
-      if (shouldStoreAcceptedUserMessage) {
+      if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
       }
     } catch (error) {

@@ -674,10 +674,12 @@ export class OpencodeSdkAdapter
         timestamp,
         ...admittedUserMessage,
       };
-      emitAdmittedUserMessage(this.createRuntimeEventView(session), {
-        ...admittedUserMessage,
-        timestamp,
-      });
+      if (systemInvocation.kind !== "manual_session_compaction") {
+        emitAdmittedUserMessage(this.createRuntimeEventView(session), {
+          ...admittedUserMessage,
+          timestamp,
+        });
+      }
       return event;
     } catch (error) {
       markStreamTurnIdle(session);

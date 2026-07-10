@@ -40,14 +40,24 @@ describe("OpencodeSdkAdapter user message", () => {
     });
     mock.mcp.statusCalls.length = 0;
     mock.tool.idsCalls.length = 0;
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
+    );
 
-    await adapter.sendUserMessage({
-      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
-      parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
-      model: { providerId: "openai", modelId: "gpt-5" },
-    });
+    try {
+      await adapter.sendUserMessage({
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+        parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+    } finally {
+      unsubscribe();
+    }
 
     expect(summarizeCalls).toHaveLength(1);
+    expect(events.some((event) => event.type === "user_message")).toBe(false);
     expect(mock.mcp.statusCalls).toEqual([]);
     expect(mock.tool.idsCalls).toEqual([]);
   });
