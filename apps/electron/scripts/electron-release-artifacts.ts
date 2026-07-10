@@ -30,24 +30,42 @@ const releaseArtifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<str
   windows: new Set([".exe", ".zip", ".blockmap"]),
 };
 
-export const macUpdateManifestPattern = /^latest-mac(?:-[a-z0-9]+)?\.yml$/i;
-export const canonicalMacUpdateManifestName = "latest-mac.yml";
+export const defaultElectronUpdateChannel = "latest";
 
-export const updateMetadataArtifactPatterns: Record<ElectronReleasePlatform, RegExp> = {
-  linux: /^latest-linux(?:-[a-z0-9]+)*\.yml$/i,
-  macos: macUpdateManifestPattern,
-  windows: /^latest(?:-[a-z0-9]+)*\.yml$/i,
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const getCanonicalMacUpdateManifestName = (
+  updateChannel = defaultElectronUpdateChannel,
+): string => `${updateChannel}-mac.yml`;
+
+export const createMacUpdateManifestPattern = (
+  updateChannel = defaultElectronUpdateChannel,
+): RegExp => new RegExp(`^${escapeRegExp(updateChannel)}-mac(?:-[a-z0-9]+)?\\.yml$`, "i");
+
+const updateMetadataArtifactPatterns = (
+  updateChannel = defaultElectronUpdateChannel,
+): Record<ElectronReleasePlatform, RegExp> => ({
+  linux: new RegExp(`^${escapeRegExp(updateChannel)}-linux(?:-[a-z0-9]+)*\\.yml$`, "i"),
+  macos: createMacUpdateManifestPattern(updateChannel),
+  windows: new RegExp(`^${escapeRegExp(updateChannel)}(?:-[a-z0-9]+)*\\.yml$`, "i"),
+});
+
+export const getRequiredUpdateMetadataLabel = (
+  platform: ElectronReleasePlatform,
+  updateChannel = defaultElectronUpdateChannel,
+): string => {
+  if (platform === "linux") return `${updateChannel}-linux.yml`;
+  if (platform === "macos") return getCanonicalMacUpdateManifestName(updateChannel);
+  return `${updateChannel}.yml`;
 };
 
-export const requiredUpdateMetadataLabels: Record<ElectronReleasePlatform, string> = {
-  linux: "latest-linux.yml",
-  macos: canonicalMacUpdateManifestName,
-  windows: "latest.yml",
-};
-
-export const isReleaseArtifact = (platform: ElectronReleasePlatform, fileName: string): boolean =>
+export const isReleaseArtifact = (
+  platform: ElectronReleasePlatform,
+  fileName: string,
+  updateChannel = defaultElectronUpdateChannel,
+): boolean =>
   releaseArtifactExtensions[platform].has(extname(fileName)) ||
-  isUpdateMetadataArtifact(platform, fileName);
+  isUpdateMetadataArtifact(platform, fileName, updateChannel);
 
 export const isInstallableReleaseArtifact = (
   platform: ElectronReleasePlatform,
@@ -57,7 +75,8 @@ export const isInstallableReleaseArtifact = (
 export const isUpdateMetadataArtifact = (
   platform: ElectronReleasePlatform,
   fileName: string,
-): boolean => updateMetadataArtifactPatterns[platform].test(fileName);
+  updateChannel = defaultElectronUpdateChannel,
+): boolean => updateMetadataArtifactPatterns(updateChannel)[platform].test(fileName);
 
 export const isCompanionReleaseArtifact = (fileName: string): boolean =>
   companionArtifactExtensions.has(extname(fileName));

@@ -2,9 +2,10 @@ import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse, stringify } from "yaml";
 import {
-  canonicalMacUpdateManifestName,
+  createMacUpdateManifestPattern,
+  defaultElectronUpdateChannel,
   detectMacUpdateArtifactArchFromUrl,
-  macUpdateManifestPattern,
+  getCanonicalMacUpdateManifestName,
 } from "./electron-release-artifacts";
 
 type MacUpdateManifestFile = {
@@ -44,8 +45,13 @@ const readManifest = async (
 const fileUrl = (file: MacUpdateManifestFile): string | null =>
   typeof file.url === "string" && file.url.trim() ? file.url : null;
 
-export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<string | null> => {
+export const mergeMacUpdateManifests = async (
+  assetsDirectory: string,
+  updateChannel = defaultElectronUpdateChannel,
+): Promise<string | null> => {
   const entries = await readdir(assetsDirectory, { withFileTypes: true });
+  const canonicalMacUpdateManifestName = getCanonicalMacUpdateManifestName(updateChannel);
+  const macUpdateManifestPattern = createMacUpdateManifestPattern(updateChannel);
   const manifestNames = entries
     .filter((entry) => entry.isFile() && macUpdateManifestPattern.test(entry.name))
     .map((entry) => entry.name)
@@ -92,7 +98,9 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
   const hasX64Artifact = entries.some((entry) => entry.isFile() && entry.name.includes("mac-x64"));
   if (hasArm64Artifact && hasX64Artifact) {
     if (!presentArchitectures.has("arm64") || !presentArchitectures.has("x64")) {
-      throw new Error("Canonical latest-mac.yml must include both arm64 and x64 update files.");
+      throw new Error(
+        `Canonical ${canonicalMacUpdateManifestName} must include both arm64 and x64 update files.`,
+      );
     }
   }
 
@@ -115,14 +123,15 @@ export const mergeMacUpdateManifests = async (assetsDirectory: string): Promise<
 
 if (import.meta.main) {
   const assetsDirectory = process.argv[2];
+  const updateChannel = process.argv[3] ?? defaultElectronUpdateChannel;
   if (!assetsDirectory) {
     console.error(
-      "Usage: bun run apps/electron/scripts/merge-mac-update-manifests.ts <assets-dir>",
+      "Usage: bun run apps/electron/scripts/merge-mac-update-manifests.ts <assets-dir> [update-channel]",
     );
     process.exit(1);
   }
 
-  await mergeMacUpdateManifests(assetsDirectory)
+  await mergeMacUpdateManifests(assetsDirectory, updateChannel)
     .then((mergedPath) => {
       if (mergedPath) {
         console.log(`Merged macOS update manifest: ${basename(mergedPath)}`);

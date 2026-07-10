@@ -33,8 +33,10 @@ type ElectronAppUpdateLogger = {
 };
 
 export type ElectronUpdaterConfigureOptions = {
+  allowPrerelease: boolean;
   autoDownload: false;
   autoInstallOnAppQuit: false;
+  channel: string | null;
   logger: ElectronAppUpdateLogger;
 };
 
@@ -106,6 +108,12 @@ const DEFAULT_APP_UPDATE_CONFIG_FILE = "app-update.yml";
 const HOST_SHUTDOWN_BEFORE_RUN_OPERATION = "electron.main.shutdown-host-before-run";
 const INSTALL_RELAUNCH_GUIDANCE = "Quit and reopen OpenDucktor before trying again.";
 export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+const releaseVersionPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+)(?:\.[0-9A-Za-z-]+)*)?$/;
+
+export const deriveElectronUpdateChannel = (version: string): string | null =>
+  releaseVersionPattern.exec(version)?.[4] ?? null;
 
 const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
   clearInterval: (handle) => {
@@ -490,6 +498,8 @@ export const createElectronAppUpdateService = ({
     }
 
     let rawConfig: string | null;
+    const updateChannel = deriveElectronUpdateChannel(currentVersion);
+
     try {
       rawConfig = readUpdateConfig(resolvedAppUpdateConfigPath);
     } catch (cause) {
@@ -532,8 +542,10 @@ export const createElectronAppUpdateService = ({
 
     try {
       adapter.configure({
+        allowPrerelease: updateChannel !== null,
         autoDownload: false,
         autoInstallOnAppQuit: false,
+        channel: updateChannel,
         logger,
       });
       registerAdapterEvents();

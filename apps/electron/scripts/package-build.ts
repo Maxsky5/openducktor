@@ -11,13 +11,14 @@ import {
   errorMessage,
 } from "../src/effect/electron-errors";
 import {
+  defaultElectronUpdateChannel,
   electronBuilderPlatformFlags,
+  getRequiredUpdateMetadataLabel,
   isCompanionReleaseArtifact,
   isInstallableReleaseArtifact,
   isReleaseArtifact,
   isUpdateMetadataArtifact,
   localElectronPackageTargets,
-  requiredUpdateMetadataLabels,
 } from "./electron-release-artifacts";
 import {
   detectHostReleaseArch,
@@ -36,20 +37,78 @@ export type ElectronPackageBuildOptions = {
   electronPackageDirectory: string;
   outputDirectory: string | undefined;
   platform: ElectronReleasePlatform;
+  releaseVersion?: string | undefined;
   signed: boolean;
   stageReleaseArtifacts: boolean;
   workspaceRoot: string;
 };
 
+type ElectronReleaseVersionMetadata = {
+  desktopVersion: string | null;
+  releaseVersion: string | null;
+  updateChannel: string;
+};
+
+const releaseVersionPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
+export const resolveElectronReleaseVersionMetadata = (
+  releaseVersion: string | undefined,
+): ElectronReleaseVersionMetadata => {
+  const version = releaseVersion?.trim();
+  if (!version) {
+    return {
+      desktopVersion: null,
+      releaseVersion: null,
+      updateChannel: defaultElectronUpdateChannel,
+    };
+  }
+
+  const match = releaseVersionPattern.exec(version);
+  if (!match) {
+    throw new ElectronValidationError({
+      operation: "electron.package.parse-release-version",
+      message: "Expected --release-version to be a semver version like 0.4.3 or 0.4.3-beta.1.",
+      field: "releaseVersion",
+      details: { releaseVersion },
+    });
+  }
+
+  const desktopVersion = `${match[1]}.${match[2]}.${match[3]}`;
+  const prerelease = match[4];
+  return {
+    desktopVersion,
+    releaseVersion: version,
+    updateChannel: prerelease?.split(".")[0] ?? defaultElectronUpdateChannel,
+  };
+};
+
+export const resolveElectronBuildEnv = (
+  releaseVersion: string | undefined,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv => {
+  const metadata = resolveElectronReleaseVersionMetadata(releaseVersion);
+  if (!metadata.releaseVersion) {
+    return env;
+  }
+
+  return {
+    ...env,
+    ODT_APP_VERSION: metadata.releaseVersion,
+  };
+};
+
 export const resolveElectronBuilderArgs = ({
   arch,
   platform,
+  releaseVersion,
   signed,
   stageReleaseArtifacts,
 }: Pick<
   ElectronPackageBuildOptions,
-  "arch" | "platform" | "signed" | "stageReleaseArtifacts"
+  "arch" | "platform" | "releaseVersion" | "signed" | "stageReleaseArtifacts"
 >): string[] => {
+  const releaseMetadata = resolveElectronReleaseVersionMetadata(releaseVersion);
   const args = [
     "--config",
     "electron-builder.yml",
@@ -59,6 +118,24 @@ export const resolveElectronBuilderArgs = ({
     "--publish",
     "never",
   ];
+
+  if (releaseMetadata.updateChannel !== defaultElectronUpdateChannel) {
+    args.push(`-c.publish.channel=${releaseMetadata.updateChannel}`);
+  }
+
+  if (
+    releaseMetadata.releaseVersion &&
+    releaseMetadata.desktopVersion &&
+    releaseMetadata.releaseVersion !== releaseMetadata.desktopVersion
+  ) {
+    args.push(
+      `-c.extraMetadata.version=${releaseMetadata.releaseVersion}`,
+      `-c.extraMetadata.shortVersion=${releaseMetadata.desktopVersion}`,
+      `-c.extraMetadata.shortVersionWindows=${releaseMetadata.desktopVersion}`,
+      `-c.mac.bundleShortVersion=${releaseMetadata.desktopVersion}`,
+      `-c.mac.bundleVersion=${releaseMetadata.desktopVersion}`,
+    );
+  }
 
   if (!signed && platform === "macos") {
     args.push("-c.mac.notarize=false");
@@ -122,10 +199,12 @@ export const collectReleaseArtifactsEffect = ({
   outputDirectory,
   platform,
   releaseDirectory,
+  updateChannel = defaultElectronUpdateChannel,
 }: {
   outputDirectory: string;
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
+  updateChannel?: string;
 }): Effect.Effect<string[], ElectronOperationError> =>
   Effect.gen(function* () {
     const entries = yield* readReleaseDirectoryEntriesEffect(releaseDirectory);
@@ -151,13 +230,13 @@ export const collectReleaseArtifactsEffect = ({
     });
 
     const artifactEntries = entries.filter(
-      (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name),
+      (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name, updateChannel),
     );
     const installableArtifactEntries = artifactEntries.filter((entry) =>
       isInstallableReleaseArtifact(platform, entry.name),
     );
     const updateMetadataEntries = artifactEntries.filter((entry) =>
-      isUpdateMetadataArtifact(platform, entry.name),
+      isUpdateMetadataArtifact(platform, entry.name, updateChannel),
     );
 
     if (installableArtifactEntries.length === 0) {
@@ -175,7 +254,10 @@ export const collectReleaseArtifactsEffect = ({
       return yield* Effect.fail(
         new ElectronOperationError({
           operation: "electron.package.collect-release-artifacts",
-          message: `Electron update metadata is missing for ${platform}; expected ${requiredUpdateMetadataLabels[platform]}.`,
+          message: `Electron update metadata is missing for ${platform}; expected ${getRequiredUpdateMetadataLabel(
+            platform,
+            updateChannel,
+          )}.`,
           path: releaseDirectory,
           platform,
         }),
@@ -218,6 +300,7 @@ export const collectReleaseArtifacts = (input: {
   outputDirectory: string;
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
+  updateChannel?: string;
 }): Promise<string[]> => runElectronEffect(collectReleaseArtifactsEffect(input));
 
 const runPackageCommandEffect = ({
@@ -245,6 +328,7 @@ export const buildElectronPackageEffect = ({
   electronPackageDirectory,
   outputDirectory,
   platform,
+  releaseVersion,
   signed,
   stageReleaseArtifacts,
   workspaceRoot,
@@ -254,6 +338,10 @@ export const buildElectronPackageEffect = ({
 > =>
   Effect.gen(function* () {
     const releaseDirectory = join(electronPackageDirectory, "release");
+    const releaseMetadata = resolveElectronReleaseVersionMetadata(releaseVersion);
+    const electronBuildEnv = releaseMetadata.releaseVersion
+      ? resolveElectronBuildEnv(releaseMetadata.releaseVersion, process.env)
+      : undefined;
 
     yield* Effect.tryPromise({
       try: () => rm(releaseDirectory, { force: true, recursive: true }),
@@ -275,6 +363,7 @@ export const buildElectronPackageEffect = ({
     yield* runPackageCommandEffect({
       command: ["bun", "run", "build"],
       cwd: electronPackageDirectory,
+      ...(electronBuildEnv ? { env: electronBuildEnv } : {}),
       label: "Electron app build",
     });
     yield* runPackageCommandEffect({
@@ -283,7 +372,13 @@ export const buildElectronPackageEffect = ({
         "run",
         "builder",
         "--",
-        ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
+        ...resolveElectronBuilderArgs({
+          arch,
+          platform,
+          releaseVersion: releaseMetadata.releaseVersion ?? undefined,
+          signed,
+          stageReleaseArtifacts,
+        }),
       ],
       cwd: electronPackageDirectory,
       env: resolveElectronBuilderEnv(signed, process.env),
@@ -321,6 +416,7 @@ export const buildElectronPackageEffect = ({
       outputDirectory,
       platform,
       releaseDirectory,
+      updateChannel: releaseMetadata.updateChannel,
     });
   });
 
@@ -371,6 +467,7 @@ if (import.meta.main) {
   try {
     const args = process.argv.slice(2);
     const stageReleaseArtifacts = hasFlag(args, "--stage-release-artifacts");
+    const releaseVersion = readFlagValue(args, "--release-version");
     const outputDirectoryValue = readFlagValue(args, "--output-dir");
     const outputDirectory =
       outputDirectoryValue || stageReleaseArtifacts
@@ -382,6 +479,7 @@ if (import.meta.main) {
       electronPackageDirectory,
       outputDirectory,
       platform: parsePlatform(readFlagValue(args, "--platform")),
+      releaseVersion,
       signed: hasFlag(args, "--signed"),
       stageReleaseArtifacts,
       workspaceRoot,

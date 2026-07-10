@@ -7,8 +7,10 @@ import {
   isInstallableReleaseArtifact,
   isReleaseArtifact,
   isUpdateMetadataArtifact,
+  resolveElectronBuildEnv,
   resolveElectronBuilderArgs,
   resolveElectronBuilderEnv,
+  resolveElectronReleaseVersionMetadata,
 } from "./package-build";
 
 describe("build Electron release artifact", () => {
@@ -21,6 +23,57 @@ describe("build Electron release artifact", () => {
         stageReleaseArtifacts: true,
       }),
     ).toEqual(["--config", "electron-builder.yml", "--mac", "--arm64", "--publish", "never"]);
+  });
+
+  it("builds prerelease artifacts with beta update metadata and packaged app version", () => {
+    expect(
+      resolveElectronBuilderArgs({
+        arch: "arm64",
+        platform: "macos",
+        releaseVersion: "0.4.0-beta.2",
+        signed: true,
+        stageReleaseArtifacts: true,
+      }),
+    ).toEqual([
+      "--config",
+      "electron-builder.yml",
+      "--mac",
+      "--arm64",
+      "--publish",
+      "never",
+      "-c.publish.channel=beta",
+      "-c.extraMetadata.version=0.4.0-beta.2",
+      "-c.extraMetadata.shortVersion=0.4.0",
+      "-c.extraMetadata.shortVersionWindows=0.4.0",
+      "-c.mac.bundleShortVersion=0.4.0",
+      "-c.mac.bundleVersion=0.4.0",
+    ]);
+  });
+
+  it("passes the release version into the renderer build environment", () => {
+    expect(resolveElectronBuildEnv(undefined, { PATH: "/bin" })).toEqual({ PATH: "/bin" });
+    expect(resolveElectronBuildEnv("0.4.0-beta.2", { PATH: "/bin" })).toEqual({
+      ODT_APP_VERSION: "0.4.0-beta.2",
+      PATH: "/bin",
+    });
+  });
+
+  it("derives the updater channel from prerelease versions", () => {
+    expect(resolveElectronReleaseVersionMetadata(undefined)).toEqual({
+      desktopVersion: null,
+      releaseVersion: null,
+      updateChannel: "latest",
+    });
+    expect(resolveElectronReleaseVersionMetadata("0.4.0")).toEqual({
+      desktopVersion: "0.4.0",
+      releaseVersion: "0.4.0",
+      updateChannel: "latest",
+    });
+    expect(resolveElectronReleaseVersionMetadata("0.4.0-beta.2")).toEqual({
+      desktopVersion: "0.4.0",
+      releaseVersion: "0.4.0-beta.2",
+      updateChannel: "beta",
+    });
   });
 
   it("builds unsigned Linux artifacts without macOS notarization overrides", () => {
@@ -104,6 +157,8 @@ describe("build Electron release artifact", () => {
     expect(isReleaseArtifact("macos", "latest-mac.yml")).toBe(true);
     expect(isReleaseArtifact("macos", "latest-mac-x64.yml")).toBe(true);
     expect(isReleaseArtifact("macos", "latest-mac-.yml")).toBe(false);
+    expect(isReleaseArtifact("macos", "beta-mac.yml", "beta")).toBe(true);
+    expect(isReleaseArtifact("macos", "latest-mac.yml", "beta")).toBe(false);
     expect(isReleaseArtifact("macos", "OpenDucktor.app")).toBe(false);
     expect(isReleaseArtifact("macos", "builder-debug.yml")).toBe(false);
     expect(isReleaseArtifact("windows", "latest.yml")).toBe(true);
@@ -116,6 +171,7 @@ describe("build Electron release artifact", () => {
       false,
     );
     expect(isUpdateMetadataArtifact("macos", "latest-mac.yml")).toBe(true);
+    expect(isUpdateMetadataArtifact("macos", "beta-mac.yml", "beta")).toBe(true);
     expect(isUpdateMetadataArtifact("macos", "latest.yml")).toBe(false);
   });
 
@@ -150,6 +206,39 @@ describe("build Electron release artifact", () => {
         "OpenDucktor-0.3.1-mac-arm64.dmg",
         "OpenDucktor-0.3.1-mac-arm64.dmg.blockmap",
         "latest-mac.yml",
+      ]);
+    } finally {
+      await rm(baseDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("copies channel-specific release metadata for prerelease artifacts", async () => {
+    const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
+    const releaseDirectory = join(baseDirectory, "release");
+    const outputDirectory = join(baseDirectory, "release-publish");
+
+    try {
+      await mkdir(releaseDirectory, { recursive: true });
+      await Promise.all([
+        writeFile(join(releaseDirectory, "OpenDucktor-0.4.0-beta.2-mac-arm64.dmg"), "dmg"),
+        writeFile(join(releaseDirectory, "beta-mac.yml"), "metadata"),
+        writeFile(join(releaseDirectory, "latest-mac.yml"), "stable metadata"),
+      ]);
+
+      const artifacts = await collectReleaseArtifacts({
+        outputDirectory,
+        platform: "macos",
+        releaseDirectory,
+        updateChannel: "beta",
+      });
+
+      expect(artifacts.map((artifact) => basename(artifact)).sort()).toEqual([
+        "OpenDucktor-0.4.0-beta.2-mac-arm64.dmg",
+        "beta-mac.yml",
+      ]);
+      expect((await readdir(outputDirectory)).sort()).toEqual([
+        "OpenDucktor-0.4.0-beta.2-mac-arm64.dmg",
+        "beta-mac.yml",
       ]);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });

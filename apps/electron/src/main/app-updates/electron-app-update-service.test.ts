@@ -312,8 +312,20 @@ describe("electron app update service", () => {
 
     expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
     expect(adapter.configureOptions).toMatchObject({
+      allowPrerelease: false,
       autoDownload: false,
       autoInstallOnAppQuit: false,
+      channel: null,
+    });
+  });
+
+  test("configures prerelease builds to check their update channel", () => {
+    const { adapter, service } = createService({ currentVersion: "0.4.0-beta.2" });
+
+    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.0-beta.2" });
+    expect(adapter.configureOptions).toMatchObject({
+      allowPrerelease: true,
+      channel: "beta",
     });
   });
 

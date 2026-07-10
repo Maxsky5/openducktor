@@ -19,6 +19,7 @@ const toDownloadProgress = (progress: ProgressInfo): ElectronUpdaterDownloadProg
 
 type ElectronUpdaterAdapterOptions = {
   platform?: NodeJS.Platform;
+  updater?: typeof autoUpdater;
 };
 
 const updateInfoEventNames = new Set<keyof ElectronUpdaterEventMap>([
@@ -29,12 +30,13 @@ const updateInfoEventNames = new Set<keyof ElectronUpdaterEventMap>([
 
 export const createElectronUpdaterAdapter = ({
   platform = process.platform,
+  updater = autoUpdater,
 }: ElectronUpdaterAdapterOptions = {}): ElectronAppUpdaterAdapter => {
   let macInstallHandoffStarted = false;
 
   return {
     checkForUpdates: async () => {
-      const result = await autoUpdater.checkForUpdates();
+      const result = await updater.checkForUpdates();
       if (result === null) {
         return null;
       }
@@ -47,13 +49,19 @@ export const createElectronUpdaterAdapter = ({
     configure: ({
       autoDownload,
       autoInstallOnAppQuit,
+      allowPrerelease,
+      channel,
       logger,
     }: ElectronUpdaterConfigureOptions) => {
-      autoUpdater.autoDownload = autoDownload;
-      autoUpdater.autoInstallOnAppQuit = autoInstallOnAppQuit;
-      autoUpdater.logger = logger;
+      updater.allowPrerelease = allowPrerelease;
+      updater.autoDownload = autoDownload;
+      updater.autoInstallOnAppQuit = autoInstallOnAppQuit;
+      if (channel) {
+        updater.channel = channel;
+      }
+      updater.logger = logger;
     },
-    downloadUpdate: () => autoUpdater.downloadUpdate(),
+    downloadUpdate: () => updater.downloadUpdate(),
     on: (eventName, listener) => {
       const untypedListener = (payload: unknown) => {
         if (eventName === "download-progress") {
@@ -66,9 +74,9 @@ export const createElectronUpdaterAdapter = ({
         }
         listener(payload as ElectronUpdaterEventMap[typeof eventName]);
       };
-      autoUpdater.on(eventName, untypedListener);
+      updater.on(eventName, untypedListener);
       return () => {
-        autoUpdater.removeListener(eventName, untypedListener);
+        updater.removeListener(eventName, untypedListener);
       };
     },
     quitAndInstall: (isSilent, isForceRunAfter) => {
@@ -83,7 +91,7 @@ export const createElectronUpdaterAdapter = ({
         }
         macInstallHandoffStarted = true;
       }
-      autoUpdater.quitAndInstall(isSilent, isForceRunAfter);
+      updater.quitAndInstall(isSilent, isForceRunAfter);
     },
   };
 };
