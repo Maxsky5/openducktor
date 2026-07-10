@@ -19,6 +19,9 @@ export type AppUpdateStatusDisplay = {
   label: string;
 };
 
+export const appUpdateErrorPanelClassName =
+  "max-h-40 overflow-y-auto break-words whitespace-pre-wrap rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground";
+
 export const getAppUpdateAvailableVersion = (state: AppUpdateState): string | undefined =>
   "availableVersion" in state ? state.availableVersion : undefined;
 
@@ -50,6 +53,20 @@ export const isActionableUpdateError = (state: AppUpdateState): boolean => {
 export const canDownloadUpdate = canDownloadAppUpdate;
 
 export const canInstallUpdate = canInstallAppUpdate;
+
+const getErrorStatusDescription = (state: AppUpdateState): string => {
+  const operation = state.status === "error" ? state.error.operation : undefined;
+  if (operation === "check") {
+    return "OpenDucktor could not complete the update check.";
+  }
+  if (operation === "download") {
+    return "OpenDucktor could not download the update.";
+  }
+  if (operation === "install") {
+    return "OpenDucktor could not start the update install.";
+  }
+  return "OpenDucktor could not complete the update action.";
+};
 
 export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatusDisplay => {
   if (state.status === "disabled") {
@@ -112,7 +129,7 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
     return {
       badgeVariant: "danger",
       label: "Update error",
-      description: state.error?.message ?? "OpenDucktor could not complete the update action.",
+      description: getErrorStatusDescription(state),
     };
   }
   return {

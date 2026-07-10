@@ -82,6 +82,19 @@ class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
 
 const fixedNow = "2026-07-08T22:00:00.000Z";
 
+const createMissingManifestError = (): Error & { code: string } =>
+  Object.assign(
+    new Error(`Cannot find latest-mac.yml in the latest release artifacts (https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml): HttpError: 404 "method: GET url: https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml
+
+Please double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.
+"
+Headers: {"content-security-policy":"default-src 'none'","x-github-request-id":"4BDD:2F6204:154326FB:1101F3BB:6A501D61"}
+    at createHttpError
+    at ElectronHttpExecutor.handleResponse
+    at ClientRequest.<anonymous>`),
+    { code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" },
+  );
+
 const createService = (
   overrides: Partial<Parameters<typeof createElectronAppUpdateService>[0]> & {
     adapter?: FakeUpdaterAdapter;
@@ -352,6 +365,52 @@ describe("electron app update service", () => {
         },
       },
     });
+  });
+
+  test("reports missing GitHub updater metadata without leaking transport internals", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = Promise.reject(createMissingManifestError());
+    const { service } = createService({ adapter });
+
+    const result = await service.check({ initiator: "settings" });
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: {
+        status: "error",
+        checkedAt: fixedNow,
+        error: {
+          code: "check_failed",
+          operation: "check",
+        },
+      },
+    });
+    expect(result.state.status).toBe("error");
+    if (result.state.status !== "error") return;
+
+    expect(result.state.error.message).toBe(
+      "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again.",
+    );
+    expect(result.state.error.message).not.toContain("Headers");
+    expect(result.state.error.message).not.toContain("x-github-request-id");
+    expect(result.state.error.message).not.toContain("at createHttpError");
+  });
+
+  test("sanitizes updater error events before publishing them to renderers", () => {
+    const adapter = new FakeUpdaterAdapter();
+    const { service } = createService({ adapter });
+
+    adapter.emit("error", createMissingManifestError());
+
+    expect(service.getState().status).toBe("error");
+    const state = service.getState();
+    if (state.status !== "error") return;
+
+    expect(state.error.message).toBe(
+      "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again.",
+    );
+    expect(state.error.message).not.toContain("Headers");
+    expect(state.error.message).not.toContain("at ElectronHttpExecutor.handleResponse");
   });
 
   test("preserves an available update when a follow-up manual check fails", async () => {

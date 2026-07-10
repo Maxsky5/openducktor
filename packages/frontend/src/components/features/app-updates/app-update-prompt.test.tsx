@@ -9,6 +9,9 @@ afterEach(() => {
   configureShellBridge(createUnavailableShellBridge());
 });
 
+const longUpdateError =
+  "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again. https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml x-github-request-id-4BDD-2F6204-154326FB-1101F3BB-6A501D61";
+
 describe("AppUpdatePrompt", () => {
   test("stays hidden for background up-to-date checks", async () => {
     const appUpdates = createFakeAppUpdateBridge({
@@ -40,6 +43,34 @@ describe("AppUpdatePrompt", () => {
 
     expect(await screen.findByText("Updates unavailable")).toBeTruthy();
     expect(screen.getByText("Electron update feed configuration is missing.")).toBeTruthy();
+  });
+
+  test("keeps long manual check errors in a single bounded panel", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "error",
+      currentVersion: "0.4.2",
+      checkInitiator: "menu",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+      error: {
+        code: "check_failed",
+        message: longUpdateError,
+        operation: "check",
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Update error")).toBeTruthy();
+    expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
+    const errorMessages = screen.getAllByText(longUpdateError);
+    expect(errorMessages).toHaveLength(1);
+    const [errorMessage] = errorMessages;
+    expect(errorMessage).toBeTruthy();
+    if (!errorMessage) return;
+    expect(errorMessage.className).toContain("max-h-40");
+    expect(errorMessage.className).toContain("overflow-y-auto");
+    expect(errorMessage.className).toContain("break-words");
   });
 
   test("shows available updates and allows dismissal for the live cycle", async () => {

@@ -115,6 +115,65 @@ const defaultNow = (): string => new Date().toISOString();
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
+const readStringProperty = (value: unknown, property: string): string | undefined => {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const propertyValue = (value as Record<string, unknown>)[property];
+  return typeof propertyValue === "string" ? propertyValue : undefined;
+};
+
+const missingManifestPattern = /Cannot find (?:channel ")?(latest(?:-[a-z0-9]+)*\.ya?ml)/i;
+const githubReleaseDownloadPattern =
+  /https:\/\/github\.com\/[^\s)]+\/releases\/download\/([^/\s)]+)\/[^\s)]+/i;
+
+const missingManifestMessage = (message: string): string | undefined => {
+  const manifest = missingManifestPattern.exec(message)?.[1];
+  if (!manifest) {
+    return undefined;
+  }
+
+  const release = githubReleaseDownloadPattern.exec(message)?.[1];
+  return `OpenDucktor could not read ${manifest}${
+    release ? ` for release ${release}` : ""
+  }. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again.`;
+};
+
+const stripTechnicalDetails = (message: string): string => {
+  const withoutHeaders = message.split(/\nHeaders:/u)[0] ?? message;
+  const withoutStack = withoutHeaders.split(/\n\s+at\s+/u)[0] ?? withoutHeaders;
+  return withoutStack.replace(/\s+/gu, " ").trim();
+};
+
+const truncateMessage = (message: string): string =>
+  message.length > 320 ? `${message.slice(0, 317).trimEnd()}...` : message;
+
+const appUpdateErrorMessage = (operation: AppUpdateOperation, cause: unknown): string => {
+  const message = errorMessage(cause);
+  const code = readStringProperty(cause, "code");
+  const manifestMessage = missingManifestMessage(message);
+  if (manifestMessage) {
+    return manifestMessage;
+  }
+
+  if (
+    operation === "check" &&
+    (code === "ERR_UPDATER_LATEST_VERSION_NOT_FOUND" ||
+      message.includes("Unable to find latest version on GitHub"))
+  ) {
+    return "OpenDucktor could not read the latest GitHub release. Make sure a published OpenDucktor release exists and the update feed is reachable.";
+  }
+
+  if (
+    operation === "check" &&
+    (code === "ERR_UPDATER_INVALID_UPDATE_INFO" || message.includes("Cannot parse update info"))
+  ) {
+    return "OpenDucktor could not parse the Electron updater metadata. Regenerate the release metadata and upload it to the GitHub release, then try again.";
+  }
+
+  return truncateMessage(stripTechnicalDetails(message));
+};
+
 const isObjectWithOperation = (cause: unknown): cause is { operation: unknown } =>
   typeof cause === "object" && cause !== null && "operation" in cause;
 
@@ -122,7 +181,7 @@ const isHostShutdownInstallFailure = (cause: unknown): boolean =>
   isObjectWithOperation(cause) && cause.operation === HOST_SHUTDOWN_BEFORE_RUN_OPERATION;
 
 const installTerminalFailureMessage = (cause: unknown): string => {
-  const message = errorMessage(cause);
+  const message = appUpdateErrorMessage("install", cause);
   return message.includes(INSTALL_RELAUNCH_GUIDANCE)
     ? message
     : `${message} ${INSTALL_RELAUNCH_GUIDANCE}`;
@@ -331,7 +390,7 @@ export const createElectronAppUpdateService = ({
     const operation = activeOperation ?? (installHandoffStarted ? "install" : "check");
     const availableVersion = availableVersionFromState(previousState);
     const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
-    const message = errorMessage(cause);
+    const message = appUpdateErrorMessage(operation, cause);
     if (operation === "install" && previousState.status === "downloaded") {
       activeOperation = null;
       if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
@@ -537,7 +596,7 @@ export const createElectronAppUpdateService = ({
           checkedAt: now(),
           code: "check_failed",
           cause,
-          message: errorMessage(cause),
+          message: appUpdateErrorMessage("check", cause),
           operation: "check",
         });
         return commandAccepted();
@@ -593,7 +652,7 @@ export const createElectronAppUpdateService = ({
           ...(checkedAt ? { checkedAt } : {}),
           code: "download_failed",
           cause,
-          message: errorMessage(cause),
+          message: appUpdateErrorMessage("download", cause),
           operation: "download",
         });
         return commandAccepted();
@@ -644,7 +703,7 @@ export const createElectronAppUpdateService = ({
         publishState(
           markDownloadedInstallError({
             cause,
-            message: errorMessage(cause),
+            message: appUpdateErrorMessage("install", cause),
             previousState,
           }),
         );

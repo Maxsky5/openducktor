@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
+  appUpdateErrorPanelClassName,
   canDownloadUpdate,
   canInstallUpdate,
   getAppUpdateAvailableVersion,
@@ -94,11 +95,7 @@ export function AppUpdatePrompt(): ReactElement | null {
                 <p className="text-xs text-muted-foreground">{progressPercent}% downloaded</p>
               </div>
             )}
-            {errorMessage && (
-              <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-                {errorMessage}
-              </p>
-            )}
+            {errorMessage && <p className={appUpdateErrorPanelClassName}>{errorMessage}</p>}
             <div className="flex flex-wrap gap-2">
               {canDownloadUpdate(state) && (
                 <Button

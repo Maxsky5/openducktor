@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
+  appUpdateErrorPanelClassName,
   canDownloadUpdate,
   canInstallUpdate,
   getAppUpdateAvailableVersion,
@@ -107,11 +108,7 @@ function SettingsAppUpdatesContent({
         {visibleState.status === "downloading" && (
           <AppUpdateProgress percent={getAppUpdateProgressPercent(visibleState) ?? 0} />
         )}
-        {errorMessage && (
-          <p className="rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground">
-            {errorMessage}
-          </p>
-        )}
+        {errorMessage && <p className={appUpdateErrorPanelClassName}>{errorMessage}</p>}
         <div className="flex flex-wrap gap-2">
           {downloadAllowed && (
             <Button
