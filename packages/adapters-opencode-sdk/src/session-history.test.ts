@@ -13,7 +13,7 @@ import {
 import type { SessionRecord } from "./types";
 
 describe("OpencodeSdkAdapter session history", () => {
-  test("loadSessionHistory suppresses internal compaction summary messages", async () => {
+  test("loadSessionHistory keeps the assistant compaction summary and hides its marker", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -37,7 +37,7 @@ describe("OpencodeSdkAdapter session history", () => {
         {
           info: {
             id: "msg-marker",
-            role: "assistant",
+            role: "user",
             time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
           parts: [
@@ -47,13 +47,6 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-marker",
               type: "compaction",
               auto: false,
-            } as unknown as Part,
-            {
-              id: "marker-summary-text",
-              sessionID: "session-opencode-1",
-              messageID: "msg-marker",
-              type: "text",
-              text: "Internal marker summary",
             } as unknown as Part,
           ],
         },
@@ -86,6 +79,11 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     expect(history).toEqual([
+      expect.objectContaining({
+        messageId: "msg-summary",
+        role: "assistant",
+        text: "Internal compaction summary",
+      }),
       expect.objectContaining({
         messageId: "msg-visible",
         role: "assistant",
