@@ -332,6 +332,7 @@ export type AgentToolType =
 export type AgentSessionStatus =
   | {
       type: "busy";
+      message: string | null;
     }
   | {
       type: "idle";

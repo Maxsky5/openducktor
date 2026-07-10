@@ -46,6 +46,7 @@ export type AgentChatThreadSession = AgentSessionIdentity & {
   title?: string;
   sessionScope?: AgentSessionScope | null;
   activityState: AgentSessionActivityState | null;
+  runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
 };
 

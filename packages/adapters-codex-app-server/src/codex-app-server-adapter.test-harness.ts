@@ -1,4 +1,4 @@
-import { mock } from "bun:test";
+import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   type CodexEffectivePolicy,
@@ -101,6 +101,32 @@ export const codexUserMessageInput = (
     ...base,
     ...input,
   };
+};
+
+type TestRuntimeStreamListener = (event: {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  receivedAt: string;
+  message: unknown;
+}) => void;
+
+export const createRuntimeStreamSubscription = () => {
+  const streamListeners: TestRuntimeStreamListener[] = [];
+  const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
+    streamListeners.push(listener);
+    return () => {};
+  });
+  const emitNotification = (message: unknown, receivedAt = new Date().toISOString()) => {
+    const listener = streamListeners[0];
+    expect(listener).toBeDefined();
+    listener?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      receivedAt,
+      message,
+    });
+  };
+  return { subscribeEvents, emitNotification };
 };
 
 export const createDeferred = <T>() => {

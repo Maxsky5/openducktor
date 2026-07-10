@@ -70,6 +70,7 @@ export const settleLoadedStartingSession = (
   updateSession(session, (current) => ({
     ...current,
     status,
+    runtimeStatusMessage: null,
   }));
 };
 
@@ -109,6 +110,7 @@ const markSessionRunningForSend = (
   dependencies.updateSession(session, (current) => ({
     ...current,
     status: "running",
+    runtimeStatusMessage: null,
     pendingUserMessageStartedAt,
   }));
 };
@@ -219,6 +221,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       dependencies.updateSession(readySession, (current) => ({
         ...current,
         status: isBusyQueuedSend ? current.status : "error",
+        ...(!isBusyQueuedSend ? { runtimeStatusMessage: null } : {}),
         pendingUserMessageStartedAt: undefined,
       }));
       appendSendFailureNotice(readySession, errorMessage(error), dependencies.updateSession);

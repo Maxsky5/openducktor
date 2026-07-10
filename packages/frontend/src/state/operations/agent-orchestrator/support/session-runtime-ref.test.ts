@@ -9,6 +9,7 @@ const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessio
   runtimeKind: "codex",
   role: "build",
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/repo/worktree",
   messages: createSessionMessagesState(overrides.externalSessionId ?? "session-1"),

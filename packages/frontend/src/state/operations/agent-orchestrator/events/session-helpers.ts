@@ -52,8 +52,12 @@ export const settleSessionToIdle = (
     const status = current.status === "error" ? "error" : "idle";
     const shouldClearPendingUserMessage =
       status === "idle" && current.pendingUserMessageStartedAt !== undefined;
+    const shouldClearRuntimeStatusMessage = current.runtimeStatusMessage !== null;
     const didChange =
-      messages !== current.messages || current.status !== status || shouldClearPendingUserMessage;
+      messages !== current.messages ||
+      current.status !== status ||
+      shouldClearPendingUserMessage ||
+      shouldClearRuntimeStatusMessage;
     if (!didChange) {
       return current;
     }
@@ -62,6 +66,7 @@ export const settleSessionToIdle = (
       ...current,
       messages,
       status,
+      runtimeStatusMessage: null,
       pendingUserMessageStartedAt: undefined,
     };
   });

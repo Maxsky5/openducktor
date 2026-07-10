@@ -134,6 +134,7 @@ export const sessionFixture = (
   taskId: "task-1",
   role: "build",
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:10:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "not_requested",

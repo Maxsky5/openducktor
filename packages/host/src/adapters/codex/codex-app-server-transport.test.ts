@@ -6,6 +6,7 @@ import type {
   CodexAppServerProtocolMessage,
   CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
+import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
 const createChild = (
@@ -133,6 +134,118 @@ describe("createCodexAppServerTransport", () => {
     ]);
 
     await Effect.runPromise(transport.close());
+  });
+
+  test("keeps the transport usable after model safety buffering and unknown notifications", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const notification = {
+      method: "model/safetyBuffering/updated" satisfies CodexAppServerServerNotificationMethod,
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        model: "gpt-5",
+        useCases: ["cyber"],
+        reasons: ["user_risk"],
+        showBufferingUi: true,
+        fasterModel: "gpt-5-mini",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+    const unknownNotification = {
+      method: "future/notification",
+      params: {
+        threadId: "thread-1",
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    try {
+      child.stdout.write(`${JSON.stringify(notification)}\n`);
+      child.stdout.write(`${JSON.stringify(unknownNotification)}\n`);
+      await waitForStreamEvents();
+
+      const nextResponse = Effect.runPromise(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: null } })}\n`,
+      );
+
+      expect(await nextResponse).toEqual({ data: [], nextCursor: null });
+      expect(emitted).toEqual([
+        notificationEvent(notification),
+        notificationEvent(unknownNotification),
+      ]);
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("still fails fast for unknown server requests", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+
+    try {
+      child.stdout.write(
+        `${JSON.stringify({ id: "request-1", method: "future/request", params: {} })}\n`,
+      );
+      await waitForStreamEvents();
+
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      ).rejects.toThrow(
+        "Unsupported Codex app-server server request method for runtime-1: future/request",
+      );
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("fails fast when a known server request is missing its id", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+
+    try {
+      child.stdout.write(
+        `${JSON.stringify({
+          method: "item/permissions/requestApproval",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "item-1",
+            startedAtMs: 1,
+            cwd: "/repo",
+            reason: null,
+            permissions: {
+              network: null,
+              fileSystem: null,
+            },
+          },
+        })}\n`,
+      );
+      await waitForStreamEvents();
+
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      ).rejects.toThrow("Codex app-server server request for runtime-1 is missing an id");
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
   });
 
   test("keeps emitted server requests available as buffered events until OpenDucktor responds", async () => {

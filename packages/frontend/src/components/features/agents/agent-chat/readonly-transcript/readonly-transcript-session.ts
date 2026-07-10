@@ -42,6 +42,7 @@ export const createReadonlyTranscriptSession = ({
   ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
   ...(sessionScope ? { sessionScope } : {}),
   activityState: null,
+  runtimeStatusMessage: null,
   messages: createSessionMessagesState(
     externalSessionId,
     historyToChatMessages(history, {
@@ -61,6 +62,7 @@ export const createReadonlyRuntimeSessionState = ({
   taskId: "",
   role: null,
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: history[0]?.timestamp ?? EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
   historyLoadState: "loaded",
   messages: createSessionMessagesState(
@@ -85,6 +87,7 @@ export const createEmptyReadonlyRuntimeSessionState = ({
   taskId: "",
   role: null,
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
   historyLoadState: "loading",
   messages: createSessionMessagesState(externalSessionId),

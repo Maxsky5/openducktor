@@ -27,6 +27,7 @@ const createSessionState = (overrides: CreateSessionStateOverrides = {}): AgentS
     taskId: "task-1",
     role: "build",
     status: "running",
+    runtimeStatusMessage: null,
     startedAt: "2026-03-01T09:00:00.000Z",
     runtimeKind: "opencode",
     workingDirectory: "/tmp/repo/worktree",
@@ -79,11 +80,15 @@ describe("session-runtime-snapshot", () => {
   });
 
   test("clears pending outbound sends when runtime snapshot is missing", () => {
-    const session = createSessionState({ pendingUserMessageStartedAt: 123 });
+    const session = createSessionState({
+      pendingUserMessageStartedAt: 123,
+      runtimeStatusMessage: "Safety buffering",
+    });
     const applied = applyMissingSnapshotToSession(session);
 
     expect(applied.status).toBe("idle");
     expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.runtimeStatusMessage).toBeNull();
   });
 
   test("settles untrusted runtime-owned state when runtime snapshot is missing", () => {
@@ -127,12 +132,14 @@ describe("session-runtime-snapshot", () => {
         pendingApprovals: [],
         pendingQuestions: [],
         pendingUserMessageStartedAt: 123,
+        runtimeStatusMessage: "Safety buffering",
       }),
       snapshot,
     );
 
     expect(applied.status).toBe("idle");
     expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.runtimeStatusMessage).toBeNull();
   });
 
   test("reuses empty pending input arrays from the current session", () => {

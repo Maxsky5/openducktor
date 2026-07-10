@@ -45,6 +45,9 @@ import {
 import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
+const CODEX_SAFETY_BUFFERING_MESSAGE =
+  "Our systems are thinking a bit more about this request before responding.";
+
 export type CompletedAgentMessage = {
   session: CodexSessionState;
   item: Record<string, unknown>;
@@ -590,6 +593,26 @@ export const handleCodexPendingNotifications = async (
           });
           activeTurn.markTurnSettled();
         }
+      }
+      continue;
+    }
+
+    if (notification.method === "model/safetyBuffering/updated") {
+      const params = isPlainObject(notification.params) ? notification.params : null;
+      const isActiveTurn =
+        Boolean(notificationTurnId) &&
+        !activeTurn?.isTurnSettled() &&
+        activeTurn?.turnId === notificationTurnId;
+      if (isActiveTurn && typeof params?.showBufferingUi === "boolean") {
+        emitCodexSessionEvent(context, session.threadId, {
+          type: "session_status",
+          externalSessionId: session.threadId,
+          timestamp,
+          status: {
+            type: "busy",
+            message: params.showBufferingUi ? CODEX_SAFETY_BUFFERING_MESSAGE : null,
+          },
+        });
       }
       continue;
     }

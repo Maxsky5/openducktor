@@ -26,7 +26,6 @@ export type {
   CodexAppServerServerRequestMethod,
 } from "@openducktor/contracts";
 export {
-  CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS,
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
   isCodexAppServerCommandAction,
   isCodexAppServerJsonValue,

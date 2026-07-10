@@ -58,7 +58,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     handleEvent({
       type: "session_status",
       externalSessionId: "session-1",
-      status: { type: "busy" },
+      status: { type: "busy", message: null },
       timestamp: "2026-02-22T08:00:01.000Z",
     });
     handleEvent({

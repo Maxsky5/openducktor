@@ -4,12 +4,10 @@ import type {
   CodexAppServerRequestResult,
 } from "../../ports/codex-app-server-port";
 import {
-  CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS,
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
   type CodexAppServerCommandExecutionRequestApprovalParams,
   type CodexAppServerExecCommandApprovalParams,
   type CodexAppServerPermissionsRequestApprovalParams,
-  type CodexAppServerServerNotificationMethod,
   type CodexAppServerServerRequestMethod,
   isCodexAppServerCommandAction,
   isCodexAppServerJsonValue,
@@ -23,11 +21,6 @@ const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
 export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isCodexServerNotificationMethod = (
-  method: string,
-): method is CodexAppServerServerNotificationMethod =>
-  CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS.some((candidate) => candidate === method);
 
 const isCodexServerRequestMethod = (method: string): method is CodexAppServerServerRequestMethod =>
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
@@ -135,7 +128,7 @@ export const parseStreamMessage = (
   message: Record<string, unknown>,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage => {
-  if (typeof message.method !== "string") {
+  if (typeof message.method !== "string" || message.method.trim().length === 0) {
     throw new HostValidationError({
       message: `Codex app-server ${kind} for ${runtimeId} is missing a method`,
       field: "method",
@@ -234,10 +227,10 @@ export const parseStreamMessage = (
       params: message.params,
     };
   }
-  if (!isCodexServerNotificationMethod(message.method)) {
+  if (isCodexServerRequestMethod(message.method)) {
     throw new HostValidationError({
-      message: `Unsupported Codex app-server notification method for ${runtimeId}: ${message.method}`,
-      field: "method",
+      message: `Codex app-server server request for ${runtimeId} is missing an id`,
+      field: "id",
       details: { runtimeId, kind, method: message.method },
     });
   }

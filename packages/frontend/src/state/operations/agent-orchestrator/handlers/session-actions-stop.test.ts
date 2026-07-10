@@ -32,6 +32,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       buildSession({
         role: "planner",
         workingDirectory: "/tmp/repo",
+        runtimeStatusMessage: "Safety buffering",
         pendingApprovals: [
           {
             requestId: "perm-1",
@@ -83,6 +84,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       },
     ]);
     expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(getSession(sessionsRef)?.runtimeStatusMessage).toBeNull();
     expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
     expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
   });

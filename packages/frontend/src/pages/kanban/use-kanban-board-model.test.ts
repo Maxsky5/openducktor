@@ -46,6 +46,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     taskId: "task-1",
     role: "build",
     status: "running",
+    runtimeStatusMessage: null,
     startedAt: "2026-03-17T10:00:00.000Z",
     workingDirectory: "/repo",
     messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),

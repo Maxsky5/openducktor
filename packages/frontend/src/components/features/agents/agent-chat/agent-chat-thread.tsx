@@ -1,5 +1,5 @@
 import { type AgentSessionTodoItem, workflowAgentSessionScope } from "@openducktor/core";
-import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
+import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -123,6 +123,7 @@ type AgentChatBottomStackProps = {
   pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
   todos: readonly AgentSessionTodoItem[];
   sessionAuxiliaryError: string | null;
+  runtimeStatusMessage: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
@@ -217,6 +218,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   pendingApprovals,
   todos,
   sessionAuxiliaryError,
+  runtimeStatusMessage,
   canSubmitQuestionAnswers,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
@@ -266,6 +268,16 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
       {sessionAuxiliaryError ? (
         <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
           {sessionAuxiliaryError}
+        </div>
+      ) : null}
+
+      {runtimeStatusMessage ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-info-border bg-info-surface px-3 py-2 text-sm text-info-surface-foreground"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-info-accent" aria-hidden="true" />
+          <span>{runtimeStatusMessage}</span>
         </div>
       ) : null}
 
@@ -357,8 +369,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const { registerRowElement } = useAgentChatRowMotion();
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
+  const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
   const hasBottomStack = Boolean(
-    session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError),
+    session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError || runtimeStatusMessage),
   );
 
   const resolveRowRef = useCallback(
@@ -454,6 +467,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}
             sessionAuxiliaryError={sessionAuxiliaryError}
+            runtimeStatusMessage={runtimeStatusMessage}
             todoPanelCollapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}
             sessionAccentColor={sessionAccentColor}

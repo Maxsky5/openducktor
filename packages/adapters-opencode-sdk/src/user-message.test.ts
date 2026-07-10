@@ -272,7 +272,7 @@ describe("OpencodeSdkAdapter user message", () => {
         type: "session_status",
         externalSessionId: "session-opencode-1",
         timestamp: "2026-02-17T12:00:00Z",
-        status: { type: "busy" },
+        status: { type: "busy", message: null },
       }),
     );
   });
@@ -349,7 +349,7 @@ describe("OpencodeSdkAdapter user message", () => {
         type: "session_status",
         externalSessionId: "session-opencode-1",
         timestamp: "2026-02-17T12:00:00Z",
-        status: { type: "busy" },
+        status: { type: "busy", message: null },
       }),
     );
     expect(events).toContainEqual(

@@ -11,8 +11,12 @@ type AvailableAgentSessionRuntimeSnapshot = Extract<
   { availability: "runtime" }
 >;
 
-const clearLiveTurnFields = (): Pick<AgentSessionState, "pendingUserMessageStartedAt"> => ({
+const clearLiveTurnFields = (): Pick<
+  AgentSessionState,
+  "pendingUserMessageStartedAt" | "runtimeStatusMessage"
+> => ({
   pendingUserMessageStartedAt: undefined,
+  runtimeStatusMessage: null,
 });
 
 const statusFromRuntimeSnapshot = (
@@ -92,6 +96,7 @@ const settleMissingRuntimeSnapshot = (current: AgentSessionState): AgentSessionS
     pendingApprovals: [],
     pendingQuestions: [],
     pendingUserMessageStartedAt: undefined,
+    runtimeStatusMessage: null,
   };
 };
 

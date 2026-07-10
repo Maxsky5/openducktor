@@ -27,6 +27,7 @@ export const buildInitialSession = ({
   runtimeKind: startedCtx.summary.runtimeKind,
   role: startedCtx.role,
   status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
+  runtimeStatusMessage: null,
   startedAt: startedCtx.summary.startedAt,
   workingDirectory: startedCtx.summary.workingDirectory,
   historyLoadState: initialMessages ? "loaded" : "not_requested",
