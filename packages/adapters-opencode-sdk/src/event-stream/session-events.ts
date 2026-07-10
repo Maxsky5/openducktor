@@ -265,6 +265,20 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
   return true;
 };
 
+const handleSessionCompactedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
+  if (event.type !== "session.compacted") {
+    return false;
+  }
+  runtime.emit(runtime.externalSessionId, {
+    type: "session_compacted",
+    externalSessionId: runtime.externalSessionId,
+    timestamp: runtime.now(),
+    ...(runtime.activeCompactionPartId ? { messageId: runtime.activeCompactionPartId } : {}),
+    message: "Session compacted.",
+  });
+  return true;
+};
+
 const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   const eventType = String(event.type);
   if (eventType !== "permission.asked" && eventType !== "permission.v2.asked") {
@@ -513,6 +527,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
 export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (
     bindChildSessionCorrelation(event, runtime) ||
+    handleSessionCompactedEvent(event, runtime) ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||

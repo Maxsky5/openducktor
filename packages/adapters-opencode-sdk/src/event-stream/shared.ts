@@ -52,6 +52,7 @@ export type SubagentSessionLink = {
 };
 
 export type EventStreamState = {
+  activeCompactionPartId: string | undefined;
   partsById: Map<string, Part>;
   messageRoleById: Map<string, string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;

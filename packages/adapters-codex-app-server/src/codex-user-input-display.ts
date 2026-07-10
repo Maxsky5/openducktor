@@ -18,6 +18,9 @@ const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart 
   if (part.kind === "text") {
     return { kind: "text", text: part.text };
   }
+  if (part.kind === "slash_command") {
+    return { kind: "text", text: `/${part.command.trigger}` };
+  }
   if (part.kind === "file_reference") {
     return { kind: "file_reference", file: part.file };
   }

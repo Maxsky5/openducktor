@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
   type AgentUserMessagePart,
+  classifySystemSlashCommandInvocation,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
 } from "@openducktor/core";
@@ -22,6 +23,7 @@ import {
   requireLoadedSession,
   requireWorkspaceRepoPath,
 } from "../support/session-invariants";
+import { removeRunningSessionCompactionNotices } from "../support/session-notice-messages";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
@@ -119,21 +121,30 @@ const appendSendFailureNotice = (
   session: AgentSessionState,
   message: string,
   updateSession: UpdateSession,
+  removeRunningCompactionNotice: boolean,
 ): void => {
   updateSession(session, (current) => ({
     ...current,
-    messages: appendSessionMessage(current, {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: `Failed to send message: ${message}`,
-      timestamp: now(),
-      meta: {
-        kind: "session_notice",
-        tone: "error",
-        reason: "session_error",
-        title: "Error",
+    messages: appendSessionMessage(
+      {
+        externalSessionId: current.externalSessionId,
+        messages: removeRunningCompactionNotice
+          ? removeRunningSessionCompactionNotices(current.messages)
+          : current.messages,
       },
-    }),
+      {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: `Failed to send message: ${message}`,
+        timestamp: now(),
+        meta: {
+          kind: "session_notice",
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
+        },
+      },
+    ),
   }));
 };
 
@@ -154,6 +165,8 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return;
     }
+    const isManualCompactionSend =
+      classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
 
     const currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
     const externalSessionId = currentSession.externalSessionId;
@@ -224,7 +237,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         ...(!isBusyQueuedSend ? { runtimeStatusMessage: null } : {}),
         pendingUserMessageStartedAt: undefined,
       }));
-      appendSendFailureNotice(readySession, errorMessage(error), dependencies.updateSession);
+      appendSendFailureNotice(
+        readySession,
+        errorMessage(error),
+        dependencies.updateSession,
+        isManualCompactionSend && !isBusyQueuedSend,
+      );
       if (!isBusyQueuedSend) {
         dependencies.clearSessionTurnState(readySession);
       }

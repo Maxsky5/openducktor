@@ -170,6 +170,13 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("Codex descriptor advertises its system slash command input", () => {
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsSlashCommands).toBe(true);
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toContain(
+      "slash_command",
+    );
+  });
+
   test("runtime ref identifies a concrete running runtime", () => {
     const parsed = runtimeInstanceRefSchema.parse({
       kind: "opencode",

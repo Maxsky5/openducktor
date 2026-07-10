@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
+  createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { hostClient } from "@/lib/host-client";
@@ -34,6 +36,11 @@ const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
 
 const createDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
+  attachments: [],
+});
+
+const createCompactionDraft = (): AgentChatComposerDraft => ({
+  segments: [createSlashCommandSegment(MANUAL_SESSION_COMPACTION_SLASH_COMMAND)],
   attachments: [],
 });
 
@@ -126,6 +133,28 @@ describe("useAgentStudioSendAction", () => {
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
 
+    await harness.unmount();
+  });
+
+  test("rejects stale system compaction before starting a new session", async () => {
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      selectedSessionIdentity: null,
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createCompactionDraft())).rejects.toThrow(
+        "/compact requires an existing selected session",
+      );
+    });
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
     await harness.unmount();
   });
 

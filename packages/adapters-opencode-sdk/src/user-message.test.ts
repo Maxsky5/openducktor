@@ -207,9 +207,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },
@@ -228,7 +228,7 @@ describe("OpencodeSdkAdapter user message", () => {
         sessionID: "session-opencode-1",
         directory: "/repo",
         messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-        command: "compact",
+        command: "review",
         arguments: "summarize the latest session",
         model: "openai/gpt-5",
         variant: "high",
@@ -258,9 +258,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },
@@ -294,9 +294,9 @@ describe("OpencodeSdkAdapter user message", () => {
           {
             kind: "slash_command",
             command: {
-              id: "compact",
-              trigger: "compact",
-              title: "compact",
+              id: "review",
+              trigger: "review",
+              title: "review",
               hints: [],
             },
           },
@@ -334,9 +334,9 @@ describe("OpencodeSdkAdapter user message", () => {
           {
             kind: "slash_command",
             command: {
-              id: "compact",
-              trigger: "compact",
-              title: "compact",
+              id: "review",
+              trigger: "review",
+              title: "review",
               hints: [],
             },
           },
@@ -506,9 +506,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },

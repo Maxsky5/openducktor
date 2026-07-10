@@ -341,7 +341,7 @@ A user-configured prompt snippet that can be inserted through a **Slash Command*
 _Avoid_: Prompt Template, System Prompt, Skill
 
 **Slash Command**:
-A command-like **Chat Composer** part selected with a slash trigger. **Slash Commands** can come from the **Runtime**, MCP, **Skills**, custom definitions, or **Reusable Prompts**.
+A command-like **Chat Composer** part selected with a slash trigger. **Slash Commands** can come from OpenDucktor system commands, the **Runtime**, MCP, **Skills**, custom definitions, or **Reusable Prompts**.
 _Avoid_: shell command, Workflow MCP Tool, Tool Call
 
 **Slash Command Catalog**:

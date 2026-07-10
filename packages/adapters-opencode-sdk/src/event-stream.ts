@@ -160,6 +160,12 @@ export const createEventStreamRuntime = (
     now: input.now,
     emit: input.emit,
     getSession: input.getSession,
+    get activeCompactionPartId() {
+      return session.activeCompactionPartId;
+    },
+    set activeCompactionPartId(partId: string | undefined) {
+      session.activeCompactionPartId = partId;
+    },
     ...(input.resolveSubagentSessionLink
       ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
       : {}),

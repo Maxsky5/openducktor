@@ -10,6 +10,7 @@ describe("createRuntimeDefinitionsService", () => {
     expect(definitions[0]?.capabilities.workflow.supportsOdtWorkflowTools).toBe(true);
     expect(definitions[1]?.capabilities.promptInput.supportedParts).toEqual([
       "text",
+      "slash_command",
       "skill_mention",
       "file_reference",
       "folder_reference",

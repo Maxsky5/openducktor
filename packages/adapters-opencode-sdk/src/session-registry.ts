@@ -353,6 +353,7 @@ export const registerSession = (
     isSendingUserMessage: false,
     isAwaitingRuntimeTurnStart: false,
     activeAssistantMessageId: null,
+    activeCompactionPartId: undefined,
     completedAssistantMessageIds: new Set<string>(),
     emittedAssistantMessageIds: new Set<string>(),
     emittedUserMessageSignatures: new Map<string, string>(),

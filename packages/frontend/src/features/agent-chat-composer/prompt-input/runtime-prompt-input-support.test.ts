@@ -24,7 +24,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "codex",
       }),
     ).toEqual({
-      runtimeSupportsSlashCommands: false,
+      runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: true,
       supportsSubagentReferences: false,

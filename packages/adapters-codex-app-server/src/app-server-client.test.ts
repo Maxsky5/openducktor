@@ -43,6 +43,20 @@ describe("createCodexAppServerClient", () => {
     ]);
   });
 
+  test("sends thread/compact/start requests", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request(request) {
+        calls.push(request);
+        return {};
+      },
+    };
+    const client = createCodexAppServerClient(transport);
+
+    await expect(client.threadCompactStart({ threadId: "thread-1" })).resolves.toEqual({});
+    expect(calls).toEqual([{ method: "thread/compact/start", params: { threadId: "thread-1" } }]);
+  });
+
   test("sends cwd-scoped skills/list requests", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {

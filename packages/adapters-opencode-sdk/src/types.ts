@@ -58,6 +58,7 @@ export type SessionRecord = {
   isSendingUserMessage: boolean;
   isAwaitingRuntimeTurnStart: boolean;
   activeAssistantMessageId: string | null;
+  activeCompactionPartId: string | undefined;
   completedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;
   emittedUserMessageSignatures: Map<string, string>;

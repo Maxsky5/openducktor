@@ -56,6 +56,14 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
     expect(list).toHaveBeenCalledWith({ directory: "/repo" });
     expect(catalog.commands).toEqual([
       {
+        id: "system:compact",
+        trigger: "compact",
+        title: "Compact session",
+        description: "Summarize the current session to reduce context size",
+        source: "system",
+        hints: [],
+      },
+      {
         id: "mcp-prompt",
         trigger: "mcp-prompt",
         title: "mcp-prompt",
@@ -84,6 +92,24 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         hints: ["ignored"],
       },
     ]);
+  });
+
+  test("reserves compact case-insensitively after a successful runtime read", async () => {
+    const catalog = await listAvailableSlashCommands(
+      (() => ({
+        command: {
+          list: async () => ({
+            data: [
+              { name: "Compact", source: "command", hints: [] },
+              { name: "review", source: "command", hints: [] },
+            ],
+          }),
+        },
+      })) as never,
+      { runtimeEndpoint: "http://127.0.0.1:1234", workingDirectory: "/repo" },
+    );
+
+    expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
   });
 
   test("fails when the runtime does not expose command listing", async () => {

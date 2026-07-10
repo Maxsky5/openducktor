@@ -159,6 +159,7 @@ test("runEventStreamWithSession emits permission v2 approval events", async () =
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
   const runtime: EventStreamRuntime = {
+    activeCompactionPartId: undefined,
     externalSessionId: "external-session-1",
     input: makeSessionInput(),
     now: () => "2026-02-22T12:30:00.000Z",
@@ -418,6 +419,44 @@ const makeMessagePartDeltaEvent = (input: {
   }) as unknown as Event;
 
 describe("event-stream", () => {
+  test("correlates OpenCode compaction start and completion events", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "compact-part-1",
+            sessionID: "external-session-1",
+            messageID: "compact-message-1",
+            type: "compaction",
+            auto: false,
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.compacted",
+        properties: { sessionID: "external-session-1" },
+      } as unknown as Event,
+      {
+        type: "session.compacted",
+        properties: { sessionID: "external-session-1" },
+      } as unknown as Event,
+    ]);
+
+    expect(
+      emitted.filter(
+        (event) =>
+          event.type === "session_compaction_started" || event.type === "session_compacted",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "session_compaction_started",
+        messageId: "compact-part-1",
+      }),
+      expect.objectContaining({ type: "session_compacted", messageId: "compact-part-1" }),
+      expect.objectContaining({ type: "session_compacted", messageId: "compact-part-1" }),
+    ]);
+  });
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
       {

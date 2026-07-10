@@ -643,7 +643,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().supportsFileSearch).toBe(true);
       expect(harness.getLatest().supportsSkillReferences).toBe(true);
       expect(harness.getLatest().supportsSubagentReferences).toBe(false);
@@ -879,7 +879,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().supportsFileSearch).toBe(true);
 
       let results: AgentFileSearchResult[] = [];

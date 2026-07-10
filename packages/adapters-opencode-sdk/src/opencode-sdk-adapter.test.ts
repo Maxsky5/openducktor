@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
@@ -807,6 +811,7 @@ describe("opencode-sdk-adapter", () => {
     expect(list).toHaveBeenCalledWith({ directory: "/repo" });
     expect(catalog).toEqual({
       commands: [
+        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
         {
           id: "review",
           trigger: "review",
@@ -1627,7 +1632,7 @@ describe("opencode-sdk-adapter", () => {
       parts: [
         {
           kind: "slash_command",
-          command: { id: "compact", trigger: "compact", title: "compact", hints: [] },
+          command: { id: "review", trigger: "review", title: "review", hints: [] },
         },
       ],
     });

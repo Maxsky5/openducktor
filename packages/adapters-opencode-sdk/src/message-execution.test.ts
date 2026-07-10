@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import { sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
 import {
@@ -7,10 +8,10 @@ import {
 } from "./user-message-signatures";
 
 const COMMAND = {
-  id: "compact",
-  trigger: "compact",
-  title: "compact",
-  hints: ["compact"],
+  id: "review",
+  trigger: "review",
+  title: "review",
+  hints: ["review"],
 };
 const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
@@ -52,9 +53,11 @@ const SUBAGENT_REFERENCE = {
 const createSession = (overrides?: {
   commandResult?: { data?: unknown; error?: unknown; response?: unknown };
   promptAsyncResult?: { data?: unknown; error?: unknown; response?: unknown };
+  summarizeResult?: { data?: unknown; error?: unknown; response?: unknown };
 }) => {
   const command = mock(async () => overrides?.commandResult ?? { error: null });
   const promptAsync = mock(async () => overrides?.promptAsyncResult ?? { error: null });
+  const summarize = mock(async () => overrides?.summarizeResult ?? { data: true, error: null });
 
   const session = {
     externalSessionId: "session-opencode-1",
@@ -71,6 +74,7 @@ const createSession = (overrides?: {
       session: {
         command,
         promptAsync,
+        summarize,
       },
     },
     activeAssistantMessageId: null,
@@ -80,7 +84,7 @@ const createSession = (overrides?: {
     isAwaitingRuntimeTurnStart: false,
   } as unknown as SessionRecord;
 
-  return { session, command, promptAsync };
+  return { session, command, promptAsync, summarize };
 };
 
 describe("message-execution", () => {
@@ -109,13 +113,109 @@ describe("message-execution", () => {
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      command: "compact",
+      command: "review",
       arguments: "summarize latest session",
       model: "openai/gpt-5",
       variant: "high",
       agent: "hephaestus",
     });
     expect(promptAsync).not.toHaveBeenCalled();
+  });
+
+  test("routes the canonical system command through stable session summarization", async () => {
+    const { session, command, promptAsync, summarize } = createSession();
+
+    const accepted = await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-opencode-1",
+        parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      },
+      tools: {},
+    });
+
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(summarize).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      providerID: "openai",
+      modelID: "gpt-5",
+    });
+    expect(command).not.toHaveBeenCalled();
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(accepted.parts).toEqual([{ kind: "text", text: "/compact" }]);
+
+    await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-opencode-1",
+        parts: [{ kind: "text", text: "continue" }],
+      },
+      tools: {},
+    });
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("preserves native busy-session admission without queued follow-up tracking", async () => {
+    const { session, command, promptAsync, summarize } = createSession();
+    session.activeAssistantMessageId = "msg-active";
+
+    const accepted = await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-opencode-1",
+        parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      },
+      tools: {},
+    });
+
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(command).not.toHaveBeenCalled();
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(accepted.state).toBe("read");
+    expect(session.pendingQueuedUserMessages).toEqual([]);
+  });
+
+  test("rejects manual compaction without a model before invoking any endpoint", async () => {
+    const { session, command, promptAsync, summarize } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-opencode-1",
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "compact session: OpenCode session compaction requires a selected provider and model",
+    );
+
+    expect(summarize).not.toHaveBeenCalled();
+    expect(command).not.toHaveBeenCalled();
+    expect(promptAsync).not.toHaveBeenCalled();
+  });
+
+  test("preserves compact-session context when summarization rejects", async () => {
+    const { session } = createSession();
+    session.client.session.summarize = mock(async () => {
+      throw new Error("connection closed");
+    }) as never;
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-opencode-1",
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+          model: { providerId: "openai", modelId: "gpt-5" },
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow("OpenCode request failed: compact session: connection closed");
   });
 
   test("tracks busy slash command sends as queued follow-ups through the shared pre-send flow", async () => {
