@@ -1,5 +1,6 @@
 import {
   isManualSessionCompactionSlashCommand,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type RepoRuntimeRef,
   type ReusablePrompt,
   type RuntimeKind,
@@ -20,23 +21,27 @@ export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
   reusablePromptSlashCommands: AgentSlashCommand[],
 ): AgentSlashCommand[] => {
+  const reservedTrigger = MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
   const systemCommands = runtimeSlashCommands.filter(isManualSessionCompactionSlashCommand);
   const systemTriggers = new Set(systemCommands.map((command) => command.trigger.toLowerCase()));
   const reusablePromptTriggers = new Set(
     reusablePromptSlashCommands
       .map((command) => command.trigger.toLowerCase())
-      .filter((trigger) => !systemTriggers.has(trigger)),
+      .filter((trigger) => trigger !== reservedTrigger && !systemTriggers.has(trigger)),
   );
   return [
     ...systemCommands,
     ...runtimeSlashCommands.filter(
       (command) =>
         !isManualSessionCompactionSlashCommand(command) &&
+        command.trigger.toLowerCase() !== reservedTrigger &&
         !systemTriggers.has(command.trigger.toLowerCase()) &&
         !reusablePromptTriggers.has(command.trigger.toLowerCase()),
     ),
     ...reusablePromptSlashCommands.filter(
-      (command) => !systemTriggers.has(command.trigger.toLowerCase()),
+      (command) =>
+        command.trigger.toLowerCase() !== reservedTrigger &&
+        !systemTriggers.has(command.trigger.toLowerCase()),
     ),
   ];
 };

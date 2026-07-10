@@ -18,7 +18,7 @@ describe("use-chat-composer-slash-commands", () => {
 
     expect(
       mergeSlashCommands(runtimeCommands, reusableCommands).map((command) => command.id),
-    ).toEqual(["runtime-compact", "prompt-review"]);
+    ).toEqual(["prompt-review"]);
   });
 
   test("reserves compact for the system command while preserving other prompt precedence", () => {
@@ -47,6 +47,23 @@ describe("use-chat-composer-slash-commands", () => {
         "opencode",
       ).map((command) => command.id),
     ).toEqual(["review"]);
+  });
+
+  test("keeps compact reserved when repository scope hides the system command", () => {
+    const mergedCommands = mergeSlashCommands(
+      [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+      [
+        {
+          id: "reusable-prompt:compact",
+          trigger: "COMPACT",
+          title: "Custom compact",
+          source: "custom",
+          hints: [],
+        },
+      ],
+    );
+
+    expect(filterSlashCommandsForComposerScope(mergedCommands, "repo", "opencode")).toEqual([]);
   });
 
   test("removes system commands from unsupported session runtimes", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
@@ -12,6 +13,103 @@ import {
 const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
 describe("OpencodeSdkAdapter user message", () => {
+  test("manual compaction bypasses workflow-tool discovery", async () => {
+    const mock = makeMockClient({});
+    const summarizeCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async (input: unknown) => {
+        summarizeCalls.push(input);
+        return { data: true, error: undefined };
+      },
+    });
+    Object.assign(mock.client.mcp, {
+      status: async () => {
+        throw new Error("MCP discovery must not run");
+      },
+    });
+    Object.assign(mock.client.tool, {
+      ids: async () => {
+        throw new Error("Tool discovery must not run");
+      },
+    });
+    mock.mcp.statusCalls.length = 0;
+    mock.tool.idsCalls.length = 0;
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+
+    expect(summarizeCalls).toHaveLength(1);
+    expect(mock.mcp.statusCalls).toEqual([]);
+    expect(mock.tool.idsCalls).toEqual([]);
+  });
+
+  test("invalid compaction shape fails before workflow-tool discovery", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.mcp, {
+      status: async () => {
+        throw new Error("MCP discovery must not run");
+      },
+    });
+    mock.mcp.statusCalls.length = 0;
+
+    await expect(
+      adapter.sendUserMessage({
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+        parts: [
+          { kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND },
+          { kind: "text", text: " now" },
+        ],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow("must be sent without arguments or references");
+    expect(mock.mcp.statusCalls).toEqual([]);
+  });
+
+  test("rejects cached session route mismatches before compaction", async () => {
+    const mock = makeMockClient({});
+    const summarizeCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async (input: unknown) => {
+        summarizeCalls.push(input);
+        return { data: true, error: undefined };
+      },
+    });
+
+    for (const override of [{ repoPath: "/other" }, { workingDirectory: "/other" }]) {
+      await expect(
+        adapter.sendUserMessage({
+          ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+          ...override,
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ).rejects.toThrow("Cannot send OpenCode session 'session-opencode-1'");
+    }
+
+    expect(summarizeCalls).toEqual([]);
+  });
+
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

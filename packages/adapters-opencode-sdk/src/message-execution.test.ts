@@ -157,6 +157,40 @@ describe("message-execution", () => {
     expect(promptAsync).toHaveBeenCalledTimes(1);
   });
 
+  test("preserves the installed SDK session receiver when summarizing", async () => {
+    class SdkSessionClient {
+      readonly summarizeCalls: unknown[] = [];
+
+      async summarize(input: unknown) {
+        this.summarizeCalls.push(input);
+        return { data: true, error: null };
+      }
+    }
+
+    const { session } = createSession();
+    const sdkSessionClient = new SdkSessionClient();
+    session.client.session = sdkSessionClient as never;
+
+    await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-opencode-1",
+        parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      },
+      tools: {},
+    });
+
+    expect(sdkSessionClient.summarizeCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+    ]);
+  });
+
   test("preserves native busy-session admission without queued follow-up tracking", async () => {
     const { session, command, promptAsync, summarize } = createSession();
     session.activeAssistantMessageId = "msg-active";

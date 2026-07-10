@@ -126,6 +126,34 @@ describe("CodexAppServerAdapter manual compaction", () => {
     );
   });
 
+  test("rejects cached session route mismatches before native compaction", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const adapter = createAdapterWithTransport({
+      async request(request) {
+        calls.push(request);
+        if (request.method === "thread/compact/start") {
+          return {};
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    });
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    );
+
+    for (const override of [{ repoPath: "/other" }, { workingDirectory: "/other" }]) {
+      await expect(
+        adapter.sendUserMessage({
+          ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+          ...override,
+        }),
+      ).rejects.toThrow("Cannot send Codex session 'thread-1'");
+    }
+
+    expect(calls.filter((call) => call.method === "thread/compact/start")).toHaveLength(1);
+  });
+
   test("streams native lifecycle without registering a normal active turn", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const runtimeStream = createRuntimeStreamSubscription();
@@ -170,6 +198,17 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
     });
     runtimeStream.emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: {
+          id: "compact-turn-1",
+          status: "completed",
+          completedAt: 1_778_112_003,
+        },
+      },
+    });
+    runtimeStream.emitNotification({
       method: "thread/status/changed",
       params: { threadId: "thread-1", status: { type: "idle" } },
     });
@@ -183,8 +222,10 @@ describe("CodexAppServerAdapter manual compaction", () => {
           messageId: "compact-item-1",
         }),
         expect.objectContaining({ type: "session_compacted", messageId: "compact-item-1" }),
+        expect.objectContaining({ type: "session_idle" }),
       ]),
     );
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
     expect(calls.some((call) => call.method === "turn/start" || call.method === "turn/steer")).toBe(
       false,
     );

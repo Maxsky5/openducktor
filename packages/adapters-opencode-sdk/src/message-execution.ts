@@ -291,15 +291,14 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
         new Error("OpenCode session compaction requires a selected provider and model."),
       );
     }
-    const summarize = session.client.session.summarize;
-    if (typeof summarize !== "function") {
+    if (typeof session.client.session.summarize !== "function") {
       throw toOpenCodeRequestError(
         "compact session",
         new Error("OpenCode runtime client does not expose session summarization."),
       );
     }
     try {
-      const response = await summarize({
+      const response = await session.client.session.summarize({
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
         providerID: modelInput.model.providerID,

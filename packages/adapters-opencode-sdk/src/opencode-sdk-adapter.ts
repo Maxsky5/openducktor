@@ -37,6 +37,7 @@ import type {
 import {
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
+  classifySystemSlashCommandInvocation,
   formatWorkflowAgentSessionTitle,
   requireWorkflowAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
@@ -628,10 +629,17 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
+    const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
     const session = requireSession(this.sessions, input.externalSessionId);
+    const registeredSessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot send OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input);
     startUserMessageSend(session, {
       expectRuntimeTurnStart:
@@ -644,7 +652,10 @@ export class OpencodeSdkAdapter
       status: { type: "busy", message: null },
     });
     try {
-      const tools = await this.resolveSessionToolSelection(session);
+      const tools =
+        systemInvocation.kind === "manual_session_compaction"
+          ? {}
+          : await this.resolveSessionToolSelection(session);
       const admittedUserMessage = await sendUserMessage({
         session,
         request: input,

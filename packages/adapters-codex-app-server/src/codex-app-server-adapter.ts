@@ -306,6 +306,12 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    const registeredSessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot send Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input);
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
