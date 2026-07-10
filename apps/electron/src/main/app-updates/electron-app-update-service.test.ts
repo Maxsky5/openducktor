@@ -802,6 +802,39 @@ describe("electron app update service", () => {
         operation: "install",
       },
     });
+
+    const backgroundCheckResult = await service.check({ initiator: "background" });
+
+    expect(backgroundCheckResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "check",
+      },
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        installRetryDisabled: true,
+      },
+    });
+    expect(adapter.checkCalls).toBe(1);
+
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.4" },
+    };
+
+    const recoveryCheckResult = await service.check({ initiator: "settings" });
+
+    expect(recoveryCheckResult).toMatchObject({
+      accepted: true,
+      state: {
+        status: "available",
+        availableVersion: "0.4.4",
+        checkInitiator: "settings",
+      },
+    });
+    expect(adapter.checkCalls).toBe(2);
   });
 
   test("treats delayed macOS updater handoff errors as terminal for the process", async () => {

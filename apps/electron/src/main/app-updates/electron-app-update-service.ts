@@ -577,10 +577,13 @@ export const createElectronAppUpdateService = ({
         }
         return rejectBusy("check");
       }
+      const checkBlockedByDownloadedState =
+        state.status === "downloaded" &&
+        (state.installRetryDisabled !== true || initiator === "background");
       if (
         activeOperation !== null ||
         state.status === "downloading" ||
-        state.status === "downloaded"
+        checkBlockedByDownloadedState
       ) {
         return rejectBusy("check");
       }
