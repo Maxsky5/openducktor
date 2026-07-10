@@ -22,6 +22,14 @@ export const requireString = (value: unknown, label: string): string => {
   return value.trim();
 };
 
+export const requireStringPreservingWhitespace = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw invalidInput(`${label} is required.`, label);
+  }
+
+  return value;
+};
+
 export const optionalString = (value: unknown, label: string): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;

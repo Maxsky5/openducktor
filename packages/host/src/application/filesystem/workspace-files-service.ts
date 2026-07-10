@@ -53,8 +53,7 @@ const toHostValidationError = (
   });
 
 const requireRelativePath = (relativePath: string): Effect.Effect<string, HostValidationError> => {
-  const trimmed = relativePath.trim();
-  if (!trimmed) {
+  if (relativePath.trim().length === 0) {
     return Effect.fail(
       new HostValidationError({
         field: "relativePath",
@@ -62,7 +61,7 @@ const requireRelativePath = (relativePath: string): Effect.Effect<string, HostVa
       }),
     );
   }
-  if (isAbsolutePathLike(trimmed)) {
+  if (isAbsolutePathLike(relativePath)) {
     return Effect.fail(
       new HostValidationError({
         field: "relativePath",
@@ -71,7 +70,7 @@ const requireRelativePath = (relativePath: string): Effect.Effect<string, HostVa
       }),
     );
   }
-  return Effect.succeed(trimmed);
+  return Effect.succeed(relativePath);
 };
 
 const canonicalizeRoot = (filesystem: FilesystemPort, rootPath: string) =>
@@ -139,14 +138,28 @@ const canonicalizeContainedFile = (
     return canonicalPath;
   });
 
-const normalizeGitStatus = (status: string | null | undefined): WorkspaceFileGitStatus | null => {
+const normalizeGitStatus = (
+  status: string | null | undefined,
+): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError> => {
   if (!status) {
-    return null;
+    return Effect.succeed(null);
   }
   if (PIERRE_GIT_STATUSES.has(status as WorkspaceFileGitStatus)) {
-    return status as WorkspaceFileGitStatus;
+    return Effect.succeed(status as WorkspaceFileGitStatus);
   }
-  return "modified";
+  if (status === "copied") {
+    return Effect.succeed("added");
+  }
+  if (status === "typechange" || status === "unmerged") {
+    return Effect.succeed("modified");
+  }
+  return Effect.fail(
+    new HostValidationError({
+      field: "gitStatus",
+      message: `Unrecognized Git status value: ${status}`,
+      details: { status },
+    }),
+  );
 };
 const GIT_STATUS_PRIORITY: Record<WorkspaceFileGitStatus, number> = {
   ignored: 0,
@@ -186,14 +199,16 @@ const statFile = (
   canonicalRoot: string,
   relativePath: string,
 ): Effect.Effect<FilesystemStats, HostValidationError> =>
-  filesystem.stat(filesystem.join(canonicalRoot, relativePath)).pipe(
-    Effect.mapError((cause) =>
-      toHostValidationError(cause, `Unable to inspect file '${relativePath}'.`, {
-        rootPath: canonicalRoot,
-        relativePath,
-      }),
-    ),
-  );
+  filesystem
+    .stat(filesystem.join(canonicalRoot, relativePath), { followSymbolicLinks: false })
+    .pipe(
+      Effect.mapError((cause) =>
+        toHostValidationError(cause, `Unable to inspect file '${relativePath}'.`, {
+          rootPath: canonicalRoot,
+          relativePath,
+        }),
+      ),
+    );
 
 const isBinaryBytes = (bytes: Uint8Array): boolean => {
   const sampleLength = Math.min(bytes.byteLength, 8192);
@@ -260,17 +275,19 @@ export const createWorkspaceFilesService = (
       const filePathSet = new Set(listedFilePaths);
       const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
       for (const change of targetChanges) {
+        const normalizedStatus = yield* normalizeGitStatus(change.status);
         filePathSet.add(change.path);
         gitStatusByPath.set(
           change.path,
-          mergeGitStatus(gitStatusByPath.get(change.path), normalizeGitStatus(change.status)),
+          mergeGitStatus(gitStatusByPath.get(change.path), normalizedStatus),
         );
       }
       for (const status of statuses) {
+        const normalizedStatus = yield* normalizeGitStatus(status.status);
         filePathSet.add(status.path);
         gitStatusByPath.set(
           status.path,
-          mergeGitStatus(gitStatusByPath.get(status.path), normalizeGitStatus(status.status)),
+          mergeGitStatus(gitStatusByPath.get(status.path), normalizedStatus),
         );
       }
       const filePaths = [...filePathSet].sort(compareWorkspacePaths);

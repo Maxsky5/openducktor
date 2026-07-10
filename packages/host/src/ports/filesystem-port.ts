@@ -11,12 +11,18 @@ export type FilesystemStats = {
   size?: number;
   mtimeMs?: number;
 };
+export type FilesystemStatOptions = {
+  followSymbolicLinks?: boolean;
+};
 export type FilesystemPort = {
   homeDirectory(): string | null;
   canonicalize(path: string): Effect.Effect<string, HostOperationError>;
   readDirectory(path: string): Effect.Effect<FilesystemDirectoryEntry[], HostOperationError>;
   readFileBytes(path: string, maxBytes: number): Effect.Effect<Uint8Array, HostOperationError>;
-  stat(path: string): Effect.Effect<FilesystemStats, HostOperationError>;
+  stat(
+    path: string,
+    options?: FilesystemStatOptions,
+  ): Effect.Effect<FilesystemStats, HostOperationError>;
   exists(path: string): Effect.Effect<boolean, HostPathAccessError>;
   join(...paths: string[]): string;
   relative(from: string, to: string): string;

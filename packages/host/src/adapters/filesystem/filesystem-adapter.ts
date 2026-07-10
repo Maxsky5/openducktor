@@ -1,9 +1,10 @@
-import { access, open, readdir, realpath, stat } from "node:fs/promises";
+import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
 import type { FilesystemDirectoryEntry, FilesystemPort } from "../../ports/filesystem-port";
+import { readBoundedFileBytes } from "./bounded-file-read";
 
 export const createFilesystemAdapter = (): FilesystemPort => ({
   homeDirectory() {
@@ -39,9 +40,7 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       try: async () => {
         const file = await open(inputPath, "r");
         try {
-          const bytes = new Uint8Array(maxBytes);
-          const result = await file.read(bytes, 0, maxBytes, 0);
-          return bytes.subarray(0, result.bytesRead);
+          return await readBoundedFileBytes(file, maxBytes);
         } finally {
           await file.close();
         }
@@ -53,10 +52,10 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
         }),
     });
   },
-  stat(inputPath) {
+  stat(inputPath, options) {
     return Effect.gen(function* () {
       const metadata = yield* Effect.tryPromise({
-        try: () => stat(inputPath),
+        try: () => (options?.followSymbolicLinks === false ? lstat(inputPath) : stat(inputPath)),
         catch: (cause) =>
           toHostOperationError(cause, "filesystem.stat", {
             path: inputPath,

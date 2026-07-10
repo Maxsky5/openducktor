@@ -703,6 +703,34 @@ describe("createGithubPullRequestReviewProvider", () => {
     ]);
   });
 
+  test("returns malformed review contexts through the typed error channel", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+    const malformedView = {
+      ...(defaultPullRequestViewResponse(true) as Record<string, unknown>),
+      url: "not-a-url",
+    };
+
+    const result = await Effect.runPromise(
+      provider
+        .read({
+          dependencies: createDependencies({ pullRequestViewResponse: malformedView }),
+          repoPath: "/repo",
+          context: {
+            repository: { host: "github.com", owner: "openai", name: "openducktor" },
+            remoteName: "origin",
+          },
+          pullRequestNumber: 42,
+        })
+        .pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("github.review_context");
+    }
+  });
+
   test("maps the gh cancel bucket to a cancelled check", async () => {
     const provider = createGithubPullRequestReviewProvider();
 

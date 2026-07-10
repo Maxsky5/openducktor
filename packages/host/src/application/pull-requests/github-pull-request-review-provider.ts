@@ -407,15 +407,24 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             cause,
           }),
       });
-      return pullRequestReviewContextSchema.parse({
-        status: "loaded",
-        providerId: "github",
-        pullRequest: view.pullRequest,
-        aggregateStatus: aggregateChecks(checks),
-        checks,
-        comments: [...view.comments, ...reviewThreads.comments],
-        reviewThreads: reviewThreads.summary,
-        refreshedAt: new Date().toISOString(),
+      return yield* Effect.try({
+        try: () =>
+          pullRequestReviewContextSchema.parse({
+            status: "loaded",
+            providerId: "github",
+            pullRequest: view.pullRequest,
+            aggregateStatus: aggregateChecks(checks),
+            checks,
+            comments: [...view.comments, ...reviewThreads.comments],
+            reviewThreads: reviewThreads.summary,
+            refreshedAt: new Date().toISOString(),
+          }),
+        catch: (cause) =>
+          new HostValidationError({
+            field: "github.review_context",
+            message: `GitHub pull request review response failed schema validation: ${errorMessage(cause)}`,
+            cause,
+          }),
       });
     });
   },

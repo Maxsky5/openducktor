@@ -100,6 +100,7 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: "/repo/.worktrees/task-24",
         isWorktreeResolving: false,
         worktreeError: null,
+        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: "/repo/.worktrees/task-24", unavailableReason: null });
   });
@@ -112,6 +113,7 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: null,
         isWorktreeResolving: true,
         worktreeError: null,
+        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: null, unavailableReason: "Resolving task worktree..." });
   });
@@ -124,8 +126,24 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: "/repo/.worktrees/task-24",
         isWorktreeResolving: false,
         worktreeError: null,
+        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: "/repo", unavailableReason: null });
+  });
+
+  test("surfaces invalid task target branches before resolving a worktree", () => {
+    const validationError = "Invalid openducktor.targetBranch metadata.";
+
+    expect(
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath: "/repo",
+        contextMode: "worktree",
+        worktreePath: "/repo/.worktrees/task-24",
+        isWorktreeResolving: false,
+        worktreeError: null,
+        targetBranchValidationError: validationError,
+      }),
+    ).toEqual({ rootPath: null, unavailableReason: validationError });
   });
 });
 
@@ -136,6 +154,7 @@ describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
         contextMode: "repository",
         targetBranch: "@{upstream}",
         upstreamStatus: "untracked",
+        targetBranchValidationError: null,
       }),
     ).toBeNull();
   });
@@ -146,8 +165,20 @@ describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
         contextMode: "worktree",
         targetBranch: "origin/main",
         upstreamStatus: "untracked",
+        targetBranchValidationError: null,
       }),
     ).toBe("origin/main");
+  });
+
+  test("omits comparisons for invalid worktree target branches", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "worktree",
+        targetBranch: "origin/main",
+        upstreamStatus: "untracked",
+        targetBranchValidationError: "Invalid task target branch.",
+      }),
+    ).toBeNull();
   });
 });
 

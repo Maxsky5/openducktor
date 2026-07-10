@@ -11,6 +11,7 @@ import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 type CommentFilter = "all" | "humans" | "bots";
 
 type CommentGroup = {
+  id: "conversation" | "needs-review" | "resolved";
   comments: PullRequestReviewComment[];
   title: string;
 };
@@ -39,11 +40,20 @@ const groupComments = (comments: readonly PullRequestReviewComment[]): CommentGr
   const conversation = comments.filter((comment) => comment.isResolved === null);
   const resolved = comments.filter((comment) => comment.isResolved === true);
 
-  return [
-    { title: `Needs review · ${needsReview.length}`, comments: needsReview },
-    { title: `Conversation · ${conversation.length}`, comments: conversation },
-    { title: `Resolved · ${resolved.length}`, comments: resolved },
-  ].filter((group) => group.comments.length > 0);
+  const groups: CommentGroup[] = [
+    {
+      id: "needs-review",
+      title: `Needs review · ${needsReview.length}`,
+      comments: needsReview,
+    },
+    {
+      id: "conversation",
+      title: `Conversation · ${conversation.length}`,
+      comments: conversation,
+    },
+    { id: "resolved", title: `Resolved · ${resolved.length}`, comments: resolved },
+  ];
+  return groups.filter((group) => group.comments.length > 0);
 };
 
 export function TaskExecutionCiCommentsList({
@@ -110,7 +120,7 @@ export function TaskExecutionCiCommentsList({
             ) : (
               <div className="space-y-4">
                 {groups.map((group) => (
-                  <section key={group.title} className="space-y-2">
+                  <section key={group.id} className="space-y-2">
                     <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
                     <div className="space-y-2">
                       {group.comments.map((comment) => (

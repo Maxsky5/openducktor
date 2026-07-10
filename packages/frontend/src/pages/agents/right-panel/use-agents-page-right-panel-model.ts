@@ -171,14 +171,19 @@ export const resolveTaskExecutionFileExplorerRoot = ({
   worktreePath,
   isWorktreeResolving,
   worktreeError,
+  targetBranchValidationError,
 }: {
   workspaceRepoPath: string | null;
   contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
   worktreePath: string | null;
   isWorktreeResolving: boolean;
   worktreeError: string | null;
+  targetBranchValidationError: string | null;
 }): FileExplorerRoot => {
   if (contextMode === "worktree") {
+    if (targetBranchValidationError) {
+      return { rootPath: null, unavailableReason: targetBranchValidationError };
+    }
     if (worktreePath) {
       return { rootPath: worktreePath, unavailableReason: null };
     }
@@ -208,13 +213,18 @@ export const resolveTaskExecutionFileExplorerTargetBranch = ({
   contextMode,
   targetBranch,
   upstreamStatus,
+  targetBranchValidationError,
 }: {
   contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
   targetBranch: string | null;
   upstreamStatus: ReturnType<
     typeof useAgentStudioBuildToolsWorktreeSnapshot
   >["diffData"]["upstreamStatus"];
+  targetBranchValidationError: string | null;
 }): string | null => {
+  if (targetBranchValidationError) {
+    return null;
+  }
   if (contextMode === "repository" && upstreamStatus !== "tracking") {
     return null;
   }
@@ -335,12 +345,14 @@ export function useAgentsPageRightPanelModel({
         worktreePath: buildToolsSnapshot.worktree.path,
         isWorktreeResolving: buildToolsSnapshot.worktree.isResolving,
         worktreeError: buildToolsSnapshot.worktree.error,
+        targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
       }),
     [
       buildToolsSnapshot.gitPanelContextMode,
       buildToolsSnapshot.worktree.error,
       buildToolsSnapshot.worktree.isResolving,
       buildToolsSnapshot.worktree.path,
+      buildToolsSnapshot.targetBranchState.validationError,
       workspaceRepoPath,
     ],
   );
@@ -348,6 +360,7 @@ export function useAgentsPageRightPanelModel({
     contextMode: buildToolsSnapshot.gitPanelContextMode,
     targetBranch: diffData.targetBranch ?? null,
     upstreamStatus: diffData.upstreamStatus,
+    targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
   });
   const fileExplorerModel = useMemo(
     () => ({
