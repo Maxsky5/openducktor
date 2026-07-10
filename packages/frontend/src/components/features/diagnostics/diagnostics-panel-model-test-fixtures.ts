@@ -1,5 +1,11 @@
-import type { RuntimeDescriptor, TaskStoreCheck, WorkspaceRecord } from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type {
+  RuntimeCheck,
+  RuntimeDescriptor,
+  RuntimeHealth,
+  TaskStoreCheck,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import {
   createTaskStoreCheckFixture,
@@ -9,6 +15,23 @@ import type { RepoRuntimeDiagnosticInstance, RepoRuntimeHealthCheck } from "@/ty
 
 export const makeRuntimeDefinitions = (): RuntimeDescriptor[] => [
   structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
+];
+
+export const makeBuiltInRuntimeDefinitions = (): RuntimeDescriptor[] => [
+  ...makeRuntimeDefinitions(),
+  structuredClone(CODEX_RUNTIME_DESCRIPTOR),
+];
+
+export const makeBuiltInRuntimeDiagnostics = (
+  opencode: RuntimeHealth & { kind: "opencode" },
+): RuntimeCheck["runtimes"] => [
+  structuredClone(opencode),
+  {
+    kind: "codex",
+    enabled: false,
+    ok: false,
+    version: null,
+  },
 ];
 
 export const makeRuntimeDiagnosticInstance = (): RepoRuntimeDiagnosticInstance => ({

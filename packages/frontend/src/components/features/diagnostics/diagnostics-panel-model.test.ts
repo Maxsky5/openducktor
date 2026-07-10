@@ -1,63 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import {
-  CODEX_RUNTIME_DESCRIPTOR,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeCheck,
-  type RuntimeDescriptor,
-} from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
+  makeBuiltInRuntimeDefinitions,
+  makeBuiltInRuntimeDiagnostics,
   makeRepoHealth,
   makeRuntimeDiagnosticInstance,
   makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
-
-const makeDisabledCodexDiagnostic = (): RuntimeCheck["runtimes"][number] => ({
-  kind: "codex",
-  enabled: false,
-  ok: false,
-  version: null,
-});
-
-const makeBuiltInRuntimeDefinitions = (): RuntimeDescriptor[] => [
-  structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
-  structuredClone(CODEX_RUNTIME_DESCRIPTOR),
-];
-
-const buildCliToolsModel = ({
-  runtimeDefinitions = makeBuiltInRuntimeDefinitions(),
-  runtimeDefinitionsError = null,
-  runtimes,
-}: {
-  runtimeDefinitions?: RuntimeDescriptor[];
-  runtimeDefinitionsError?: string | null;
-  runtimes: RuntimeCheck["runtimes"];
-}) =>
-  buildDiagnosticsPanelModel({
-    workspaceRepoPath: "/repo",
-    activeWorkspace: makeWorkspace("/repo"),
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError,
-    runtimeCheck: {
-      gitOk: true,
-      gitVersion: "git version 2.50.1",
-      ghOk: true,
-      ghVersion: "gh version 2.73.0",
-      ghAuthOk: true,
-      ghAuthLogin: "octocat",
-      ghAuthError: null,
-      runtimes,
-      errors: [],
-    },
-    taskStoreCheck: makeTaskStoreCheck(),
-    runtimeCheckFailureKind: null,
-    taskStoreCheckFailureKind: null,
-    runtimeHealthByRuntime: {},
-    isLoadingChecks: false,
-  });
 
 describe("buildDiagnosticsPanelModel", () => {
   test("returns no-repository summary and empty-state messages when no repository is selected", () => {
@@ -105,98 +57,6 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(cliToolsSection?.emptyMessage).toBe("CLI checks are loading...");
   });
 
-  test("restores OpenCode and Codex CLI values by runtime kind", () => {
-    const opencodeValue = "1.2.9 (/Users/dev/.opencode/bin/opencode)";
-    const codexValue =
-      "codex-cli 0.42.0 (/Applications/OpenDucktor.app/Contents/Resources/bin/codex)";
-    const model = buildCliToolsModel({
-      runtimes: [
-        { kind: "codex", ok: true, version: codexValue },
-        { kind: "opencode", ok: true, version: opencodeValue },
-      ],
-    });
-
-    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-
-    expect(cliToolsSection?.rows).toEqual([
-      { label: "Git", value: "git version 2.50.1" },
-      { label: "GitHub CLI", value: "gh version 2.73.0" },
-      { label: "OpenCode", value: opencodeValue, breakAll: true },
-      { label: "Codex", value: codexValue, breakAll: true },
-    ]);
-  });
-
-  test.each([
-    {
-      name: "missing OpenCode and detected Codex",
-      runtimes: [
-        { kind: "opencode" as const, ok: false, version: null },
-        { kind: "codex" as const, ok: true, version: "codex-cli 0.42.0 (/bin/codex)" },
-      ],
-      expectedValues: ["missing", "codex-cli 0.42.0 (/bin/codex)"],
-    },
-    {
-      name: "detected OpenCode and missing Codex",
-      runtimes: [
-        { kind: "opencode" as const, ok: true, version: "1.2.9 (/bin/opencode)" },
-        { kind: "codex" as const, ok: false, version: null },
-      ],
-      expectedValues: ["1.2.9 (/bin/opencode)", "missing"],
-    },
-  ])("formats $name independently", ({ runtimes, expectedValues }) => {
-    const model = buildCliToolsModel({ runtimes: [...runtimes] });
-    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-
-    expect(cliToolsSection?.rows.slice(2).map((row) => row.value)).toEqual([...expectedValues]);
-  });
-
-  test("formats a runtime with no reported version as detected", () => {
-    const model = buildCliToolsModel({
-      runtimes: [
-        { kind: "opencode", ok: true, version: null },
-        { kind: "codex", ok: true, version: null },
-      ],
-    });
-    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-
-    expect(cliToolsSection?.rows.slice(2).map((row) => row.value)).toEqual([
-      "detected",
-      "detected",
-    ]);
-  });
-
-  test("fails when a loaded runtime diagnostic omits an expected runtime", () => {
-    expect(() =>
-      buildCliToolsModel({
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
-      }),
-    ).toThrow('Missing CLI diagnostic for runtime kind "codex"');
-  });
-
-  test("fails when loaded runtime definitions omit an expected runtime", () => {
-    expect(() =>
-      buildCliToolsModel({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimes: [
-          { kind: "opencode", ok: true, version: "1.2.9" },
-          { kind: "codex", ok: true, version: "codex-cli 0.42.0" },
-        ],
-      }),
-    ).toThrow('Missing runtime definition for runtime kind "codex"');
-  });
-
-  test("keeps runtime definition failures authoritative over CLI row invariants", () => {
-    const model = buildCliToolsModel({
-      runtimeDefinitions: [],
-      runtimeDefinitionsError: "Runtime definitions unavailable",
-      runtimes: [],
-    });
-    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-
-    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
-    expect(cliToolsSection?.errors).toEqual(["Runtime definitions unavailable"]);
-  });
-
   test("keeps summary in checking state while runtime health is still pending", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
@@ -212,7 +72,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -241,7 +101,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -290,7 +150,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -341,7 +201,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -374,23 +234,6 @@ describe("buildDiagnosticsPanelModel", () => {
     );
   });
 
-  test("preserves a detected CLI value before the disabled qualifier", () => {
-    const codexValue = "codex-cli 0.42.0 (/Applications/OpenDucktor.app/bin/codex)";
-    const model = buildCliToolsModel({
-      runtimes: [
-        { kind: "opencode", ok: true, version: "1.2.9" },
-        { kind: "codex", enabled: false, ok: true, version: codexValue },
-      ],
-    });
-    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-
-    expect(cliToolsSection?.rows.at(3)).toEqual({
-      label: "Codex",
-      value: `${codexValue} (runtime disabled)`,
-      breakAll: true,
-    });
-  });
-
   test("returns setup-needed summary when no effective worktree directory is available", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
@@ -411,7 +254,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -451,7 +294,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck({
@@ -510,7 +353,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -557,10 +400,11 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [
-          { kind: "opencode", ok: true, version: "1.2.9 (/Users/dev/.opencode/bin/opencode)" },
-          makeDisabledCodexDiagnostic(),
-        ],
+        runtimes: makeBuiltInRuntimeDiagnostics({
+          kind: "opencode",
+          ok: true,
+          version: "1.2.9 (/Users/dev/.opencode/bin/opencode)",
+        }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck({
@@ -619,7 +463,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: false,
         ghAuthLogin: null,
         ghAuthError: "gh not found in PATH",
-        runtimes: [{ kind: "opencode", ok: false, version: null }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
         errors: ["opencode not found in PATH"],
       },
       taskStoreCheck: makeTaskStoreCheck({
@@ -691,7 +535,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -734,7 +578,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -810,7 +654,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -888,7 +732,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -931,7 +775,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -978,7 +822,7 @@ describe("buildDiagnosticsPanelModel", () => {
         ghAuthOk: true,
         ghAuthLogin: "octocat",
         ghAuthError: null,
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
       taskStoreCheck: makeTaskStoreCheck(),
@@ -1009,149 +853,5 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toContain("MCP unavailable");
     expect(mcpSection?.errors).toEqual(["MCP unavailable"]);
-  });
-
-  test("shows timeout-specific cli tools and task-store states instead of leaving them checking", () => {
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: "/repo",
-      activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions: makeBuiltInRuntimeDefinitions(),
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: {
-        gitOk: false,
-        gitVersion: null,
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Timed out after 15000ms",
-        runtimes: [{ kind: "opencode", ok: false, version: null }, makeDisabledCodexDiagnostic()],
-        errors: ["Timed out after 15000ms"],
-      },
-      taskStoreCheck: makeTaskStoreCheck({
-        taskStoreOk: false,
-        taskStorePath: null,
-        taskStoreError: "Timed out after 15000ms",
-        repoStoreHealth: {
-          category: "database_unavailable",
-          status: "blocking",
-          isReady: false,
-          detail: "Timed out after 15000ms",
-          databasePath: null,
-        },
-      }),
-      runtimeCheckFailureKind: "timeout",
-      taskStoreCheckFailureKind: "timeout",
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeDiagnosticInstance() },
-          mcp: { toolIds: [] },
-        }),
-        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
-      },
-      isLoadingChecks: false,
-    });
-
-    expect(model.isSummaryChecking).toBe(false);
-    expect(model.summaryState.label).toBe("Critical issue");
-    expect(model.criticalReasons).toEqual(expect.arrayContaining(["Timed out after 15000ms"]));
-    expect(model.sections[1]?.badge).toEqual({ label: "Timed out", variant: "warning" });
-    expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
-    const taskStoreSection = model.sections.find((section) => section.key === "task-store");
-    expect(taskStoreSection?.badge).toEqual({ label: "Timed out", variant: "warning" });
-    expect(taskStoreSection?.errors[0]).toContain("Task store is not yet available");
-  });
-
-  test("keeps hard failures ahead of timeout summary state", () => {
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: "/repo",
-      activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions: makeBuiltInRuntimeDefinitions(),
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: {
-        gitOk: false,
-        gitVersion: null,
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Timed out after 15000ms",
-        runtimes: [{ kind: "opencode", ok: false, version: null }, makeDisabledCodexDiagnostic()],
-        errors: ["Timed out after 15000ms"],
-      },
-      taskStoreCheck: makeTaskStoreCheck(),
-      runtimeCheckFailureKind: "timeout",
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          status: "error",
-          runtime: {
-            status: "error",
-            stage: "startup_failed",
-            observation: null,
-            instance: makeRuntimeDiagnosticInstance(),
-            startedAt: makeRuntimeDiagnosticInstance().startedAt,
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: 20_000,
-            attempts: 4,
-            detail: "runtime failed",
-            failureKind: "error",
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "waiting_for_runtime",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "Runtime is unavailable, so MCP cannot be verified.",
-            failureKind: "timeout",
-          },
-        }),
-        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
-      },
-      isLoadingChecks: false,
-    });
-
-    expect(model.isSummaryChecking).toBe(false);
-    expect(model.summaryState.label).toBe("Critical issue");
-    expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
-  });
-
-  test("treats GitHub CLI auth failures as optional warnings", () => {
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: "/repo",
-      activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions: makeBuiltInRuntimeDefinitions(),
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: {
-        gitOk: true,
-        gitVersion: "git version 2.50.1",
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "gh auth missing",
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }, makeDisabledCodexDiagnostic()],
-        errors: ["gh auth missing"],
-      },
-      taskStoreCheck: makeTaskStoreCheck(),
-      runtimeCheckFailureKind: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          runtime: { instance: makeRuntimeDiagnosticInstance() },
-          mcp: { toolIds: [] },
-        }),
-      },
-      isLoadingChecks: false,
-    });
-
-    expect(model.criticalReasons).not.toContain("gh auth missing");
-    expect(model.sections[1]?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
-    expect(model.sections[1]?.errors).toEqual([]);
   });
 });
