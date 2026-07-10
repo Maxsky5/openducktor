@@ -124,14 +124,6 @@ export const handleMessagePartUpdatedEvent = (
   const nextPart = applyPendingDeltas(runtime, partId, current);
   runtime.partsById.set(partId, nextPart);
   if (readStringProp(rawPartRecord, ["type"]) === "compaction") {
-    runtime.activeCompactionPartId = partId;
-    runtime.emit(runtime.externalSessionId, {
-      type: "session_compaction_started",
-      externalSessionId: runtime.externalSessionId,
-      timestamp: readPartUpdatedTimestamp(properties, nextPart) ?? runtime.now(),
-      messageId: partId,
-      message: "Session compaction started.",
-    });
     return true;
   }
   emitAssistantPart(runtime, nextPart);
