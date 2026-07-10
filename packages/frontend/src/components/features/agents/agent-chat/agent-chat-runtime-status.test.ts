@@ -29,30 +29,55 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+const BUFFERING_MESSAGE =
+  "Our systems are thinking a bit more about this request before responding.";
+
+const renderRuntimeStatus = ({
+  runtimeStatusMessage,
+  isSessionWorking,
+}: {
+  runtimeStatusMessage: string | null;
+  isSessionWorking: boolean;
+}) =>
+  render(
+    createElement(AgentChatThread, {
+      model: {
+        ...buildBaseModel(),
+        session: buildSession({ runtimeStatusMessage }),
+        isSessionWorking,
+      },
+    }),
+  );
+
 describe("AgentChatThread runtime status", () => {
   test("renders a transient runtime status with informational styling", async () => {
-    const rendered = render(
-      createElement(AgentChatThread, {
-        model: {
-          ...buildBaseModel(),
-          session: buildSession({
-            runtimeStatusMessage:
-              "Our systems are thinking a bit more about this request before responding.",
-          }),
-          isSessionWorking: true,
-        },
-      }),
-    );
+    const rendered = renderRuntimeStatus({
+      runtimeStatusMessage: BUFFERING_MESSAGE,
+      isSessionWorking: true,
+    });
     await act(flush);
 
     const notice = screen.getByRole("status");
-    expect(notice.textContent).toContain(
-      "Our systems are thinking a bit more about this request before responding.",
-    );
+    expect(notice.textContent).toContain(BUFFERING_MESSAGE);
     expect(notice.className).toContain("border-info-border");
     expect(notice.className).toContain("bg-info-surface");
     expect(notice.className).toContain("text-info-surface-foreground");
 
     rendered.unmount();
+  });
+
+  test("does not render a runtime status outside its active display conditions", async () => {
+    const hiddenCases = [
+      { runtimeStatusMessage: BUFFERING_MESSAGE, isSessionWorking: false },
+      { runtimeStatusMessage: null, isSessionWorking: true },
+    ];
+
+    for (const hiddenCase of hiddenCases) {
+      const rendered = renderRuntimeStatus(hiddenCase);
+      await act(flush);
+
+      expect(screen.queryByRole("status")).toBeNull();
+      rendered.unmount();
+    }
   });
 });
