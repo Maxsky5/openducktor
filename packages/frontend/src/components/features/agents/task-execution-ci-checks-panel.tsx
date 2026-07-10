@@ -2,7 +2,10 @@ import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { errorMessage } from "@/lib/errors";
-import { pullRequestReviewContextQueryOptions } from "@/state/queries/pull-request-review";
+import {
+  type PullRequestReviewContextQueryInput,
+  pullRequestReviewContextQueryOptions,
+} from "@/state/queries/pull-request-review";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import {
   TaskExecutionCiPanelState,
@@ -11,11 +14,7 @@ import {
 
 export type TaskExecutionCiChecksPanelModel = {
   isActive: boolean;
-  queryInput: {
-    repoPath: string;
-    taskId?: string;
-    workingDirectory?: string;
-  } | null;
+  queryInput: PullRequestReviewContextQueryInput | null;
 };
 
 type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
@@ -36,15 +35,16 @@ const pullRequestStateProps = (
   if (context.status === "error") {
     return {
       title: "Could not load CI checks",
-      message: "GitHub returned an error while reading pull request checks or review comments.",
+      message:
+        "The pull request provider returned an error while reading checks or review comments.",
       kind: "error",
       detail: context.reason,
     };
   }
 
   return {
-    title: "GitHub checks unavailable",
-    message: "Check the repository GitHub integration, GitHub CLI, and authentication.",
+    title: "Pull request checks unavailable",
+    message: "Check the repository provider integration, command-line tool, and authentication.",
     kind: "unavailable",
     detail: context.reason,
   };
@@ -74,7 +74,7 @@ export function TaskExecutionCiChecksPanel({
     return (
       <TaskExecutionCiPanelState
         title="Loading CI checks"
-        message="Reading the current pull request, check runs, and review threads from GitHub."
+        message="Reading the current pull request, check runs, and review threads."
         kind="loading"
       />
     );
@@ -84,7 +84,7 @@ export function TaskExecutionCiChecksPanel({
     return (
       <TaskExecutionCiPanelState
         title="Could not load CI checks"
-        message="OpenDucktor could not read pull request review data from GitHub."
+        message="OpenDucktor could not read pull request review data."
         detail={errorMessage(reviewQuery.error)}
         kind="error"
         actionLabel="Retry"

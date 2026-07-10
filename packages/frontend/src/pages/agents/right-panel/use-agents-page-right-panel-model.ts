@@ -325,6 +325,8 @@ export function useAgentsPageRightPanelModel({
   );
   const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
   const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");
+  const linkedPullRequestProviderId = selectedView.selectedTask?.pullRequest?.providerId ?? null;
+  const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
   const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
     () =>
       workspaceRepoPath
@@ -336,15 +338,26 @@ export function useAgentsPageRightPanelModel({
                   workingDirectory: selectedView.selectedSession.identity.workingDirectory,
                 }
               : {}),
+            ...(linkedPullRequestProviderId && linkedPullRequestNumber
+              ? {
+                  pullRequest: {
+                    providerId: linkedPullRequestProviderId,
+                    number: linkedPullRequestNumber,
+                  },
+                }
+              : {}),
           }
         : null,
     [
+      linkedPullRequestNumber,
+      linkedPullRequestProviderId,
       selectedView.selectedSession.identity?.workingDirectory,
       selectedView.taskId,
       workspaceRepoPath,
     ],
   );
-  const hasLinkedPullRequest = selectedView.selectedTask?.pullRequest != null;
+  const hasLinkedPullRequest =
+    linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
   useEffect(() => {
     if (!hasCiChecksTab || !hasLinkedPullRequest || !ciReviewQueryInput) {
       return;

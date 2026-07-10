@@ -330,7 +330,7 @@ export const createWorkspaceFilesService = (
           mtimeMs: metadata.mtimeMs ?? null,
         });
       }
-      const bytes = yield* filesystem.readFileBytes(canonicalPath).pipe(
+      const bytes = yield* filesystem.readFileBytes(canonicalPath, MAX_TEXT_FILE_BYTES + 1).pipe(
         Effect.mapError((cause) =>
           toHostValidationError(cause, `Unable to read file '${relativePath}'.`, {
             rootPath: canonicalRoot,
@@ -338,6 +338,18 @@ export const createWorkspaceFilesService = (
           }),
         ),
       );
+      const actualSize = Math.max(size, bytes.byteLength);
+      if (bytes.byteLength > MAX_TEXT_FILE_BYTES) {
+        return workspaceTextFileReadResultSchema.parse({
+          kind: "unsupported",
+          rootPath: canonicalRoot,
+          relativePath,
+          reason: "too_large",
+          message: `File is too large to preview (${actualSize} bytes).`,
+          size: actualSize,
+          mtimeMs: metadata.mtimeMs ?? null,
+        });
+      }
       if (isBinaryBytes(bytes)) {
         return workspaceTextFileReadResultSchema.parse({
           kind: "unsupported",
@@ -345,7 +357,7 @@ export const createWorkspaceFilesService = (
           relativePath,
           reason: "binary",
           message: "Binary files cannot be previewed as text.",
-          size,
+          size: actualSize,
           mtimeMs: metadata.mtimeMs ?? null,
         });
       }
@@ -362,7 +374,7 @@ export const createWorkspaceFilesService = (
         rootPath: canonicalRoot,
         relativePath,
         contents,
-        size,
+        size: actualSize,
         mtimeMs: metadata.mtimeMs ?? null,
       });
     });

@@ -6,7 +6,7 @@ import type {
   WorkspaceFileTree,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -36,6 +36,7 @@ let preparePresortedFileTreeInputCalls: string[][] = [];
 let fileTreeSelectedPaths: string[] = [];
 let deselectedFileTreePaths: string[] = [];
 let selectedOnlyFileTreePaths: string[] = [];
+let fileTreeSubscriber: (() => void) | null = null;
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
@@ -48,6 +49,7 @@ beforeEach(async () => {
   fileTreeSelectedPaths = [];
   deselectedFileTreePaths = [];
   selectedOnlyFileTreePaths = [];
+  fileTreeSubscriber = null;
 
   mock.module("@pierre/trees", () => ({
     prepareFileTreeInput: (paths: string[]) => {
@@ -81,7 +83,12 @@ beforeEach(async () => {
           }),
           getSelectedPaths: () => fileTreeSelectedPaths,
           resetPaths: () => {},
-          subscribe: () => () => {},
+          subscribe: (subscriber: () => void) => {
+            fileTreeSubscriber = subscriber;
+            return () => {
+              fileTreeSubscriber = null;
+            };
+          },
           setGitStatus: () => {},
           setIcons: () => {},
           setSearch: () => {},
@@ -711,6 +718,64 @@ describe("TaskExecutionPanel", () => {
     await waitFor(() => expect(deselectedFileTreePaths).toEqual(["src/old.ts"]));
     expect(fileTreeSelectedPaths).toEqual([]);
     expect(selectedOnlyFileTreePaths).toEqual([]);
+  });
+
+  test("selects files with the canonical root returned by the host", async () => {
+    const onSelectFile = mock(() => {});
+    const requestedRoot = "/repo/symlinked-worktree";
+    const fileTree: WorkspaceFileTree = {
+      rootPath: "/private/repo/worktree",
+      paths: ["src/index.ts"],
+      entries: [
+        {
+          kind: "file",
+          path: "src/index.ts",
+          size: 24,
+          mtimeMs: 1_760_000_000_000,
+          gitStatus: null,
+        },
+      ],
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(filesystemQueryKeys.tree(requestedRoot, "origin/main"), fileTree);
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          ThemeProvider,
+          null,
+          createElement(TaskExecutionPanel, {
+            model: {
+              ...basePanelModel,
+              tabs: [
+                { id: "git", label: "Git" },
+                { id: "file_explorer", label: "File explorer" },
+              ],
+              activeTabId: "file_explorer",
+              documentModel: null,
+              fileExplorerModel: {
+                rootPath: requestedRoot,
+                targetBranch: "origin/main",
+                unavailableReason: null,
+                isActive: true,
+                selectedFile: null,
+                onSelectFile,
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
+    await waitFor(() => expect(fileTreeSubscriber).not.toBeNull());
+    fileTreeSelectedPaths = ["src/index.ts"];
+    act(() => fileTreeSubscriber?.());
+
+    expect(onSelectFile).toHaveBeenCalledWith({
+      rootPath: fileTree.rootPath,
+      relativePath: "src/index.ts",
+    });
   });
 
   test("renders Dev Servers below the task execution panel", () => {

@@ -407,13 +407,22 @@ describe("useAgentsPageRightPanelModel", () => {
 
     expect(prefetchPullRequestReviewContextMock).toHaveBeenCalledTimes(1);
     const prefetchCalls = prefetchPullRequestReviewContextMock.mock.calls as unknown as Array<
-      [unknown, { repoPath: string; taskId?: string; workingDirectory?: string }]
+      [
+        unknown,
+        {
+          repoPath: string;
+          taskId?: string;
+          workingDirectory?: string;
+          pullRequest?: { providerId: string; number: number };
+        },
+      ]
     >;
     expect(prefetchCalls[0]?.[0]).toBe(queryClient);
     expect(prefetchCalls[0]?.[1]).toEqual({
       repoPath: "/repo",
       taskId: "task-1",
       workingDirectory: "/repo",
+      pullRequest: { providerId: "github", number: 42 },
     });
 
     await harness.unmount();

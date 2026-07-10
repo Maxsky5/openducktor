@@ -208,11 +208,15 @@ export function TaskExecutionFileExplorerPanel({
 }: {
   model: TaskExecutionFileExplorerPanelModel;
 }): ReactElement {
-  const rootPath = model.rootPath;
+  const requestedRootPath = model.rootPath;
   const treeQuery = useQuery({
-    ...workspaceFileTreeQueryOptions(rootPath ?? "__inactive_file_tree__", model.targetBranch),
-    enabled: model.isActive && rootPath !== null,
+    ...workspaceFileTreeQueryOptions(
+      requestedRootPath ?? "__inactive_file_tree__",
+      model.targetBranch,
+    ),
+    enabled: model.isActive && requestedRootPath !== null,
   });
+  const rootPath = treeQuery.data?.rootPath ?? requestedRootPath;
   const { theme } = useTheme();
   const treeStyle = useMemo(() => treeStylesForTheme(theme), [theme]);
   const entriesByPath = useMemo(

@@ -1,4 +1,4 @@
-import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { access, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -34,11 +34,23 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       );
     });
   },
-  readFileBytes(inputPath) {
+  readFileBytes(inputPath, maxBytes) {
     return Effect.tryPromise({
-      try: () => readFile(inputPath),
+      try: async () => {
+        const file = await open(inputPath, "r");
+        try {
+          const bytes = new Uint8Array(maxBytes);
+          const result = await file.read(bytes, 0, maxBytes, 0);
+          return bytes.subarray(0, result.bytesRead);
+        } finally {
+          await file.close();
+        }
+      },
       catch: (cause) =>
-        toHostOperationError(cause, "filesystem.readFileBytes", { path: inputPath }),
+        toHostOperationError(cause, "filesystem.readFileBytes", {
+          path: inputPath,
+          maxBytes,
+        }),
     });
   },
   stat(inputPath) {

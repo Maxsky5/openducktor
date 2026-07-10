@@ -6,65 +6,80 @@ import type { GithubCommandDependencies } from "../tasks/support/github-pull-req
 import { createGithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
 const createDependencies = ({
+  commandActivity,
+  commandDelayMs = 0,
   commands = [],
   includeReviewId = true,
   pullRequestViewResponse = defaultPullRequestViewResponse(includeReviewId),
   reviewThreadNodes = defaultReviewThreadNodes,
+  reviewThreadResponse,
 }: {
+  commandActivity?: { active: number; maxActive: number };
+  commandDelayMs?: number;
   commands?: string[][];
   includeReviewId?: boolean;
   pullRequestViewResponse?: unknown;
   reviewThreadNodes?: unknown[];
+  reviewThreadResponse?: (args: string[]) => unknown;
 } = {}): GithubCommandDependencies => {
+  const succeed = (stdout: unknown) =>
+    Effect.gen(function* () {
+      if (commandActivity) {
+        commandActivity.active += 1;
+        commandActivity.maxActive = Math.max(commandActivity.maxActive, commandActivity.active);
+      }
+      if (commandDelayMs > 0) {
+        yield* Effect.sleep(`${commandDelayMs} millis`);
+      }
+      if (commandActivity) {
+        commandActivity.active -= 1;
+      }
+      return {
+        ok: true,
+        stdout: JSON.stringify(stdout),
+        stderr: "",
+      };
+    });
   const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
     runCommandAllowFailure: (_command, args) => {
       commands.push(args);
       const command = args.join(" ");
       if (command.includes("pr view")) {
-        return Effect.succeed({
-          ok: true,
-          stdout: JSON.stringify(pullRequestViewResponse),
-          stderr: "",
-        });
+        return succeed(pullRequestViewResponse);
       }
       if (command.includes("pr checks")) {
-        return Effect.succeed({
-          ok: true,
-          stdout: JSON.stringify([
-            {
-              name: "lint",
-              workflow: "CI",
-              state: "SUCCESS",
-              bucket: "pass",
-              link: "https://github.com/openai/openducktor/actions/runs/1",
-            },
-            {
-              name: "test",
-              workflow: "CI",
-              state: "FAILURE",
-              bucket: "fail",
-              link: "https://github.com/openai/openducktor/actions/runs/2",
-            },
-          ]),
-          stderr: "",
-        });
+        return succeed([
+          {
+            name: "lint",
+            workflow: "CI",
+            state: "SUCCESS",
+            bucket: "pass",
+            link: "https://github.com/openai/openducktor/actions/runs/1",
+          },
+          {
+            name: "test",
+            workflow: "CI",
+            state: "FAILURE",
+            bucket: "fail",
+            link: "https://github.com/openai/openducktor/actions/runs/2",
+          },
+        ]);
       }
       if (command.includes("api graphql")) {
-        return Effect.succeed({
-          ok: true,
-          stdout: JSON.stringify({
+        return succeed(
+          reviewThreadResponse?.(args) ?? {
             data: {
               repository: {
                 pullRequest: {
                   reviewThreads: {
                     nodes: reviewThreadNodes,
+                    pageInfo: { hasNextPage: false, endCursor: null },
                   },
                 },
               },
             },
-          }),
-          stderr: "",
-        });
+          },
+        );
       }
       return Effect.fail(
         new HostOperationError({
@@ -118,6 +133,7 @@ const defaultReviewThreadNodes = [
     id: "thread-1",
     isResolved: true,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-1",
@@ -136,6 +152,7 @@ const defaultReviewThreadNodes = [
     id: "thread-2",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-2",
@@ -167,6 +184,7 @@ const fairnestPullRequestReviewThreadNodes = [
     id: "thread-fairnest-1",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-fairnest-1",
@@ -197,6 +215,7 @@ const fairnestPullRequestReviewThreadNodes = [
     id: "thread-fairnest-2",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-fairnest-2",
@@ -215,6 +234,7 @@ const fairnestPullRequestReviewThreadNodes = [
     id: "thread-fairnest-3",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-fairnest-3",
@@ -233,6 +253,7 @@ const fairnestPullRequestReviewThreadNodes = [
     id: "thread-fairnest-4",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-fairnest-4",
@@ -251,6 +272,7 @@ const fairnestPullRequestReviewThreadNodes = [
     id: "thread-fairnest-5",
     isResolved: false,
     comments: {
+      pageInfo: { hasNextPage: false, endCursor: null },
       nodes: [
         {
           id: "thread-comment-fairnest-5",
@@ -367,25 +389,24 @@ describe("createGithubPullRequestReviewProvider", () => {
     );
 
     const pullRequestCommands = commands.filter((args) => args[0] === "pr");
-    expect(pullRequestCommands).toEqual([
-      [
-        "pr",
-        "view",
-        "42",
-        "--json",
-        "number,title,url,state,isDraft,comments,reviews,latestReviews",
-        "--repo",
-        "openai/openducktor",
-      ],
-      [
-        "pr",
-        "checks",
-        "42",
-        "--json",
-        "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
-        "--repo",
-        "openai/openducktor",
-      ],
+    expect(pullRequestCommands).toHaveLength(2);
+    expect(pullRequestCommands).toContainEqual([
+      "pr",
+      "view",
+      "42",
+      "--json",
+      "number,title,url,state,isDraft,comments,reviews,latestReviews",
+      "--repo",
+      "openai/openducktor",
+    ]);
+    expect(pullRequestCommands).toContainEqual([
+      "pr",
+      "checks",
+      "42",
+      "--json",
+      "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
+      "--repo",
+      "openai/openducktor",
     ]);
     expect(pullRequestCommands.flat()).not.toContain("--hostname");
   });
@@ -482,5 +503,149 @@ describe("createGithubPullRequestReviewProvider", () => {
       "Disable all login options while any login flow is active.",
     );
     expect(commands.flat().join(" ")).toContain("diffHunk");
+  });
+
+  test("loads every review thread and comment page", async () => {
+    const commands: string[][] = [];
+    const provider = createGithubPullRequestReviewProvider();
+    const reviewThreadResponse = (args: string[]): unknown => {
+      const command = args.join(" ");
+      if (command.includes("PullRequestReviewThreadComments")) {
+        expect(command).toContain("threadId=thread-1");
+        expect(command).toContain("commentsCursor=comments-page-2");
+        return {
+          data: {
+            node: {
+              id: "thread-1",
+              isResolved: false,
+              comments: {
+                nodes: [
+                  {
+                    id: "thread-1-comment-2",
+                    author: { login: "reviewer" },
+                    body: "Second comment page",
+                    url: "https://example.com/thread-1-comment-2",
+                    createdAt: "2026-07-10T08:02:00.000Z",
+                    updatedAt: "2026-07-10T08:02:00.000Z",
+                    path: "src/one.ts",
+                    line: 2,
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        };
+      }
+      if (command.includes("threadsCursor=threads-page-2")) {
+        return {
+          data: {
+            repository: {
+              pullRequest: {
+                reviewThreads: {
+                  nodes: [
+                    {
+                      id: "thread-2",
+                      isResolved: false,
+                      comments: {
+                        nodes: [
+                          {
+                            id: "thread-2-comment-1",
+                            author: { login: "reviewer" },
+                            body: "Second thread page",
+                            url: "https://example.com/thread-2-comment-1",
+                            createdAt: "2026-07-10T08:03:00.000Z",
+                            updatedAt: "2026-07-10T08:03:00.000Z",
+                            path: "src/two.ts",
+                            line: 3,
+                          },
+                        ],
+                        pageInfo: { hasNextPage: false, endCursor: null },
+                      },
+                    },
+                  ],
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            },
+          },
+        };
+      }
+      return {
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                nodes: [
+                  {
+                    id: "thread-1",
+                    isResolved: false,
+                    comments: {
+                      nodes: [
+                        {
+                          id: "thread-1-comment-1",
+                          author: { login: "reviewer" },
+                          body: "First comment page",
+                          url: "https://example.com/thread-1-comment-1",
+                          createdAt: "2026-07-10T08:01:00.000Z",
+                          updatedAt: "2026-07-10T08:01:00.000Z",
+                          path: "src/one.ts",
+                          line: 1,
+                        },
+                      ],
+                      pageInfo: { hasNextPage: true, endCursor: "comments-page-2" },
+                    },
+                  },
+                ],
+                pageInfo: { hasNextPage: true, endCursor: "threads-page-2" },
+              },
+            },
+          },
+        },
+      };
+    };
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({ commands, reviewThreadResponse }),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review_thread")
+        .map((comment) => comment.id),
+    ).toEqual(["thread-1-comment-1", "thread-1-comment-2", "thread-2-comment-1"]);
+    expect(context.reviewThreads).toEqual({ openCount: 2 });
+    expect(commands.filter((args) => args.includes("api"))).toHaveLength(3);
+  });
+
+  test("loads independent pull request resources concurrently", async () => {
+    const commandActivity = { active: 0, maxActive: 0 };
+    const provider = createGithubPullRequestReviewProvider();
+
+    await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({ commandActivity, commandDelayMs: 20 }),
+        repoPath: "/repo",
+        context: {
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          remoteName: "origin",
+        },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(commandActivity.maxActive).toBe(3);
   });
 });

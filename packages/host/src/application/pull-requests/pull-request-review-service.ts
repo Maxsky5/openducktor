@@ -1,24 +1,17 @@
 import {
+  type GitProviderId,
+  type PullRequest,
   type PullRequestReviewContext,
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
+import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
-import {
-  findGithubPullRequestForBranch,
-  GITHUB_PROVIDER_ID,
-  type GithubCommandDependencies,
-  type GithubRepositoryDependencies,
-  githubProviderStatus,
-  requireGithubPullRequestContext,
-} from "../tasks/support/github-pull-requests";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import type { GithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
 export type PullRequestReviewContextInput = {
   repoPath: string;
@@ -34,129 +27,77 @@ export type PullRequestReviewService = {
   ): Effect.Effect<PullRequestReviewContext, PullRequestReviewServiceError>;
 };
 
-const unavailable = (reason: string): PullRequestReviewContext =>
+const unavailable = (providerId: GitProviderId, reason: string): PullRequestReviewContext =>
   pullRequestReviewContextSchema.parse({
     status: "unavailable",
-    providerId: "github",
+    providerId,
     reason,
   });
 
-const noPullRequest = (reason: string): PullRequestReviewContext =>
-  pullRequestReviewContextSchema.parse({
-    status: "no_pull_request",
-    providerId: "github",
-    reason,
-  });
-
-const providerError = (reason: string): PullRequestReviewContext =>
+const providerError = (providerId: GitProviderId, reason: string): PullRequestReviewContext =>
   pullRequestReviewContextSchema.parse({
     status: "error",
-    providerId: "github",
+    providerId,
     reason,
   });
 
+const selectProvider = (
+  providers: readonly PullRequestReviewProviderPort[],
+  repoConfig: Parameters<PullRequestReviewProviderPort["isEnabled"]>[0],
+  linkedPullRequest: PullRequest | null,
+): PullRequestReviewProviderPort | null => {
+  if (linkedPullRequest) {
+    return (
+      providers.find((provider) => provider.providerId === linkedPullRequest.providerId) ?? null
+    );
+  }
+  return providers.find((provider) => provider.isEnabled(repoConfig)) ?? null;
+};
+
 export const createPullRequestReviewService = ({
-  gitPort,
-  githubDependencies,
-  githubReviewProvider,
+  providers,
   taskReader,
   workspaceSettingsService,
 }: {
-  gitPort: GitPort;
-  githubDependencies: GithubCommandDependencies;
-  githubReviewProvider: GithubPullRequestReviewProvider;
-  taskReader: TaskReader;
-  workspaceSettingsService: WorkspaceSettingsService;
+  providers: readonly PullRequestReviewProviderPort[];
+  taskReader: Pick<TaskReader, "getTask">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
 }): PullRequestReviewService => {
-  const githubRepositoryDependencies: GithubRepositoryDependencies = {
-    ...githubDependencies,
-    gitPort,
-  };
-
   return {
     getContext(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
-        const providerConfig = repoConfig.git.providers[GITHUB_PROVIDER_ID];
-        if (!providerConfig?.enabled) {
-          return unavailable("GitHub provider is not enabled for this repository.");
-        }
-
-        const status = yield* githubProviderStatus(
-          githubRepositoryDependencies,
-          repoConfig.repoPath,
-          repoConfig,
-        );
-        if (!status.available) {
-          return unavailable(status.reason ?? "GitHub provider is unavailable.");
-        }
-
-        const contextResult = yield* Effect.either(
-          requireGithubPullRequestContext(
-            githubRepositoryDependencies,
-            repoConfig.repoPath,
-            repoConfig,
-          ),
-        );
-        if (contextResult._tag === "Left") {
-          return unavailable(errorMessage(contextResult.left));
-        }
-        const context = contextResult.right;
-
-        let pullRequestNumber: number | null = null;
+        let linkedPullRequest: PullRequest | null = null;
         if (input.taskId) {
           const taskResult = yield* Effect.either(
             taskReader.getTask({ repoPath: repoConfig.repoPath, taskId: input.taskId }),
           );
           if (taskResult._tag === "Left") {
-            return providerError(errorMessage(taskResult.left));
+            return providerError("unknown", errorMessage(taskResult.left));
           }
-          const taskPullRequest = taskResult.right.pullRequest;
-          if (taskPullRequest?.providerId === GITHUB_PROVIDER_ID) {
-            pullRequestNumber = taskPullRequest.number;
-          }
+          linkedPullRequest = taskResult.right.pullRequest ?? null;
         }
 
-        if (pullRequestNumber === null) {
-          const workingDirectory = input.workingDirectory ?? repoConfig.repoPath;
-          const currentBranchResult = yield* Effect.either(
-            gitPort.getCurrentBranch(workingDirectory),
+        const provider = selectProvider(providers, repoConfig, linkedPullRequest);
+        if (!provider) {
+          const providerId = linkedPullRequest?.providerId ?? "unknown";
+          return unavailable(
+            providerId,
+            linkedPullRequest
+              ? `Pull request review provider '${providerId}' is not supported.`
+              : "No pull request review provider is configured.",
           );
-          if (currentBranchResult._tag === "Left") {
-            return providerError(errorMessage(currentBranchResult.left));
-          }
-          const sourceBranch = currentBranchResult.right.name;
-          if (!sourceBranch) {
-            return noPullRequest("Current Git branch is detached or unavailable.");
-          }
-          const pullRequestResult = yield* Effect.either(
-            findGithubPullRequestForBranch(
-              githubDependencies,
-              repoConfig.repoPath,
-              context,
-              sourceBranch,
-              "open",
-            ),
-          );
-          if (pullRequestResult._tag === "Left") {
-            return providerError(errorMessage(pullRequestResult.left));
-          }
-          if (!pullRequestResult.right) {
-            return noPullRequest(`No open GitHub pull request found for ${sourceBranch}.`);
-          }
-          pullRequestNumber = pullRequestResult.right.record.number;
         }
 
         const reviewResult = yield* Effect.either(
-          githubReviewProvider.read({
-            dependencies: githubDependencies,
-            repoPath: repoConfig.repoPath,
-            context,
-            pullRequestNumber,
+          provider.readContext({
+            repoConfig,
+            linkedPullRequest,
+            ...(input.workingDirectory ? { workingDirectory: input.workingDirectory } : {}),
           }),
         );
         if (reviewResult._tag === "Left") {
-          return providerError(errorMessage(reviewResult.left));
+          return providerError(provider.providerId, errorMessage(reviewResult.left));
         }
         return reviewResult.right;
       }).pipe(

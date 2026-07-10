@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { gitProviderIdSchema } from "./git-schemas";
 
-export const pullRequestReviewProviderIdSchema = z.enum(["github"]);
+export const pullRequestReviewProviderIdSchema = gitProviderIdSchema;
 export type PullRequestReviewProviderId = z.infer<typeof pullRequestReviewProviderIdSchema>;
 
 export const pullRequestReviewStateSchema = z.enum(["open", "draft", "merged", "closed"]);

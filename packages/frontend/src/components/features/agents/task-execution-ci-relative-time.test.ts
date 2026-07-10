@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatCiRelativeTime } from "./task-execution-ci-relative-time";
+import { formatCiRelativeTime } from "./task-execution-ci-relative-time-format";
 
 describe("formatCiRelativeTime", () => {
   const now = Date.parse("2026-07-09T12:00:00Z");

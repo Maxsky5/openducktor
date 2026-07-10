@@ -8,6 +8,7 @@ import { createWorkspaceFilesService } from "./workspace-files-service";
 
 type FakeFilesystemInput = {
   canonical?: Record<string, string>;
+  readLimits?: number[];
   stats?: Record<string, FilesystemStats>;
   files?: Record<string, Uint8Array>;
 };
@@ -22,15 +23,21 @@ const hostOperationError = (message: string): HostOperationError =>
 
 const createFakeFilesystem = ({
   canonical = {},
+  readLimits,
   stats = {},
   files = {},
 }: FakeFilesystemInput = {}): FilesystemPort => ({
   homeDirectory: () => "/home/dev",
   canonicalize: (path) => Effect.succeed(canonical[path] ?? path),
   readDirectory: () => Effect.succeed([]),
-  readFileBytes: (path) => {
+  readFileBytes: (path, maxBytes) => {
+    if (maxBytes !== undefined) {
+      readLimits?.push(maxBytes);
+    }
     const value = files[path];
-    return value ? Effect.succeed(value) : Effect.fail(hostOperationError(`Missing file ${path}`));
+    return value
+      ? Effect.succeed(maxBytes === undefined ? value : value.slice(0, maxBytes))
+      : Effect.fail(hostOperationError(`Missing file ${path}`));
   },
   stat: (path) => {
     const value = stats[path];
@@ -262,6 +269,33 @@ describe("createWorkspaceFilesService", () => {
       size: 3,
       mtimeMs: 20,
     });
+  });
+
+  test("bounds the actual file read when the file grows after stat", async () => {
+    const readLimits: number[] = [];
+    const grownContents = new Uint8Array(1024 * 1024 + 1).fill(0x61);
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        readLimits,
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/growing.txt": { isDirectory: false, isFile: true, size: 18, mtimeMs: 20 },
+        },
+        files: {
+          "/repo/growing.txt": grownContents,
+        },
+      }),
+      createFakeGitPort(),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "growing.txt" })),
+    ).resolves.toMatchObject({
+      kind: "unsupported",
+      reason: "too_large",
+      size: 1024 * 1024 + 1,
+    });
+    expect(readLimits).toEqual([1024 * 1024 + 1]);
   });
 
   test("rejects file paths outside the selected root", async () => {

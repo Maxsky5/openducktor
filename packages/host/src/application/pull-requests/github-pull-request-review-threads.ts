@@ -1,8 +1,16 @@
-import type {
-  PullRequestReviewComment,
-  PullRequestReviewThreadsSummary,
-} from "@openducktor/contracts";
+import type { PullRequestReviewComment } from "@openducktor/contracts";
+import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import {
+  type GithubCommandDependencies,
+  type GithubPullRequestContext,
+  runGithubCommand,
+} from "../tasks/support/github-pull-requests";
+
+type GithubGraphqlPageInfoPayload = {
+  hasNextPage?: unknown;
+  endCursor?: unknown;
+};
 
 type GithubGraphqlReviewThreadCommentPayload = {
   id?: unknown;
@@ -21,6 +29,7 @@ type GithubGraphqlReviewThreadPayload = {
   isResolved?: unknown;
   comments?: {
     nodes?: unknown;
+    pageInfo?: GithubGraphqlPageInfoPayload | null;
   } | null;
 };
 
@@ -30,40 +39,97 @@ type GithubGraphqlReviewThreadsPayload = {
       pullRequest?: {
         reviewThreads?: {
           nodes?: unknown;
+          pageInfo?: GithubGraphqlPageInfoPayload | null;
         } | null;
       } | null;
     } | null;
   } | null;
 };
 
-type ParsedReviewThreads = {
-  comments: PullRequestReviewComment[];
-  summary: PullRequestReviewThreadsSummary;
+type GithubGraphqlReviewThreadCommentsPayload = {
+  data?: {
+    node?: GithubGraphqlReviewThreadPayload | null;
+  } | null;
 };
 
+export type ReviewThreadCommentsCursor = {
+  threadId: string;
+  cursor: string;
+};
+
+export type ParsedReviewThreadsPage = {
+  comments: PullRequestReviewComment[];
+  openThreadIds: string[];
+  nextThreadsCursor: string | null;
+  commentPageCursors: ReviewThreadCommentsCursor[];
+};
+
+export type ParsedReviewThreadCommentsPage = {
+  comments: PullRequestReviewComment[];
+  nextCommentsCursor: string | null;
+  threadId: string;
+};
+
+const REVIEW_THREAD_COMMENT_FIELDS = `
+  id
+  author {
+    login
+  }
+  body
+  diffHunk
+  url
+  createdAt
+  updatedAt
+  path
+  line
+`;
+
 export const REVIEW_THREADS_QUERY = `
-query PullRequestReviewThreads($owner: String!, $name: String!, $number: Int!) {
+query PullRequestReviewThreads(
+  $owner: String!
+  $name: String!
+  $number: Int!
+  $threadsCursor: String
+) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $threadsCursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           id
           isResolved
           comments(first: 100) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             nodes {
-              id
-              author {
-                login
-              }
-              body
-              diffHunk
-              url
-              createdAt
-              updatedAt
-              path
-              line
+              ${REVIEW_THREAD_COMMENT_FIELDS}
             }
           }
+        }
+      }
+    }
+  }
+}
+`;
+
+export const REVIEW_THREAD_COMMENTS_QUERY = `
+query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
+  node(id: $threadId) {
+    ... on PullRequestReviewThread {
+      id
+      isResolved
+      comments(first: 100, after: $commentsCursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ${REVIEW_THREAD_COMMENT_FIELDS}
         }
       }
     }
@@ -77,9 +143,6 @@ const toNullableString = (value: unknown): string | null =>
 const toNullableNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
 
-const toNullableBoolean = (value: unknown): boolean | null =>
-  typeof value === "boolean" ? value : null;
-
 const requireString = (value: unknown, field: string): string => {
   const parsed = toNullableString(value);
   if (!parsed) {
@@ -89,6 +152,16 @@ const requireString = (value: unknown, field: string): string => {
     });
   }
   return parsed;
+};
+
+const requireBoolean = (value: unknown, field: string): boolean => {
+  if (typeof value !== "boolean") {
+    throw new HostValidationError({
+      field,
+      message: `GitHub pull request review field '${field}' is missing or invalid.`,
+    });
+  }
+  return value;
 };
 
 const parseJson = (payload: string): unknown => {
@@ -103,6 +176,20 @@ const parseJson = (payload: string): unknown => {
   }
 };
 
+const parseNextCursor = (
+  pageInfo: GithubGraphqlPageInfoPayload | null | undefined,
+  field: string,
+): string | null => {
+  if (!pageInfo) {
+    throw new HostValidationError({
+      field,
+      message: `GitHub pull request review field '${field}' is missing or invalid.`,
+    });
+  }
+  const hasNextPage = requireBoolean(pageInfo.hasNextPage, `${field}.hasNextPage`);
+  return hasNextPage ? requireString(pageInfo.endCursor, `${field}.endCursor`) : null;
+};
+
 const GITHUB_SUGGESTION_BLOCK = /^```suggestion[^\n]*\n[\s\S]*?^```[ \t]*$/gm;
 
 const withoutGithubSuggestionBlocks = (body: string): string =>
@@ -113,7 +200,8 @@ const withoutGithubSuggestionBlocks = (body: string): string =>
 
 const toReviewThreadComment = (
   payload: GithubGraphqlReviewThreadCommentPayload,
-  thread: GithubGraphqlReviewThreadPayload,
+  threadId: string,
+  isResolved: boolean,
 ): PullRequestReviewComment | null => {
   const body = typeof payload.body === "string" ? payload.body : "";
   if (!body.trim()) {
@@ -129,13 +217,41 @@ const toReviewThreadComment = (
     updatedAt: toNullableString(payload.updatedAt),
     path: toNullableString(payload.path),
     line: toNullableNumber(payload.line),
-    threadId: requireString(thread.id, "thread.id"),
-    isResolved: toNullableBoolean(thread.isResolved),
+    threadId,
+    isResolved,
     source: "review_thread",
   };
 };
 
-export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
+const parseThread = (thread: GithubGraphqlReviewThreadPayload) => {
+  const threadId = requireString(thread.id, "thread.id");
+  const isResolved = requireBoolean(thread.isResolved, "thread.isResolved");
+  if (!Array.isArray(thread.comments?.nodes)) {
+    throw new HostValidationError({
+      field: "thread.comments.nodes",
+      message: "GitHub pull request review field 'thread.comments.nodes' is missing or invalid.",
+    });
+  }
+  const comments: PullRequestReviewComment[] = [];
+  for (const comment of thread.comments.nodes) {
+    const normalized = toReviewThreadComment(
+      comment as GithubGraphqlReviewThreadCommentPayload,
+      threadId,
+      isResolved,
+    );
+    if (normalized) {
+      comments.push(normalized);
+    }
+  }
+  return {
+    comments,
+    isResolved,
+    nextCommentsCursor: parseNextCursor(thread.comments.pageInfo, "thread.comments.pageInfo"),
+    threadId,
+  };
+};
+
+const requireObjectPayload = (payload: string): Record<string, unknown> => {
   const parsed = parseJson(payload);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new HostValidationError({
@@ -143,8 +259,12 @@ export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
       message: "Failed to parse GitHub pull request review threads response: expected an object.",
     });
   }
-  const reviewThreads = (parsed as GithubGraphqlReviewThreadsPayload).data?.repository?.pullRequest
-    ?.reviewThreads;
+  return parsed as Record<string, unknown>;
+};
+
+export const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
+  const parsed = requireObjectPayload(payload) as GithubGraphqlReviewThreadsPayload;
+  const reviewThreads = parsed.data?.repository?.pullRequest?.reviewThreads;
   if (!Array.isArray(reviewThreads?.nodes)) {
     throw new HostValidationError({
       field: "reviewThreads.nodes",
@@ -153,41 +273,144 @@ export const parseReviewThreads = (payload: string): ParsedReviewThreads => {
     });
   }
   const comments: PullRequestReviewComment[] = [];
-  const openThreadIds = new Set<string>();
+  const openThreadIds: string[] = [];
+  const commentPageCursors: ReviewThreadCommentsCursor[] = [];
   for (const thread of reviewThreads.nodes) {
-    const reviewThread = thread as GithubGraphqlReviewThreadPayload;
-    const reviewThreadId = requireString(reviewThread.id, "thread.id");
-    const isResolved = toNullableBoolean(reviewThread.isResolved);
-    if (isResolved === null) {
-      throw new HostValidationError({
-        field: "thread.isResolved",
-        message: "GitHub pull request review field 'thread.isResolved' is missing or invalid.",
+    const parsedThread = parseThread(thread as GithubGraphqlReviewThreadPayload);
+    comments.push(...parsedThread.comments);
+    if (!parsedThread.isResolved) {
+      openThreadIds.push(parsedThread.threadId);
+    }
+    if (parsedThread.nextCommentsCursor) {
+      commentPageCursors.push({
+        threadId: parsedThread.threadId,
+        cursor: parsedThread.nextCommentsCursor,
       });
-    }
-    if (isResolved === false) {
-      openThreadIds.add(reviewThreadId);
-    }
-    if (!Array.isArray(reviewThread.comments?.nodes)) {
-      throw new HostValidationError({
-        field: "thread.comments.nodes",
-        message: "GitHub pull request review field 'thread.comments.nodes' is missing or invalid.",
-      });
-    }
-
-    for (const comment of reviewThread.comments.nodes) {
-      const normalized = toReviewThreadComment(
-        comment as GithubGraphqlReviewThreadCommentPayload,
-        reviewThread,
-      );
-      if (normalized) {
-        comments.push(normalized);
-      }
     }
   }
   return {
     comments,
-    summary: {
-      openCount: openThreadIds.size,
-    },
+    openThreadIds,
+    nextThreadsCursor: parseNextCursor(reviewThreads.pageInfo, "reviewThreads.pageInfo"),
+    commentPageCursors,
   };
 };
+
+export const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadCommentsPage => {
+  const parsed = requireObjectPayload(payload) as GithubGraphqlReviewThreadCommentsPayload;
+  if (!parsed.data?.node) {
+    throw new HostValidationError({
+      field: "node",
+      message:
+        "Failed to parse GitHub pull request review thread comments response: expected data.node.",
+    });
+  }
+  const thread = parseThread(parsed.data.node);
+  return {
+    comments: thread.comments,
+    nextCommentsCursor: thread.nextCommentsCursor,
+    threadId: thread.threadId,
+  };
+};
+
+type GithubReviewThreadsReadInput = {
+  dependencies: GithubCommandDependencies;
+  repoPath: string;
+  context: GithubPullRequestContext;
+  pullRequestNumber: number;
+};
+
+const runReviewGraphql = (
+  input: GithubReviewThreadsReadInput,
+  query: string,
+  variables: readonly { name: string; value: string | number }[],
+) =>
+  runGithubCommand(input.dependencies, input.repoPath, input.context.repository.host, [
+    "api",
+    "graphql",
+    "-f",
+    `query=${query}`,
+    ...variables.flatMap(({ name, value }) => ["-F", `${name}=${value}`]),
+  ]).pipe(
+    Effect.mapError(
+      (cause) =>
+        new HostValidationError({
+          field: "github.review_threads",
+          message: errorMessage(cause),
+          cause,
+          details: { pullRequestNumber: input.pullRequestNumber },
+        }),
+    ),
+  );
+
+export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
+  Effect.gen(function* () {
+    const comments: PullRequestReviewComment[] = [];
+    const openThreadIds = new Set<string>();
+    let threadsCursor: string | null = null;
+
+    do {
+      const variables: { name: string; value: string | number }[] = [
+        { name: "owner", value: input.context.repository.owner },
+        { name: "name", value: input.context.repository.name },
+        { name: "number", value: input.pullRequestNumber },
+      ];
+      if (threadsCursor) {
+        variables.push({ name: "threadsCursor", value: threadsCursor });
+      }
+      const payload = yield* runReviewGraphql(input, REVIEW_THREADS_QUERY, variables);
+      const page = yield* Effect.try({
+        try: () => parseReviewThreadsPage(payload),
+        catch: (cause) =>
+          new HostValidationError({
+            field: "github.review_threads",
+            message: errorMessage(cause),
+            cause,
+          }),
+      });
+      comments.push(...page.comments);
+      for (const threadId of page.openThreadIds) {
+        openThreadIds.add(threadId);
+      }
+
+      for (const commentPage of page.commentPageCursors) {
+        let commentsCursor: string | null = commentPage.cursor;
+        while (commentsCursor) {
+          const commentsPayload: string = yield* runReviewGraphql(
+            input,
+            REVIEW_THREAD_COMMENTS_QUERY,
+            [
+              { name: "threadId", value: commentPage.threadId },
+              { name: "commentsCursor", value: commentsCursor },
+            ],
+          );
+          const parsedCommentsPage: ParsedReviewThreadCommentsPage = yield* Effect.try({
+            try: () => parseReviewThreadCommentsPage(commentsPayload),
+            catch: (cause) =>
+              new HostValidationError({
+                field: "github.review_threads",
+                message: errorMessage(cause),
+                cause,
+              }),
+          });
+          if (parsedCommentsPage.threadId !== commentPage.threadId) {
+            return yield* Effect.fail(
+              new HostValidationError({
+                field: "github.review_threads.threadId",
+                message: `GitHub returned comments for unexpected review thread '${parsedCommentsPage.threadId}'.`,
+              }),
+            );
+          }
+          comments.push(...parsedCommentsPage.comments);
+          commentsCursor = parsedCommentsPage.nextCommentsCursor;
+        }
+      }
+
+      threadsCursor = page.nextThreadsCursor;
+    } while (threadsCursor);
+
+    return {
+      comments,
+      summary: { openCount: openThreadIds.size },
+    };
+  });

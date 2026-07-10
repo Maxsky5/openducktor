@@ -6,6 +6,7 @@ import {
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
+import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-requests/github-pull-request-review-adapter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -17,7 +18,6 @@ import { createWorkspaceFilesService } from "../../application/filesystem/worksp
 import { createGitService } from "../../application/git/git-service";
 import { createGithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
-import { createGithubPullRequestReviewProvider } from "../../application/pull-requests/github-pull-request-review-provider";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import {
   type CodexAppServerService,
@@ -253,9 +253,12 @@ export const createNodeEffectHostCommandRouter = (
     toolDiscovery,
   });
   const pullRequestReviewService = createPullRequestReviewService({
-    gitPort: git,
-    githubDependencies: githubCommandDependencies,
-    githubReviewProvider: createGithubPullRequestReviewProvider(),
+    providers: [
+      createGithubPullRequestReviewAdapter({
+        gitPort: git,
+        githubDependencies: githubCommandDependencies,
+      }),
+    ],
     taskReader: taskStore,
     workspaceSettingsService,
   });

@@ -15,11 +15,8 @@ import type {
   GithubCommandDependencies,
   GithubPullRequestContext,
 } from "../tasks/support/github-pull-requests";
-import {
-  runGithubCommand,
-  runGithubRepositoryCommand,
-} from "../tasks/support/github-pull-requests";
-import { parseReviewThreads, REVIEW_THREADS_QUERY } from "./github-pull-request-review-threads";
+import { runGithubRepositoryCommand } from "../tasks/support/github-pull-requests";
+import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
   bucket?: unknown;
@@ -62,13 +59,17 @@ type GithubPullViewPayload = {
   latestReviews?: unknown;
 };
 
+type GithubPullRequestReviewReadInput = {
+  dependencies: GithubCommandDependencies;
+  repoPath: string;
+  context: GithubPullRequestContext;
+  pullRequestNumber: number;
+};
+
 export type GithubPullRequestReviewProvider = {
-  read(input: {
-    dependencies: GithubCommandDependencies;
-    repoPath: string;
-    context: GithubPullRequestContext;
-    pullRequestNumber: number;
-  }): Effect.Effect<PullRequestReviewContext, HostValidationError>;
+  read(
+    input: GithubPullRequestReviewReadInput,
+  ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
 };
 
 const toNullableString = (value: unknown): string | null =>
@@ -327,76 +328,45 @@ const parsePullView = (
 export const createGithubPullRequestReviewProvider = (): GithubPullRequestReviewProvider => ({
   read(input) {
     return Effect.gen(function* () {
-      const pullViewPayload = yield* runGithubRepositoryCommand(
-        input.dependencies,
-        input.repoPath,
-        input.context.repository,
+      const [pullViewPayload, checksPayload, reviewThreads] = yield* Effect.all(
         [
-          "pr",
-          "view",
-          String(input.pullRequestNumber),
-          "--json",
-          "number,title,url,state,isDraft,comments,reviews,latestReviews",
+          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.context.repository, [
+            "pr",
+            "view",
+            String(input.pullRequestNumber),
+            "--json",
+            "number,title,url,state,isDraft,comments,reviews,latestReviews",
+          ]).pipe(
+            Effect.mapError(
+              (cause) =>
+                new HostValidationError({
+                  field: "github.pull_request",
+                  message: errorMessage(cause),
+                  cause,
+                  details: { pullRequestNumber: input.pullRequestNumber },
+                }),
+            ),
+          ),
+          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.context.repository, [
+            "pr",
+            "checks",
+            String(input.pullRequestNumber),
+            "--json",
+            "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
+          ]).pipe(
+            Effect.mapError(
+              (cause) =>
+                new HostValidationError({
+                  field: "github.checks",
+                  message: errorMessage(cause),
+                  cause,
+                  details: { pullRequestNumber: input.pullRequestNumber },
+                }),
+            ),
+          ),
+          loadGithubReviewThreads(input),
         ],
-      ).pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              field: "github.pull_request",
-              message: errorMessage(cause),
-              cause,
-              details: { pullRequestNumber: input.pullRequestNumber },
-            }),
-        ),
-      );
-      const checksPayload = yield* runGithubRepositoryCommand(
-        input.dependencies,
-        input.repoPath,
-        input.context.repository,
-        [
-          "pr",
-          "checks",
-          String(input.pullRequestNumber),
-          "--json",
-          "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
-        ],
-      ).pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              field: "github.checks",
-              message: errorMessage(cause),
-              cause,
-              details: { pullRequestNumber: input.pullRequestNumber },
-            }),
-        ),
-      );
-      const reviewThreadsPayload = yield* runGithubCommand(
-        input.dependencies,
-        input.repoPath,
-        input.context.repository.host,
-        [
-          "api",
-          "graphql",
-          "-f",
-          `query=${REVIEW_THREADS_QUERY}`,
-          "-F",
-          `owner=${input.context.repository.owner}`,
-          "-F",
-          `name=${input.context.repository.name}`,
-          "-F",
-          `number=${input.pullRequestNumber}`,
-        ],
-      ).pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              field: "github.review_threads",
-              message: errorMessage(cause),
-              cause,
-              details: { pullRequestNumber: input.pullRequestNumber },
-            }),
-        ),
+        { concurrency: "unbounded" },
       );
       const view = yield* Effect.try({
         try: () => parsePullView(pullViewPayload),
@@ -412,15 +382,6 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
         catch: (cause) =>
           new HostValidationError({
             field: "github.checks",
-            message: errorMessage(cause),
-            cause,
-          }),
-      });
-      const reviewThreads = yield* Effect.try({
-        try: () => parseReviewThreads(reviewThreadsPayload),
-        catch: (cause) =>
-          new HostValidationError({
-            field: "github.review_threads",
             message: errorMessage(cause),
             cause,
           }),

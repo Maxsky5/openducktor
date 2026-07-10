@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { invalidatePullRequestReviewContextQueries } from "@/state/queries/pull-request-review";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
@@ -97,6 +98,7 @@ export function useTaskPullRequestOperations({
         if (activeRepoPathRef.current === repoPath) {
           if (result.outcome === "linked") {
             await refreshTaskData(repoPath, taskId);
+            await invalidatePullRequestReviewContextQueries(queryClient);
             toast.success("Pull request linked", {
               description: `PR #${result.pullRequest.number}`,
             });
@@ -118,7 +120,7 @@ export function useTaskPullRequestOperations({
         );
       }
     },
-    [activeRepoPath, refreshTaskData],
+    [activeRepoPath, queryClient, refreshTaskData],
   );
 
   const cancelLinkMergedPullRequest = useCallback((): void => {
@@ -156,6 +158,7 @@ export function useTaskPullRequestOperations({
         current?.repoPath === repoPath && current.taskId === taskId ? null : current,
       );
       await refreshTaskData(repoPath, taskId);
+      await invalidatePullRequestReviewContextQueries(queryClient);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
       });
@@ -172,24 +175,27 @@ export function useTaskPullRequestOperations({
     async (taskId: string): Promise<void> => {
       setUnlinkingPullRequestTaskId(taskId);
       try {
-        await runTaskMutation({
-          refreshStrategy: { kind: "task", taskId },
-          run: async (repoPath) => {
-            await host.taskPullRequestUnlink(repoPath, taskId);
-          },
-          successTitle: "Pull request unlinked",
-          successDescription: taskId,
-          failureTitle: "Failed to unlink pull request",
-        }).catch(() => {
+        try {
+          await runTaskMutation({
+            refreshStrategy: { kind: "task", taskId },
+            run: async (repoPath) => {
+              await host.taskPullRequestUnlink(repoPath, taskId);
+            },
+            successTitle: "Pull request unlinked",
+            successDescription: taskId,
+            failureTitle: "Failed to unlink pull request",
+          });
+          await invalidatePullRequestReviewContextQueries(queryClient);
+        } catch {
           // runTaskMutation already surfaced the actionable error to the user.
-        });
+        }
       } finally {
         setUnlinkingPullRequestTaskId((currentTaskId) =>
           currentTaskId === taskId ? null : currentTaskId,
         );
       }
     },
-    [runTaskMutation],
+    [queryClient, runTaskMutation],
   );
 
   return {
