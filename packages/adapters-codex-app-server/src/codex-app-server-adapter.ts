@@ -321,7 +321,6 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
-      this.emitSessionEvent(session.threadId, acceptedUserMessage);
       try {
         await client.threadCompactStart({ threadId: session.threadId });
       } catch (error) {

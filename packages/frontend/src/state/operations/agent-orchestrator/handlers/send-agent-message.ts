@@ -229,7 +229,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           ? { systemPrompt: preparedSend.systemPrompt }
           : {}),
       });
-      upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
+      const shouldStoreAcceptedUserMessage =
+        !isManualCompactionSend || readySession.runtimeKind !== "codex";
+      if (shouldStoreAcceptedUserMessage) {
+        upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
+      }
     } catch (error) {
       dependencies.updateSession(readySession, (current) => ({
         ...current,

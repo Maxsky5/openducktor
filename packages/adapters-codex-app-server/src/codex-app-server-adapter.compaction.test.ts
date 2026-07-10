@@ -238,7 +238,6 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
     expect(events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: "user_message", message: "/compact" }),
         expect.objectContaining({
           type: "session_compaction_started",
           messageId: "compact-item-1",
@@ -247,13 +246,14 @@ describe("CodexAppServerAdapter manual compaction", () => {
         expect.objectContaining({ type: "session_idle" }),
       ]),
     );
+    expect(events.some((event) => event.type === "user_message")).toBe(false);
     expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
     expect(calls.some((call) => call.method === "turn/start" || call.method === "turn/steer")).toBe(
       false,
     );
   });
 
-  test("emits the accepted command before synchronous compaction lifecycle events", async () => {
+  test("does not synthesize a user message before synchronous compaction lifecycle events", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const events: Array<{ type: string; [key: string]: unknown }> = [];
     const adapter = createAdapterWithTransport(
@@ -305,10 +305,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
 
-    expect(events.map((event) => event.type)).toEqual([
-      "user_message",
-      "session_compaction_started",
-    ]);
+    expect(events.map((event) => event.type)).toEqual(["session_compaction_started"]);
   });
 
   test("drains buffered compaction lifecycle events without a live runtime stream", async () => {
@@ -393,7 +390,6 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
     expect(takeBufferedEvents).toHaveBeenCalledTimes(1);
     expect(events.map((event) => event.type)).toEqual([
-      "user_message",
       "session_compaction_started",
       "session_compacted",
       "session_idle",
