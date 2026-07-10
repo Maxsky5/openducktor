@@ -1008,4 +1008,60 @@ describe("electron app update service", () => {
     expect(retryResult.accepted).toBe(true);
     expect(adapter.installCalls).toHaveLength(2);
   });
+
+  test("allows manual checks after retryable install failures while keeping background blocked", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({ adapter, platform: "win32" });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.4.3",
+      error: {
+        code: "install_failed",
+        operation: "install",
+      },
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(true);
+
+    const backgroundCheckResult = await service.check({ initiator: "background" });
+
+    expect(backgroundCheckResult).toMatchObject({
+      accepted: false,
+      rejection: {
+        code: "busy",
+        operation: "check",
+      },
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+      },
+    });
+    expect(adapter.checkCalls).toBe(1);
+
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.4" },
+    };
+
+    const recoveryCheckResult = await service.check({ initiator: "settings" });
+
+    expect(recoveryCheckResult).toMatchObject({
+      accepted: true,
+      state: {
+        status: "available",
+        availableVersion: "0.4.4",
+        checkInitiator: "settings",
+      },
+    });
+    expect(adapter.checkCalls).toBe(2);
+  });
 });
