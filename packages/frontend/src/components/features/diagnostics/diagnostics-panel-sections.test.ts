@@ -7,7 +7,10 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
+import {
+  buildDisabledRuntimeHealth,
+  deriveRepoRuntimeHealthState,
+} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
@@ -156,6 +159,7 @@ describe("DiagnosticsPanelSections", () => {
             failureKind: null,
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -240,6 +244,7 @@ describe("DiagnosticsPanelSections", () => {
             failureKind: "error",
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });

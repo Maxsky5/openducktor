@@ -174,7 +174,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
         ghAuthOk: false,
         ghAuthLogin: null,
         ghAuthError: "Timed out after 15000ms",
-        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
+        runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["Timed out after 15000ms"],
       },
       taskStoreCheck: makeTaskStoreCheck({
@@ -204,8 +204,10 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     expect(model.isSummaryChecking).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(expect.arrayContaining(["Timed out after 15000ms"]));
-    expect(model.sections[1]?.badge).toEqual({ label: "Timed out", variant: "warning" });
-    expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
+    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
+    expect(cliToolsSection?.badge).toEqual({ label: "Timed out", variant: "warning" });
+    expect(cliToolsSection?.errors[0]).toContain("CLI tools are not yet available");
+    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
     const taskStoreSection = model.sections.find((section) => section.key === "task-store");
     expect(taskStoreSection?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(taskStoreSection?.errors[0]).toContain("Task store is not yet available");
@@ -303,7 +305,8 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     });
 
     expect(model.criticalReasons).not.toContain("gh auth missing");
-    expect(model.sections[1]?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
-    expect(model.sections[1]?.errors).toEqual([]);
+    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
+    expect(cliToolsSection?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(cliToolsSection?.errors).toEqual([]);
   });
 });

@@ -474,7 +474,10 @@ export const buildDiagnosticsPanelModel = (
         checking: "Checking",
       });
   const cliRuntimeRows =
-    runtimeCheck && !isLoadingRuntimeDefinitions && runtimeDefinitionsError === null
+    runtimeCheck &&
+    runtimeCheckFailureKind === null &&
+    !isLoadingRuntimeDefinitions &&
+    runtimeDefinitionsError === null
       ? buildCliRuntimeRows(runtimeDefinitions, runtimeCheck)
       : [];
 

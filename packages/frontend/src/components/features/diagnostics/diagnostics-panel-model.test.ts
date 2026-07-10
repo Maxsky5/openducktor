@@ -127,6 +127,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: null,
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -500,6 +501,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: "error",
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -513,8 +515,9 @@ describe("buildDiagnosticsPanelModel", () => {
       expect.arrayContaining(["runtime failed", "task store failed"]),
     );
     expect(model.criticalReasons).not.toContain("gh not found in PATH");
-    expect(model.sections[1]?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
-    expect(model.sections[1]?.errors).toEqual([]);
+    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
+    expect(cliToolsSection?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(cliToolsSection?.errors).toEqual([]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
     expect(taskStoreSection?.errors).toEqual(["task store failed"]);
@@ -555,6 +558,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: "error",
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -610,6 +614,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: "timeout",
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -686,6 +691,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: null,
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -752,6 +758,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: null,
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -795,6 +802,7 @@ describe("buildDiagnosticsPanelModel", () => {
             failureKind: "timeout",
           },
         }),
+        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
