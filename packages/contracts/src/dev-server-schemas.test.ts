@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { devServerEventSchema, devServerGroupStateSchema } from "./dev-server-schemas";
+import {
+  devServerEventSchema,
+  devServerGroupStateSchema,
+  devServerScriptStateSchema,
+} from "./dev-server-schemas";
 
 describe("dev-server-schemas", () => {
   test("parses terminal chunk events with ordered replay metadata", () => {
@@ -50,6 +54,63 @@ describe("dev-server-schemas", () => {
         updatedAt: "2026-03-25T10:00:00.000Z",
       }),
     ).toThrow();
+  });
+
+  for (const status of ["starting", "stopping"] as const) {
+    test(`rejects ${status} scripts with missing run ownership`, () => {
+      const parsed = devServerScriptStateSchema.safeParse({
+        scriptId: "frontend",
+        name: "Frontend",
+        command: "bun run dev",
+        status,
+        runIdentity: null,
+        pid: null,
+        startedAt: null,
+        exitCode: null,
+        lastError: null,
+        bufferedTerminalChunks: [],
+      });
+
+      expect(parsed.success).toBe(false);
+      if (parsed.success) {
+        throw new Error(`Expected ${status} script without run ownership to be rejected.`);
+      }
+      expect(parsed.error.issues).toHaveLength(1);
+      expect(parsed.error.issues[0]?.path).toEqual(["runIdentity"]);
+    });
+  }
+
+  test("reports only the root ownership issue for failed scripts with buffered output", () => {
+    const parsed = devServerScriptStateSchema.safeParse({
+      scriptId: "frontend",
+      name: "Frontend",
+      command: "bun run dev",
+      status: "failed",
+      runIdentity: null,
+      pid: null,
+      startedAt: null,
+      exitCode: 1,
+      lastError: "Process exited",
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          runIdentity: {
+            runId: "frontend:1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
+          sequence: 0,
+          data: "Process exited\r\n",
+          timestamp: "2026-03-25T10:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error("Expected failed script with buffered output and no owner to be rejected.");
+    }
+    expect(parsed.error.issues).toHaveLength(1);
+    expect(parsed.error.issues[0]?.path).toEqual(["runIdentity"]);
   });
 
   test("requires stopped scripts to state null ownership explicitly", () => {

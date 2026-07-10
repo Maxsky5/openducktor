@@ -1,5 +1,5 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
@@ -38,6 +38,12 @@ type DevServerTerminalBufferOwner = {
   scopeKey: string;
   terminalBuffers: DevServerTerminalBufferStore;
 };
+
+const createDevServerTerminalBufferOwner = (scopeKey: string): DevServerTerminalBufferOwner => ({
+  pendingMutationReplaySync: null,
+  scopeKey,
+  terminalBuffers: createDevServerTerminalBufferStore(),
+});
 
 type UseAgentStudioDevServerTerminalBuffersResult = {
   applyTerminalBuffersFromEvent: (
@@ -94,14 +100,12 @@ export const useAgentStudioDevServerTerminalBuffers = (
   scope: DevServerTaskScope | null,
 ): UseAgentStudioDevServerTerminalBuffersResult => {
   const requestedScopeKey = formatDevServerTaskScopeKey(scope);
-  const terminalBufferOwner = useMemo<DevServerTerminalBufferOwner>(
-    () => ({
-      pendingMutationReplaySync: null,
-      scopeKey: requestedScopeKey,
-      terminalBuffers: createDevServerTerminalBufferStore(),
-    }),
-    [requestedScopeKey],
+  const [terminalBufferOwner, setTerminalBufferOwner] = useState<DevServerTerminalBufferOwner>(() =>
+    createDevServerTerminalBufferOwner(requestedScopeKey),
   );
+  if (terminalBufferOwner.scopeKey !== requestedScopeKey) {
+    setTerminalBufferOwner(createDevServerTerminalBufferOwner(requestedScopeKey));
+  }
   const [selectedScriptTerminalBufferState, setSelectedScriptTerminalBufferState] =
     useState<SelectedScriptTerminalBufferState | null>(null);
   const activeScopeKey = terminalBufferOwner.scopeKey;

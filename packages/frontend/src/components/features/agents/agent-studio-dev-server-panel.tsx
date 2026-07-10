@@ -145,15 +145,20 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const terminalScopeKey = formatDevServerTaskScopeKey(
     createDevServerTaskScope(model.repoPath, model.taskId),
   );
-  const selectedScriptTerminalBuffer =
-    model.selectedScriptTerminalBuffer ??
-    (selectedScriptContent
-      ? {
-          entries: selectedScriptContent.bufferedTerminalChunks,
-          lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
-          resetToken: 0,
-        }
-      : null);
+  const selectedScriptTerminalBuffer = useMemo(() => {
+    if (model.selectedScriptTerminalBuffer !== null) {
+      return model.selectedScriptTerminalBuffer;
+    }
+    if (selectedScriptContent === null) {
+      return null;
+    }
+
+    return {
+      entries: selectedScriptContent.bufferedTerminalChunks,
+      lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
+      resetToken: 0,
+    };
+  }, [model.selectedScriptTerminalBuffer, selectedScriptContent]);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
   const disabledReasonId = useId();

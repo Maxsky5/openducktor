@@ -1,52 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  DevServerEvent,
-  DevServerGroupState,
-  DevServerScriptState,
-} from "@openducktor/contracts";
+import type { DevServerEvent } from "@openducktor/contracts";
 import {
   applyDevServerEventToState,
   buildTaskMemoryKey,
   isDevServerPanelExpanded,
   selectDefaultDevServerTab,
 } from "./use-agent-studio-dev-server-panel-helpers";
-
-const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => {
-  const bufferedRunIdentity = overrides.bufferedTerminalChunks?.[0]?.runIdentity;
-  const defaultRunIdentity =
-    overrides.pid === null || overrides.pid === undefined
-      ? null
-      : {
-          runId: "frontend:1",
-          runOrder: { hostInstanceId: "host-1", generation: 1 },
-        };
-  const runIdentity =
-    overrides.runIdentity === undefined
-      ? (bufferedRunIdentity ?? defaultRunIdentity)
-      : overrides.runIdentity;
-  return {
-    scriptId: "frontend",
-    name: "Frontend",
-    command: "bun run dev",
-    status: "stopped",
-    runIdentity,
-    pid: null,
-    startedAt: null,
-    exitCode: null,
-    lastError: null,
-    bufferedTerminalChunks: [],
-    ...overrides,
-  };
-};
-
-const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
-  repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
-  scripts: [buildScript()],
-  updatedAt: "2026-03-19T15:30:00.000Z",
-  ...overrides,
-});
+import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-test-fixtures";
 
 describe("useAgentStudioDevServerPanel helpers", () => {
   test("builds task memory keys without delimiter collisions", () => {

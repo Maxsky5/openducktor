@@ -55,6 +55,7 @@ export const devServerScriptStateSchema = z
         message: `Dev server script status ${script.status} requires explicit run ownership.`,
         path: ["runIdentity"],
       });
+      return;
     }
 
     for (const [index, chunk] of script.bufferedTerminalChunks.entries()) {
