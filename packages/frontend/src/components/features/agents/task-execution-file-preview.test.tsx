@@ -11,12 +11,9 @@ import {
   useEffect,
   useState,
 } from "react";
-import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
 
@@ -36,11 +33,13 @@ let codeViewPropsHistory: Array<{
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 let secondFileReadMode: "pending" | "resolve" = "pending";
+let previewTheme: "light" | "dark" = "light";
 
 const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diffs-dark-bg))";
 const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
 
 const actualDiffsReact = await import("@pierre/diffs/react");
+const actualThemeProvider = await import("@/components/layout/theme-provider");
 const actualHost = await import("@/state/operations/host");
 
 const firstFile: TaskExecutionSelectedFile = {
@@ -64,24 +63,10 @@ const textFileResult = (
   mtimeMs: 1_760_000_000_000,
 });
 
-function PreviewTestProviders({
-  children,
-  theme,
-}: PropsWithChildren<{ theme: "light" | "dark" }>): ReactElement {
-  const [queryClient] = useState(() => {
-    const client = createQueryClient();
-    client.setQueryData(
-      settingsSnapshotQueryOptions().queryKey,
-      createSettingsSnapshotFixture({ theme }),
-    );
-    return client;
-  });
+function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
+  const [queryClient] = useState(createQueryClient);
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme={theme}>{children}</ThemeProvider>
-    </QueryClientProvider>
-  );
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
 const renderPreview = (
@@ -99,9 +84,10 @@ const renderPreview = (
     preservePreviousSnapshot: false,
     ...model,
   };
+  previewTheme = theme;
 
   return (
-    <PreviewTestProviders theme={theme}>
+    <PreviewTestProviders>
       <TaskExecutionSelectedFilePreview model={fullModel} />
     </PreviewTestProviders>
   );
@@ -112,6 +98,7 @@ beforeEach(async () => {
   codeViewMountCount = 0;
   codeViewUnmountCount = 0;
   secondFileReadMode = "pending";
+  previewTheme = "light";
 
   readTextFileMock = mock((input: { rootPath: string; relativePath: string }) => {
     if (input.relativePath === secondFile.relativePath) {
@@ -127,6 +114,14 @@ beforeEach(async () => {
     host: {
       filesystemReadTextFile: readTextFileMock,
     },
+  }));
+
+  mock.module("@/components/layout/theme-provider", () => ({
+    ...actualThemeProvider,
+    useTheme: () => ({
+      theme: previewTheme,
+      setTheme: () => {},
+    }),
   }));
 
   mock.module("@pierre/diffs/react", () => ({
@@ -163,6 +158,7 @@ afterEach(async () => {
   document.documentElement.classList.remove("dark", "light");
   await restoreMockedModules([
     ["@pierre/diffs/react", async () => actualDiffsReact],
+    ["@/components/layout/theme-provider", async () => actualThemeProvider],
     ["@/state/operations/host", async () => actualHost],
   ]);
 });
@@ -190,8 +186,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
 
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(codeViewPropsHistory.at(-1)?.style?.colorScheme).toBe("dark"));
     const codeViewProps = codeViewPropsHistory.at(-1);
+    expect(codeViewProps?.style?.colorScheme).toBe("dark");
     expect(codeViewProps?.style?.["--diffs-light-bg" as keyof CSSProperties]).toBe("#ffffff");
     expect(codeViewProps?.style?.["--diffs-dark-bg" as keyof CSSProperties]).toBe("#0a0a0a");
     expect(codeViewProps?.style?.["--diffs-bg" as keyof CSSProperties]).toBe(
