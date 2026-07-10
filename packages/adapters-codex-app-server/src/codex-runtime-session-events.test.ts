@@ -430,6 +430,86 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
+  test("handles identical child approval request ids independently across runtimes", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    const parentOne = createSessionForRuntime("parent-one", "runtime-1");
+    const parentTwo = createSessionForRuntime("parent-two", "runtime-2");
+    const sessions = new Map([
+      [parentOne.threadId, parentOne],
+      [parentTwo.threadId, parentTwo],
+    ]);
+    const sessionEvents = new CodexSessionEventBus();
+    const parentOneEvents: unknown[] = [];
+    const parentTwoEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentOne.threadId,
+      childThreadId: "shared-child-thread",
+      itemId: "spawn-one",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-2",
+      parentThreadId: parentTwo.threadId,
+      childThreadId: "shared-child-thread",
+      itemId: "spawn-two",
+      status: "running",
+    });
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      subagents,
+    });
+    const approval = {
+      id: 0,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "shared-child-thread",
+        turnId: "child-turn",
+        itemId: "child-command",
+        command: "pwd",
+        cwd: "/repo",
+      },
+    };
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    listeners.get("runtime-1")?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: approval,
+    });
+    await flushRuntimeEvents();
+    listeners.get("runtime-2")?.({
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: approval,
+    });
+    await flushRuntimeEvents();
+
+    expect(parentOneEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "parent-one",
+        requestId: "0",
+      }),
+    );
+    expect(parentTwoEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "parent-two",
+        requestId: "0",
+      }),
+    );
+  });
+
   test("restarts a terminal child from an actual buffered child turn start", async () => {
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);

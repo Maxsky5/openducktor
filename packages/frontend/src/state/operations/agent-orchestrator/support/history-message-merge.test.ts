@@ -209,6 +209,41 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
+  test("keeps an exact current reasoning timestamp when completed history uses an approximate timestamp", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "thinking:assistant-1:reasoning-1",
+          role: "thinking",
+          content: "Completed reasoning",
+          timestamp: "2026-03-01T09:00:00.000Z",
+          timestampIsApproximate: true,
+          meta: {
+            kind: "reasoning",
+            partId: "reasoning-1",
+            completed: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "thinking:assistant-1:reasoning-1",
+          role: "thinking",
+          content: "Completed reasoning",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "reasoning",
+            partId: "reasoning-1",
+            completed: true,
+          },
+        },
+      ],
+    );
+
+    expect(merged[0]?.timestamp).toBe("2026-03-01T09:00:03.000Z");
+    expect(merged[0]?.timestampIsApproximate).toBeUndefined();
+  });
+
   test("preserves a current terminal tool row and loads identity from the history row", () => {
     const merged = mergedMessages(
       [
@@ -366,6 +401,81 @@ describe("agent-orchestrator/support/history-message-merge", () => {
         observedStartedAtMs: 101,
       },
     });
+  });
+
+  test("keeps an exact current tool timestamp when terminal history uses an approximate timestamp", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "tool:assistant-1:tool-part-1",
+          role: "tool",
+          content: "History completed output",
+          timestamp: "2026-03-01T09:00:00.000Z",
+          timestampIsApproximate: true,
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            toolType: "generic" as const,
+            status: "completed",
+          },
+        },
+      ],
+      [
+        {
+          id: "tool:assistant-1:tool-part-1",
+          role: "tool",
+          content: "Current running output",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            toolType: "generic" as const,
+            status: "running",
+          },
+        },
+      ],
+    );
+
+    expect(merged[0]?.timestamp).toBe("2026-03-01T09:00:03.000Z");
+    expect(merged[0]?.timestampIsApproximate).toBeUndefined();
+  });
+
+  test("keeps an exact current subagent timestamp when history uses an approximate timestamp", () => {
+    const subagentMeta = {
+      kind: "subagent" as const,
+      partId: "subagent-part-1",
+      correlationKey: "session:parent:child",
+      externalSessionId: "child",
+      status: "completed" as const,
+    };
+    const merged = mergedMessages(
+      [
+        {
+          id: "subagent:session:parent:child",
+          role: "system",
+          content: "Subagent completed",
+          timestamp: "2026-03-01T09:00:00.000Z",
+          timestampIsApproximate: true,
+          meta: subagentMeta,
+        },
+      ],
+      [
+        {
+          id: "subagent:session:parent:child",
+          role: "system",
+          content: "Subagent completed",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: subagentMeta,
+        },
+      ],
+    );
+
+    expect(merged[0]?.timestamp).toBe("2026-03-01T09:00:03.000Z");
+    expect(merged[0]?.timestampIsApproximate).toBeUndefined();
   });
 
   test("appends unmatched current messages after loaded history", () => {

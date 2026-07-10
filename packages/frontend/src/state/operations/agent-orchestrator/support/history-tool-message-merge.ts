@@ -1,5 +1,6 @@
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { toToolMessageId } from "./chat-message-ids";
+import { applyPreferredMessageTimestamp } from "./message-timestamp";
 
 type ScopedPartId = {
   messageId: string;
@@ -102,7 +103,11 @@ export const mergeToolMessages = (
   }
 
   if (shouldPreserveCurrentToolMessage(loadedMessage.meta.status, currentMessage.meta.status)) {
-    return preserveCurrentToolWithLoadedIdentity(loadedMessage, currentMessage);
+    return applyPreferredMessageTimestamp(
+      preserveCurrentToolWithLoadedIdentity(loadedMessage, currentMessage),
+      currentMessage,
+      loadedMessage,
+    );
   }
 
   const nextMeta = {
@@ -121,10 +126,14 @@ export const mergeToolMessages = (
       : {}),
   };
 
-  return {
-    ...loadedMessage,
-    meta: nextMeta,
-  };
+  return applyPreferredMessageTimestamp(
+    {
+      ...loadedMessage,
+      meta: nextMeta,
+    },
+    loadedMessage,
+    currentMessage,
+  );
 };
 
 export const matchesLoadedTool = (

@@ -57,6 +57,23 @@ describe("agent-orchestrator/support/messages", () => {
     expect(sessionMessageAt(createSession(replaced), 0)?.content).toBe("updated");
   });
 
+  test("commits a revision when only timestamp accuracy changes", () => {
+    const message: AgentChatMessage = {
+      id: "m1",
+      role: "system",
+      content: "History item",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      timestampIsApproximate: true,
+    };
+    const session = createSession(createSessionMessagesState("session-1", [message], 7));
+
+    const { timestampIsApproximate: _approximate, ...exactMessage } = message;
+    const updated = upsertSessionMessage(session, exactMessage);
+
+    expect(updated.version).toBe(8);
+    expect(updated.items[0]?.timestampIsApproximate).toBeUndefined();
+  });
+
   test("confirms a pending synthetic Codex user message with the matching runtime message", () => {
     const session = createSession([
       {

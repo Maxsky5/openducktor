@@ -1,4 +1,5 @@
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
+import { applyMessageTimestamp, haveSameMessageTimestamp } from "./message-timestamp";
 
 type MessageRole = AgentChatMessage["role"];
 
@@ -18,7 +19,7 @@ const areMessagesShallowEqual = (left: AgentChatMessage, right: AgentChatMessage
     left.id === right.id &&
     left.role === right.role &&
     left.content === right.content &&
-    left.timestamp === right.timestamp &&
+    haveSameMessageTimestamp(left, right) &&
     left.meta === right.meta
   );
 };
@@ -471,7 +472,7 @@ function mergeAtIndex(
     return previous;
   }
 
-  const merged = { ...existing, ...incoming };
+  const merged = applyMessageTimestamp({ ...existing, ...incoming }, incoming);
   if (areMessagesShallowEqual(existing, merged)) {
     return previous;
   }

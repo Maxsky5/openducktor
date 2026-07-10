@@ -62,6 +62,68 @@ describe("CodexPendingInputState", () => {
     ]);
   });
 
+  test("keeps identical request ids independently replyable across runtimes", () => {
+    const pendingInput = new CodexPendingInputState();
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: approvalRequest("0"),
+      route: {
+        runtimeId: "runtime-1",
+        parentExternalSessionId: "parent-one",
+        childExternalSessionId: "child-thread",
+        subagentCorrelationKey: "codex-subagent:parent-one:child-thread",
+      },
+    });
+    pendingInput.addApproval({
+      runtimeId: "runtime-2",
+      threadId: "child-thread",
+      request: approvalRequest("0"),
+      route: {
+        runtimeId: "runtime-2",
+        parentExternalSessionId: "parent-two",
+        childExternalSessionId: "child-thread",
+        subagentCorrelationKey: "codex-subagent:parent-two:child-thread",
+      },
+    });
+
+    expect(pendingInput.requireApprovalForSession("0", "parent-one").runtimeId).toBe("runtime-1");
+    expect(pendingInput.requireApprovalForSession("0", "parent-two").runtimeId).toBe("runtime-2");
+    expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-1")).toEqual([
+      approvalRequest("0"),
+    ]);
+    expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-2")).toEqual([
+      approvalRequest("0"),
+    ]);
+
+    pendingInput.resolveApproval("0", "runtime-1");
+
+    expect(pendingInput.approval("0", "runtime-1")).toBeUndefined();
+    expect(pendingInput.approval("0", "runtime-2")?.runtimeId).toBe("runtime-2");
+  });
+
+  test("clears pending input only for the released runtime session", () => {
+    const pendingInput = new CodexPendingInputState();
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "shared-child-thread",
+      request: approvalRequest("0"),
+    });
+    pendingInput.addApproval({
+      runtimeId: "runtime-2",
+      threadId: "shared-child-thread",
+      request: approvalRequest("0"),
+    });
+
+    pendingInput.clearSession("shared-child-thread", "runtime-1");
+
+    expect(pendingInput.approval("0", "runtime-1")).toBeUndefined();
+    expect(pendingInput.approval("0", "runtime-2")?.runtimeId).toBe("runtime-2");
+    expect(pendingInput.pendingApprovalsForSession("shared-child-thread", "runtime-2")).toEqual([
+      approvalRequest("0"),
+    ]);
+  });
+
   test("requires pending requests to belong to the replying session", () => {
     const pendingInput = new CodexPendingInputState();
     pendingInput.addApproval({

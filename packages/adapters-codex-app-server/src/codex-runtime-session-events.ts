@@ -112,7 +112,10 @@ const serverRequestFromRuntimeEvent = (
 
 export class CodexRuntimeSessionEvents {
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
-  private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
+  private readonly handledStreamRequestKeysByRuntimeId = new Map<
+    string,
+    Map<string, Set<string>>
+  >();
   private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
@@ -205,7 +208,7 @@ export class CodexRuntimeSessionEvents {
   clearSession(externalSessionId: string, runtimeId?: string): void {
     this.runtimeEventBuffer.clearSession(externalSessionId, runtimeId);
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
-    this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
+    this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
@@ -280,7 +283,7 @@ export class CodexRuntimeSessionEvents {
     for (const event of events) {
       await this.processBufferedRuntimeEvent(session, handledRequestKeys, event);
     }
-    return this.hasPendingInputForSession(session.threadId);
+    return this.hasPendingInputForSession(session.threadId, session.runtimeId);
   }
 
   emitUserMessage(
@@ -507,8 +510,8 @@ export class CodexRuntimeSessionEvents {
     requestId: string,
     runtimeId?: string,
   ): boolean {
-    const approval = this.deps.pendingInput.approval(requestId);
-    const question = this.deps.pendingInput.question(requestId);
+    const approval = this.deps.pendingInput.approval(requestId, runtimeId);
+    const question = this.deps.pendingInput.question(requestId, runtimeId);
     const entry = approval ?? question;
     if (!entry) {
       return false;
@@ -529,8 +532,8 @@ export class CodexRuntimeSessionEvents {
       ...codexSubagentRouteEventFields(route),
     };
     const activeTurn = approval
-      ? this.deps.pendingInput.resolveApproval(requestId)
-      : this.deps.pendingInput.resolveQuestion(requestId);
+      ? this.deps.pendingInput.resolveApproval(requestId, entry.runtimeId)
+      : this.deps.pendingInput.resolveQuestion(requestId, entry.runtimeId);
     const type = approval ? "approval_resolved" : "question_resolved";
     if (this.deps.sessions.get(threadId)) {
       this.emitSessionEvent(threadId, {
@@ -711,14 +714,17 @@ export class CodexRuntimeSessionEvents {
       requestsByOwnerThreadId.set(ownerThreadId, ownerRequests);
     }
     for (const [ownerThreadId, ownerRequests] of requestsByOwnerThreadId) {
-      const existingHandledRequestKeys = this.handledStreamRequestKeysByThreadId.get(ownerThreadId);
+      const handledRequestKeysByThreadId =
+        this.handledStreamRequestKeysByRuntimeId.get(session.runtimeId) ?? new Map();
+      const existingHandledRequestKeys = handledRequestKeysByThreadId.get(ownerThreadId);
       const handledRequestKeys =
         existingHandledRequestKeys ??
         (ownerThreadId === session.threadId
           ? (handledRequestKeysOverride ?? activeTurn?.handledRequestKeys)
           : undefined) ??
         new Set<string>();
-      this.handledStreamRequestKeysByThreadId.set(ownerThreadId, handledRequestKeys);
+      handledRequestKeysByThreadId.set(ownerThreadId, handledRequestKeys);
+      this.handledStreamRequestKeysByRuntimeId.set(session.runtimeId, handledRequestKeysByThreadId);
       hasPendingInput =
         (await this.handleServerRequests(session, handledRequestKeys, ownerRequests)) ||
         hasPendingInput;
@@ -728,6 +734,20 @@ export class CodexRuntimeSessionEvents {
       this.bindPendingInputToActiveTurn(session.threadId, activeTurn);
     }
     return hasPendingInput;
+  }
+
+  private clearHandledStreamRequestKeys(externalSessionId: string, runtimeId?: string): void {
+    const runtimeIds = runtimeId
+      ? [runtimeId]
+      : [...this.handledStreamRequestKeysByRuntimeId.keys()];
+    for (const currentRuntimeId of runtimeIds) {
+      const handledRequestKeysByThreadId =
+        this.handledStreamRequestKeysByRuntimeId.get(currentRuntimeId);
+      handledRequestKeysByThreadId?.delete(externalSessionId);
+      if (handledRequestKeysByThreadId?.size === 0) {
+        this.handledStreamRequestKeysByRuntimeId.delete(currentRuntimeId);
+      }
+    }
   }
 
   private async processBufferedRuntimeEvent(
@@ -850,10 +870,10 @@ export class CodexRuntimeSessionEvents {
     return hasPendingInput;
   }
 
-  private hasPendingInputForSession(threadId: string): boolean {
+  private hasPendingInputForSession(threadId: string, runtimeId: string): boolean {
     return (
-      this.deps.pendingInput.pendingApprovalEventsForSession(threadId).length > 0 ||
-      this.deps.pendingInput.pendingQuestionEventsForSession(threadId).length > 0
+      this.deps.pendingInput.pendingApprovalEventsForSession(threadId, runtimeId).length > 0 ||
+      this.deps.pendingInput.pendingQuestionEventsForSession(threadId, runtimeId).length > 0
     );
   }
 

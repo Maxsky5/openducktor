@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSubagentMessage } from "@/state/operations/agent-orchestrator/support/subagent-messages";
+import {
+  createEmptyReadonlyRuntimeSessionState,
+  createReadonlyTranscriptSession,
+  mergeReadonlyRuntimeHistory,
+} from "./readonly-transcript-session";
 
 type SystemHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "system" }>;
 
@@ -70,5 +76,76 @@ describe("createReadonlyTranscriptSession", () => {
     });
 
     expect(forked.messages.version).not.toBe(compacted.messages.version);
+  });
+
+  test("versions readonly transcripts when timestamp accuracy changes", () => {
+    const exact = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      history: [createHistoryMessage()],
+    });
+    const approximate = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      history: [{ ...createHistoryMessage(), timestampIsApproximate: true }],
+    });
+
+    expect(approximate.messages.version).not.toBe(exact.messages.version);
+  });
+
+  test("reconciles runtime and history subagent rows by child session identity", () => {
+    const emptySession = createEmptyReadonlyRuntimeSessionState({
+      externalSessionId: "parent-thread",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
+    const liveSubagent = createSubagentMessage({
+      timestamp: "2026-07-10T12:00:01.000Z",
+      meta: {
+        kind: "subagent",
+        partId: "session:child-thread",
+        correlationKey: "session:child-thread",
+        externalSessionId: "child-thread",
+        prompt: "Inspect the repository",
+        status: "running",
+      },
+    });
+    const liveSession = {
+      ...emptySession,
+      messages: createSessionMessagesState("parent-thread", [liveSubagent], 1),
+    };
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "assistant-1",
+        role: "assistant",
+        timestamp: "2026-07-10T12:00:00.000Z",
+        text: "",
+        parts: [
+          {
+            kind: "subagent",
+            messageId: "assistant-1",
+            partId: "spawn-1",
+            correlationKey: "codex-subagent:parent-thread:child-thread",
+            externalSessionId: "child-thread",
+            prompt: "Inspect the repository",
+            status: "completed",
+          },
+        ],
+      },
+    ];
+
+    const merged = mergeReadonlyRuntimeHistory(liveSession, history);
+    const subagents = merged.messages.items.filter(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+
+    expect(subagents).toHaveLength(1);
+    expect(subagents[0]?.meta).toMatchObject({
+      kind: "subagent",
+      externalSessionId: "child-thread",
+      status: "completed",
+    });
   });
 });

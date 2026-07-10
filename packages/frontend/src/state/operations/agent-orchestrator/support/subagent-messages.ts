@@ -1,5 +1,10 @@
 import type { AgentChatMessage, AgentChatMessageMeta } from "@/types/agent-orchestrator";
 import {
+  applyPreferredMessageTimestamp,
+  type MessageTimestamp,
+  preferredMessageTimestamp,
+} from "./message-timestamp";
+import {
   findLastSessionMessageByRole,
   getSessionMessagesSlice,
   removeSessionMessageById,
@@ -65,10 +70,12 @@ export const formatSubagentContent = (meta: {
 export const createSubagentMessage = ({
   id,
   timestamp,
+  timestampIsApproximate,
   meta,
 }: {
   id?: string;
   timestamp: string;
+  timestampIsApproximate?: true;
   meta: SubagentMeta;
 }): SubagentMessage => {
   return {
@@ -76,6 +83,7 @@ export const createSubagentMessage = ({
     role: "system",
     content: formatSubagentContent(meta),
     timestamp,
+    ...(timestampIsApproximate ? { timestampIsApproximate: true } : {}),
     meta,
   };
 };
@@ -220,12 +228,13 @@ export const upsertSubagentMessage = ({
     duplicateMessageId === null
       ? owner
       : { ...owner, messages: removeSessionMessageById(owner, duplicateMessageId) };
+  const nextTimestamp = preferredMessageTimestamp(existingMessage ?? { timestamp }, { timestamp });
 
   return upsertSessionMessage(
     ownerWithoutDuplicate,
     createSubagentMessage({
       id: existingMessage?.id ?? toSubagentMessageId(incomingMeta.correlationKey),
-      timestamp: existingMessage?.timestamp ?? timestamp,
+      ...nextTimestamp,
       meta: nextMeta,
     }),
   );
@@ -266,11 +275,16 @@ export const mergeSubagentMessages = (
     ...(typeof description === "string" ? { description } : {}),
   };
 
-  return createSubagentMessage({
-    id: loadedMessage.id,
-    timestamp: loadedMessage.timestamp,
-    meta: resolvedMeta,
-  });
+  return applyPreferredMessageTimestamp(
+    createSubagentMessage({
+      id: loadedMessage.id,
+      timestamp: loadedMessage.timestamp,
+      ...(loadedMessage.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+      meta: resolvedMeta,
+    }),
+    loadedMessage,
+    currentMessage,
+  );
 };
 
 const matchesLoadedSubagent = (
@@ -472,9 +486,10 @@ const mergeHistorySubagentMessages = (
     correlationKey,
   });
 
+  const timestamp: MessageTimestamp = preferredMessageTimestamp(existingMessage, incomingMessage);
   return createSubagentMessage({
     id: toSubagentMessageId(correlationKey),
-    timestamp: existingMessage.timestamp,
+    ...timestamp,
     meta: nextMeta,
   });
 };

@@ -597,7 +597,7 @@ export class CodexAppServerAdapter
       }),
       undefined,
     );
-    const activeTurn = this.pendingInput.resolveApproval(input.requestId);
+    const activeTurn = this.pendingInput.resolveApproval(input.requestId, pending.runtimeId);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.runtimeEvents.continueTurnAfterPendingInput(activeTurn);
     }
@@ -657,7 +657,7 @@ export class CodexAppServerAdapter
         },
       }),
     });
-    const activeTurn = this.pendingInput.resolveQuestion(input.requestId);
+    const activeTurn = this.pendingInput.resolveQuestion(input.requestId, pending.runtimeId);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.runtimeEvents.continueTurnAfterPendingInput(activeTurn);
     }
@@ -684,6 +684,7 @@ export class CodexAppServerAdapter
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
     for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
       externalSessionId,
+      session?.runtimeId,
     )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
@@ -697,6 +698,7 @@ export class CodexAppServerAdapter
     }
     for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
       externalSessionId,
+      session?.runtimeId,
     )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
