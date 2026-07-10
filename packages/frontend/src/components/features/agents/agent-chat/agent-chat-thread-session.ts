@@ -12,5 +12,6 @@ export const toAgentChatThreadSession = (session: AgentSessionState): AgentChatT
     ? { sessionScope: workflowAgentSessionScope(session.taskId, session.role) }
     : {}),
   activityState: getAgentSessionActivityStateFromSession(session),
+  runtimeStatusMessage: session.runtimeStatusMessage ?? null,
   messages: toSessionMessagesState(session),
 });

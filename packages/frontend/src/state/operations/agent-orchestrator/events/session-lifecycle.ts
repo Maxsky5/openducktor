@@ -94,6 +94,7 @@ export const handleSessionStarted = (
   context.store.updateSession(context.session.identity, (current) => ({
     ...current,
     status: "running",
+    runtimeStatusMessage: null,
     messages: appendSessionMessage(current, {
       id: crypto.randomUUID(),
       role: "system",
@@ -164,6 +165,7 @@ export const handleUserMessage = (
   context.store.updateSession(context.session.identity, (current) => {
     return {
       ...current,
+      runtimeStatusMessage: null,
       messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
     };
   });
@@ -183,6 +185,10 @@ export const handleSessionStatus = (
         : {
             ...current,
             status: "running",
+            runtimeStatusMessage:
+              status.message === undefined
+                ? (current.runtimeStatusMessage ?? null)
+                : status.message,
           },
     );
     return;
@@ -306,6 +312,7 @@ export const handleSessionError = (
       return {
         ...current,
         pendingUserMessageStartedAt: undefined,
+        runtimeStatusMessage: null,
         status: appendUserStoppedNotice ? "stopped" : "error",
         stopRequestedAt: null,
         pendingApprovals: [],
@@ -358,6 +365,7 @@ export const handleSessionFinished = (
       return {
         ...current,
         pendingUserMessageStartedAt: undefined,
+        runtimeStatusMessage: null,
         messages: settleTerminalMessages(current, event.timestamp, {
           ...(appendUserStoppedNotice
             ? {

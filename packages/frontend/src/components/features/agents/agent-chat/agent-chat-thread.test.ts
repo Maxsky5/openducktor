@@ -1003,6 +1003,32 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
+  test("renders a transient runtime status message with informational styling", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            runtimeStatusMessage:
+              "Our systems are thinking a bit more about this request before responding.",
+          }),
+          isSessionWorking: true,
+        },
+      }),
+    );
+    await act(flush);
+
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain(
+      "Our systems are thinking a bit more about this request before responding.",
+    );
+    expect(notice.className).toContain("border-info-border");
+    expect(notice.className).toContain("bg-info-surface");
+    expect(notice.className).toContain("text-info-surface-foreground");
+
+    rendered.unmount();
+  });
+
   test("keeps the todo panel flush with the composer when todo is the last bottom-stack item", async () => {
     const rendered = render(
       createElement(AgentChatThread, {

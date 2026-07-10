@@ -163,6 +163,7 @@ export type AgentSessionState = {
   runtimeKind: RuntimeKind;
   role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
+  runtimeStatusMessage?: string | null;
   startedAt: string;
   workingDirectory: string;
   historyLoadState: AgentSessionHistoryLoadState;

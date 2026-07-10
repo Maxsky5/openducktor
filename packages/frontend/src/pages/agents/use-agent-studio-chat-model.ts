@@ -15,7 +15,7 @@ import type { AgentChatDraftSessionIdentity } from "@/components/features/agents
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -110,11 +110,15 @@ const toSelectedSessionThreadSession = ({
   if (!identity || !loadedSession) {
     return null;
   }
+  const runtimeStatusMessage = matchesAgentSessionIdentity(loadedSession, identity)
+    ? (loadedSession.runtimeStatusMessage ?? null)
+    : null;
 
   return {
     ...identity,
     ...(loadedSession.title ? { title: loadedSession.title } : {}),
     activityState,
+    runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),
   };
 };

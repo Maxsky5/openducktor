@@ -71,6 +71,7 @@ const markSessionObserverFailures = ({
       nextSessionCollection = replaceAgentSession(nextSessionCollection, {
         ...session,
         pendingUserMessageStartedAt: undefined,
+        runtimeStatusMessage: null,
         status: "error",
         pendingApprovals: [],
         pendingQuestions: [],

@@ -111,6 +111,7 @@ export const createStopAgentSession = ({
       return {
         ...current,
         status: "stopped",
+        runtimeStatusMessage: null,
         messages: shouldAppendUserStoppedNotice
           ? appendUserStoppedNotice(current, stoppedAt)
           : current.messages,
