@@ -194,7 +194,7 @@ export const startTerminalRun = (
   resetTerminalChunks(runtime, script);
 };
 
-export const resetTerminalChunks = (
+const resetTerminalChunks = (
   runtime: DevServerGroupRuntime,
   script: DevServerScriptState,
 ): void => {
