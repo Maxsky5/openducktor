@@ -321,13 +321,16 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
+      this.emitSessionEvent(session.threadId, acceptedUserMessage);
       try {
         await client.threadCompactStart({ threadId: session.threadId });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Codex failed to compact thread '${session.threadId}': ${message}`);
       }
-      this.emitSessionEvent(session.threadId, acceptedUserMessage);
+      if (!this.options.subscribeEvents) {
+        await this.runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+      }
       return acceptedUserMessage;
     }
     return startCodexTurnForSession(

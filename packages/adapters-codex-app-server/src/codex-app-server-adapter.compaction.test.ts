@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
+  bufferedNotificationEvent,
   codexSessionRuntimeRef,
   codexUserMessageInput,
   createAdapterWithTransport,
@@ -12,6 +13,27 @@ import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 const compactPart = () => ({
   kind: "slash_command" as const,
   command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+});
+
+const modelListResponse = () => ({
+  data: [
+    {
+      id: "gpt-5",
+      model: "gpt-5",
+      displayName: "GPT-5",
+      description: "GPT-5 model",
+      hidden: false,
+      supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced reasoning" }],
+      defaultReasoningEffort: {
+        reasoningEffort: "medium",
+        description: "Balanced reasoning",
+      },
+      inputModalities: ["text"],
+      supportsPersonality: true,
+      isDefault: true,
+    },
+  ],
+  nextCursor: null,
 });
 
 describe("CodexAppServerAdapter manual compaction", () => {
@@ -229,5 +251,152 @@ describe("CodexAppServerAdapter manual compaction", () => {
     expect(calls.some((call) => call.method === "turn/start" || call.method === "turn/steer")).toBe(
       false,
     );
+  });
+
+  test("emits the accepted command before synchronous compaction lifecycle events", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    const adapter = createAdapterWithTransport(
+      {
+        async request(request) {
+          if (request.method === "thread/loaded/list") {
+            return { data: ["thread-1"], nextCursor: null };
+          }
+          if (request.method === "thread/list") {
+            return {
+              data: [
+                {
+                  id: "thread-1",
+                  cwd: "/repo",
+                  createdAt: 1_778_112_000,
+                  status: { type: "active", activeFlags: [] },
+                },
+              ],
+              nextCursor: null,
+              backwardsCursor: null,
+            };
+          }
+          if (request.method === "model/list") {
+            return modelListResponse();
+          }
+          if (request.method === "thread/compact/start") {
+            runtimeStream.emitNotification({
+              method: "item/started",
+              params: {
+                threadId: "thread-1",
+                turnId: "compact-turn-1",
+                startedAtMs: 1_778_112_001_000,
+                item: { type: "contextCompaction", id: "compact-item-1" },
+              },
+            });
+            await flushCodexAdapterWork();
+            return {};
+          }
+          throw new Error(`Unexpected method '${request.method}'.`);
+        },
+      },
+      { subscribeEvents: runtimeStream.subscribeEvents },
+    );
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread-1"), (event) =>
+      events.push(event),
+    );
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      "user_message",
+      "session_compaction_started",
+    ]);
+  });
+
+  test("drains buffered compaction lifecycle events without a live runtime stream", async () => {
+    const takeBufferedEvents = mock(
+      async () => [] as ReturnType<typeof bufferedNotificationEvent>[],
+    );
+    takeBufferedEvents.mockImplementationOnce(async () => [
+      bufferedNotificationEvent({
+        method: "item/started",
+        params: {
+          threadId: "thread-1",
+          turnId: "compact-turn-1",
+          startedAtMs: 1_778_112_001_000,
+          item: { type: "contextCompaction", id: "compact-item-1" },
+        },
+      }),
+      bufferedNotificationEvent({
+        method: "item/completed",
+        params: {
+          threadId: "thread-1",
+          turnId: "compact-turn-1",
+          completedAtMs: 1_778_112_002_000,
+          item: { type: "contextCompaction", id: "compact-item-1" },
+        },
+      }),
+      bufferedNotificationEvent({
+        method: "turn/completed",
+        params: {
+          threadId: "thread-1",
+          turn: {
+            id: "compact-turn-1",
+            status: "completed",
+            completedAt: 1_778_112_003,
+          },
+        },
+      }),
+      bufferedNotificationEvent({
+        method: "thread/status/changed",
+        params: { threadId: "thread-1", status: { type: "idle" } },
+      }),
+    ]);
+    const adapter = createAdapterWithTransport(
+      {
+        async request(request) {
+          if (request.method === "thread/loaded/list") {
+            return { data: ["thread-1"], nextCursor: null };
+          }
+          if (request.method === "thread/list") {
+            return {
+              data: [
+                {
+                  id: "thread-1",
+                  cwd: "/repo",
+                  createdAt: 1_778_112_000,
+                  status: { type: "active", activeFlags: [] },
+                },
+              ],
+              nextCursor: null,
+              backwardsCursor: null,
+            };
+          }
+          if (request.method === "model/list") {
+            return modelListResponse();
+          }
+          if (request.method === "thread/compact/start") {
+            return {};
+          }
+          throw new Error(`Unexpected method '${request.method}'.`);
+        },
+      },
+      { takeBufferedEvents },
+    );
+    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread-1"), (event) =>
+      events.push(event),
+    );
+    await flushCodexAdapterWork();
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    );
+
+    expect(takeBufferedEvents).toHaveBeenCalledTimes(1);
+    expect(events.map((event) => event.type)).toEqual([
+      "user_message",
+      "session_compaction_started",
+      "session_compacted",
+      "session_idle",
+    ]);
   });
 });
