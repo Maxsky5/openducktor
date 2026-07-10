@@ -156,6 +156,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   role: "spec",
   hasDocumentPanel: true,
   hasGithubIntegration: false,
+  hasLinkedGithubPullRequest: false,
   ...overrides,
 });
 
@@ -272,6 +273,38 @@ describe("useAgentStudioRightPanel", () => {
     expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual(["git", "file_explorer"]);
     expect(harness.getLatest().isPanelOpen).toBe(true);
     expect(harness.getLatest().rightPanelToggleModel?.kind).toBe("task_execution");
+
+    await harness.unmount();
+  });
+
+  test("shows CI checks only for tasks with a linked GitHub pull request", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        hasGithubIntegration: true,
+        hasLinkedGithubPullRequest: true,
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual([
+      "document",
+      "git",
+      "file_explorer",
+      "ci_checks",
+    ]);
+
+    await harness.update(
+      createHookArgs({
+        hasGithubIntegration: true,
+        hasLinkedGithubPullRequest: false,
+      }),
+    );
+    expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual([
+      "document",
+      "git",
+      "file_explorer",
+    ]);
 
     await harness.unmount();
   });

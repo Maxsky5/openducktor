@@ -3,6 +3,7 @@ import type { PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -39,6 +40,7 @@ const gitActionsState: { current: Record<string, unknown> } = {
 const buildToolsSnapshotMock = mock(() => buildToolsSnapshotState.current);
 const gitActionsMock = mock(() => gitActionsState.current);
 const prefetchPullRequestReviewContextMock = mock(async () => {});
+const refreshWorktreeMock = mock(async (_mode?: "soft" | "hard") => {});
 
 const linkedPullRequest = {
   providerId: "github",
@@ -97,7 +99,7 @@ const createSnapshot = (gitConflictId: string | null) => ({
     isLoading: false,
     disabledReason: null,
   },
-  refreshWorktree: async () => {},
+  refreshWorktree: refreshWorktreeMock,
   gitConflictId,
 });
 
@@ -223,6 +225,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 
 beforeEach(async () => {
   prefetchPullRequestReviewContextMock.mockClear();
+  refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot("A");
   gitActionsState.current = createGitActions("A");
 
@@ -431,11 +434,45 @@ describe("useAgentsPageRightPanelModel", () => {
     expect(prefetchCalls[0]?.[1]).toEqual({
       repoPath: "/repo",
       taskId: "task-1",
-      workingDirectory: "/repo",
       pullRequest: { providerId: "github", number: 42 },
     });
 
     await harness.unmount();
+  });
+
+  test("refreshes Git and invalidates file explorer data after builder mutations", async () => {
+    const queryClient = createQueryClient();
+    const rootPath = "/repo/.worktrees/task-1";
+    buildToolsSnapshotState.current = {
+      ...createSnapshot("A"),
+      gitPanelContextMode: "worktree",
+    };
+    const selectedFile = { rootPath, relativePath: "src/index.ts" };
+    const treeKey = filesystemQueryKeys.tree(rootPath, "origin/main");
+    const textFileKey = filesystemQueryKeys.textFile(rootPath, selectedFile.relativePath);
+    queryClient.setQueryData(treeKey, { entries: [] });
+    queryClient.setQueryData(textFileKey, { kind: "text" });
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        activeTabId: "file_explorer",
+        isPanelOpen: true,
+        selectedFile,
+      }),
+      { queryClient },
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.refreshWorktree("soft");
+    });
+
+    expect(refreshWorktreeMock).toHaveBeenCalledWith("soft");
+    expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(textFileKey)?.isInvalidated).toBe(true);
+
+    await harness.unmount();
+    queryClient.clear();
   });
 
   test("does not prefetch CI review data without a linked pull request", async () => {

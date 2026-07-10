@@ -34,7 +34,7 @@ const PIERRE_GIT_STATUSES = new Set<WorkspaceFileGitStatus>([
 ]);
 
 const isAbsolutePathLike = (value: string): boolean =>
-  value.startsWith("/") || /^[a-zA-Z]:[\\/]/u.test(value);
+  value.startsWith("/") || value.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/u.test(value);
 
 const compareWorkspacePaths = (left: string, right: string): number => {
   const insensitive = left.toLowerCase().localeCompare(right.toLowerCase());

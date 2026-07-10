@@ -17,6 +17,7 @@ type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
   hasGithubIntegration: boolean;
+  hasLinkedGithubPullRequest: boolean;
   hasTaskContext?: boolean;
 };
 
@@ -94,9 +95,11 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
 const buildTaskExecutionTabs = ({
   hasDocumentPanel,
   hasGithubIntegration,
+  hasLinkedGithubPullRequest,
 }: {
   hasDocumentPanel: boolean;
   hasGithubIntegration: boolean;
+  hasLinkedGithubPullRequest: boolean;
 }): TaskExecutionPanelTab[] => {
   const tabs: TaskExecutionPanelTab[] = [];
   if (hasDocumentPanel) {
@@ -104,7 +107,7 @@ const buildTaskExecutionTabs = ({
   }
   tabs.push({ id: "git", label: "Git" });
   tabs.push({ id: "file_explorer", label: "File explorer" });
-  if (hasGithubIntegration) {
+  if (hasGithubIntegration && hasLinkedGithubPullRequest) {
     tabs.push({ id: "ci_checks", label: "CI Checks" });
   }
   return tabs;
@@ -171,6 +174,7 @@ export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
   hasGithubIntegration,
+  hasLinkedGithubPullRequest,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
@@ -209,9 +213,10 @@ export function useAgentStudioRightPanel({
         ? buildTaskExecutionTabs({
             hasDocumentPanel,
             hasGithubIntegration,
+            hasLinkedGithubPullRequest,
           })
         : [],
-    [hasDocumentPanel, hasGithubIntegration, hasTaskContext],
+    [hasDocumentPanel, hasGithubIntegration, hasLinkedGithubPullRequest, hasTaskContext],
   );
   const activeTabId = resolveActiveTab({
     role,

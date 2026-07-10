@@ -5,11 +5,12 @@ import type { TaskExecutionSelectedFile } from "@/components/features/agents";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
+import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
@@ -371,32 +372,20 @@ export function useAgentsPageRightPanelModel({
   const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
   const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
     () =>
-      workspaceRepoPath
+      workspaceRepoPath &&
+      selectedView.taskId &&
+      linkedPullRequestProviderId &&
+      linkedPullRequestNumber
         ? {
             repoPath: workspaceRepoPath,
-            ...(selectedView.taskId ? { taskId: selectedView.taskId } : {}),
-            ...(selectedView.selectedSession.identity?.workingDirectory
-              ? {
-                  workingDirectory: selectedView.selectedSession.identity.workingDirectory,
-                }
-              : {}),
-            ...(linkedPullRequestProviderId && linkedPullRequestNumber
-              ? {
-                  pullRequest: {
-                    providerId: linkedPullRequestProviderId,
-                    number: linkedPullRequestNumber,
-                  },
-                }
-              : {}),
+            taskId: selectedView.taskId,
+            pullRequest: {
+              providerId: linkedPullRequestProviderId,
+              number: linkedPullRequestNumber,
+            },
           }
         : null,
-    [
-      linkedPullRequestNumber,
-      linkedPullRequestProviderId,
-      selectedView.selectedSession.identity?.workingDirectory,
-      selectedView.taskId,
-      workspaceRepoPath,
-    ],
+    [linkedPullRequestNumber, linkedPullRequestProviderId, selectedView.taskId, workspaceRepoPath],
   );
   const hasLinkedPullRequest =
     linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
@@ -441,10 +430,20 @@ export function useAgentsPageRightPanelModel({
       visibleDevServerModel,
     ],
   );
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    async (mode): Promise<void> => {
+      const refreshes: Promise<unknown>[] = [buildToolsSnapshot.refreshWorktree(mode)];
+      if (fileExplorerRoot.rootPath) {
+        refreshes.push(invalidateWorkspaceFileQueries(queryClient, fileExplorerRoot.rootPath));
+      }
+      await Promise.all(refreshes);
+    },
+    [buildToolsSnapshot.refreshWorktree, fileExplorerRoot.rootPath, queryClient],
+  );
 
   return {
     isRightPanelVisible: Boolean(activeTabId && isPanelOpen),
     rightPanelModel,
-    refreshWorktree: buildToolsSnapshot.refreshWorktree,
+    refreshWorktree,
   };
 }

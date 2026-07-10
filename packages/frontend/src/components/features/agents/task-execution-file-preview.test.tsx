@@ -1,12 +1,22 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { CodeViewOptions } from "@pierre/diffs";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type CSSProperties, createElement, type ReactElement, useEffect } from "react";
+import {
+  type CSSProperties,
+  createElement,
+  type PropsWithChildren,
+  type ReactElement,
+  useEffect,
+  useState,
+} from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { QueryProvider } from "@/lib/query-provider";
+import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
 
@@ -54,6 +64,26 @@ const textFileResult = (
   mtimeMs: 1_760_000_000_000,
 });
 
+function PreviewTestProviders({
+  children,
+  theme,
+}: PropsWithChildren<{ theme: "light" | "dark" }>): ReactElement {
+  const [queryClient] = useState(() => {
+    const client = createQueryClient();
+    client.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ theme }),
+    );
+    return client;
+  });
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme={theme}>{children}</ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
 const renderPreview = (
   model: Omit<
     TaskExecutionSelectedFilePreviewModel,
@@ -71,11 +101,9 @@ const renderPreview = (
   };
 
   return (
-    <QueryProvider useIsolatedClient>
-      <ThemeProvider defaultTheme={theme}>
-        <TaskExecutionSelectedFilePreview model={fullModel} />
-      </ThemeProvider>
-    </QueryProvider>
+    <PreviewTestProviders theme={theme}>
+      <TaskExecutionSelectedFilePreview model={fullModel} />
+    </PreviewTestProviders>
   );
 };
 

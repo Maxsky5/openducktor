@@ -110,7 +110,8 @@ describe("createGitCliAdapter", () => {
   test("lists changed destination paths without loading patch content", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "diff --name-status -z --end-of-options origin/main":
+        "merge-base --end-of-options origin/main HEAD": "base123\n",
+        "diff --name-status -z --end-of-options base123":
           "M\0src/modified.ts\0R084\0src/old.ts\0src/new.ts\0",
       }),
     });

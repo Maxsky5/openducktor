@@ -185,7 +185,8 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     repoPath != null &&
     taskId != null &&
     directWorktreePath == null;
-  const shouldQueryTaskWorktree = isEnabled && shouldUseTaskWorktreeQuery;
+  const isWorktreeResolutionEnabled = (isEnabled || isRightPanelOpen) && hasSelectedTask;
+  const shouldQueryTaskWorktree = isWorktreeResolutionEnabled && shouldUseTaskWorktreeQuery;
   const taskWorktreeOptions = taskWorktreeQueryOptions({
     repoPath: repoPath ?? "",
     taskId: taskId ?? "",
@@ -224,7 +225,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     await refetchTaskWorktree();
   }, [refetchTaskWorktree, shouldQueryTaskWorktree]);
   const worktreeStatus = resolveBuildToolsWorktreeStatus({
-    isEnabled,
+    isEnabled: isWorktreeResolutionEnabled,
     contextMode: gitPanelContextMode,
     worktreePath,
     isResolving: isWorktreeResolving,

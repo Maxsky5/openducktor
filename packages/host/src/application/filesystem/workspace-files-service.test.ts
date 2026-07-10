@@ -8,6 +8,7 @@ import { createWorkspaceFilesService } from "./workspace-files-service";
 
 type FakeFilesystemInput = {
   canonical?: Record<string, string>;
+  relative?: (from: string, to: string) => string;
   readLimits?: number[];
   stats?: Record<string, FilesystemStats>;
   files?: Record<string, Uint8Array>;
@@ -23,6 +24,7 @@ const hostOperationError = (message: string): HostOperationError =>
 
 const createFakeFilesystem = ({
   canonical = {},
+  relative,
   readLimits,
   stats = {},
   files = {},
@@ -49,15 +51,17 @@ const createFakeFilesystem = ({
     const parent = path.split("/").slice(0, -1).join("/");
     return parent.length > 0 ? parent : null;
   },
-  relative: (from, to) => {
-    if (to === from) {
-      return "";
-    }
-    if (to.startsWith(`${from}/`)) {
-      return to.slice(from.length + 1);
-    }
-    return `../${to}`;
-  },
+  relative:
+    relative ??
+    ((from, to) => {
+      if (to === from) {
+        return "";
+      }
+      if (to.startsWith(`${from}/`)) {
+        return to.slice(from.length + 1);
+      }
+      return `../${to}`;
+    }),
 });
 
 const createFakeGitPort = ({
@@ -328,6 +332,25 @@ describe("createWorkspaceFilesService", () => {
     await expect(
       Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "..config" })),
     ).resolves.toMatchObject({ kind: "text", relativePath: "..config", contents: "ok" });
+  });
+
+  test("rejects canonical files that resolve to an absolute UNC path", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        canonical: {
+          "/repo/link.txt": "\\\\server\\share\\secret.txt",
+        },
+        relative: () => "\\\\server\\share\\secret.txt",
+        stats: {
+          "/repo": { isDirectory: true },
+        },
+      }),
+      createFakeGitPort(),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "link.txt" })),
+    ).rejects.toThrow("outside the selected workspace root");
   });
 
   test("uses changed-file metadata without loading full diffs", async () => {

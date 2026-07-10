@@ -9,8 +9,7 @@ import type { HostValidationError } from "../effect/host-errors";
 
 export type PullRequestReviewProviderInput = {
   repoConfig: RepoConfig;
-  linkedPullRequest: PullRequest | null;
-  workingDirectory?: string;
+  linkedPullRequest: PullRequest;
 };
 
 export type PullRequestReviewProviderPort = {

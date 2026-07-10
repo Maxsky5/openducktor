@@ -32,7 +32,6 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
 });
 
 export function AgentsPageBuildWorktreeRefreshRuntime({
-  activeTabId,
   isPanelOpen,
   selectedView,
   refreshWorktreeRef,
@@ -46,7 +45,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
 
   useAgentStudioBuildWorktreeRefresh({
     selectedView: {
-      role: activeTabId === "git" && isPanelOpen ? selectedView.role : null,
+      role: isPanelOpen ? selectedView.role : null,
       loadedSession: selectedView.loadedSession,
     },
     refreshWorktree,

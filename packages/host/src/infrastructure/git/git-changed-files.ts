@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { GitCommandRunner } from "./git-command-runner";
 import { requireNonEmptyEffect, runGit } from "./git-command-runner";
+import { resolveBranchDiffBase } from "./git-diff";
 
 const nameStatusToFileStatus = (value: string): string => {
   switch (value.at(0)) {
@@ -15,7 +16,7 @@ const nameStatusToFileStatus = (value: string): string => {
   }
 };
 
-export const parseChangedFiles = (output: string): Array<{ path: string; status: string }> => {
+const parseChangedFiles = (output: string): Array<{ path: string; status: string }> => {
   const fields = output.split("\0");
   const files: Array<{ path: string; status: string }> = [];
   for (let index = 0; index < fields.length; ) {
@@ -45,12 +46,13 @@ export const loadChangedFiles = (
 ) =>
   Effect.gen(function* () {
     const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
+    const diffBase = yield* resolveBranchDiffBase(runner, workingDirectory, target);
     const output = yield* runGit(runner, workingDirectory, [
       "diff",
       "--name-status",
       "-z",
       "--end-of-options",
-      target,
+      diffBase,
     ]);
     return parseChangedFiles(output);
   });

@@ -84,7 +84,7 @@ const REVIEW_THREAD_COMMENT_FIELDS = `
   line
 `;
 
-export const REVIEW_THREADS_QUERY = `
+const REVIEW_THREADS_QUERY = `
 query PullRequestReviewThreads(
   $owner: String!
   $name: String!
@@ -117,7 +117,7 @@ query PullRequestReviewThreads(
 }
 `;
 
-export const REVIEW_THREAD_COMMENTS_QUERY = `
+const REVIEW_THREAD_COMMENTS_QUERY = `
 query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
   node(id: $threadId) {
     ... on PullRequestReviewThread {
@@ -262,7 +262,7 @@ const requireObjectPayload = (payload: string): Record<string, unknown> => {
   return parsed as Record<string, unknown>;
 };
 
-export const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
+const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
   const parsed = requireObjectPayload(payload) as GithubGraphqlReviewThreadsPayload;
   const reviewThreads = parsed.data?.repository?.pullRequest?.reviewThreads;
   if (!Array.isArray(reviewThreads?.nodes)) {
@@ -296,7 +296,7 @@ export const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage
   };
 };
 
-export const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadCommentsPage => {
+const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadCommentsPage => {
   const parsed = requireObjectPayload(payload) as GithubGraphqlReviewThreadCommentsPayload;
   if (!parsed.data?.node) {
     throw new HostValidationError({

@@ -7,15 +7,12 @@ const parsePullRequestReviewContextInput = (
 ): {
   repoPath: string;
   taskId?: string;
-  workingDirectory?: string;
 } => {
   const record = requireRecord(args, "pull_request_review_context_get input");
   const taskId = optionalString(record.taskId, "taskId");
-  const workingDirectory = optionalString(record.workingDirectory, "workingDirectory");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     ...(taskId ? { taskId } : {}),
-    ...(workingDirectory ? { workingDirectory } : {}),
   };
 };
 

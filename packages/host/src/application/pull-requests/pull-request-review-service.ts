@@ -16,7 +16,6 @@ import type {
 export type PullRequestReviewContextInput = {
   repoPath: string;
   taskId?: string;
-  workingDirectory?: string;
 };
 
 export type PullRequestReviewServiceError = HostValidationError | WorkspaceSettingsError;
@@ -41,17 +40,18 @@ const providerError = (providerId: GitProviderId, reason: string): PullRequestRe
     reason,
   });
 
+const noPullRequest = (taskId: string | undefined): PullRequestReviewContext =>
+  pullRequestReviewContextSchema.parse({
+    status: "no_pull_request",
+    providerId: "unknown",
+    reason: taskId ? `Task ${taskId} has no linked pull request.` : "No linked pull request.",
+  });
+
 const selectProvider = (
   providers: readonly PullRequestReviewProviderPort[],
-  repoConfig: Parameters<PullRequestReviewProviderPort["isEnabled"]>[0],
-  linkedPullRequest: PullRequest | null,
+  linkedPullRequest: PullRequest,
 ): PullRequestReviewProviderPort | null => {
-  if (linkedPullRequest) {
-    return (
-      providers.find((provider) => provider.providerId === linkedPullRequest.providerId) ?? null
-    );
-  }
-  return providers.find((provider) => provider.isEnabled(repoConfig)) ?? null;
+  return providers.find((provider) => provider.providerId === linkedPullRequest.providerId) ?? null;
 };
 
 export const createPullRequestReviewService = ({
@@ -78,14 +78,16 @@ export const createPullRequestReviewService = ({
           linkedPullRequest = taskResult.right.pullRequest ?? null;
         }
 
-        const provider = selectProvider(providers, repoConfig, linkedPullRequest);
+        if (!linkedPullRequest) {
+          return noPullRequest(input.taskId);
+        }
+
+        const provider = selectProvider(providers, linkedPullRequest);
         if (!provider) {
-          const providerId = linkedPullRequest?.providerId ?? "unknown";
+          const providerId = linkedPullRequest.providerId;
           return unavailable(
             providerId,
-            linkedPullRequest
-              ? `Pull request review provider '${providerId}' is not supported.`
-              : "No pull request review provider is configured.",
+            `Pull request review provider '${providerId}' is not supported.`,
           );
         }
 
@@ -93,7 +95,6 @@ export const createPullRequestReviewService = ({
           provider.readContext({
             repoConfig,
             linkedPullRequest,
-            ...(input.workingDirectory ? { workingDirectory: input.workingDirectory } : {}),
           }),
         );
         if (reviewResult._tag === "Left") {

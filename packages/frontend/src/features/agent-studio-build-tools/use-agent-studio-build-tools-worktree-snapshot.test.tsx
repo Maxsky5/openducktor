@@ -248,7 +248,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-25",
-        status: "idle",
+        status: "resolved",
         shouldBlockDiffLoading: true,
       });
       expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -260,6 +260,24 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     } finally {
       await harness.unmount();
       queryClient.clear();
+    }
+  });
+
+  test("resolves the task worktree while another task panel tab is active", async () => {
+    const harness = createHookHarness(createBaseArgs({ isGitTabActive: false }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+      });
+      expect(harness.getLatest().isEnabled).toBe(false);
+    } finally {
+      await harness.unmount();
     }
   });
 

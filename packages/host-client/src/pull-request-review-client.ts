@@ -10,7 +10,6 @@ export class HostPullRequestReviewClient {
   async pullRequestReviewContextGet(input: {
     repoPath: string;
     taskId?: string;
-    workingDirectory?: string;
   }): Promise<PullRequestReviewContext> {
     const payload = await this.invokeFn("pull_request_review_context_get", input);
     return pullRequestReviewContextSchema.parse(payload);

@@ -5,7 +5,6 @@ import {
   type GithubPullRequestReviewProvider,
 } from "../../application/pull-requests/github-pull-request-review-provider";
 import {
-  findGithubPullRequestForBranch,
   GITHUB_PROVIDER_ID,
   type GithubCommandDependencies,
   type GithubRepositoryDependencies,
@@ -19,13 +18,6 @@ import type { PullRequestReviewProviderPort } from "../../ports/pull-request-rev
 const unavailable = (reason: string) =>
   pullRequestReviewContextSchema.parse({
     status: "unavailable",
-    providerId: GITHUB_PROVIDER_ID,
-    reason,
-  });
-
-const noPullRequest = (reason: string) =>
-  pullRequestReviewContextSchema.parse({
-    status: "no_pull_request",
     providerId: GITHUB_PROVIDER_ID,
     reason,
   });
@@ -49,7 +41,7 @@ export const createGithubPullRequestReviewAdapter = ({
     isEnabled: (repoConfig) => repoConfig.git.providers[GITHUB_PROVIDER_ID]?.enabled === true,
     readContext(input) {
       return Effect.gen(function* () {
-        if (input.linkedPullRequest && input.linkedPullRequest.providerId !== GITHUB_PROVIDER_ID) {
+        if (input.linkedPullRequest.providerId !== GITHUB_PROVIDER_ID) {
           return yield* Effect.fail(
             new HostValidationError({
               field: "pullRequest.providerId",
@@ -76,54 +68,11 @@ export const createGithubPullRequestReviewAdapter = ({
         }
         const context = contextResult.right;
 
-        let pullRequestNumber = input.linkedPullRequest?.number ?? null;
-        if (pullRequestNumber === null) {
-          const workingDirectory = input.workingDirectory ?? repoPath;
-          const currentBranchResult = yield* Effect.either(
-            gitPort.getCurrentBranch(workingDirectory),
-          );
-          if (currentBranchResult._tag === "Left") {
-            return yield* Effect.fail(
-              new HostValidationError({
-                field: "workingDirectory",
-                message: errorMessage(currentBranchResult.left),
-                cause: currentBranchResult.left,
-              }),
-            );
-          }
-          const sourceBranch = currentBranchResult.right.name;
-          if (!sourceBranch) {
-            return noPullRequest("Current Git branch is detached or unavailable.");
-          }
-          const pullRequestResult = yield* Effect.either(
-            findGithubPullRequestForBranch(
-              githubDependencies,
-              repoPath,
-              context,
-              sourceBranch,
-              "open",
-            ),
-          );
-          if (pullRequestResult._tag === "Left") {
-            return yield* Effect.fail(
-              new HostValidationError({
-                field: "pullRequest",
-                message: errorMessage(pullRequestResult.left),
-                cause: pullRequestResult.left,
-              }),
-            );
-          }
-          if (!pullRequestResult.right) {
-            return noPullRequest(`No open GitHub pull request found for ${sourceBranch}.`);
-          }
-          pullRequestNumber = pullRequestResult.right.record.number;
-        }
-
         return yield* reviewProvider.read({
           dependencies: githubDependencies,
           repoPath,
           context,
-          pullRequestNumber,
+          pullRequestNumber: input.linkedPullRequest.number,
         });
       }).pipe(
         Effect.mapError((cause) =>

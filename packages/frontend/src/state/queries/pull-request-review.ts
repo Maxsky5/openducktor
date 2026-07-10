@@ -6,13 +6,12 @@ type PullRequestReviewQueryHost = Pick<typeof host, "pullRequestReviewContextGet
 export type PullRequestReviewContextQueryInput = {
   repoPath: string;
   taskId?: string;
-  workingDirectory?: string;
   pullRequest?: Pick<PullRequest, "providerId" | "number">;
 };
 
 const PULL_REQUEST_REVIEW_STALE_TIME_MS = 30_000;
 const EMPTY_VALUE = "__none__";
-const PULL_REQUEST_REVIEW_QUERY_VERSION = "v4";
+const PULL_REQUEST_REVIEW_QUERY_VERSION = "v5";
 
 export const pullRequestReviewQueryKeys = {
   all: ["pull-request-review", PULL_REQUEST_REVIEW_QUERY_VERSION] as const,
@@ -22,7 +21,6 @@ export const pullRequestReviewQueryKeys = {
       "context",
       input.repoPath,
       input.taskId ?? EMPTY_VALUE,
-      input.workingDirectory ?? EMPTY_VALUE,
       input.pullRequest?.providerId ?? EMPTY_VALUE,
       input.pullRequest?.number ?? EMPTY_VALUE,
     ] as const,
@@ -38,7 +36,6 @@ export const pullRequestReviewContextQueryOptions = (
       hostClient.pullRequestReviewContextGet({
         repoPath: input.repoPath,
         ...(input.taskId ? { taskId: input.taskId } : {}),
-        ...(input.workingDirectory ? { workingDirectory: input.workingDirectory } : {}),
       }),
     staleTime: PULL_REQUEST_REVIEW_STALE_TIME_MS,
   });

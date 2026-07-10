@@ -154,13 +154,13 @@ describe("createPullRequestReviewService", () => {
     expect(githubReadContext).not.toHaveBeenCalled();
   });
 
-  test("does not invoke a disabled provider for an unlinked task", async () => {
+  test("does not invoke any provider for an unlinked task", async () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const service = makeService({
       providers: [
         {
           providerId: "github",
-          isEnabled: () => false,
+          isEnabled: () => true,
           readContext: githubReadContext,
         },
       ],
@@ -171,9 +171,9 @@ describe("createPullRequestReviewService", () => {
     );
 
     expect(context).toEqual({
-      status: "unavailable",
+      status: "no_pull_request",
       providerId: "unknown",
-      reason: "No pull request review provider is configured.",
+      reason: "Task task-1 has no linked pull request.",
     });
     expect(githubReadContext).not.toHaveBeenCalled();
   });

@@ -500,6 +500,7 @@ export function useAgentStudioOrchestrationController({
     hasTaskContext: Boolean(selectedSessionContext.taskId),
     hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
     hasGithubIntegration: githubIntegrationEnabled,
+    hasLinkedGithubPullRequest: view.selectedTask?.pullRequest?.providerId === "github",
   });
   const selectedSessionIdentity = selectedSession.identity;
   const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
