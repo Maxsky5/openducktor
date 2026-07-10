@@ -23,6 +23,120 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("preserves inherited Codex history and inserts the exact subagent fork boundary", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const childTurns = [
+      {
+        id: "parent-turn",
+        startedAt: 10,
+        completedAt: 20,
+        status: "interrupted",
+        items: [
+          {
+            id: "parent-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Parent prompt" }],
+          },
+          {
+            id: "parent-answer",
+            type: "agentMessage",
+            phase: "commentary",
+            text: "Parent answer",
+          },
+        ],
+      },
+      {
+        id: "child-turn",
+        startedAt: 30,
+        completedAt: 40,
+        status: "completed",
+        items: [
+          {
+            id: "child-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Child task" }],
+          },
+          {
+            id: "child-answer",
+            type: "agentMessage",
+            phase: "final_answer",
+            text: "Child result",
+          },
+        ],
+      },
+    ];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 25,
+              status: { type: "idle" },
+              forkedFromId: "parent-thread",
+              parentThreadId: "parent-thread",
+              turns: childTurns,
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const params = request.params as {
+            threadId: string;
+            itemsView: string;
+          };
+          if (params.threadId === "parent-thread") {
+            return {
+              data: [{ id: "parent-turn", status: "completed", items: [] }],
+              nextCursor: null,
+            } as Response;
+          }
+          return { data: childTurns, nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "parent-user",
+      "parent-answer",
+      "codex-fork-boundary:child-thread:child-turn",
+      "child-user",
+      "child-answer",
+    ]);
+    expect(history[2]).toEqual({
+      messageId: "codex-fork-boundary:child-thread:child-turn",
+      role: "system",
+      timestamp: "1970-01-01T00:00:30.000Z",
+      text: "Forked into subagent thread",
+      notice: {
+        tone: "info",
+        reason: "session_forked",
+        title: "Forked into subagent thread",
+        parentExternalSessionId: "parent-thread",
+      },
+      parts: [],
+    });
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "thread/turns/list" &&
+          (call.params as { threadId?: string; itemsView?: string }).threadId === "parent-thread" &&
+          (call.params as { itemsView?: string }).itemsView === "summary",
+      ),
+    ).toBe(true);
+  });
+
   test("loads Codex history and diff from App Server reads", async () => {
     const { adapter, takeBufferedEvents, transports } = createHarness();
 

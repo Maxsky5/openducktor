@@ -1729,6 +1729,54 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("pins a cached readonly modal transcript to the physical bottom on mount", async () => {
+    const rows = createTurnRows(20, "child-session");
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "child-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("pins an asynchronously loaded readonly modal transcript to the physical bottom", async () => {
+    const rows = createTurnRows(20, "child-session");
+    const harness = await mountHarness(
+      {
+        rows: [],
+        displayedSessionKey: "child-session",
+        shouldResetForTranscriptLoad: true,
+      },
+      { attachDom: true },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await harness.update({
+      rows,
+      displayedSessionKey: "child-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
   test("keeps following the latest row window after a large transcript reset", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 60);
     const appendedRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 61);

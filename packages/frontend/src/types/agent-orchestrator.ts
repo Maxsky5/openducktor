@@ -101,6 +101,13 @@ export type AgentChatMessageMeta =
       reason: "session_compacted";
       title: string;
       compactionStatus?: "running" | "completed";
+    }
+  | {
+      kind: "session_notice";
+      tone: "info";
+      reason: "session_forked";
+      title: string;
+      parentExternalSessionId: string;
     };
 
 export type AgentChatMessage = {

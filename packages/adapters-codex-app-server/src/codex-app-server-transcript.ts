@@ -59,6 +59,7 @@ export type CodexTurnTiming = {
 
 export type CodexThreadReadItem = {
   item: Record<string, unknown>;
+  turnIndex: number;
   turnId: string | null;
   timestamp: string | null;
   isFinalAgentMessage: boolean;
@@ -197,7 +198,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
     throw new Error("Codex thread/read response is missing thread turns.");
   }
   const threadModelProvider = extractStringField(value.thread, ["modelProvider", "model_provider"]);
-  return value.thread.turns.flatMap((turn): CodexThreadReadItem[] => {
+  return value.thread.turns.flatMap((turn, turnIndex): CodexThreadReadItem[] => {
     if (!isPlainObject(turn)) {
       return [];
     }
@@ -239,6 +240,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
         codexItemTimestamp(item) ?? codexTimestampFromSeconds(timestampSeconds) ?? null;
       return {
         item: withCodexItemCompletedAtMs(item),
+        turnIndex,
         turnId,
         timestamp,
         isFinalAgentMessage: itemIsFinalAgentMessage,

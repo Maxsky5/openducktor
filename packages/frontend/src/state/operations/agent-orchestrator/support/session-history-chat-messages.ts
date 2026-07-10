@@ -218,12 +218,21 @@ export const historyToChatMessages = (
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
-        meta = {
-          kind: "session_notice",
-          tone: message.notice.tone,
-          reason: message.notice.reason,
-          title: message.notice.title,
-        };
+        meta =
+          message.notice.reason === "session_forked"
+            ? {
+                kind: "session_notice",
+                tone: message.notice.tone,
+                reason: message.notice.reason,
+                title: message.notice.title,
+                parentExternalSessionId: message.notice.parentExternalSessionId,
+              }
+            : {
+                kind: "session_notice",
+                tone: message.notice.tone,
+                reason: message.notice.reason,
+                title: message.notice.title,
+              };
       }
 
       next.push({

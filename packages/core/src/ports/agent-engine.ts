@@ -186,11 +186,18 @@ export type AgentSessionHistoryMessage =
        * history-read context. Adapters must not read OpenDucktor persistence to
        * synthesize missing prompt text.
        */
-      notice?: {
-        tone: "info";
-        reason: "session_compacted";
-        title: string;
-      };
+      notice?:
+        | {
+            tone: "info";
+            reason: "session_compacted";
+            title: string;
+          }
+        | {
+            tone: "info";
+            reason: "session_forked";
+            title: string;
+            parentExternalSessionId: ExternalSessionId;
+          };
       parts: [];
     };
 

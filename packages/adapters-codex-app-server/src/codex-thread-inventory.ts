@@ -214,6 +214,38 @@ export class CodexThreadInventoryReader {
     return { ...response, thread: { ...response.thread, turns: pagedTurns } };
   }
 
+  async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
+    const turnIds = new Set<string>();
+    let cursor: string | null = null;
+    const seenCursors = new Set<string>();
+    do {
+      if (cursor) {
+        seenCursors.add(cursor);
+      }
+      const response = await client.threadTurnsList({
+        threadId,
+        cursor,
+        limit: 100,
+        sortDirection: "asc",
+        itemsView: "summary",
+      });
+      for (const turn of arrayFromUnknown(response)) {
+        const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]);
+        if (!turnId) {
+          throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
+        }
+        turnIds.add(turnId);
+      }
+      cursor = isPlainObject(response)
+        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
+        : null;
+      if (cursor && seenCursors.has(cursor)) {
+        throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");
+      }
+    } while (cursor);
+    return turnIds;
+  }
+
   private async fetch(
     client: CodexAppServerClient,
     runtimeId: string,

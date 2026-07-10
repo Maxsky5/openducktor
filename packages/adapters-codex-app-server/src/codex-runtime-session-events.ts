@@ -43,6 +43,7 @@ import {
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
+import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import {
   type CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -125,14 +126,21 @@ export class CodexRuntimeSessionEvents {
   >();
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
+  private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
     this.eventMapperPipeline = createCodexEventMapperPipeline(
       createCodexEventMappers(deps.subagents),
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
+    this.subagentLifecycle = new CodexSubagentLifecycleProjector({
+      sessions: deps.sessions,
+      subagents: deps.subagents,
+      emitParentSessionEvent: (externalSessionId, event) =>
+        this.emitSessionEvent(externalSessionId, event),
+    });
     deps.subagents.onRouteLearned((route) => {
-      this.scheduleBufferedSubagentServerRequestProcessing(route);
+      this.scheduleBufferedSubagentRouteProcessing(route);
     });
   }
 
@@ -196,6 +204,7 @@ export class CodexRuntimeSessionEvents {
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
     this.runtimeEventBuffer.clearSession(externalSessionId, runtimeId);
+    this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
     this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
@@ -292,12 +301,14 @@ export class CodexRuntimeSessionEvents {
       session.runtimeId,
     );
     await this.processServerRequestsForSession(session, bufferedRequests);
+    this.subagentLifecycle.projectBufferedForParent(session);
     await this.processBufferedSubagentServerRequestsForParent(session);
   }
 
-  private scheduleBufferedSubagentServerRequestProcessing(route: CodexSubagentRoute): void {
+  private scheduleBufferedSubagentRouteProcessing(route: CodexSubagentRoute): void {
     void Promise.resolve()
       .then(() => this.applyRouteToPendingInput(route))
+      .then(() => this.subagentLifecycle.projectBufferedRoute(route))
       .then(() => this.processBufferedSubagentServerRequests(route))
       .catch((error) => this.emitBufferedSubagentServerRequestError(route, error));
   }
@@ -446,7 +457,10 @@ export class CodexRuntimeSessionEvents {
           return;
         }
       }
-      this.bufferRuntimeStreamEvent(threadId, event);
+      const bufferedEvent = this.bufferRuntimeStreamEvent(threadId, event);
+      if (bufferedEvent.kind === "notification") {
+        this.subagentLifecycle.projectNotification(event.runtimeId, bufferedEvent.notification);
+      }
       return;
     }
     if (session.runtimeId !== event.runtimeId) {
@@ -460,6 +474,12 @@ export class CodexRuntimeSessionEvents {
         this.bufferRuntimeStreamEvent(threadId, event);
       }
       return;
+    }
+    if (event.kind === "notification") {
+      this.subagentLifecycle.projectNotification(
+        event.runtimeId,
+        parseNotificationRecord(event.message, event.receivedAt),
+      );
     }
     await this.processRuntimeStreamEventForSession(session, event);
   }
@@ -606,8 +626,8 @@ export class CodexRuntimeSessionEvents {
   private bufferRuntimeStreamEvent(
     threadId: string,
     event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
-  ): void {
-    this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
+  ): ReturnType<CodexRuntimeEventBuffer["bufferRuntimeStreamEvent"]> {
+    return this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
 
   private emitRuntimeStreamEventError(event: CodexRuntimeStreamEvent, error: unknown): void {
@@ -746,6 +766,7 @@ export class CodexRuntimeSessionEvents {
       this.handleServerRequestResolvedNotification(event.runtimeId, notification);
       return;
     }
+    this.subagentLifecycle.projectNotification(event.runtimeId, notification);
     if (!threadId) {
       await this.handlePendingNotifications(preferredSession, [notification]);
       return;
@@ -1020,6 +1041,7 @@ export class CodexRuntimeSessionEvents {
           this.handleServerRequestResolvedNotification(event.runtimeId, notification);
           continue;
         }
+        this.subagentLifecycle.projectNotification(event.runtimeId, notification);
         takenNotifications.push(notification);
       }
       const notifications = [...bufferedNotifications, ...takenNotifications];

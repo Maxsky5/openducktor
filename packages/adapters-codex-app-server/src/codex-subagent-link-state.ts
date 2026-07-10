@@ -1,6 +1,8 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexThreadSnapshot } from "./codex-app-server-threads";
 
+type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
+
 export type CodexSubagentRoute = {
   runtimeId?: string;
   parentExternalSessionId: string;
@@ -30,6 +32,7 @@ export type CodexSubagentLinkInput = {
   metadata?: Record<string, unknown>;
   executionMode?: "background";
   preferItemCorrelationKey?: boolean;
+  allowStatusRestart?: boolean;
 };
 
 type CodexStoredSubagentLink = {
@@ -77,9 +80,13 @@ const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
 const resolveStatus = (
   existing: AgentSubagentStatus | undefined,
   incoming: AgentSubagentStatus,
+  allowStatusRestart: boolean,
 ): AgentSubagentStatus => {
   if (!existing) {
     return incoming;
+  }
+  if (allowStatusRestart && incoming === "running") {
+    return "running";
   }
   return STATUS_PRECEDENCE[incoming] > STATUS_PRECEDENCE[existing] ? incoming : existing;
 };
@@ -182,7 +189,7 @@ export class CodexSubagentLinkState {
     });
   }
 
-  upsertLink(input: CodexSubagentLinkInput): AgentStreamPart {
+  upsertLink(input: CodexSubagentLinkInput): CodexSubagentPart {
     const previousRoute = input.childThreadId
       ? this.routeForChild(input.childThreadId, input.runtimeId)
       : null;
@@ -219,11 +226,16 @@ export class CodexSubagentLinkState {
       existingLinked ??
       existingProvisional ??
       this.linksByCorrelationKey.get(scopedKey(input.runtimeId, correlationKey));
-    const status = resolveStatus(existing?.status, input.status);
+    const status = resolveStatus(existing?.status, input.status, input.allowStatusRestart === true);
+    const didRestart =
+      input.allowStatusRestart === true &&
+      input.status === "running" &&
+      existing !== undefined &&
+      existing.status !== "running";
     const childThreadId = input.childThreadId ?? existing?.childThreadId;
     const prompt = input.prompt ?? existing?.prompt;
     const description = input.description ?? existing?.description;
-    const error = input.error ?? existing?.error;
+    const error = input.error ?? (didRestart ? undefined : existing?.error);
     const agent = input.agent ?? existing?.agent;
     const metadata = mergeDefined(existing?.metadata, input.metadata);
     const executionMode = input.executionMode ?? existing?.executionMode;
@@ -254,6 +266,10 @@ export class CodexSubagentLinkState {
       return null;
     }
     return routeFromLink(link);
+  }
+
+  statusForChild(childThreadId: string, runtimeId?: string): AgentSubagentStatus | null {
+    return this.linkForChild(childThreadId, runtimeId)?.status ?? null;
   }
 
   routesForParent(parentThreadId: string, runtimeId?: string): CodexSubagentRoute[] {
@@ -354,7 +370,7 @@ export class CodexSubagentLinkState {
     return match;
   }
 
-  private toPart(link: CodexStoredSubagentLink): AgentStreamPart {
+  private toPart(link: CodexStoredSubagentLink): CodexSubagentPart {
     return {
       kind: "subagent",
       messageId: link.correlationKey,

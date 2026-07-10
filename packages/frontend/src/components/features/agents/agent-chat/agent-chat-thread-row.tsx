@@ -3,6 +3,7 @@ import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import { AgentTranscriptSeparator } from "./agent-transcript-separator";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
@@ -26,6 +27,9 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   switch (row.kind) {
     case "turn_duration": {
       return <AgentTurnDurationSeparator durationMs={row.durationMs} />;
+    }
+    case "fork_boundary": {
+      return <AgentTranscriptSeparator label={row.label} />;
     }
     case "message": {
       const isUserMessage = row.message.role === "user";

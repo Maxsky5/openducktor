@@ -60,6 +60,43 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     ]);
   });
 
+  test("maps fork boundaries to transient transcript notice metadata", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "fork-boundary-1",
+          role: "system",
+          timestamp: "2026-07-10T10:00:00.000Z",
+          text: "Forked into subagent thread",
+          notice: {
+            tone: "info",
+            reason: "session_forked",
+            title: "Forked into subagent thread",
+            parentExternalSessionId: "parent-thread",
+          },
+          parts: [],
+        },
+      ],
+      { role: null },
+    );
+
+    expect(messages).toEqual([
+      {
+        id: "fork-boundary-1",
+        role: "system",
+        content: "Forked into subagent thread",
+        timestamp: "2026-07-10T10:00:00.000Z",
+        meta: {
+          kind: "session_notice",
+          tone: "info",
+          reason: "session_forked",
+          title: "Forked into subagent thread",
+          parentExternalSessionId: "parent-thread",
+        },
+      },
+    ]);
+  });
+
   test("extracts latest final assistant context usage from loaded history", () => {
     const contextUsage = historyToSessionContextUsage([
       {

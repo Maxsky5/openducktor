@@ -43,6 +43,39 @@ const threadReadResponse = (
 });
 
 describe("CodexThreadInventoryReader", () => {
+  test("reads every parent turn id with summary-only pagination", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadTurnsList: async (params: Record<string, unknown>) => {
+        calls.push(params);
+        return params.cursor
+          ? { data: [{ id: "turn-2" }], nextCursor: null }
+          : { data: [{ id: "turn-1" }], nextCursor: "page-2" };
+      },
+    } as unknown as CodexAppServerClient;
+
+    const turnIds = await reader.readThreadTurnIds(client, "parent-thread");
+
+    expect([...turnIds]).toEqual(["turn-1", "turn-2"]);
+    expect(calls).toEqual([
+      {
+        threadId: "parent-thread",
+        cursor: null,
+        limit: 100,
+        sortDirection: "asc",
+        itemsView: "summary",
+      },
+      {
+        threadId: "parent-thread",
+        cursor: "page-2",
+        limit: 100,
+        sortDirection: "asc",
+        itemsView: "summary",
+      },
+    ]);
+  });
+
   test("does not let a stale in-flight read overwrite a refreshed inventory", async () => {
     const reader = new CodexThreadInventoryReader();
     const firstLoaded = createDeferred<unknown>();

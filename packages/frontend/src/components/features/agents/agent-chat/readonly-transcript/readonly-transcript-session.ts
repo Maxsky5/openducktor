@@ -28,6 +28,7 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
     hash = updateHash(hash, message.timestamp);
     hash = updateHash(hash, message.text);
     hash = updateHash(hash, JSON.stringify(message.parts));
+    hash = updateHash(hash, JSON.stringify(message.role === "system" ? message.notice : null));
   }
   return hash;
 };

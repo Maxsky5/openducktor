@@ -323,6 +323,7 @@ export const codexSubagentPartsFromItem = (
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: collabMetadata(item, type, parentThreadId, childThreadId),
         preferItemCorrelationKey: tool === "spawnAgent",
+        allowStatusRestart: tool === "resumeAgent" && mapped.status === "running",
       });
     });
   }
