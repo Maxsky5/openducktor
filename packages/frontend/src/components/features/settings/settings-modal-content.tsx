@@ -136,6 +136,7 @@ export function SettingsModalContent({
       <AgentRuntimesSection
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
+        runtimeCheck={controller.runtimeCheck}
         disabled={isInteractionDisabled}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}

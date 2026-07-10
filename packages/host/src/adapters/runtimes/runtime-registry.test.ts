@@ -8,10 +8,32 @@ import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
-import { createRuntimeRegistry as createEffectRuntimeRegistry } from "./runtime-registry";
+import {
+  type CreateRuntimeRegistryInput,
+  createRuntimeRegistry as createEffectRuntimeRegistry,
+} from "./runtime-registry";
+import {
+  type CreateRuntimeSessionOperationsInput,
+  createRuntimeSessionOperations,
+} from "./runtime-session-operations";
 
-const createRuntimeRegistry = (...args: Parameters<typeof createEffectRuntimeRegistry>) =>
-  createEffectRuntimeRegistry(...args);
+type TestRuntimeRegistryInput = CreateRuntimeRegistryInput & CreateRuntimeSessionOperationsInput;
+
+const createRuntimeRegistry = ({
+  codexAppServer,
+  claudeAgentSdk,
+  sessionOperations,
+  ...input
+}: TestRuntimeRegistryInput = {}) => {
+  const sessionOperationInput: CreateRuntimeSessionOperationsInput = {
+    ...(codexAppServer ? { codexAppServer } : {}),
+    ...(claudeAgentSdk ? { claudeAgentSdk } : {}),
+  };
+  return createEffectRuntimeRegistry({
+    ...input,
+    sessionOperations: sessionOperations ?? createRuntimeSessionOperations(sessionOperationInput),
+  });
+};
 const codexResult = (value: unknown) => Effect.succeed(value as CodexAppServerRequestResult);
 const requireMethod = <T>(method: T | undefined, methodName: string): T => {
   if (!method) {
@@ -46,6 +68,16 @@ const createCodexRuntime = (
     descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
     ...overrides,
   });
+const createClaudeRuntime = (
+  overrides: Partial<RuntimeInstanceSummary> = {},
+): RuntimeInstanceSummary =>
+  createRuntime({
+    kind: "claude",
+    runtimeId: "runtime-claude",
+    runtimeRoute: { type: "host_service", identity: "runtime-claude" },
+    descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+    ...overrides,
+  });
 const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
   stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
@@ -71,7 +103,10 @@ describe("createRuntimeRegistry", () => {
     ).resolves.toEqual(runtime);
   });
   test("returns an existing workspace runtime when the repo path formatting differs", async () => {
-    const runtime = createRuntime({ repoPath: "/repo", workingDirectory: "/repo" });
+    const runtime = createRuntime({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+    });
     const registry = createRuntimeRegistry({ runtimes: [runtime] });
     await expect(
       Effect.runPromise(
@@ -154,12 +189,19 @@ describe("createRuntimeRegistry", () => {
       repoPath: "/other",
       workingDirectory: "/other",
     });
-    const registry = createRuntimeRegistry({ runtimes: [opencode, codex, otherRepo] });
+    const registry = createRuntimeRegistry({
+      runtimes: [opencode, codex, otherRepo],
+    });
     await expect(
       Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "c:/repo" })),
     ).resolves.toEqual([opencode, codex]);
     await expect(
-      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "c:/repo", runtimeKind: "codex" })),
+      Effect.runPromise(
+        registry.listRuntimesByRepo({
+          repoPath: "c:/repo",
+          runtimeKind: "codex",
+        }),
+      ),
     ).resolves.toEqual([codex]);
   });
   test("starts and registers a workspace runtime through the configured starter", async () => {
@@ -189,7 +231,10 @@ describe("createRuntimeRegistry", () => {
     );
     await expect(
       Effect.runPromise(
-        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+        registry.listRuntimesByRepo({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toEqual([runtime]);
     expect(starts).toEqual([
@@ -311,7 +356,10 @@ describe("createRuntimeRegistry", () => {
     await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
     await expect(
       Effect.runPromise(
-        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+        registry.listRuntimesByRepo({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toEqual([createRuntime()]);
     expect(starts).toBe(1);
@@ -356,7 +404,10 @@ describe("createRuntimeRegistry", () => {
     await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
     await expect(
       Effect.runPromise(
-        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+        registry.listRuntimesByRepo({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toEqual([createRuntime()]);
     expect(starts).toBe(1);
@@ -421,7 +472,10 @@ describe("createRuntimeRegistry", () => {
     ).resolves.toBeNull();
     await expect(
       Effect.runPromise(
-        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+        registry.listRuntimesByRepo({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toEqual([]);
     expect(stops).toEqual([]);
@@ -460,7 +514,10 @@ describe("createRuntimeRegistry", () => {
     ).resolves.toBeNull();
     await expect(
       Effect.runPromise(
-        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+        registry.listRuntimesByRepo({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toEqual([]);
     expect(stops).toEqual(["runtime-1"]);
@@ -677,7 +734,10 @@ describe("createRuntimeRegistry", () => {
         Effect.runPromise(
           probeMcpStatus({
             runtimeKind: "opencode",
-            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4096",
+            },
             workingDirectory: "/repo/worktree",
             serverName: "openducktor",
           }),
@@ -1049,7 +1109,9 @@ describe("createRuntimeRegistry", () => {
     ).rejects.toThrow("Codex thread/turns/list response data must be an array");
   });
   test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
-    const registry = createRuntimeRegistry({ runtimes: [createCodexRuntime()] });
+    const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
+    });
     await expect(
       Effect.runPromise(
         registry.stopSession({
@@ -1063,7 +1125,10 @@ describe("createRuntimeRegistry", () => {
     const codexRegistry = createRuntimeRegistry({
       runtimes: [
         createCodexRuntime({
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4096",
+          },
         }),
       ],
       codexAppServer: {
@@ -1082,5 +1147,56 @@ describe("createRuntimeRegistry", () => {
         }),
       ),
     ).rejects.toThrow("Codex app-server operations require a stdio runtime route.");
+  });
+  test("routes Claude session stop and status probes through the Claude Agent SDK service", async () => {
+    const stops: unknown[] = [];
+    const probes: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      runtimes: [createClaudeRuntime()],
+      claudeAgentSdk: {
+        stopSession(input) {
+          stops.push(input);
+          return Effect.void;
+        },
+        probeSessionStatus(input) {
+          probes.push(input);
+          return Effect.succeed({ supported: true, hasLiveSession: true });
+        },
+      },
+    });
+    const sessionRef = {
+      runtimeKind: "claude",
+      repoPath: "/repo",
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+    } as const;
+    const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
+
+    await expect(Effect.runPromise(registry.stopSession(sessionRef))).resolves.toBeUndefined();
+    await expect(Effect.runPromise(probeSessionStatus(sessionRef))).resolves.toEqual({
+      supported: true,
+      hasLiveSession: true,
+    });
+    expect(stops).toEqual([sessionRef]);
+    expect(probes).toEqual([sessionRef]);
+  });
+  test("fails Claude session operations without the Claude Agent SDK service", async () => {
+    const registry = createRuntimeRegistry({
+      runtimes: [createClaudeRuntime()],
+    });
+    const sessionRef = {
+      runtimeKind: "claude",
+      repoPath: "/repo",
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+    } as const;
+    const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
+
+    await expect(Effect.runPromise(probeSessionStatus(sessionRef))).rejects.toThrow(
+      "Claude session status probing requires the Claude Agent SDK service.",
+    );
+    await expect(Effect.runPromise(registry.stopSession(sessionRef))).rejects.toThrow(
+      "Claude session stop requires the Claude Agent SDK service.",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -45,6 +45,7 @@ type SessionStartContextSession = {
 type BuildSessionStartModalRequestArgs = {
   source: SessionStartModalSource;
   request: SessionStartFlowRequest;
+  requestedRuntimeKind?: RuntimeKind | null;
   selectedModel: AgentModelSelection | null;
   taskSessions: AgentSessionSummary[];
   preferredSourceSession?: SessionStartContextSession | null | undefined;
@@ -133,6 +134,7 @@ const resolveInitialSourceSession = ({
 export const buildSessionStartModalRequest = ({
   source,
   request,
+  requestedRuntimeKind,
   selectedModel,
   taskSessions,
   preferredSourceSession,
@@ -154,6 +156,7 @@ export const buildSessionStartModalRequest = ({
     role: request.role,
     launchActionId: request.launchActionId,
     postStartAction: request.postStartAction,
+    ...(requestedRuntimeKind ? { requestedRuntimeKind } : {}),
     selectedModel,
     initialTargetBranch,
     ...(initialTargetBranchError ? { initialTargetBranchError } : {}),

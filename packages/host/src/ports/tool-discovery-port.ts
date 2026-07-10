@@ -2,7 +2,14 @@ import type { ToolExecutableSourceCategory } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type { HostDependencyError, HostValidationError } from "../effect/host-errors";
 
-export const TOOL_DISCOVERY_IDS = ["bun", "codex", "git", "githubCli", "opencode"] as const;
+export const TOOL_DISCOVERY_IDS = [
+  "bun",
+  "claude",
+  "codex",
+  "git",
+  "githubCli",
+  "opencode",
+] as const;
 
 export type ToolDiscoveryId = (typeof TOOL_DISCOVERY_IDS)[number];
 

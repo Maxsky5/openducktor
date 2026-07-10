@@ -3,6 +3,7 @@ import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import {
   appendSessionMessage,
+  createSessionMessagesState,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "../support/messages";
@@ -111,12 +112,14 @@ export const handleAssistantMessage = (
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
-    const durationMs = context.turn.resolveTurnDurationMs(
-      context.session.key,
-      context.session.identity.externalSessionId,
-      event.timestamp,
-      settledMessages,
-    );
+    const durationMs =
+      event.durationMs ??
+      context.turn.resolveTurnDurationMs(
+        context.session.key,
+        context.session.identity.externalSessionId,
+        event.timestamp,
+        settledMessages,
+      );
     const shouldPreserveContextUsage =
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
@@ -142,6 +145,33 @@ export const handleAssistantMessage = (
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
+};
+
+export const handleTranscriptRetracted = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "transcript_retracted" }>,
+): void => {
+  const retractedMessageIds = new Set(event.messageIds);
+  const belongsToRetractedMessage = (messageId: string): boolean => {
+    for (const retractedMessageId of retractedMessageIds) {
+      if (
+        messageId === retractedMessageId ||
+        messageId.startsWith(`thinking:${retractedMessageId}:`) ||
+        messageId.startsWith(`tool:${retractedMessageId}:`)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: createSessionMessagesState(
+      current.externalSessionId,
+      current.messages.items.filter((message) => !belongsToRetractedMessage(message.id)),
+      current.messages.version + 1,
+    ),
+  }));
 };
 
 export const handleUserMessage = (

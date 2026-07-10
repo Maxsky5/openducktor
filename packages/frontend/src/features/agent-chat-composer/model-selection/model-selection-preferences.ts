@@ -147,7 +147,9 @@ export const resolveChatComposerModelSelections = ({
       selectionCatalog,
       selectedModelSelection: selectedSessionSelection.selectedModelSelection,
       selectionForNewSession:
-        source.draftSelection ?? roleDefaultSelection ?? fallbackCatalogSelection,
+        selectedSessionSelection.selectedModelSelection ??
+        fallbackCatalogSelection ??
+        roleDefaultSelection,
       sessionModelRepairCommand: resolveSessionModelRepairCommand({
         sessionIdentity: source.sessionIdentity,
         repairSelection: selectedSessionSelection.repairSelection,

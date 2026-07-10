@@ -1,7 +1,11 @@
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { QueuedSessionEvent, SessionEventBatcher } from "./session-event-batching";
+import {
+  prepareForcedQueuedSessionEvents,
+  type QueuedSessionEvent,
+  type SessionEventBatcher,
+} from "./session-event-batching";
 import { routeStreamEventSession } from "./session-event-identity";
 import {
   createSessionEventContext,
@@ -228,7 +232,11 @@ export const createSessionEventRouter = ({
     }
 
     if (options.force === true) {
-      applyQueuedSessionEvents(context, queuedEvents, handleEvent);
+      applyQueuedSessionEvents(
+        context,
+        prepareForcedQueuedSessionEvents(queuedEvents),
+        handleEvent,
+      );
       clearSession(sessionKey);
       return null;
     }

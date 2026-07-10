@@ -179,6 +179,102 @@ export const CODEX_RUNTIME_CAPABILITIES = {
   },
 } as const satisfies RuntimeCapabilities;
 
+const CLAUDE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
+  "Bash",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "Write",
+  "WebFetch",
+  "WebSearch",
+] as const;
+
+export const CLAUDE_ODT_TOOL_ID_PREFIXES = ["mcp__openducktor__"] as const;
+
+export const toClaudeOdtToolAliases = (canonicalOdtToolName: string): string[] =>
+  CLAUDE_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}${canonicalOdtToolName}`);
+
+const createClaudeWorkflowToolAliasesByCanonical =
+  (): RuntimeDescriptor["workflowToolAliasesByCanonical"] => {
+    const aliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
+
+    for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
+      aliasesByCanonical[toolName] = toClaudeOdtToolAliases(toolName);
+    }
+
+    return aliasesByCanonical;
+  };
+
+export const CLAUDE_RUNTIME_CAPABILITIES = {
+  provisioningMode: "host_managed",
+  workflow: {
+    supportsOdtWorkflowTools: true,
+    supportedScopes: requiredRuntimeSupportedScopes,
+  },
+  sessionLifecycle: {
+    supportedStartModes: ["fresh", "reuse", "fork"],
+    supportsSessionFork: true,
+    forkTargets: ["session"],
+    supportsListLiveSessions: true,
+    supportsQueuedUserMessages: true,
+    supportsPendingInputSnapshots: true,
+  },
+  history: {
+    loadable: true,
+    fidelity: "message",
+    replay: "snapshot",
+    stableItemIds: true,
+    stableItemOrder: true,
+    exposesCompletionState: false,
+    limitations: [
+      "Claude Agent SDK session history is loaded from SDK transcript messages; live reconciliation also honors SDK retraction and supersession metadata.",
+    ],
+  },
+  approvals: {
+    supportedRequestTypes: ["command_execution", "file_change", "permission_grant", "runtime_tool"],
+    supportedReplyOutcomes: ["approve_once", "reject"],
+    omittedPermissionBehavior: "deny",
+    pendingVisibility: ["live_snapshot"],
+    canClassifyMutatingRequests: true,
+    readOnlyAutoRejectSafe: true,
+  },
+  structuredInput: {
+    supportsQuestions: true,
+    supportsMultipleQuestions: true,
+    supportedAnswerModes: ["free_text", "single_select", "multi_select"],
+    supportsRequiredQuestions: true,
+    supportsDefaultValues: false,
+    supportsSecretInput: false,
+    supportsCustomAnswers: true,
+    supportsQuestionResolution: true,
+    pendingVisibility: ["live_snapshot"],
+  },
+  promptInput: {
+    supportedParts: [
+      "text",
+      "slash_command",
+      "skill_mention",
+      "file_reference",
+      "folder_reference",
+      "attachment",
+    ],
+    supportsSlashCommands: true,
+    supportsFileSearch: true,
+    supportsSkillReferences: true,
+    supportsSubagentReferences: false,
+  },
+  optionalSurfaces: {
+    supportsProfiles: false,
+    supportsVariants: true,
+    supportsTodos: false,
+    supportsDiff: false,
+    supportsFileStatus: false,
+    supportsMcpStatus: false,
+    supportsSubagents: true,
+    supportedSubagentExecutionModes: ["foreground", "background"],
+  },
+} as const satisfies RuntimeCapabilities;
+
 export const OPENCODE_RUNTIME_DESCRIPTOR = {
   kind: "opencode",
   label: "OpenCode",
@@ -197,7 +293,17 @@ export const CODEX_RUNTIME_DESCRIPTOR = {
   capabilities: CODEX_RUNTIME_CAPABILITIES,
 } as const satisfies RuntimeDescriptor;
 
+export const CLAUDE_RUNTIME_DESCRIPTOR = {
+  kind: "claude",
+  label: "Claude",
+  description: "Local Claude Agent SDK runtime connected through the OpenDucktor MCP bridge.",
+  readOnlyRoleBlockedTools: [...CLAUDE_READ_ONLY_ROLE_BLOCKED_TOOLS],
+  workflowToolAliasesByCanonical: createClaudeWorkflowToolAliasesByCanonical(),
+  capabilities: CLAUDE_RUNTIME_CAPABILITIES,
+} as const satisfies RuntimeDescriptor;
+
 export const RUNTIME_DESCRIPTORS_BY_KIND = {
   [OPENCODE_RUNTIME_DESCRIPTOR.kind]: OPENCODE_RUNTIME_DESCRIPTOR,
   [CODEX_RUNTIME_DESCRIPTOR.kind]: CODEX_RUNTIME_DESCRIPTOR,
+  [CLAUDE_RUNTIME_DESCRIPTOR.kind]: CLAUDE_RUNTIME_DESCRIPTOR,
 } as const satisfies Record<RuntimeKind, RuntimeDescriptor>;

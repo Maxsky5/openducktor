@@ -157,24 +157,32 @@ describe("session-start-modal-selection", () => {
     });
   });
 
-  test("resolveSelectionForRuntimeChange keeps draft shape for missing role", () => {
+  test("resolveSelectionForRuntimeChange preserves only same-runtime drafts for missing role", () => {
+    const currentSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+    } as const;
+
     expect(
       resolveSelectionForRuntimeChange({
         activeRole: null,
-        currentSelection: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-        },
+        currentSelection,
         intentSelectedModel: null,
         repoSettings: REPO_SETTINGS,
         runtimeKind: "opencode",
       }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-    });
+    ).toEqual(currentSelection);
+
+    expect(
+      resolveSelectionForRuntimeChange({
+        activeRole: null,
+        currentSelection,
+        intentSelectedModel: null,
+        repoSettings: REPO_SETTINGS,
+        runtimeKind: "claude",
+      }),
+    ).toBeNull();
   });
 
   test("resolveSelectionForRuntimeChange preserves the draft when role is provided", () => {
@@ -195,6 +203,23 @@ describe("session-start-modal-selection", () => {
       providerId: "anthropic",
       modelId: "claude-sonnet",
     });
+  });
+
+  test("resolveSelectionForRuntimeChange clears a model from another runtime", () => {
+    expect(
+      resolveSelectionForRuntimeChange({
+        activeRole: "spec",
+        currentSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+        },
+        intentSelectedModel: null,
+        repoSettings: REPO_SETTINGS,
+        runtimeKind: "claude",
+      }),
+    ).toBeNull();
   });
 
   test("resolveSelectionForRuntimeChange falls back to role defaults when no draft exists", () => {

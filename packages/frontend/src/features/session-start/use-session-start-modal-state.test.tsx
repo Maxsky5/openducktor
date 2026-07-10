@@ -1,7 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import { QueryClient } from "@tanstack/react-query";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -76,6 +82,23 @@ const CODEX_CATALOG: AgentModelCatalog = {
   ],
   defaultModelsByProvider: {
     codex: "gpt-5.4-mini",
+  },
+};
+
+const CLAUDE_CATALOG: AgentModelCatalog = {
+  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "default",
+      providerId: "claude",
+      providerName: "Claude",
+      modelId: "default",
+      modelName: "Default",
+      variants: ["low", "medium", "high", "xhigh", "max"],
+    },
+  ],
+  defaultModelsByProvider: {
+    claude: "default",
   },
 };
 
@@ -525,6 +548,110 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("clears previous runtime model while switching to a runtime with a loading catalog", async () => {
+    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      if (runtimeRef.runtimeKind === "claude") {
+        return catalogDeferred.promise;
+      }
+      return CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-3B",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "kickoff",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectRuntime("claude");
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
+    expect(harness.getLatest().selection).toBeNull();
+    expect(harness.getLatest().modelOptions).toEqual([]);
+    expect(harness.getLatest().variantOptions).toEqual([]);
+
+    await harness.run(() => {
+      catalogDeferred.resolve(CLAUDE_CATALOG);
+    });
+    await harness.waitFor((state) => state.selection?.runtimeKind === "claude");
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "default",
+      variant: "low",
+    });
+    expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("clears stale model selection and exposes catalog errors when runtime catalog loading fails", async () => {
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      if (runtimeRef.runtimeKind === "claude") {
+        throw new Error("Claude auth failed");
+      }
+      return CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-3C",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "kickoff",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectRuntime("claude");
+    });
+    await harness.waitFor((state) => state.catalogError === "Claude auth failed");
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
+    expect(harness.getLatest().selection).toBeNull();
+    expect(harness.getLatest().modelOptions).toEqual([]);
+    expect(harness.getLatest().variantOptions).toEqual([]);
+    expect(harness.getLatest().isCatalogLoading).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("falls back to a valid start mode when initialStartMode is not allowed", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -919,6 +1046,68 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("fetches fresh modal catalog data instead of reusing stale shared runtime cache", async () => {
+    const queryClient = new QueryClient();
+    const claudeModel = CLAUDE_CATALOG.models[0];
+    if (!claudeModel) {
+      throw new Error("Expected Claude catalog fixture to include a model.");
+    }
+    const staleClaudeCatalog: AgentModelCatalog = {
+      ...CLAUDE_CATALOG,
+      models: [
+        {
+          ...claudeModel,
+          variants: [],
+        },
+      ],
+    };
+    queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "claude"), staleClaudeCatalog);
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
+      return runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+      }),
+      { queryClient },
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-FRESH-CLAUDE-CATALOG",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "kickoff",
+        title: "Start Spec Session",
+      });
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectRuntime("claude");
+    });
+
+    await harness.waitFor((state) => state.selection?.runtimeKind === "claude");
+
+    expect(loadCatalog).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+    });
+    expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+
+    await harness.unmount();
+    queryClient.clear();
+  });
+
   test("preserves caller-selected model when opening modal", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -1284,10 +1473,10 @@ describe("useSessionStartModalState", () => {
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
+      profileId: "build-agent",
     });
 
     await harness.run(() => {

@@ -153,10 +153,13 @@ export function useAgentStudioSessionStartFlow({
         buildSessionStartModalRequest({
           source: "agent_studio",
           request,
-          selectedModel:
-            request.role === role && request.taskId === taskId
-              ? (selectionForNewSession ?? null)
+          requestedRuntimeKind:
+            request.taskId === taskId
+              ? (selectionForNewSession?.runtimeKind ??
+                selectedSessionIdentity?.runtimeKind ??
+                null)
               : null,
+          selectedModel: request.taskId === taskId ? (selectionForNewSession ?? null) : null,
           taskSessions: sessionsForTask,
           preferredSourceSession: isWorkflowAgentSession(loadedSession) ? loadedSession : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
@@ -166,9 +169,9 @@ export function useAgentStudioSessionStartFlow({
     },
     [
       loadedSession,
-      role,
       runInternalSessionStartRequest,
       selectionForNewSession,
+      selectedSessionIdentity?.runtimeKind,
       selectedTask,
       sessionsForTask,
       taskId,

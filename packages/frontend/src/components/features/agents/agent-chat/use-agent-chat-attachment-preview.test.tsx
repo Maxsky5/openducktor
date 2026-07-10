@@ -201,4 +201,27 @@ describe("useAgentChatAttachmentPreview", () => {
 
     await harness.unmount();
   });
+
+  test("does not resolve local previews when the runtime marks history content unavailable", async () => {
+    const resolveLocalAttachmentPreviewUrl = mock(async () => "asset://localhost/unexpected");
+    configureAttachmentPreviewShellBridge(resolveLocalAttachmentPreviewUrl);
+
+    const harness = createHookHarness(useAgentChatAttachmentPreview, {
+      attachment: {
+        id: "attachment-history",
+        name: "Claude image attachment.png",
+        kind: "image" as const,
+        path: "runtime-history-attachment",
+        localPreviewAvailable: false,
+      },
+      externalError: null,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().previewable).toBe(false);
+    expect(resolveLocalAttachmentPreviewUrl).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
 });

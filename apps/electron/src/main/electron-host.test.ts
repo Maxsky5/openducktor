@@ -107,6 +107,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   agentRuntimes: {
     opencode: { enabled: true },
     codex: { enabled: false },
+    claude: { enabled: false },
   },
   workspaces: {},
   workspaceOrder: [],
@@ -138,7 +139,9 @@ const createGit = (): GitPort => ({
   shareGitCommonDirectory: () => Effect.succeed(true),
   referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
   configureBranchUpstream: () =>
-    Effect.succeed({ createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1" }),
+    Effect.succeed({
+      createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1",
+    }),
   deleteReference: () => Effect.succeed(undefined),
   listRemotes: () =>
     Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
@@ -190,7 +193,11 @@ const createGit = (): GitPort => ({
       output: "Merged",
     }),
   switchBranch: () =>
-    Effect.succeed({ name: "feature/electron", detached: false, revision: "def456" }),
+    Effect.succeed({
+      name: "feature/electron",
+      detached: false,
+      revision: "def456",
+    }),
   resetWorktreeSelection: () => Effect.succeed({ affectedPaths: ["src/main.ts"] }),
   commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
   fetchRemote: () => Effect.succeed({ outcome: "fetched", output: "Fetched origin" }),
@@ -304,18 +311,46 @@ const createTaskStore = (): TaskStorePort => ({
         qaReport: { has: false, verdict: "not_reviewed" },
       },
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
     }),
   getTaskMetadata: () =>
     Effect.succeed({
-      spec: { markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
-      plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
+      spec: {
+        markdown: "# Spec",
+        updatedAt: "2026-01-02T00:00:00Z",
+        revision: 1,
+      },
+      plan: {
+        markdown: "# Plan",
+        updatedAt: "2026-01-02T00:00:00Z",
+        revision: 1,
+      },
       agentSessions: [],
     }),
   createTask: () =>
@@ -336,10 +371,30 @@ const createTaskStore = (): TaskStorePort => ({
         qaReport: { has: false, verdict: "not_reviewed" },
       },
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
@@ -363,10 +418,30 @@ const createTaskStore = (): TaskStorePort => ({
           qaReport: { has: false, verdict: "not_reviewed" },
         },
         agentWorkflows: {
-          spec: { required: false, canSkip: true, available: false, completed: false },
-          planner: { required: false, canSkip: true, available: false, completed: false },
-          builder: { required: true, canSkip: false, available: false, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
         },
         updatedAt: "2026-01-02T00:00:00Z",
         createdAt: "2026-01-01T00:00:00Z",
@@ -390,10 +465,30 @@ const createTaskStore = (): TaskStorePort => ({
         qaReport: { has: false, verdict: "not_reviewed" },
       },
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
@@ -428,9 +523,24 @@ const createTaskStore = (): TaskStorePort => ({
         qaReport: { has: true, verdict: input.verdict },
       },
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
         qa: {
           required: true,
           canSkip: false,
@@ -465,10 +575,30 @@ const createTaskStore = (): TaskStorePort => ({
         qaReport: { has: false, verdict: "not_reviewed" },
       },
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
@@ -698,7 +828,9 @@ describe("createElectronHostCommandRouter", () => {
       path: expect.stringContaining("/tmp/openducktor-local-attachments/"),
     });
     await expect(
-      router.invoke("workspace_resolve_local_attachment_path", { path: "brief.pdf" }),
+      router.invoke("workspace_resolve_local_attachment_path", {
+        path: "brief.pdf",
+      }),
     ).resolves.toEqual({
       path: "/tmp/openducktor-local-attachments/00000000-0000-0000-0000-000000000000-brief.pdf",
     });
@@ -723,7 +855,10 @@ describe("createElectronHostCommandRouter", () => {
             taskId: null,
             role: "workspace",
             workingDirectory: input.workingDirectory,
-            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4096",
+            },
             startedAt: "2026-05-10T10:00:00.000Z",
             descriptor: opencodeDescriptor,
           };
@@ -757,9 +892,13 @@ describe("createElectronHostCommandRouter", () => {
     await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
       { kind: "opencode" },
       { kind: "codex" },
+      { kind: "claude" },
     ]);
     await expect(
-      router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
+      router.invoke("runtime_list", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
     ).resolves.toEqual([]);
     await expect(
       router.invoke("repo_runtime_health", {
@@ -772,7 +911,10 @@ describe("createElectronHostCommandRouter", () => {
       mcp: { status: "connected", toolIds: ["odt_read_task"] },
     });
     await expect(
-      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
+      router.invoke("runtime_ensure", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
     ).resolves.toMatchObject({
       kind: "opencode",
       repoPath: "/repo",
@@ -780,10 +922,16 @@ describe("createElectronHostCommandRouter", () => {
       workingDirectory: "/repo",
     });
     await expect(
-      router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
+      router.invoke("runtime_list", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
     ).resolves.toMatchObject([{ runtimeId: "runtime-1" }]);
     await expect(
-      router.invoke("runtime_require", { runtimeKind: "opencode", repoPath: "/repo" }),
+      router.invoke("runtime_require", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
     ).resolves.toMatchObject({ runtimeId: "runtime-1" });
     expect(runtimeStarts).toEqual([
       {
@@ -947,7 +1095,11 @@ describe("createElectronHostCommandRouter", () => {
         repoPath: "/repo",
         branch: "feature/electron",
       }),
-    ).resolves.toEqual({ name: "feature/electron", detached: false, revision: "def456" });
+    ).resolves.toEqual({
+      name: "feature/electron",
+      detached: false,
+      revision: "def456",
+    });
     await expect(
       router.invoke("git_reset_worktree_selection", {
         repoPath: "/repo",
@@ -1047,7 +1199,9 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("workspace_detect_github_repository", { repoPath: "/repo" }),
+      router.invoke("workspace_detect_github_repository", {
+        repoPath: "/repo",
+      }),
     ).resolves.toEqual({
       host: "github.com",
       owner: "openai",
@@ -1072,6 +1226,7 @@ describe("createElectronHostCommandRouter", () => {
       runtimes: [
         { kind: "opencode", ok: true },
         { kind: "codex", ok: true },
+        { kind: "claude", ok: true, enabled: false },
       ],
     });
     await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({
@@ -1150,16 +1305,32 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).resolves.toEqual({
-      spec: { markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
-      plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
+      spec: {
+        markdown: "# Spec",
+        updatedAt: "2026-01-02T00:00:00Z",
+        revision: 1,
+      },
+      plan: {
+        markdown: "# Plan",
+        updatedAt: "2026-01-02T00:00:00Z",
+        revision: 1,
+      },
       agentSessions: [],
     });
     await expect(
       router.invoke("spec_get", { repoPath: "/repo", taskId: "task-1" }),
-    ).resolves.toEqual({ markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 });
+    ).resolves.toEqual({
+      markdown: "# Spec",
+      updatedAt: "2026-01-02T00:00:00Z",
+      revision: 1,
+    });
     await expect(
       router.invoke("plan_get", { repoPath: "/repo", taskId: "task-1" }),
-    ).resolves.toEqual({ markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 });
+    ).resolves.toEqual({
+      markdown: "# Plan",
+      updatedAt: "2026-01-02T00:00:00Z",
+      revision: 1,
+    });
     await expect(
       router.invoke("qa_get_report", { repoPath: "/repo", taskId: "task-1" }),
     ).resolves.toEqual({ markdown: "" });
@@ -1220,8 +1391,16 @@ describe("createElectronHostCommandRouter", () => {
         ...sessionTaskStore,
         getTaskMetadata: () =>
           Effect.succeed({
-            spec: { markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
-            plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
+            spec: {
+              markdown: "# Spec",
+              updatedAt: "2026-01-02T00:00:00Z",
+              revision: 1,
+            },
+            plan: {
+              markdown: "# Plan",
+              updatedAt: "2026-01-02T00:00:00Z",
+              revision: 1,
+            },
             agentSessions: [
               {
                 externalSessionId: "external-session-1",
@@ -1315,10 +1494,16 @@ describe("createElectronHostCommandRouter", () => {
       taskStore: createTaskStore(),
     });
     await expect(
-      deleteRouter.invoke("task_delete", { repoPath: "/repo", taskId: "task-1" }),
+      deleteRouter.invoke("task_delete", {
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
     ).resolves.toEqual({ ok: true });
     await expect(
-      deleteRouter.invoke("task_reset", { repoPath: "/repo", taskId: "task-1" }),
+      deleteRouter.invoke("task_reset", {
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     const resetImplementationTaskStore = createTaskStore();
     const resetImplementationRouter = createElectronHostCommandRouter({
@@ -1529,7 +1714,11 @@ describe("createElectronHostCommandRouter", () => {
         ...createGit(),
         getWorktreeStatusSummaryData: () =>
           Effect.succeed({
-            currentBranch: { name: "main", detached: false, revision: "abc123" },
+            currentBranch: {
+              name: "main",
+              detached: false,
+              revision: "abc123",
+            },
             fileStatuses: [],
             fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
             targetAheadBehind: { ahead: 3, behind: 2 },
@@ -1682,10 +1871,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1735,10 +1944,30 @@ describe("createElectronHostCommandRouter", () => {
               qaReport: { has: false, verdict: "not_reviewed" },
             },
             agentWorkflows: {
-              spec: { required: false, canSkip: true, available: false, completed: false },
-              planner: { required: false, canSkip: true, available: false, completed: false },
-              builder: { required: true, canSkip: false, available: false, completed: false },
-              qa: { required: true, canSkip: false, available: false, completed: false },
+              spec: {
+                required: false,
+                canSkip: true,
+                available: false,
+                completed: false,
+              },
+              planner: {
+                required: false,
+                canSkip: true,
+                available: false,
+                completed: false,
+              },
+              builder: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              qa: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
             },
             updatedAt: "2026-01-02T00:00:00Z",
             createdAt: "2026-01-01T00:00:00Z",
@@ -1762,10 +1991,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1820,7 +2069,11 @@ describe("createElectronHostCommandRouter", () => {
         ...createGit(),
         getWorktreeStatusSummaryData: () =>
           Effect.succeed({
-            currentBranch: { name: "odt/task-1", detached: false, revision: "abc123" },
+            currentBranch: {
+              name: "odt/task-1",
+              detached: false,
+              revision: "abc123",
+            },
             fileStatuses: [],
             fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
             targetAheadBehind: { ahead: 1, behind: 0 },
@@ -1855,10 +2108,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1924,10 +2197,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1980,10 +2273,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -2046,10 +2359,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -2102,10 +2435,30 @@ describe("createElectronHostCommandRouter", () => {
                 qaReport: { has: false, verdict: "not_reviewed" },
               },
               agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
+                spec: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                planner: {
+                  required: false,
+                  canSkip: true,
+                  available: false,
+                  completed: false,
+                },
+                builder: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
+                qa: {
+                  required: true,
+                  canSkip: false,
+                  available: false,
+                  completed: false,
+                },
               },
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
@@ -2162,7 +2515,10 @@ describe("createElectronHostCommandRouter", () => {
           taskId: null,
           role: "workspace",
           workingDirectory: input.workingDirectory,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4096",
+          },
           startedAt: "2026-05-10T10:00:00.000Z",
           descriptor: input.descriptor,
         }),

@@ -6,7 +6,6 @@ import {
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
-import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type {
   RuntimeRegistryError,
   RuntimeRegistryPort,
@@ -18,11 +17,16 @@ import {
   createRuntimeRegistryStore,
   type WorkspaceRuntimeLookupInput,
 } from "./runtime-registry-store";
-import { probeRuntimeSessionStatus, stopRuntimeSession } from "./runtime-session-operations";
+import {
+  createRuntimeSessionOperations,
+  probeRuntimeSessionStatus,
+  type RuntimeSessionOperationsByKind,
+  stopRuntimeSession,
+} from "./runtime-session-operations";
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
-  codexAppServer?: Pick<CodexAppServerPort, "request">;
+  sessionOperations?: RuntimeSessionOperationsByKind;
 };
 
 type RuntimeEnsureFlight = {
@@ -33,7 +37,7 @@ type RuntimeEnsureFlight = {
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
-  codexAppServer,
+  sessionOperations = createRuntimeSessionOperations(),
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const store = createRuntimeRegistryStore(runtimes);
   const handles = new Map<string, RuntimeWorkspaceHandle>();
@@ -51,7 +55,10 @@ export const createRuntimeRegistry = ({
             resource: "runtime",
             operation,
             message: `No live ${input.runtimeKind} workspace runtime found for repo '${input.repoPath}'.`,
-            details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+            details: {
+              runtimeKind: input.runtimeKind,
+              repoPath: input.repoPath,
+            },
           }),
         );
       }),
@@ -153,7 +160,10 @@ export const createRuntimeRegistry = ({
               resource: "runtimeWorkspaceStarter",
               operation: "runtimeRegistry.ensureWorkspaceRuntime",
               message: `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
-              details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+              details: {
+                runtimeKind: input.runtimeKind,
+                repoPath: input.repoPath,
+              },
             }),
           );
         }
@@ -183,7 +193,10 @@ export const createRuntimeRegistry = ({
                   new HostValidationError({
                     message: cause instanceof Error ? cause.message : String(cause),
                     cause,
-                    details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+                    details: {
+                      runtimeKind: input.runtimeKind,
+                      repoPath: input.repoPath,
+                    },
                   }),
               });
               store.upsert(parsed);
@@ -242,13 +255,17 @@ export const createRuntimeRegistry = ({
     stopSession(input) {
       return Effect.gen(function* () {
         const runtime = yield* requireWorkspaceRuntime(input, "runtimeRegistry.stopSession");
-        return yield* stopRuntimeSession({ input, runtime, codexAppServer });
+        return yield* stopRuntimeSession({ input, runtime, sessionOperations });
       });
     },
     probeSessionStatus(input) {
       return Effect.gen(function* () {
         const runtime = yield* findRegisteredWorkspaceRuntime(input);
-        return yield* probeRuntimeSessionStatus({ input, runtime, codexAppServer });
+        return yield* probeRuntimeSessionStatus({
+          input,
+          runtime,
+          sessionOperations,
+        });
       });
     },
     probeMcpStatus(input) {

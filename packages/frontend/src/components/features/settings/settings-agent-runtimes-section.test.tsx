@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentRuntimes,
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -18,7 +19,11 @@ const createSection = (
 ) =>
   createElement(AgentRuntimesSection, {
     agentRuntimes,
-    runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+    runtimeDefinitions: [
+      CLAUDE_RUNTIME_DESCRIPTOR,
+      CODEX_RUNTIME_DESCRIPTOR,
+      OPENCODE_RUNTIME_DESCRIPTOR,
+    ],
     disabled: false,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged: false,
@@ -45,11 +50,13 @@ describe("AgentRuntimesSection", () => {
 
     try {
       const tabs = screen.getAllByRole("tab");
-      expect(tabs).toHaveLength(2);
+      expect(tabs).toHaveLength(3);
       expect(tabs[0]?.textContent).toContain("OpenCode");
       expect(tabs[0]?.textContent).toContain("Enabled");
-      expect(tabs[1]?.textContent).toContain("Codex");
+      expect(tabs[1]?.textContent).toContain("Claude");
       expect(tabs[1]?.textContent).toContain("Disabled");
+      expect(tabs[2]?.textContent).toContain("Codex");
+      expect(tabs[2]?.textContent).toContain("Disabled");
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(renderer.container.innerHTML).toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
@@ -57,6 +64,42 @@ describe("AgentRuntimesSection", () => {
       expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
       expect(renderer.container.innerHTML).not.toContain("Role override");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows Claude installation, authentication, and current billing guidance", () => {
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+        runtimeCheck: {
+          gitOk: true,
+          gitVersion: "git version 2.50.0",
+          ghOk: true,
+          ghVersion: null,
+          ghAuthOk: true,
+          ghAuthLogin: null,
+          ghAuthError: null,
+          runtimes: [{ kind: "claude", enabled: false, ok: true, version: "2.1.0", error: null }],
+          errors: [],
+        },
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect(renderer.container.textContent).toContain("Ready (2.1.0)");
+      expect(renderer.container.textContent).toContain("Verified when a Claude session starts");
+      expect(renderer.container.textContent).toContain("ANTHROPIC_API_KEY");
+      expect(
+        screen.getByRole("link", { name: "Current Agent SDK plan policy" }).getAttribute("href"),
+      ).toContain("15036540");
     } finally {
       renderer.unmount();
     }

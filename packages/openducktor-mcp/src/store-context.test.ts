@@ -11,6 +11,7 @@ const STORE_CONTEXT_ENV_KEYS = [
   "ODT_WORKSPACE_ID",
   "ODT_HOST_URL",
   "ODT_HOST_TOKEN",
+  "ODT_HOST_TOKEN_FILE",
   "ODT_FORBID_WORKSPACE_ID_INPUT",
   "OPENDUCKTOR_CHANNEL",
   "OPENDUCKTOR_CONFIG_DIR",
@@ -151,6 +152,41 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       hostUrl: "http://127.0.0.1:14327",
     });
+  });
+
+  test("reads the host bridge token from a token file", async () => {
+    const dir = join(tmpdir(), `openducktor-mcp-token-${Date.now()}-${Math.random()}`);
+    await mkdir(dir, { recursive: true });
+    const tokenFile = join(dir, "host-token");
+    await writeFile(tokenFile, " file-token ", "utf8");
+    tempDirs.push(dir);
+    const observedHostTokens: Array<string | undefined> = [];
+
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        observedHostTokens.push(
+          (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
+        );
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.ODT_HOST_TOKEN_FILE = tokenFile;
+
+    await expect(resolveStoreContext({})).resolves.toEqual({
+      hostUrl: "http://127.0.0.1:14327",
+      hostToken: "file-token",
+    });
+    expect(observedHostTokens).toEqual(["file-token"]);
   });
 
   test("reads workspaceId-forbidden mode from the environment", async () => {

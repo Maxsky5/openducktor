@@ -898,6 +898,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -938,6 +939,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -977,6 +979,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -1070,6 +1073,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -1124,6 +1128,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 

@@ -126,7 +126,8 @@ const makeNodeHostDefaultPorts = (
         systemCommands,
       });
     const runtimeHealth =
-      input.runtimeHealth ?? createRuntimeHealthProbe(systemCommands, toolDiscovery);
+      input.runtimeHealth ??
+      createRuntimeHealthProbe(systemCommands, toolDiscovery, input.runtimeDistribution);
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
@@ -143,13 +144,13 @@ const makeNodeHostDefaultPorts = (
         createGitCliAdapter({
           processEnv,
           resolveCommand: () =>
-            toolDiscovery
-              .resolveToolPath("git")
-              .pipe(
-                Effect.mapError((cause) =>
-                  toHostOperationError(cause, "git.resolveCommand", { toolId: "git" }),
-                ),
+            toolDiscovery.resolveToolPath("git").pipe(
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "git.resolveCommand", {
+                  toolId: "git",
+                }),
               ),
+            ),
         }),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),

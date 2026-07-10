@@ -108,7 +108,6 @@ const upsertLiveAssistantMessage = ({
           ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
-
   return {
     ...current,
     messages: upsertSessionMessage(current, {

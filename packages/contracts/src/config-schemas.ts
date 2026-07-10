@@ -165,16 +165,19 @@ export type AgentRuntimeConfig = AgentRuntimeEnabledConfig | CodexRuntimeConfig;
 export type AgentRuntimes = Record<string, AgentRuntimeConfig> & {
   opencode: AgentRuntimeEnabledConfig;
   codex: CodexRuntimeConfig;
+  claude: AgentRuntimeEnabledConfig;
 };
 
 type DefaultAgentRuntimes = {
   opencode: AgentRuntimeEnabledConfig;
   codex: CodexRuntimeConfig;
+  claude: AgentRuntimeEnabledConfig;
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
   opencode: { enabled: true },
   codex: { enabled: false, defaults: createDefaultCodexRuntimePolicy(), roleOverrides: {} },
+  claude: { enabled: false },
 });
 
 export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes();
@@ -183,6 +186,7 @@ export const agentRuntimesSchema = z
   .object({
     opencode: agentRuntimeEnabledConfigSchema.optional(),
     codex: codexRuntimeConfigSchema.optional(),
+    claude: agentRuntimeEnabledConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
   .transform(
@@ -194,6 +198,7 @@ export const agentRuntimesSchema = z
         defaults: createDefaultCodexRuntimePolicy(),
         roleOverrides: {},
       },
+      claude: value.claude ?? { enabled: false },
     }),
   )
   .default(() => createDefaultAgentRuntimes());
@@ -366,7 +371,10 @@ export const repoConfigSchema = z.object({
   defaultRuntimeKind: runtimeKindSchema,
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
-  defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),
+  defaultTargetBranch: gitTargetBranchSchema.default({
+    remote: "origin",
+    branch: "main",
+  }),
   git: repoGitConfigSchema.default({ providers: {} }),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   devServers: z

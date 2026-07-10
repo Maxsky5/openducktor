@@ -4,6 +4,7 @@ import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-ut
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
+const HOST_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
 
 export type OdtStoreOptions = {
   workspaceId?: string;
@@ -31,7 +32,10 @@ const validateExplicitHostUrl = async (hostUrl: string, hostToken?: string): Pro
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken }).ready();
+  await new OdtHostBridgeClient({
+    baseUrl: hostUrl,
+    appToken: hostToken,
+  }).ready();
   return hostUrl;
 };
 
@@ -48,6 +52,19 @@ const readBooleanEnv = (name: string): boolean | undefined => {
     return false;
   }
   throw new Error(`${name} must be true, false, 1, or 0.`);
+};
+
+const readHostTokenFromFile = async (): Promise<string | undefined> => {
+  const tokenFile = normalizeOptionalInput(process.env[HOST_TOKEN_FILE_ENV]);
+  if (!tokenFile) {
+    return undefined;
+  }
+  try {
+    return normalizeOptionalInput(await readFile(tokenFile, "utf8"));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed reading ${HOST_TOKEN_FILE_ENV} for OpenDucktor MCP: ${reason}`);
+  }
 };
 
 const validateConfiguredWorkspace = async (
@@ -170,7 +187,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
   let resolvedHostToken =
     normalizeOptionalInput(context.hostToken) ??
-    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]);
+    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]) ??
+    (await readHostTokenFromFile());
   let hostUrl: string;
   if (explicitHostUrl) {
     hostUrl = await validateExplicitHostUrl(explicitHostUrl, resolvedHostToken);

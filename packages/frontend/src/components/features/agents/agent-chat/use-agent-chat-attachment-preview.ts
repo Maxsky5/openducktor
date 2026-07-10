@@ -10,6 +10,7 @@ export type AgentChatAttachmentPreviewTarget = {
   mime?: string;
   path?: string;
   file?: File;
+  localPreviewAvailable?: boolean;
 };
 
 export type AgentChatAttachmentPreviewState = {
@@ -105,7 +106,8 @@ export const useAgentChatAttachmentPreview = ({
   });
   const { dialogOpen, resolvedPreviewSrc, objectPreviewUrl, previewError, isResolvingPreview } =
     state;
-  const previewable = isPreviewableAttachmentKind(attachment.kind);
+  const previewable =
+    isPreviewableAttachmentKind(attachment.kind) && attachment.localPreviewAvailable !== false;
   const latestPreviewSrcRef = useRef<string | null>(null);
   const setDialogOpen = useCallback((open: boolean): void => {
     dispatch({ type: "dialogChanged", open });

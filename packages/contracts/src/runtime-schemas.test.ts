@@ -7,6 +7,7 @@ import {
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   formatRuntimeDescriptorSchemaIssue,
   gitBranchSchema,
@@ -178,6 +179,39 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("Claude descriptor parses with SDK-native prompt and subagent capabilities", () => {
+    const parsed = runtimeDescriptorSchema.parse(CLAUDE_RUNTIME_DESCRIPTOR);
+
+    expect(parsed).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
+    expect(parsed.capabilities.sessionLifecycle.supportsQueuedUserMessages).toBe(true);
+    expect(parsed.capabilities.promptInput).toMatchObject({
+      supportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: true,
+      supportsSubagentReferences: false,
+    });
+    expect(parsed.capabilities.promptInput.supportedParts).toEqual(
+      expect.arrayContaining([
+        "text",
+        "slash_command",
+        "skill_mention",
+        "file_reference",
+        "folder_reference",
+        "attachment",
+      ]),
+    );
+    expect(parsed.capabilities.promptInput.supportedParts).not.toContain("subagent_reference");
+    expect(parsed.workflowToolAliasesByCanonical.odt_read_task).toContain(
+      "mcp__openducktor__odt_read_task",
+    );
+    expect(parsed.capabilities.optionalSurfaces).toMatchObject({
+      supportsProfiles: false,
+      supportsVariants: true,
+      supportsSubagents: true,
+      supportedSubagentExecutionModes: ["foreground", "background"],
+    });
+  });
+
   test("runtime ref identifies a concrete running runtime", () => {
     const parsed = runtimeInstanceRefSchema.parse({
       kind: "opencode",
@@ -226,10 +260,30 @@ describe("runtime schemas", () => {
     expect(parsed.documentSummary.qaReport.has).toBe(false);
     expect(parsed.documentSummary.qaReport.verdict).toBe("not_reviewed");
     expect(parsed.agentWorkflows).toEqual({
-      spec: { required: false, canSkip: true, available: false, completed: false },
-      planner: { required: false, canSkip: true, available: false, completed: false },
-      builder: { required: true, canSkip: false, available: false, completed: false },
-      qa: { required: false, canSkip: true, available: false, completed: false },
+      spec: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
+      planner: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
+      builder: {
+        required: true,
+        canSkip: false,
+        available: false,
+        completed: false,
+      },
+      qa: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
     });
   });
 
@@ -267,10 +321,30 @@ describe("runtime schemas", () => {
         },
       },
       agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: true,
+        },
+        planner: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-02-20T13:00:00.000Z",
       createdAt: "2026-02-20T12:00:00.000Z",
@@ -1138,6 +1212,25 @@ describe("runtime schemas", () => {
       identity: "runtime-stdio",
       workingDirectory: "/repo",
     });
+  });
+
+  test("runtime route schemas represent host-owned services without a fake transport", () => {
+    expect(
+      runtimeInstanceSummarySchema.parse({
+        kind: "claude",
+        runtimeId: "runtime-claude",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: {
+          type: "host_service",
+          identity: " runtime-claude ",
+        },
+        startedAt: "2026-01-01T00:00:00.000Z",
+        descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+      }).runtimeRoute,
+    ).toEqual({ type: "host_service", identity: "runtime-claude" });
   });
 
   test("runtime route schema rejects malformed stdio payloads", () => {

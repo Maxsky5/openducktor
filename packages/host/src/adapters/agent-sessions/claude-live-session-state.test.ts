@@ -1,0 +1,182 @@
+import { describe, expect, test } from "bun:test";
+import {
+  type AgentSessionControlSummary,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+} from "@openducktor/contracts";
+import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
+import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import { createClaudeLiveSessionState } from "./claude-live-session-state";
+
+const runtime = {
+  kind: "claude" as const,
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace" as const,
+  workingDirectory: "/repo",
+  runtimeRoute: { type: "host_service" as const, identity: "runtime-1" },
+  startedAt: "2026-07-17T10:00:00.000Z",
+  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+};
+
+const summary = {
+  externalSessionId: "session-1",
+  runtimeKind: "claude",
+  workingDirectory: "/repo/worktree",
+  title: "Claude build",
+  role: "build",
+  startedAt: "2026-07-17T10:01:00.000Z",
+  status: "idle",
+} as const satisfies AgentSessionControlSummary;
+
+const session: ClaudeSessionContext = {
+  acceptedUserMessages: [],
+  activeSdkUserTurnCount: 0,
+  abortController: new AbortController(),
+  activity: "idle",
+  externalSessionId: "session-1",
+  input: {
+    repoPath: "/repo",
+    runtimeKind: "claude",
+    workingDirectory: "/repo/worktree",
+    runtimePolicy: { kind: "claude" },
+    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    systemPrompt: "Build",
+  },
+  model: undefined,
+  pendingApprovals: new Map(),
+  pendingQuestions: new Map(),
+  queuedSdkMessages: [],
+  pendingUserTurnCount: 0,
+  queue: new AsyncInputQueue(),
+  runtimeId: "runtime-1",
+  startedAt: summary.startedAt,
+  summary,
+  streamAssistantMessageOrdinal: 0,
+  streamAssistantMessageIdsByBlockIndex: new Map(),
+  subagentMessageIdsByTaskId: new Map(),
+  subagentTaskIdsByToolUseId: new Map(),
+  toolInputsByCallId: new Map(),
+  toolMessageIdsByCallId: new Map(),
+  toolNamesByCallId: new Map(),
+  toolStartedAtMsByCallId: new Map(),
+};
+
+const ref = {
+  repoPath: "/repo",
+  runtimeKind: "claude" as const,
+  workingDirectory: "/repo/worktree",
+  externalSessionId: "session-1",
+};
+
+describe("Claude host live-session state", () => {
+  test("holds a new session running until its first user message is accepted", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary, { forceRunning: true });
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:01:01.000Z",
+      }),
+    ).toEqual([]);
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "running" },
+    });
+
+    state.applyEvent(session, {
+      type: "user_message",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:02.000Z",
+      messageId: "user-1",
+      message: "Start",
+      parts: [{ kind: "text", text: "Start" }],
+      state: "read",
+    });
+    state.applyEvent(session, {
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:03.000Z",
+    });
+
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+  });
+
+  test("retains a subagent permission only on the child snapshot", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+
+    state.applyEvent(session, {
+      type: "approval_required",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:00.000Z",
+      requestId: "opaque-1",
+      requestType: "command_execution",
+      title: "Approve Bash",
+      parentExternalSessionId: "session-1",
+      childExternalSessionId,
+      subagentCorrelationKey: "child-1",
+    });
+
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { pendingApprovals: [] },
+    });
+    expect(
+      state.readRetainedSnapshot({ ...ref, externalSessionId: childExternalSessionId }),
+    ).toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_permission",
+        parentExternalSessionId: "session-1",
+        pendingApprovals: [{ requestId: "opaque-1" }],
+      },
+    });
+  });
+
+  test("does not overwrite newer streamed context with an explicit load", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    state.applyEvent(session, {
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:00.000Z",
+      totalTokens: 99,
+      contextWindow: 200,
+    });
+
+    expect(state.applyLoadedContext(ref, { totalTokens: 12 })).toEqual({
+      value: { totalTokens: 99, contextWindow: 200 },
+      changes: [],
+    });
+  });
+
+  test("publishes assistant duration through the normalized transcript", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+
+    expect(
+      state.applyEvent(session, {
+        type: "assistant_message",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:04:00.000Z",
+        messageId: "assistant-1",
+        message: "Done",
+        durationMs: 4_200,
+      }),
+    ).toContainEqual({
+      type: "transcript_event",
+      event: expect.objectContaining({
+        type: "assistant_message",
+        messageId: "assistant-1",
+        durationMs: 4_200,
+      }),
+    });
+  });
+});

@@ -345,7 +345,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
     role,
     reusablePrompts: [],
     repoSettings: createRepoSettings(null),
-    updateAgentSessionModel: () => {},
+    updateAgentSessionModel: async () => {},
     loadCatalog: async () => CATALOG,
     ...hookOverrides,
   };
@@ -533,7 +533,9 @@ describe("useAgentStudioChatComposer", () => {
             profileId: "build-agent",
           },
         }),
-        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
+        sessionRuntimeData: createSessionRuntimeData({
+          isLoadingModelCatalog: true,
+        }),
         loadCatalog,
       }),
     );
@@ -566,7 +568,11 @@ describe("useAgentStudioChatComposer", () => {
       providerId: "anthropic",
       modelId: "claude-sonnet",
     };
-    const repoDefaultSelection = { ...repairedSelection, variant: "", profileId: "" };
+    const repoDefaultSelection = {
+      ...repairedSelection,
+      variant: "",
+      profileId: "",
+    };
     const staleSession = createLoadedSession({
       externalSessionId: "stale-session",
       selectedModel: staleSelection,
@@ -917,7 +923,9 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         repoSettings: createRepoSettings(null, "opencode"),
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CODEX_CATALOG }),
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: CODEX_CATALOG,
+        }),
         loadFileSearch,
       }),
       {
@@ -1013,6 +1021,7 @@ describe("useAgentStudioChatComposer", () => {
       expect(loadSlashCommands).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo/session-worktree",
       });
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
@@ -1022,7 +1031,14 @@ describe("useAgentStudioChatComposer", () => {
 
   test("merges runtime slash commands with reusable prompt commands", async () => {
     const loadSlashCommands = mock(async () => ({
-      commands: [{ id: "native-review", trigger: "review", title: "Runtime review", hints: [] }],
+      commands: [
+        {
+          id: "native-review",
+          trigger: "review",
+          title: "Runtime review",
+          hints: [],
+        },
+      ],
     }));
     const harness = createHookHarness(
       createBaseProps({
@@ -1056,8 +1072,18 @@ describe("useAgentStudioChatComposer", () => {
   test("reserves compact while giving reusable prompts precedence over ordinary triggers", async () => {
     const loadSlashCommands = mock(async () => ({
       commands: [
-        { id: "native-review", trigger: "review", title: "Runtime review", hints: [] },
-        { id: "native-compact", trigger: "compact", title: "Runtime compact", hints: [] },
+        {
+          id: "native-review",
+          trigger: "review",
+          title: "Runtime review",
+          hints: [],
+        },
+        {
+          id: "native-compact",
+          trigger: "compact",
+          title: "Runtime compact",
+          hints: [],
+        },
       ],
     }));
     const harness = createHookHarness(
@@ -1312,7 +1338,9 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: EMPTY_CATALOG }),
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: EMPTY_CATALOG,
+        }),
         updateAgentSessionModel,
       }),
     );
@@ -1382,7 +1410,9 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
+        sessionRuntimeData: createSessionRuntimeData({
+          isLoadingModelCatalog: true,
+        }),
         loadCatalog,
       }),
     );
@@ -1410,7 +1440,9 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
+        sessionRuntimeData: createSessionRuntimeData({
+          isLoadingModelCatalog: true,
+        }),
         loadCatalog: async () => CATALOG,
       }),
     );
@@ -1877,7 +1909,9 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: catalogWithContextFallback }),
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: catalogWithContextFallback,
+        }),
       }),
     );
 

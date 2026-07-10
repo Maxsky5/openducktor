@@ -559,6 +559,15 @@ describe("useRepoNavigationPersistence", () => {
         scheduledCallbacks.delete(timerId);
       }
     }) as unknown as typeof globalThis.clearTimeout;
+    const takeLatestScheduledCallback = (message: string): (() => void) => {
+      const latestEntry = [...scheduledCallbacks.entries()].at(-1);
+      if (!latestEntry) {
+        throw new Error(message);
+      }
+      const [timerId, callback] = latestEntry;
+      scheduledCallbacks.delete(timerId);
+      return callback;
+    };
 
     try {
       const harness = createHookHarness({
@@ -566,12 +575,10 @@ describe("useRepoNavigationPersistence", () => {
       });
 
       await harness.mount();
-      const initialFlush = scheduledCallbacks.get(1);
-      if (!initialFlush) {
-        throw new Error("Expected initial persistence callback to be scheduled");
-      }
+      const initialFlush = takeLatestScheduledCallback(
+        "Expected initial persistence callback to be scheduled",
+      );
       initialFlush();
-      scheduledCallbacks.delete(1);
 
       await harness.run((latest) => {
         latest.setNavigation({
@@ -589,15 +596,13 @@ describe("useRepoNavigationPersistence", () => {
         }),
       });
 
-      const pendingFlush = scheduledCallbacks.get(2);
-      if (!pendingFlush) {
-        throw new Error("Expected pending persistence callback to be scheduled");
-      }
+      const pendingFlush = takeLatestScheduledCallback(
+        "Expected pending persistence callback to be scheduled",
+      );
 
       await harness.run(() => {
         pendingFlush();
       });
-      scheduledCallbacks.delete(2);
 
       await harness.waitFor(
         (state) =>
@@ -618,16 +623,12 @@ describe("useRepoNavigationPersistence", () => {
         latest.retryPersistenceRestore();
       });
 
-      const retryFlushEntry = [...scheduledCallbacks.entries()].at(-1);
-      if (!retryFlushEntry) {
-        throw new Error("Expected retry persistence callback to be scheduled");
-      }
-
-      const [retryFlushId, retryFlush] = retryFlushEntry;
+      const retryFlush = takeLatestScheduledCallback(
+        "Expected retry persistence callback to be scheduled",
+      );
       await harness.run(() => {
         retryFlush();
       });
-      scheduledCallbacks.delete(retryFlushId);
 
       await harness.waitFor((state) => state.persistenceError === null);
 

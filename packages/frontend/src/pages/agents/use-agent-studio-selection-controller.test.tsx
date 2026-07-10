@@ -53,7 +53,9 @@ enableReactActEnvironment();
 type UseAgentStudioSelectionControllerHook =
   typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
 
-const sessionReadModelLoadStateRef: { current: AgentSessionReadModelLoadState } = {
+const sessionReadModelLoadStateRef: {
+  current: AgentSessionReadModelLoadState;
+} = {
   current: unavailableAgentSessionReadModelLoadState,
 };
 const loadSelectedSessionBaselineHistoryRef: {
@@ -184,7 +186,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     }),
     sendAgentMessage: async () => undefined,
     stopAgentSession: async () => undefined,
-    updateAgentSessionModel: () => undefined,
+    updateAgentSessionModel: async () => undefined,
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,
   });
@@ -1502,10 +1504,30 @@ describe("useAgentStudioSelectionController", () => {
       status: "open",
       issueType: "task",
       agentWorkflows: {
-        spec: { required: false, canSkip: true, available: true, completed: false },
-        planner: { required: false, canSkip: true, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: false, canSkip: true, available: false, completed: false },
+        spec: {
+          required: false,
+          canSkip: true,
+          available: true,
+          completed: false,
+        },
+        planner: {
+          required: false,
+          canSkip: true,
+          available: true,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: false,
+        },
+        qa: {
+          required: false,
+          canSkip: true,
+          available: false,
+          completed: false,
+        },
       },
     });
 

@@ -77,7 +77,9 @@ const createSettingsSnapshot = ({
 };
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useChatSettingsHarness, initialProps);
+  createSharedHookHarness(useChatSettingsHarness, initialProps, {
+    seedSettingsSnapshot: false,
+  });
 
 describe("useAgentStudioChatSettings", () => {
   test("loads chat settings when a repository is active", async () => {

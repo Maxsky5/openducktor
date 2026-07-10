@@ -20,10 +20,10 @@ export function deriveAgentStudioSessionActionState({
   runtimeDefinitions,
 }: AgentStudioSessionActionStateArgs): AgentStudioSessionActionState {
   const selectedRuntimeKind = selectedSession.identity?.runtimeKind ?? null;
+  const currentRuntimeDescriptor =
+    runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind) ?? null;
   const selectedRuntimeDescriptor =
-    selectedSession.runtimeData.modelCatalog?.runtime ??
-    runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind) ??
-    null;
+    currentRuntimeDescriptor ?? selectedSession.runtimeData.modelCatalog?.runtime ?? null;
   const supportsQueuedUserMessages = selectedRuntimeDescriptor
     ? runtimeSupportsCapability(
         selectedRuntimeDescriptor,

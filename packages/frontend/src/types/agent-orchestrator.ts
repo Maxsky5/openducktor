@@ -170,6 +170,7 @@ export type AgentSessionContextUsage = {
 };
 
 export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
+export type AgentSessionRuntimeAvailability = "runtime" | "missing";
 
 export type AgentSessionState = {
   externalSessionId: string;
@@ -184,9 +185,11 @@ export type AgentSessionState = {
   historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
   contextUsage?: AgentSessionContextUsage | null;
+  contextUsageError?: string | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
   selectedModel: AgentModelSelection | null;
+  runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };

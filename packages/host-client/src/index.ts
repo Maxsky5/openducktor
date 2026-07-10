@@ -4,6 +4,7 @@ export { createAgentSessionLiveAttachment } from "./agent-session-live-attachmen
 
 import { HostAgentSessionLiveClient } from "./agent-session-live-client";
 import { HostAgentClient } from "./build-runtime-client";
+import { HostClaudeRuntimeClient } from "./claude-runtime-client";
 import { HostFilesystemClient } from "./filesystem-client";
 import { HostGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
@@ -149,6 +150,18 @@ const AGENT_SESSION_LIVE_METHODS = [
   "agentSessionLiveReplyQuestion",
 ] as const satisfies readonly MethodName<HostAgentSessionLiveClient>[];
 
+const CLAUDE_RUNTIME_METHODS = [
+  "claudeRuntimeFileStatus",
+  "claudeRuntimeListModels",
+  "claudeRuntimeListSkills",
+  "claudeRuntimeListSlashCommands",
+  "claudeRuntimeListSubagents",
+  "claudeRuntimeLoadSessionDiff",
+  "claudeRuntimeLoadSessionHistory",
+  "claudeRuntimeLoadSessionTodos",
+  "claudeRuntimeSearchFiles",
+] as const satisfies readonly MethodName<HostClaudeRuntimeClient>[];
+
 const GIT_METHODS = [
   "gitCanonicalizePath",
   "gitGetBranches",
@@ -179,6 +192,7 @@ type TaskMethodName = (typeof TASK_METHODS)[number];
 type TerminalMethodName = (typeof TERMINAL_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
 type AgentSessionLiveMethodName = (typeof AGENT_SESSION_LIVE_METHODS)[number];
+type ClaudeRuntimeMethodName = (typeof CLAUDE_RUNTIME_METHODS)[number];
 type GitMethodName = (typeof GIT_METHODS)[number];
 
 type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
@@ -189,6 +203,7 @@ type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
   Pick<HostTerminalClient, TerminalMethodName> &
   Pick<HostAgentClient, AgentMethodName> &
   Pick<HostAgentSessionLiveClient, AgentSessionLiveMethodName> &
+  Pick<HostClaudeRuntimeClient, ClaudeRuntimeMethodName> &
   Pick<HostGitClient, GitMethodName>;
 
 type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
@@ -234,6 +249,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const terminalClient = new HostTerminalClient(invokeFn);
   const agentClient = new HostAgentClient(invokeFn, metadataCache);
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
+  const claudeRuntimeClient = new HostClaudeRuntimeClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {} as HostClientApi;
 
@@ -245,6 +261,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   bindDelegates(hostClient, terminalClient, TERMINAL_METHODS);
   bindDelegates(hostClient, agentClient, AGENT_METHODS);
   bindDelegates(hostClient, agentSessionLiveClient, AGENT_SESSION_LIVE_METHODS);
+  bindDelegates(hostClient, claudeRuntimeClient, CLAUDE_RUNTIME_METHODS);
   bindDelegates(hostClient, gitClient, GIT_METHODS);
 
   return hostClient;

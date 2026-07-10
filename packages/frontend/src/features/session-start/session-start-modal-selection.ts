@@ -24,18 +24,19 @@ export const resolveInitialModalSelection = ({
   if (!runtimeKind) {
     return null;
   }
+  const runtimeCatalog = catalog?.runtime?.kind === runtimeKind ? catalog : null;
   const requestedSelection =
     selectedModel?.runtimeKind === runtimeKind
-      ? (coerceVisibleSelectionToCatalog(catalog, selectedModel) ?? selectedModel)
+      ? (coerceVisibleSelectionToCatalog(runtimeCatalog, selectedModel) ?? selectedModel)
       : null;
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
   const runtimeRoleDefault = roleDefault?.runtimeKind === runtimeKind ? roleDefault : null;
-  const catalogDefault = pickDefaultVisibleSelectionForCatalog(catalog);
+  const catalogDefault = pickDefaultVisibleSelectionForCatalog(runtimeCatalog);
 
   return (
     requestedSelection ??
-    coerceVisibleSelectionToCatalog(catalog, runtimeRoleDefault) ??
-    (catalogDefault ? { ...catalogDefault, runtimeKind } : null) ??
+    coerceVisibleSelectionToCatalog(runtimeCatalog, runtimeRoleDefault) ??
+    catalogDefault ??
     runtimeRoleDefault
   );
 };
@@ -54,7 +55,10 @@ export const resolveSelectionForRuntimeChange = ({
   runtimeKind: RuntimeKind;
 }): AgentModelSelection | null => {
   if (!activeRole) {
-    return currentSelection ? { ...currentSelection, runtimeKind } : currentSelection;
+    return currentSelection?.runtimeKind === runtimeKind ? currentSelection : null;
+  }
+  if (currentSelection?.runtimeKind === runtimeKind) {
+    return currentSelection;
   }
 
   return resolveInitialModalSelection({
@@ -62,7 +66,7 @@ export const resolveSelectionForRuntimeChange = ({
     repoSettings,
     role: activeRole,
     runtimeKind,
-    selectedModel: currentSelection ? { ...currentSelection, runtimeKind } : intentSelectedModel,
+    selectedModel: intentSelectedModel,
   });
 };
 

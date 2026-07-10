@@ -11,7 +11,7 @@ export const toSelectedSessionThreadSession = ({
   AgentStudioSelectedSessionState,
   "identity" | "activityState" | "loadedSession"
 >): AgentChatThreadSession | null => {
-  if (!identity || !loadedSession) {
+  if (!identity || !loadedSession || !matchesAgentSessionIdentity(loadedSession, identity)) {
     return null;
   }
 
@@ -19,9 +19,7 @@ export const toSelectedSessionThreadSession = ({
     ...identity,
     ...(loadedSession.title ? { title: loadedSession.title } : {}),
     activityState,
-    runtimeStatusMessage: matchesAgentSessionIdentity(loadedSession, identity)
-      ? loadedSession.runtimeStatusMessage
-      : null,
+    runtimeStatusMessage: loadedSession.runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),
   };
 };

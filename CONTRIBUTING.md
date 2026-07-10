@@ -12,12 +12,13 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 - OpenDucktor is macOS-first, with Windows and Linux Electron builds treated as experimental.
 - The workspace-scoped SQLite task store is the V1 source of truth for tasks.
-- OpenCode and Codex are the supported local agent runtimes.
-- OpenDucktor will support open-source agent runtimes only.
+- OpenCode, Codex, and Claude Code are the supported local agent runtimes.
+- Runtime integrations may use proprietary services when their executable, authentication, and
+  billing requirements are documented and the integration fits the shared runtime contract.
 
 ## Quick Start
 
-1. Install the core tooling: Bun `1.3.11`, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode` or `codex`).
+1. Install the core tooling: Bun `1.3.14`, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
 2. Install workspace dependencies from the repository root:
 
 ```sh
@@ -43,13 +44,15 @@ Core tooling:
 - Bun `1.3.11`
 - Xcode Command Line Tools
 - `git`
-- `opencode` or `codex`
+- `opencode`, `codex`, or `claude`
 
 Notes:
 
 - Task data is stored in an OpenDucktor-managed SQLite database. No external task-store CLI is required for normal development.
 - OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`.
 - You can override the OpenCode binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
+- Claude support uses an external Claude Code installation and its existing authentication. You can
+  override its binary path with `OPENDUCKTOR_CLAUDE_BINARY`.
 
 ## Main Development Commands
 

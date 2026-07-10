@@ -418,6 +418,42 @@ export const upsertUserSessionMessage = (
   return createDerivedState(previous, [...previous.items, message]);
 };
 
+const insertSessionMessageByTimestamp = (
+  previous: SessionMessagesState,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const incomingMs = timestampMs(message.timestamp);
+  if (incomingMs === null) {
+    return createDerivedState(previous, [...previous.items, message]);
+  }
+
+  const insertionIndex = previous.items.findIndex((existing) => {
+    const existingMs = timestampMs(existing.timestamp);
+    return existingMs !== null && existingMs > incomingMs;
+  });
+
+  if (insertionIndex < 0) {
+    return createDerivedState(previous, [...previous.items, message]);
+  }
+
+  const nextMessages = previous.items.slice();
+  nextMessages.splice(insertionIndex, 0, message);
+  return createDerivedState(previous, nextMessages);
+};
+
+export const upsertSessionMessageByTimestamp = (
+  owner: SessionMessageOwner,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const previous = getSessionState(owner);
+  const index = findMessageIndexById(owner, message.id);
+  if (index >= 0) {
+    return mergeAtIndex(previous, index, message);
+  }
+
+  return insertSessionMessageByTimestamp(previous, message);
+};
+
 export const findFirstChangedSessionMessageIndex = (
   previousMessages: SessionMessagesState | null,
   nextOwner: SessionMessageOwner,

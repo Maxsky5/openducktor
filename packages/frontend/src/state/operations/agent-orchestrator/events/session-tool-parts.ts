@@ -3,7 +3,7 @@ import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orch
 import { formatToolContent } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toToolMessageId } from "../support/chat-message-ids";
-import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import { findSessionMessageById, upsertSessionMessageByTimestamp } from "../support/messages";
 import {
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,
@@ -131,6 +131,21 @@ const composeToolMessageMeta = (
   };
 };
 
+const preserveExistingToolValue = <T>(
+  incoming: T | undefined,
+  existing: T | undefined,
+): T | undefined => (incoming !== undefined ? incoming : existing);
+
+const nextSessionStatusForToolPart = (
+  currentStatus: AgentSessionState["status"],
+  status: ToolPartStatus,
+): AgentSessionState["status"] => {
+  if (status === "pending" || status === "running") {
+    return "running";
+  }
+  return currentStatus;
+};
+
 const composeToolPartSessionUpdate = ({
   current,
   prepareCurrent,
@@ -169,6 +184,31 @@ const composeToolPartSessionUpdate = ({
   const existing = findSessionMessageById(prepared, messageId);
   const previousStatus = existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
   const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
+  const resolvedInput = preserveExistingToolValue(input, existingToolMeta?.input);
+  const resolvedOutput = preserveExistingToolValue(output, existingToolMeta?.output);
+  const resolvedError = preserveExistingToolValue(error, existingToolMeta?.error);
+  const resolvedPart: ToolPart = {
+    ...part,
+    ...(part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined
+      ? { fileDiffs: existingToolMeta.fileDiffs }
+      : {}),
+    ...(part.fileContent === undefined && existingToolMeta?.fileContent !== undefined
+      ? { fileContent: existingToolMeta.fileContent }
+      : {}),
+    ...(part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined
+      ? { fileChanges: existingToolMeta.fileChanges }
+      : {}),
+    ...(typeof part.startedAtMs === "number"
+      ? {}
+      : typeof existingToolMeta?.startedAtMs === "number"
+        ? { startedAtMs: existingToolMeta.startedAtMs }
+        : {}),
+    ...(typeof part.endedAtMs === "number"
+      ? {}
+      : typeof existingToolMeta?.endedAtMs === "number"
+        ? { endedAtMs: existingToolMeta.endedAtMs }
+        : {}),
+  };
   const refreshDecision = resolveToolRefreshDecision(
     part,
     status,
@@ -179,25 +219,36 @@ const composeToolPartSessionUpdate = ({
     existingToolMeta,
     observedEventTimestampMs,
     status,
-    input,
+    resolvedInput,
   );
 
   return {
     refreshDecision,
     nextState: {
       ...prepared,
-      status: "running",
-      messages: upsertSessionMessage(prepared, {
+      status: nextSessionStatusForToolPart(prepared.status, status),
+      messages: upsertSessionMessageByTimestamp(prepared, {
         id: messageId,
         role: "tool",
         content: formatToolContent({
-          ...part,
+          ...resolvedPart,
           status,
-          ...(typeof error === "string" && error.length > 0 ? { error } : {}),
-          ...(typeof output === "string" && output.length > 0 ? { output } : {}),
+          ...(typeof resolvedError === "string" && resolvedError.length > 0
+            ? { error: resolvedError }
+            : {}),
+          ...(typeof resolvedOutput === "string" && resolvedOutput.length > 0
+            ? { output: resolvedOutput }
+            : {}),
         }),
-        timestamp,
-        meta: composeToolMessageMeta(part, status, input, output, error, timingMeta),
+        timestamp: existing?.timestamp ?? timestamp,
+        meta: composeToolMessageMeta(
+          resolvedPart,
+          status,
+          resolvedInput,
+          resolvedOutput,
+          resolvedError,
+          timingMeta,
+        ),
       }),
     },
   };
