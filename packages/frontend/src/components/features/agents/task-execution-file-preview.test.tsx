@@ -190,8 +190,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
 
     await screen.findByText("const first = true;");
+    await waitFor(() => expect(codeViewPropsHistory.at(-1)?.style?.colorScheme).toBe("dark"));
     const codeViewProps = codeViewPropsHistory.at(-1);
-    expect(codeViewProps?.style?.colorScheme).toBe("dark");
     expect(codeViewProps?.style?.["--diffs-light-bg" as keyof CSSProperties]).toBe("#ffffff");
     expect(codeViewProps?.style?.["--diffs-dark-bg" as keyof CSSProperties]).toBe("#0a0a0a");
     expect(codeViewProps?.style?.["--diffs-bg" as keyof CSSProperties]).toBe(
