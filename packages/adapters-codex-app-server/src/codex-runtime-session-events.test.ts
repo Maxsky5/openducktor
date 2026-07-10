@@ -676,6 +676,53 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
   });
 
+  test("does not replay an answered child approval when the child session materializes", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const childSession = createSession("child-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const pendingInput = new CodexPendingInputState();
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const childApproval = {
+      id: 0,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "child-thread",
+        turnId: "child-turn",
+        itemId: "child-command",
+        command: "pwd",
+        cwd: "/repo",
+      },
+    };
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      takeBufferedEvents: async () => [bufferedServerRequestEvent(childApproval)],
+      sessions,
+      pendingInput,
+      subagents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({ runtimeId: "runtime-1", kind: "server_request", message: childApproval });
+    await flushRuntimeEvents();
+    expect(pendingInput.approval("0")).toMatchObject({ threadId: "child-thread" });
+
+    pendingInput.resolveApproval("0");
+    sessions.set(childSession.threadId, childSession);
+    await runtimeEvents.handleBufferedRuntimeEvents(childSession, new Set());
+
+    expect(pendingInput.approval("0")).toBeUndefined();
+  });
+
   test("uses server-request receipt time when binding a buffered active turn", async () => {
     const requestReceivedAt = "2000-01-01T00:00:00.000Z";
     const idleReceivedAt = "2000-01-01T00:00:01.000Z";

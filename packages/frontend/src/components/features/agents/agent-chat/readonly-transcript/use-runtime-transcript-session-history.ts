@@ -28,7 +28,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
-import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
+import {
+  createReadonlyTranscriptSession,
+  mergeReadonlyRuntimeHistory,
+} from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 import { useRuntimeTranscriptLiveOverlay } from "./use-runtime-transcript-live-overlay";
 
@@ -180,10 +183,10 @@ export function useRuntimeTranscriptSessionHistory({
       ...(runtimeSessionScope ? { sessionScope: runtimeSessionScope } : {}),
     };
   }, [matchingLiveSession, repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
-  const shouldLoadHistory =
-    emptyReason === null && matchingLiveSession === null && runtimeSessionRef !== null;
+  const shouldLoadHistory = emptyReason === null && runtimeSessionRef !== null;
   const shouldObserveRuntimeSession =
     shouldLoadHistory &&
+    matchingLiveSession === null &&
     repoPath !== null &&
     stableTarget !== null &&
     repoReadinessState === "ready";
@@ -209,7 +212,10 @@ export function useRuntimeTranscriptSessionHistory({
 
   const session = useMemo(() => {
     if (matchingLiveSession !== null) {
-      return toAgentChatThreadSession(matchingLiveSession);
+      const sessionWithHistory = historyQuery.data
+        ? mergeReadonlyRuntimeHistory(matchingLiveSession, historyQuery.data)
+        : matchingLiveSession;
+      return toAgentChatThreadSession(sessionWithHistory);
     }
     if (liveOverlay.hasVisibleRuntimeData && liveOverlay.session !== null) {
       return toAgentChatThreadSession(liveOverlay.session);

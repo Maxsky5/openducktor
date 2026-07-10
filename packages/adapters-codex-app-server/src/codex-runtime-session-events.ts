@@ -701,18 +701,27 @@ export class CodexRuntimeSessionEvents {
     requests: BufferedCodexServerRequest[],
     handledRequestKeysOverride?: Set<string>,
   ): Promise<boolean> {
-    const ownerThreadIds = new Set(
-      requests.map(({ request }) => extractThreadIdFromParams(request.params) ?? session.threadId),
-    );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
-    const handledRequestKeys =
-      handledRequestKeysOverride ??
-      activeTurn?.handledRequestKeys ??
-      this.handledStreamRequestKeysByThreadId.get(session.threadId) ??
-      new Set();
-    this.handledStreamRequestKeysByThreadId.set(session.threadId, handledRequestKeys);
-    const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
-    for (const ownerThreadId of ownerThreadIds) {
+    let hasPendingInput = false;
+    const requestsByOwnerThreadId = new Map<string, BufferedCodexServerRequest[]>();
+    for (const request of requests) {
+      const ownerThreadId = extractThreadIdFromParams(request.request.params) ?? session.threadId;
+      const ownerRequests = requestsByOwnerThreadId.get(ownerThreadId) ?? [];
+      ownerRequests.push(request);
+      requestsByOwnerThreadId.set(ownerThreadId, ownerRequests);
+    }
+    for (const [ownerThreadId, ownerRequests] of requestsByOwnerThreadId) {
+      const existingHandledRequestKeys = this.handledStreamRequestKeysByThreadId.get(ownerThreadId);
+      const handledRequestKeys =
+        existingHandledRequestKeys ??
+        (ownerThreadId === session.threadId
+          ? (handledRequestKeysOverride ?? activeTurn?.handledRequestKeys)
+          : undefined) ??
+        new Set<string>();
+      this.handledStreamRequestKeysByThreadId.set(ownerThreadId, handledRequestKeys);
+      hasPendingInput =
+        (await this.handleServerRequests(session, handledRequestKeys, ownerRequests)) ||
+        hasPendingInput;
       this.resolveBufferedServerRequests(ownerThreadId, session.runtimeId);
     }
     if (hasPendingInput && activeTurn && !activeTurn.isTurnSettled()) {

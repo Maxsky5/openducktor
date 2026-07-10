@@ -16,7 +16,6 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
@@ -303,7 +302,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("prefers an already-live runtime session over history loading", async () => {
+  test("merges history into an already-live runtime session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     readSessionHistoryRef.current = readSessionHistory;
     const liveSession = createAgentSessionFixture({
@@ -320,9 +319,19 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      await harness.waitFor((state) =>
+        state.session ? getSessionMessageCount(state.session) > 0 : false,
+      );
 
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession));
+      expect(readSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().session).toMatchObject({
+        externalSessionId: liveSession.externalSessionId,
+        runtimeKind: liveSession.runtimeKind,
+        workingDirectory: liveSession.workingDirectory,
+      });
+      const mergedSession = harness.getLatest().session;
+      expect(mergedSession ? getSessionMessageCount(mergedSession) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
     } finally {
       await harness.unmount();
