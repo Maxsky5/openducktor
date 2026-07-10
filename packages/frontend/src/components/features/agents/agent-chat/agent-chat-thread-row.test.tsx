@@ -35,13 +35,13 @@ describe("AgentChatThreadRow", () => {
         row: {
           kind: "fork_boundary",
           key: "fork-1",
-          label: "Forked into subagent thread",
+          label: "Session forked here",
           parentExternalSessionId: "parent-thread",
         },
       }),
     );
 
-    expect(html).toContain("Forked into subagent thread");
+    expect(html).toContain("Session forked here");
     expect(html.match(/aria-hidden/g)).toHaveLength(2);
   });
 

@@ -13,13 +13,13 @@ describe("agent chat transcript model", () => {
       messages: [
         buildMessage("user", "Inherited parent prompt", { id: "parent-user" }),
         buildMessage("assistant", "Inherited parent answer", { id: "parent-assistant" }),
-        buildMessage("system", "Forked into subagent thread", {
+        buildMessage("system", "Session forked here", {
           id: "fork-boundary",
           meta: {
             kind: "session_notice",
             tone: "info",
             reason: "session_forked",
-            title: "Forked into subagent thread",
+            title: "Session forked here",
             parentExternalSessionId: "parent-thread",
           },
         }),
@@ -42,7 +42,7 @@ describe("agent chat transcript model", () => {
     ]);
     expect(model.rows[3]).toMatchObject({
       kind: "fork_boundary",
-      label: "Forked into subagent thread",
+      label: "Session forked here",
       parentExternalSessionId: "parent-thread",
     });
     expect(

@@ -118,11 +118,11 @@ describe("CodexAppServerAdapter history loading", () => {
       messageId: "codex-fork-boundary:child-thread:child-turn",
       role: "system",
       timestamp: "1970-01-01T00:00:30.000Z",
-      text: "Forked into subagent thread",
+      text: "Session forked here",
       notice: {
         tone: "info",
         reason: "session_forked",
-        title: "Forked into subagent thread",
+        title: "Session forked here",
         parentExternalSessionId: "parent-thread",
       },
       parts: [],

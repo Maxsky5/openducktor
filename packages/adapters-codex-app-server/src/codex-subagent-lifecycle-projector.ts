@@ -1,12 +1,16 @@
 import type { AgentEvent } from "@openducktor/core";
 import { extractThreadIdFromParams } from "./codex-app-server-requests";
 import {
+  extractStringField,
+  isPlainObject,
   MAX_CODEX_BUFFERED_THREAD_COUNT,
-  MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
   trimOldestMapKeys,
 } from "./codex-app-server-shared";
 import type { CodexSessionLookup } from "./codex-local-session-state";
-import { codexSubagentLifecycleUpdateFromNotification } from "./codex-subagent-lifecycle";
+import {
+  type CodexSubagentLifecycleUpdate,
+  codexSubagentLifecycleUpdateFromNotification,
+} from "./codex-subagent-lifecycle";
 import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
@@ -16,11 +20,16 @@ type CodexSubagentLifecycleProjectorDeps = {
   emitParentSessionEvent: (externalSessionId: string, event: AgentEvent) => void;
 };
 
+const hasLifecycleStatus = (notification: CodexNotificationRecord): boolean => {
+  const params = isPlainObject(notification.params) ? notification.params : null;
+  const turn = params && isPlainObject(params.turn) ? params.turn : null;
+  return extractStringField(turn, ["status"]) !== null;
+};
+
 export class CodexSubagentLifecycleProjector {
-  private readonly projectedNotifications = new WeakSet<CodexNotificationRecord>();
-  private readonly bufferedNotificationsByRuntimeId = new Map<
+  private readonly pendingLifecycleByRuntimeId = new Map<
     string,
-    Map<string, CodexNotificationRecord[]>
+    Map<string, CodexSubagentLifecycleUpdate>
   >();
 
   constructor(private readonly deps: CodexSubagentLifecycleProjectorDeps) {}
@@ -40,20 +49,18 @@ export class CodexSubagentLifecycleProjector {
       return;
     }
     const runtimeId = route.runtimeId ?? parentSession.runtimeId;
-    const notifications =
-      this.bufferedNotificationsByRuntimeId.get(runtimeId)?.get(route.childExternalSessionId) ?? [];
-    for (const notification of notifications) {
-      if (!this.projectLinkedNotification(runtimeId, notification, route)) {
-        return;
-      }
+    const update = this.pendingLifecycleByRuntimeId
+      .get(runtimeId)
+      ?.get(route.childExternalSessionId);
+    if (!update) {
+      return;
     }
-    this.deleteBufferedNotifications(runtimeId, route.childExternalSessionId);
+    if (this.projectLifecycleUpdate(runtimeId, route.childExternalSessionId, update, route)) {
+      this.deletePendingLifecycle(runtimeId, route.childExternalSessionId);
+    }
   }
 
   projectNotification(runtimeId: string, notification: CodexNotificationRecord): void {
-    if (this.projectedNotifications.has(notification)) {
-      return;
-    }
     if (notification.method !== "turn/started" && notification.method !== "turn/completed") {
       return;
     }
@@ -62,42 +69,38 @@ export class CodexSubagentLifecycleProjector {
       throw new Error(`Codex ${notification.method} notification is missing threadId.`);
     }
     const route = this.deps.subagents.routeForChild(childThreadId, runtimeId);
-    if (!route) {
-      this.bufferNotification(runtimeId, childThreadId, notification);
+    if (!route && !hasLifecycleStatus(notification)) {
       return;
     }
-    if (!this.projectLinkedNotification(runtimeId, notification, route)) {
-      this.bufferNotification(runtimeId, childThreadId, notification);
+    const update = codexSubagentLifecycleUpdateFromNotification(notification);
+    if (!update) {
+      return;
+    }
+    if (!route) {
+      this.rememberPendingLifecycle(runtimeId, childThreadId, update);
+      return;
+    }
+    if (!this.projectLifecycleUpdate(runtimeId, childThreadId, update, route)) {
+      this.rememberPendingLifecycle(runtimeId, childThreadId, update);
     }
   }
 
   clearSession(threadId: string, runtimeId?: string): void {
     if (runtimeId) {
-      this.deleteBufferedNotifications(runtimeId, threadId);
+      this.deletePendingLifecycle(runtimeId, threadId);
       return;
     }
-    for (const bufferedRuntimeId of [...this.bufferedNotificationsByRuntimeId.keys()]) {
-      this.deleteBufferedNotifications(bufferedRuntimeId, threadId);
+    for (const pendingRuntimeId of [...this.pendingLifecycleByRuntimeId.keys()]) {
+      this.deletePendingLifecycle(pendingRuntimeId, threadId);
     }
   }
 
-  private projectLinkedNotification(
+  private projectLifecycleUpdate(
     runtimeId: string,
-    notification: CodexNotificationRecord,
+    childThreadId: string,
+    update: CodexSubagentLifecycleUpdate,
     route: CodexSubagentRoute,
   ): boolean {
-    if (this.projectedNotifications.has(notification)) {
-      return true;
-    }
-    const childThreadId = extractThreadIdFromParams(notification.params);
-    if (!childThreadId) {
-      throw new Error(`Codex ${notification.method} notification is missing threadId.`);
-    }
-    const update = codexSubagentLifecycleUpdateFromNotification(notification);
-    if (!update) {
-      this.projectedNotifications.add(notification);
-      return true;
-    }
     if (route.runtimeId && route.runtimeId !== runtimeId) {
       throw new Error(
         `Cannot project Codex subagent lifecycle for thread '${childThreadId}' from runtime '${runtimeId}' because its route belongs to runtime '${route.runtimeId}'.`,
@@ -122,7 +125,6 @@ export class CodexSubagentLifecycleProjector {
       ...(update.error ? { error: update.error } : {}),
       allowStatusRestart: update.allowStatusRestart,
     });
-    this.projectedNotifications.add(notification);
     if (part.status === previousStatus) {
       return true;
     }
@@ -140,31 +142,23 @@ export class CodexSubagentLifecycleProjector {
     return true;
   }
 
-  private bufferNotification(
+  private rememberPendingLifecycle(
     runtimeId: string,
     childThreadId: string,
-    notification: CodexNotificationRecord,
+    update: CodexSubagentLifecycleUpdate,
   ): void {
-    const notificationsByThreadId =
-      this.bufferedNotificationsByRuntimeId.get(runtimeId) ?? new Map();
-    const notifications = notificationsByThreadId.get(childThreadId) ?? [];
-    if (!notifications.includes(notification)) {
-      notifications.push(notification);
-    }
-    if (notifications.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-      notifications.splice(0, notifications.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-    }
-    notificationsByThreadId.set(childThreadId, notifications);
-    trimOldestMapKeys(notificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
-    this.bufferedNotificationsByRuntimeId.set(runtimeId, notificationsByThreadId);
-    trimOldestMapKeys(this.bufferedNotificationsByRuntimeId, MAX_CODEX_BUFFERED_THREAD_COUNT);
+    const lifecycleByThreadId = this.pendingLifecycleByRuntimeId.get(runtimeId) ?? new Map();
+    lifecycleByThreadId.set(childThreadId, update);
+    trimOldestMapKeys(lifecycleByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
+    this.pendingLifecycleByRuntimeId.set(runtimeId, lifecycleByThreadId);
+    trimOldestMapKeys(this.pendingLifecycleByRuntimeId, MAX_CODEX_BUFFERED_THREAD_COUNT);
   }
 
-  private deleteBufferedNotifications(runtimeId: string, childThreadId: string): void {
-    const notificationsByThreadId = this.bufferedNotificationsByRuntimeId.get(runtimeId);
-    notificationsByThreadId?.delete(childThreadId);
-    if (notificationsByThreadId?.size === 0) {
-      this.bufferedNotificationsByRuntimeId.delete(runtimeId);
+  private deletePendingLifecycle(runtimeId: string, childThreadId: string): void {
+    const lifecycleByThreadId = this.pendingLifecycleByRuntimeId.get(runtimeId);
+    lifecycleByThreadId?.delete(childThreadId);
+    if (lifecycleByThreadId?.size === 0) {
+      this.pendingLifecycleByRuntimeId.delete(runtimeId);
     }
   }
 }

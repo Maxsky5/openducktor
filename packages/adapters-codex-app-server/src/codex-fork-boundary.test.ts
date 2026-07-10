@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { resolveCodexForkBoundary } from "./codex-fork-boundary";
+import { codexForkBoundaryHistoryMessage, resolveCodexForkBoundary } from "./codex-fork-boundary";
 
 const childThreadRead = ({
   forkedFromId = "parent-thread",
+  parentThreadId = "parent-thread",
   turns = [
     { id: "parent-turn-1", startedAt: 10, status: "completed", items: [] },
     { id: "parent-turn-2", startedAt: 20, status: "interrupted", items: [] },
@@ -10,12 +11,13 @@ const childThreadRead = ({
   ],
 }: {
   forkedFromId?: string | null;
+  parentThreadId?: string | null;
   turns?: unknown[];
 } = {}) => ({
   thread: {
     id: "child-thread",
     forkedFromId,
-    parentThreadId: "parent-thread",
+    ...(parentThreadId ? { parentThreadId } : {}),
     createdAt: 25,
     turns,
   },
@@ -53,6 +55,26 @@ describe("resolveCodexForkBoundary", () => {
 
   test("does not create a history boundary for a non-forked child thread", () => {
     expect(resolveCodexForkBoundary(childThreadRead({ forkedFromId: null }), new Set())).toBeNull();
+  });
+
+  test("creates a generic history boundary for a fork without subagent metadata", () => {
+    const boundary = resolveCodexForkBoundary(
+      childThreadRead({ parentThreadId: null }),
+      new Set(["parent-turn-1", "parent-turn-2"]),
+    );
+
+    expect(boundary).not.toBeNull();
+    if (!boundary) {
+      throw new Error("Expected a fork boundary for a regular forked session.");
+    }
+    expect(codexForkBoundaryHistoryMessage(boundary)).toMatchObject({
+      text: "Session forked here",
+      notice: {
+        reason: "session_forked",
+        title: "Session forked here",
+        parentExternalSessionId: "parent-thread",
+      },
+    });
   });
 
   test("places the boundary at the tail before the child starts its own turn", () => {

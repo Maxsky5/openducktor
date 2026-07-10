@@ -1,7 +1,7 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 
-const CODEX_FORK_BOUNDARY_TITLE = "Forked into subagent thread";
+const CODEX_FORK_BOUNDARY_TITLE = "Session forked here";
 
 export type CodexForkBoundary = {
   childThreadId: string;

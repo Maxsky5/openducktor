@@ -76,6 +76,17 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
+  test("rejects malformed summary turn entries instead of returning an incomplete id set", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadTurnsList: async () => ({ data: [null], nextCursor: null }),
+    } as unknown as CodexAppServerClient;
+
+    await expect(reader.readThreadTurnIds(client, "parent-thread")).rejects.toThrow(
+      "returned a summary turn without an id",
+    );
+  });
+
   test("does not let a stale in-flight read overwrite a refreshed inventory", async () => {
     const reader = new CodexThreadInventoryReader();
     const firstLoaded = createDeferred<unknown>();

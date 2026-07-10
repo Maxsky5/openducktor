@@ -253,6 +253,62 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
+  test("projects only the latest child lifecycle state learned before the parent-child link", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+    const spawnEvent = codex0144MultiAgentV2Replay[0];
+    const childStartedEvent = codex0144MultiAgentV2Replay[1];
+    const staleChildCompletionEvent = codex0144MultiAgentV2Replay[4];
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    for (const event of [staleChildCompletionEvent, childStartedEvent]) {
+      listener?.({
+        runtimeId: "runtime-1",
+        kind: event.kind,
+        message: event.message,
+      });
+      await flushRuntimeEvents();
+    }
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: spawnEvent.kind,
+      message: spawnEvent.message,
+    });
+    await flushRuntimeEvents();
+
+    const statuses = emittedEvents.flatMap((event) => {
+      if (
+        typeof event !== "object" ||
+        event === null ||
+        !("type" in event) ||
+        event.type !== "assistant_part" ||
+        !("part" in event) ||
+        typeof event.part !== "object" ||
+        event.part === null ||
+        !("kind" in event.part) ||
+        event.part.kind !== "subagent" ||
+        !("status" in event.part)
+      ) {
+        return [];
+      }
+      return [event.part.status];
+    });
+
+    expect(statuses).toEqual(["running"]);
+  });
+
   test("projects pre-link child completion when the child session is already loaded", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");

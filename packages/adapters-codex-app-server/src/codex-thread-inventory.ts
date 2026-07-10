@@ -204,7 +204,9 @@ export class CodexThreadInventoryReader {
       }
       throw error;
     }
-    const pagedTurns = await this.fetchThreadTurns(client, threadId);
+    const pagedTurns = (await this.fetchThreadTurns(client, threadId, "full")).filter(
+      isPlainObject,
+    );
     if (pagedTurns.length === 0) {
       return response;
     }
@@ -216,33 +218,13 @@ export class CodexThreadInventoryReader {
 
   async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
     const turnIds = new Set<string>();
-    let cursor: string | null = null;
-    const seenCursors = new Set<string>();
-    do {
-      if (cursor) {
-        seenCursors.add(cursor);
+    for (const turn of await this.fetchThreadTurns(client, threadId, "summary")) {
+      const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]);
+      if (!turnId) {
+        throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
       }
-      const response = await client.threadTurnsList({
-        threadId,
-        cursor,
-        limit: 100,
-        sortDirection: "asc",
-        itemsView: "summary",
-      });
-      for (const turn of arrayFromUnknown(response)) {
-        const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]);
-        if (!turnId) {
-          throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
-        }
-        turnIds.add(turnId);
-      }
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
-      if (cursor && seenCursors.has(cursor)) {
-        throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");
-      }
-    } while (cursor);
+      turnIds.add(turnId);
+    }
     return turnIds;
   }
 
@@ -307,8 +289,9 @@ export class CodexThreadInventoryReader {
   private async fetchThreadTurns(
     client: CodexAppServerClient,
     threadId: string,
-  ): Promise<Record<string, unknown>[]> {
-    const turns: Record<string, unknown>[] = [];
+    itemsView: "full" | "summary",
+  ): Promise<unknown[]> {
+    const turns: unknown[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
     do {
@@ -320,9 +303,9 @@ export class CodexThreadInventoryReader {
         cursor,
         limit: 100,
         sortDirection: "asc",
-        itemsView: "full",
+        itemsView,
       });
-      turns.push(...arrayFromUnknown(response).filter(isPlainObject));
+      turns.push(...arrayFromUnknown(response));
       cursor = isPlainObject(response)
         ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
         : null;
