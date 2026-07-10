@@ -5,6 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { createRef } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
@@ -84,6 +85,7 @@ const baseSession: AgentSessionState = {
   runtimeKind: "opencode",
   role: "spec",
   status: "running",
+  runtimeStatusMessage: null,
   startedAt: "2026-02-20T10:00:30.000Z",
   workingDirectory: "/repo",
   historyLoadState: "not_requested",
@@ -157,6 +159,38 @@ export type AgentChatThreadModelInput = Omit<
   Partial<
     Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
   >;
+
+export const buildBaseModel = () => ({
+  isSessionWorking: false,
+  transcriptState: buildThreadTranscriptState(),
+  runtimeReadiness: {
+    state: "ready" as const,
+    message: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  isInteractionEnabled: true,
+  emptyState: {
+    title: "Send a message to start a new session automatically.",
+  },
+  isStarting: false,
+  isSending: false,
+  sessionAgentColors: {},
+  canSubmitQuestionAnswers: true,
+  isSubmittingQuestionByRequestId: {},
+  canReplyToApprovals: true,
+  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
+  isSubmittingApprovalByRequestId: {},
+  approvalReplyErrorByRequestId: {},
+  onSubmitQuestionAnswers: async () => {},
+  onReplyApproval: async () => {},
+  sessionAuxiliaryError: null,
+  todoPanelCollapsed: false,
+  onToggleTodoPanel: () => {},
+  messagesContainerRef: createRef<HTMLDivElement>(),
+  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
+});
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
   const threadState = projectAgentChatThreadState({

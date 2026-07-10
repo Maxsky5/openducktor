@@ -236,6 +236,7 @@ describe("agent-orchestrator-public-operations", () => {
       taskId: "task-1",
       role: "build" as const,
       status: "idle",
+      runtimeStatusMessage: null,
       startedAt: "2026-06-12T08:00:00.000Z",
       runtimeKind: SESSION_IDENTITY.runtimeKind,
       workingDirectory: SESSION_IDENTITY.workingDirectory,

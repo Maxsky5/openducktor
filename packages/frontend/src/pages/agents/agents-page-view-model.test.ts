@@ -57,6 +57,7 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     taskId: "task-1",
     role: "spec",
     status: "running",
+    runtimeStatusMessage: null,
     startedAt: "2026-02-22T12:00:00.000Z",
     workingDirectory: "/repo",
     messages: createSessionMessagesFixture(externalSessionId, messages),

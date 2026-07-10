@@ -18,6 +18,7 @@ const buildSession = (
     runtimeKind: "opencode",
     role: "build",
     status: "idle",
+    runtimeStatusMessage: null,
     startedAt: "2026-03-18T10:00:00.000Z",
     workingDirectory,
     historyLoadState: rest.historyLoadState ?? "not_requested",

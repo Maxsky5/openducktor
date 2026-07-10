@@ -185,10 +185,7 @@ export const handleSessionStatus = (
         : {
             ...current,
             status: "running",
-            runtimeStatusMessage:
-              status.message === undefined
-                ? (current.runtimeStatusMessage ?? null)
-                : status.message,
+            runtimeStatusMessage: status.message,
           },
     );
     return;

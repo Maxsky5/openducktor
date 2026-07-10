@@ -2,10 +2,7 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
-import type {
-  AgentChatModel,
-  AgentChatThreadSession,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type AgentChatDraftScope,
@@ -15,13 +12,12 @@ import type { AgentChatDraftSessionIdentity } from "@/components/features/agents
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
-import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
+import { toSelectedSessionThreadSession } from "./agent-studio-thread-session";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
@@ -96,30 +92,6 @@ const toChatContextUsage = (
     ...(typeof selectedSessionContextUsage.outputLimit === "number"
       ? { outputLimit: selectedSessionContextUsage.outputLimit }
       : {}),
-  };
-};
-
-const toSelectedSessionThreadSession = ({
-  identity,
-  activityState,
-  loadedSession,
-}: Pick<
-  AgentStudioSelectedSessionState,
-  "identity" | "activityState" | "loadedSession"
->): AgentChatThreadSession | null => {
-  if (!identity || !loadedSession) {
-    return null;
-  }
-  const runtimeStatusMessage = matchesAgentSessionIdentity(loadedSession, identity)
-    ? (loadedSession.runtimeStatusMessage ?? null)
-    : null;
-
-  return {
-    ...identity,
-    ...(loadedSession.title ? { title: loadedSession.title } : {}),
-    activityState,
-    runtimeStatusMessage,
-    messages: toSessionMessagesState(loadedSession),
   };
 };
 

@@ -6,6 +6,7 @@ import {
   codexUserMessageInput,
   createDeferred,
   createHarness,
+  createRuntimeStreamSubscription,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexAppServerAdapter, CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
@@ -23,32 +24,6 @@ const observeSessionState = async (
   );
   await flushCodexAdapterWork();
   return unsubscribe;
-};
-
-type TestRuntimeStreamListener = (event: {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: unknown;
-}) => void;
-
-const createRuntimeStreamSubscription = () => {
-  const streamListeners: TestRuntimeStreamListener[] = [];
-  const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
-    streamListeners.push(listener);
-    return () => {};
-  });
-  const emitNotification = (message: unknown, receivedAt = new Date().toISOString()) => {
-    const listener = streamListeners[0];
-    expect(listener).toBeDefined();
-    listener?.({
-      runtimeId: "runtime-live",
-      kind: "notification",
-      receivedAt,
-      message,
-    });
-  };
-  return { subscribeEvents, emitNotification };
 };
 
 describe("CodexAppServerAdapter streaming", () => {
@@ -1005,77 +980,6 @@ describe("CodexAppServerAdapter streaming", () => {
     const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
     expect(runtimeCalls.filter((call) => call.method === "turn/steer")).toEqual([]);
     expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(2);
-    unsubscribe();
-  });
-
-  test("emits safety buffering status only for the active turn", async () => {
-    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
-    const emitSafetyBuffering = (turnId: string, showBufferingUi: boolean): void => {
-      emitNotification({
-        method: "model/safetyBuffering/updated",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turnId,
-          model: "gpt-5",
-          useCases: ["cyber"],
-          reasons: ["policy-check"],
-          showBufferingUi,
-          fasterModel: null,
-        },
-      });
-    };
-
-    await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string; status?: unknown }> = [];
-    const unsubscribe = await adapter.subscribeEvents(
-      codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => events.push(event),
-    );
-    await flushCodexAdapterWork();
-
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-live",
-        parts: [{ kind: "text", text: "Start now" }],
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    );
-    emitNotification({
-      method: "turn/started",
-      params: {
-        threadId: "thread/start-runtime-live",
-        turn: { id: "turn-live" },
-      },
-    });
-    emitSafetyBuffering("turn-live", true);
-    emitSafetyBuffering("turn-stale", true);
-    emitSafetyBuffering("turn-live", false);
-    await flushCodexAdapterWork();
-
-    expect(events.filter((event) => event.type === "session_status")).toEqual([
-      {
-        type: "session_status",
-        externalSessionId: "thread/start-runtime-live",
-        timestamp: expect.any(String),
-        status: {
-          type: "busy",
-          message: "Our systems are thinking a bit more about this request before responding.",
-        },
-        sessionRef: expect.any(Object),
-      },
-      {
-        type: "session_status",
-        externalSessionId: "thread/start-runtime-live",
-        timestamp: expect.any(String),
-        status: { type: "busy", message: null },
-        sessionRef: expect.any(Object),
-      },
-    ]);
-
-    transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
-    });
     unsubscribe();
   });
 

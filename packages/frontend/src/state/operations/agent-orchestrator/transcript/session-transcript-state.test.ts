@@ -32,6 +32,7 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     taskId: "task-1",
     role: "build",
     status: "idle",
+    runtimeStatusMessage: null,
     startedAt: "2026-02-22T08:00:00.000Z",
     runtimeKind: "opencode",
     workingDirectory: "/tmp/repo/worktree",

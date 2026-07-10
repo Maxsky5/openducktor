@@ -25,6 +25,7 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   role: "build",
   title: "BUILD task-1",
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: "2026-01-01T00:00:00.000Z",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState("external-1"),

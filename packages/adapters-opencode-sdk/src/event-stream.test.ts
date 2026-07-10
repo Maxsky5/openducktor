@@ -116,7 +116,7 @@ test("runEventStreamWithSession uses the configured session input", async () => 
     type: "session_status",
     externalSessionId: "external-session-1",
     timestamp: "2026-02-22T12:00:00.000Z",
-    status: { type: "busy" },
+    status: { type: "busy", message: null },
   });
 });
 

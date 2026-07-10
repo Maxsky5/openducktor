@@ -22,6 +22,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     taskId: "task-1",
     role: "build",
     status: "idle",
+    runtimeStatusMessage: null,
     startedAt: "2026-06-12T08:00:00.000Z",
     runtimeKind: selectedSessionIdentity.runtimeKind,
     workingDirectory: selectedSessionIdentity.workingDirectory,

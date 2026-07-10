@@ -369,7 +369,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const { registerRowElement } = useAgentChatRowMotion();
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
-  const runtimeStatusMessage = isSessionWorking ? (session?.runtimeStatusMessage ?? null) : null;
+  const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
   const hasBottomStack = Boolean(
     session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError || runtimeStatusMessage),
   );

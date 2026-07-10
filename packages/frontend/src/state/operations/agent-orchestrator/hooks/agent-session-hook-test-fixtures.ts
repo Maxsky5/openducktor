@@ -53,6 +53,7 @@ export const createSession = (overrides: CreateSessionOverrides = {}): AgentSess
     taskId: "task-1",
     role: "build",
     status: "idle",
+    runtimeStatusMessage: null,
     startedAt: "2026-03-01T09:00:00.000Z",
     workingDirectory: "/tmp/repo/worktree",
     messages: createSessionMessagesFixture(externalSessionId, messages),

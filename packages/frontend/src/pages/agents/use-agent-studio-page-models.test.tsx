@@ -453,8 +453,6 @@ describe("useAgentStudioPageModels", () => {
         modelId: "gpt-5",
         profileId: "stale-builder",
       },
-      runtimeStatusMessage:
-        "Our systems are thinking a bit more about this request before responding.",
       messages: [
         {
           id: "message-1",
@@ -491,7 +489,6 @@ describe("useAgentStudioPageModels", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo/selected-worktree",
       activityState: "running",
-      runtimeStatusMessage: null,
     });
     expect(chatModel.thread.session?.messages.items[0]?.content).toContain(
       "Loaded messages still belong to the live transcript.",
@@ -499,32 +496,6 @@ describe("useAgentStudioPageModels", () => {
     expect(chatModel.thread.isSessionWorking).toBe(true);
     expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
     expect(chatModel.composer.accentColor).toBe("#0ea5e9");
-
-    await harness.unmount();
-  });
-
-  test("projects transient runtime status from the matching loaded session", async () => {
-    const statusMessage =
-      "Our systems are thinking a bit more about this request before responding.";
-    const session = createSession("session-buffering", {
-      runtimeKind: "codex",
-      runtimeStatusMessage: statusMessage,
-    });
-    const harness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          loadedSession: session,
-          sessionsForTask: summarizeSessions([session]),
-          allSessionSummaries: summarizeSessions([session]),
-        },
-      }),
-    );
-
-    await harness.mount();
-
-    expect(harness.getLatest().agentChatModel.thread.session?.runtimeStatusMessage).toBe(
-      statusMessage,
-    );
 
     await harness.unmount();
   });

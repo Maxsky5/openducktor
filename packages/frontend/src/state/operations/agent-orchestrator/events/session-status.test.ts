@@ -50,21 +50,16 @@ const safetyBufferingStatus = {
 };
 
 describe("agent-orchestrator session status", () => {
-  test("keeps a busy message until the runtime hides it or the session becomes idle", async () => {
+  test("sets and clears busy messages explicitly and clears them on idle", async () => {
     const { handleEvent, sessionsRef } = await observeSession();
 
     handleEvent(safetyBufferingStatus);
-    handleEvent({
-      ...safetyBufferingStatus,
-      status: { type: "busy" },
-      timestamp: "2026-07-10T10:00:01.000Z",
-    });
     expect(getSession(sessionsRef).runtimeStatusMessage).toBe(safetyBufferingStatus.status.message);
 
     handleEvent({
       ...safetyBufferingStatus,
       status: { type: "busy", message: null },
-      timestamp: "2026-07-10T10:00:02.000Z",
+      timestamp: "2026-07-10T10:00:01.000Z",
     });
     expect(getSession(sessionsRef).runtimeStatusMessage).toBeNull();
 
@@ -73,7 +68,7 @@ describe("agent-orchestrator session status", () => {
       type: "session_status",
       externalSessionId: "session-1",
       status: { type: "idle" },
-      timestamp: "2026-07-10T10:00:03.000Z",
+      timestamp: "2026-07-10T10:00:02.000Z",
     });
     expect(getSession(sessionsRef).runtimeStatusMessage).toBeNull();
   });

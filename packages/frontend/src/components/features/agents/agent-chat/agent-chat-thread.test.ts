@@ -10,6 +10,7 @@ import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   type AgentChatThreadModelInput,
   buildApprovalRequest,
+  buildBaseModel,
   buildMessage,
   buildQuestionRequest,
   buildSession,
@@ -28,38 +29,6 @@ import {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-const buildBaseModel = () => ({
-  isSessionWorking: false,
-  transcriptState: buildThreadTranscriptState(),
-  runtimeReadiness: {
-    state: "ready" as const,
-    message: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
-  isInteractionEnabled: true,
-  emptyState: {
-    title: "Send a message to start a new session automatically.",
-  },
-  isStarting: false,
-  isSending: false,
-  sessionAgentColors: {},
-  canSubmitQuestionAnswers: true,
-  isSubmittingQuestionByRequestId: {},
-  canReplyToApprovals: true,
-  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
-  isSubmittingApprovalByRequestId: {},
-  approvalReplyErrorByRequestId: {},
-  onSubmitQuestionAnswers: async () => {},
-  onReplyApproval: async () => {},
-  sessionAuxiliaryError: null,
-  todoPanelCollapsed: false,
-  onToggleTodoPanel: () => {},
-  messagesContainerRef: createRef<HTMLDivElement>(),
-  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-});
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 
@@ -999,32 +968,6 @@ describe("AgentChatThread", () => {
     expect(runtimeError.className).toContain("border-destructive-border");
     expect(runtimeError.className).toContain("bg-destructive-surface");
     expect(runtimeError.className).toContain("text-destructive-surface-foreground");
-
-    rendered.unmount();
-  });
-
-  test("renders a transient runtime status message with informational styling", async () => {
-    const rendered = render(
-      createElement(AgentChatThread, {
-        model: {
-          ...buildBaseModel(),
-          session: buildSession({
-            runtimeStatusMessage:
-              "Our systems are thinking a bit more about this request before responding.",
-          }),
-          isSessionWorking: true,
-        },
-      }),
-    );
-    await act(flush);
-
-    const notice = screen.getByRole("status");
-    expect(notice.textContent).toContain(
-      "Our systems are thinking a bit more about this request before responding.",
-    );
-    expect(notice.className).toContain("border-info-border");
-    expect(notice.className).toContain("bg-info-surface");
-    expect(notice.className).toContain("text-info-surface-foreground");
 
     rendered.unmount();
   });

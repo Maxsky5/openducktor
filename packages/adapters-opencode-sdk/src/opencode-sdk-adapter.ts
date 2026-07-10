@@ -641,7 +641,7 @@ export class OpencodeSdkAdapter
       type: "session_status",
       externalSessionId: input.externalSessionId,
       timestamp: this.now(),
-      status: { type: "busy" },
+      status: { type: "busy", message: null },
     });
     try {
       const tools = await this.resolveSessionToolSelection(session);

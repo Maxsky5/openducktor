@@ -174,6 +174,7 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   taskId: "A",
   role: "build",
   status: "running",
+  runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/repo",
   messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),

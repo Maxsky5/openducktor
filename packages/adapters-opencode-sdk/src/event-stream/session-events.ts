@@ -245,7 +245,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
       type: "session_status",
       externalSessionId: runtime.externalSessionId,
       timestamp: runtime.now(),
-      status: { type: status.type },
+      status: status.type === "busy" ? { type: "busy", message: null } : { type: "idle" },
     });
     return true;
   }

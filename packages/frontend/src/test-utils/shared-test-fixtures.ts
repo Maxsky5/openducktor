@@ -100,6 +100,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   runtimeKind: "opencode",
   role: "spec",
   status: "idle",
+  runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "loaded",

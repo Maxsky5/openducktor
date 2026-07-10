@@ -67,6 +67,7 @@ export const fromPersistedSessionRecord = ({
     // Persisted task-store records are durable session fields only. Cold reads
     // start idle; mounted refreshes may preserve current live state separately.
     status: "idle",
+    runtimeStatusMessage: null,
     startedAt: record.startedAt,
     runtimeKind: identity.runtimeKind,
     workingDirectory: identity.workingDirectory,
